@@ -22,7 +22,7 @@ pub enum BlockType {
     Unsupported,
 }
 
-pub struct PageBlock {
+pub struct BlockInfo {
     pub block_type: BlockType,
     pub content: Value,
 }

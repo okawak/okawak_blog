@@ -1,8 +1,8 @@
-use crate::models::PageInfo;
+use crate::models::{BlockInfo, PageInfo};
 use serde_json::Value;
 use std::error::Error;
 
-pub fn extract_blocks(json: &Value) -> Result<&Vec<Value>, Box<dyn Error>> {
+pub fn extract_blocks(json: &Value) -> Result<Vec<BlockInfo>, Box<dyn Error>> {
     let results = json
         .get("results")
         .and_then(|v| v.as_array())

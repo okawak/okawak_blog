@@ -1,13 +1,15 @@
 use crate::config::Config;
 use crate::database::extract_pages;
 use crate::markdown::convert_page_to_markdown;
-use crate::models::PageInfo;
+use crate::models::{BlockInfo, PageInfo};
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::error::Error;
 use std::fs;
 use std::path::Path;
 
+/// ページ分割されたデータを処理する構造体
+/// 内部処理のみに用いるのでpubではない
 struct Pagination<T> {
     contents: Vec<T>,
     next_cursor: Option<String>,
@@ -117,7 +119,7 @@ impl NotionClient {
     }
 
     /// ページの子ブロックを取得し、Markdownに変換してファイルに出力する
-    pub async fn query_page(&self, page: &PageInfo) -> Result<(), Box<dyn Error>> {
+    pub async fn query_page(&self, page: &PageInfo) -> Result<Vec<BlockInfo>, Box<dyn Error>> {
         let mut all_blocks = Vec::new();
         let mut next_cursor: Option<String> = None;
         loop {
@@ -146,7 +148,7 @@ impl NotionClient {
         &self,
         page: &PageInfo,
         next_cursor: Option<&String>,
-    ) -> Result<Pagination<Value>, Box<dyn Error>> {
+    ) -> Result<Pagination<BlockInfo>, Box<dyn Error>> {
         let url = if let Some(cursor) = next_cursor {
             format!(
                 "https://api.notion.com/v1/blocks/{}/children?page_size=100&start_cursor={}",

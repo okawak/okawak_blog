@@ -1,4 +1,4 @@
-use notion_api::{NotionClient, config::Config};
+use notion_api::{Config, NotionClient};
 use std::error::Error;
 use std::fs;
 use std::path::Path;

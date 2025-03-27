@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let pages = notion_client.query_database().await?;
     // 各ページの子ブロックを取得してファイルに出力
     for page in pages {
-        notion_client.query_page(&page).await?;
+        let blocks = notion_client.query_page(&page).await?;
     }
     Ok(())
 }

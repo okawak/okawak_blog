@@ -1,4 +1,4 @@
-use notion_api::config::load_config;
+use notion_api::load_config;
 
 #[test]
 #[ignore]

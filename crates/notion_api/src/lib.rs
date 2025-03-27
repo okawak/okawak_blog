@@ -6,4 +6,4 @@ pub mod models;
 
 pub use client::NotionClient;
 pub use config::{Config, load_config};
-pub use models::PageInfo;
+pub use models::{BlockInfo, PageInfo};
