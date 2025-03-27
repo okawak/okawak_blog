@@ -1,5 +1,7 @@
-use notion_api::{NotionClient, load_config};
+use notion_api::{NotionClient, load_config, to_markdown};
 use std::error::Error;
+use std::fs;
+use std::path::Path;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -13,6 +15,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // 各ページの子ブロックを取得してファイルに出力
     for page in pages {
         let blocks = notion_client.query_page(&page).await?;
+        let markdown_str = to_markdown(&page, &blocks)?;
+
+        // ファイル出力
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
+        let file_path = format!("{}/dest/{}.md", manifest_dir, page.id);
+        if let Some(parent) = Path::new(&file_path).parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&file_path, markdown_str)?;
     }
     Ok(())
 }

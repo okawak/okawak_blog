@@ -1,12 +1,10 @@
 use crate::config::Config;
 use crate::database::extract_pages;
-use crate::markdown::convert_page_to_markdown;
+use crate::markdown::extract_blocks;
 use crate::models::{BlockInfo, PageInfo};
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::error::Error;
-use std::fs;
-use std::path::Path;
 
 /// ページ分割されたデータを処理する構造体
 /// 内部処理のみに用いるのでpubではない
@@ -20,6 +18,9 @@ pub struct NotionClient {
     pub config: Config,
 }
 
+/// Notion APIクライアント
+/// インターフェースとなる関数は、newとquery_database, query_pageのみ
+/// 実際のHTTPリクエスト処理は内部で行っており、具体的な処理はハードコードされている
 impl NotionClient {
     pub fn new(config: Config) -> Self {
         NotionClient {
@@ -62,8 +63,7 @@ impl NotionClient {
         let mut all_pages = Vec::new();
         let mut next_cursor: Option<String> = None;
         loop {
-            let pagination: Pagination<PageInfo> =
-                self.query_database_chunk(next_cursor.as_ref()).await?;
+            let pagination = self.query_database_chunk(next_cursor.as_ref()).await?;
             all_pages.extend(pagination.contents);
             if let Some(cursor) = pagination.next_cursor {
                 next_cursor = Some(cursor);
@@ -123,8 +123,7 @@ impl NotionClient {
         let mut all_blocks = Vec::new();
         let mut next_cursor: Option<String> = None;
         loop {
-            let pagination: Pagination<Value> =
-                self.query_page_chunk(page, next_cursor.as_ref()).await?;
+            let pagination = self.query_page_chunk(page, next_cursor.as_ref()).await?;
             all_blocks.extend(pagination.contents);
             if let Some(cursor) = pagination.next_cursor {
                 next_cursor = Some(cursor);
@@ -132,16 +131,7 @@ impl NotionClient {
                 break;
             }
         }
-        // Markdownに変換する処理を呼び出し
-        let markdown = convert_page_to_markdown(page, &all_blocks);
-
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
-        let file_path = format!("{}/dest/{}.md", manifest_dir, page.id);
-        if let Some(parent) = Path::new(&file_path).parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(&file_path, markdown)?;
-        Ok(())
+        Ok(all_blocks)
     }
 
     async fn query_page_chunk(
@@ -174,49 +164,10 @@ impl NotionClient {
             None
         };
 
+        let blocks = extract_blocks(&json_response)?;
         Ok(Pagination {
-            contents: vec![json_response],
+            contents: blocks,
             next_cursor,
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_extract_pages_integration() {
-        // 簡単なJSONサンプルでextract_pagesの動作確認（database.rs内のテストと同様）
-        let sample_json = json!({
-            "results": [
-                {
-                    "id": "page_1",
-                    "created_time": "2023-03-01T00:00:00.000Z",
-                    "last_edited_time": "2023-03-02T00:00:00.000Z",
-                    "properties": {
-                        "Name": {
-                            "title": [
-                                { "plain_text": "テストページ" }
-                            ]
-                        },
-                        "タグ": {
-                            "multi_select": [
-                                {"name": "タグ1"},
-                                {"name": "タグ2"}
-                            ]
-                        },
-                        "ステータス": {
-                            "status": {
-                                "name": "完了"
-                            }
-                        }
-                    }
-                }
-            ],
-            "has_more": false
-        });
-        let pages = crate::database::extract_pages(&sample_json).unwrap();
-        assert_eq!(pages.len(), 1);
     }
 }
