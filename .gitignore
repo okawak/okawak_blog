@@ -18,7 +18,6 @@ target/
 
 # Local files
 .vscode
-.github
 config.json
 output.json
 dest/
