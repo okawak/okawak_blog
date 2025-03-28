@@ -38,12 +38,18 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Test project
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          DATABASE_ID: ${{ secrets.DATABASE_ID }}
         run: cargo test -p notion_api -- --ignored
 
       - name: Build project in release mode
         run: cargo build -p notion_api --release
 
       - name: Run the binary to generate JSON file
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          DATABASE_ID: ${{ secrets.DATABASE_ID }}
         run: ./target/release/notion_api
 
       - name: Configure AWS Credentials for China region audience
