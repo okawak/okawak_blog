@@ -20,7 +20,7 @@ target/
 .vscode
 config.json
 output.json
-dest/
+dist/
 
 # System files
 .DS_Store
