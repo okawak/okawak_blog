@@ -1,0 +1,8 @@
+.terraform
+.terraform*
+.pluralith
+.terraform.lock.hcl
+plan*
+terraform.tfstate*
+*.txt
+terraform.tfvars
