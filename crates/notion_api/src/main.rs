@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         // ファイル出力
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
-        let file_path = format!("{}/dest/{}.md", manifest_dir, page.id);
+        let file_path = format!("{}/dist/{}.md", manifest_dir, page.id);
         if let Some(parent) = Path::new(&file_path).parent() {
             fs::create_dir_all(parent)?;
         }

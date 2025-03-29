@@ -49,4 +49,4 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
 
       - name: Upload files to S3
-        run: aws s3 sync crates/notion_api/dest s3://${{ secrets.S3_BUCKET }} --delete
+        run: aws s3 sync crates/notion_api/dist s3://${{ secrets.S3_BUCKET }} --delete
