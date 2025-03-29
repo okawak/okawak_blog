@@ -7,3 +7,10 @@ version = "0.1.0"
 authors = ["okawak"]
 description = "okawak's blog builder"
 edition = "2024"
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = "abort"
