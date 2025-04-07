@@ -30,7 +30,7 @@ pub fn extract_blocks(json: &Value) -> Result<Vec<BlockInfo>, Box<dyn Error>> {
                 "code" => BlockType::Code,
                 "bulleted_list_item" => BlockType::BulletedListItem,
                 "numbered_list_item" => BlockType::NumberedListItem,
-                _ => BlockType::Unsupported,
+                _ => BlockType::Unsupported(block_type_str.to_string()),
             };
             let content = block.get(block_type_str).unwrap().clone();
             BlockInfo {
@@ -60,7 +60,7 @@ pub fn to_markdown(page_info: &PageInfo, blocks: &[BlockInfo]) -> Result<String,
 
     // body
     for block in blocks {
-        match block.block_type {
+        match &block.block_type {
             BlockType::Paragraph => {
                 markdown.push_str(paragraph::process(&block.content)?.as_str());
             }
@@ -85,8 +85,8 @@ pub fn to_markdown(page_info: &PageInfo, blocks: &[BlockInfo]) -> Result<String,
             BlockType::NumberedListItem => {
                 markdown.push_str(numbered_list_item::process(&block.content)?.as_str());
             }
-            BlockType::Unsupported => {
-                println!("Unsupported block type");
+            BlockType::Unsupported(type_name) => {
+                println!("Unsupported block type: {}", type_name);
             }
         }
     }

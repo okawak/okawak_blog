@@ -42,7 +42,7 @@ jobs:
       - name: Build and Run the notion_api binary
         run: cargo run -p notion_api --release
 
-      - name: Configure AWS Credentials for China region audience
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ secrets.AWS_REGION }}

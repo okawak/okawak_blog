@@ -24,7 +24,7 @@ pub enum BlockType {
     Code,
     BulletedListItem,
     NumberedListItem,
-    Unsupported,
+    Unsupported(String),
 }
 
 pub struct BlockInfo {
