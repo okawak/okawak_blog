@@ -44,6 +44,17 @@ resource "oci_core_security_list" "my_security_list" {
 
   ingress_security_rules {
     # 6: TCP
+    protocol = 6
+    source   = "0.0.0.0/0"
+    tcp_options {
+      max = 60022
+      min = 60022
+    }
+  }
+
+
+  ingress_security_rules {
+    # 6: TCP
     protocol  = 6
     source    = "0.0.0.0/0"
     stateless = false # stateful
@@ -51,6 +62,18 @@ resource "oci_core_security_list" "my_security_list" {
     tcp_options {
       min = 80
       max = 80
+    }
+  }
+
+  ingress_security_rules {
+    # 6: TCP
+    protocol  = 6
+    source    = "0.0.0.0/0"
+    stateless = false # stateful
+
+    tcp_options {
+      min = 443
+      max = 443
     }
   }
 

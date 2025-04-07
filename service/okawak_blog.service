@@ -1,0 +1,13 @@
+[Unit]
+Description=Leptos Rust App
+After=network.target
+
+[Service]
+User=okawak
+ExecStart=/home/okawak/.cargo/bin/cargo leptos serve --release
+WorkingDirectory=/home/okawak/okawak_blog
+Restart=always
+Environment=RUST_LOG="info"
+
+[Install]
+WantedBy=multi-user.target
