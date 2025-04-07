@@ -1,8 +1,8 @@
 use leptos::prelude::*;
-use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
-    StaticSegment,
     components::{Route, Router, Routes},
+    StaticSegment,
 };
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
@@ -56,6 +56,7 @@ fn HomePage() -> impl IntoView {
 
     view! {
         <h1>"Under development with Leptos!"</h1>
+        <h1 class="text-3xl font-bold underline">Hello world!</h1>
         <button on:click=on_click>"Click Me: " {count}</button>
     }
 }

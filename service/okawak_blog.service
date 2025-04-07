@@ -8,6 +8,7 @@ ExecStart=/home/okawak/.cargo/bin/cargo leptos serve --release
 WorkingDirectory=/home/okawak/okawak_blog
 Restart=always
 Environment=RUST_LOG="info"
+Environment=LEPTOS_TAILWIND_VERSION="v4.1.3"
 
 [Install]
 WantedBy=multi-user.target
