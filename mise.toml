@@ -1,3 +1,3 @@
 [tasks.service]
 description = "Copy service file and reload the daemon"
-run = "cp -f service/okawak_blog.service /etc/systemd/system/okawak_blog.service && sudo systemctl daemon-reload && sudo systemctl restart okawak_blog"
+run = 'sudo sh -c "cp -f service/okawak_blog.service /etc/systemd/system/okawak_blog.service && systemctl daemon-reload && systemctl restart okawak_blog"'
