@@ -1,3 +1,19 @@
+[tasks.stop]
+description = "Stop the service"
+run = 'sudo systemctl stop okawak_blog'
+
 [tasks.service]
 description = "Copy service file and reload the daemon"
-run = 'sudo sh -c "cp -f service/okawak_blog.service /etc/systemd/system/okawak_blog.service && systemctl daemon-reload && systemctl restart okawak_blog"'
+run = 'sudo sh -c "cp -f service/okawak_blog.service /etc/systemd/system/okawak_blog.service && systemctl daemon-reload"'
+
+[tasks.build]
+description = "Build the project"
+run = 'cargo leptos build --release'
+
+[tasks.start]
+description = "Start the service"
+run = 'sudo systemctl start okawak_blog'
+
+[tasks.deploy]
+description = "Deploy the project"
+run = ["stop", "service", "build", "start"]
