@@ -21,6 +21,13 @@ pub fn extract_pages(json: &Value) -> Result<Vec<PageInfo>, Box<dyn Error>> {
                 .and_then(|v| v.as_str())
                 .unwrap()
                 .to_string();
+            let category = properties
+                .get("カテゴリー")
+                .and_then(|v| v.get("select"))
+                .and_then(|v| v.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let tags = properties
                 .get("タグ")
                 .and_then(|v| v.get("multi_select"))
@@ -53,6 +60,7 @@ pub fn extract_pages(json: &Value) -> Result<Vec<PageInfo>, Box<dyn Error>> {
             PageInfo {
                 id,
                 title,
+                category,
                 tags,
                 created_time,
                 last_edited_time,
@@ -92,6 +100,11 @@ mod tests {
                             "status": {
                                 "name": "完了"
                             }
+                        },
+                        "カテゴリー": {
+                            "select": {
+                                "name": "テスト"
+                            }
                         }
                     }
                 }
@@ -103,6 +116,7 @@ mod tests {
         let page = &pages[0];
         assert_eq!(page.id, "page_1");
         assert_eq!(page.title, "テストページ");
+        assert_eq!(page.category, "テスト");
         assert_eq!(page.tags, vec!["タグ1".to_string(), "タグ2".to_string()]);
     }
 }

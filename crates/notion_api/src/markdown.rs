@@ -1,5 +1,6 @@
 mod bulleted_list_item;
 mod code;
+mod equation;
 mod heading;
 mod link_to_page;
 mod numbered_list_item;
@@ -13,7 +14,7 @@ pub fn extract_blocks(json: &Value) -> Result<Vec<BlockInfo>, Box<dyn Error>> {
     let results = json
         .get("results")
         .and_then(|v| v.as_array())
-        .ok_or("No results array")?;
+        .ok_or(format!("No results array: {:?}", json))?;
     let blocks = results
         .iter()
         .map(|block| {
@@ -30,6 +31,7 @@ pub fn extract_blocks(json: &Value) -> Result<Vec<BlockInfo>, Box<dyn Error>> {
                 "code" => BlockType::Code,
                 "bulleted_list_item" => BlockType::BulletedListItem,
                 "numbered_list_item" => BlockType::NumberedListItem,
+                "equation" => BlockType::Equation,
                 _ => BlockType::Unsupported(block_type_str.to_string()),
             };
             let content = block.get(block_type_str).unwrap().clone();
@@ -48,6 +50,7 @@ pub fn to_markdown(page_info: &PageInfo, blocks: &[BlockInfo]) -> Result<String,
     // frontmatter
     markdown.push_str("+++\n");
     markdown.push_str(&format!("title = \"{}\"\n", page_info.title));
+    markdown.push_str(&format!("category = \"{}\"\n", page_info.category));
     markdown.push_str(&format!("id = \"{}\"\n", page_info.id));
     markdown.push_str(&format!("tags = [\"{}\"]\n", page_info.tags.join("\", \"")));
     markdown.push_str(&format!("created_time = \"{}\"\n", page_info.created_time));
@@ -84,6 +87,9 @@ pub fn to_markdown(page_info: &PageInfo, blocks: &[BlockInfo]) -> Result<String,
             }
             BlockType::NumberedListItem => {
                 markdown.push_str(numbered_list_item::process(&block.content)?.as_str());
+            }
+            BlockType::Equation => {
+                markdown.push_str(equation::process(&block.content)?.as_str());
             }
             BlockType::Unsupported(type_name) => {
                 println!("Unsupported block type: {}", type_name);

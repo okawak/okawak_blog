@@ -3,9 +3,11 @@ use serde_json::Value;
 /// データベースから以下の情報を抽出するため、
 /// データベースの要素にこれらが含まれていることを仮定している
 /// また、他の情報が必要であればここに追記できる
+#[derive(Debug)]
 pub struct PageInfo {
     pub id: String,
     pub title: String,
+    pub category: String,
     pub tags: Vec<String>,
     pub created_time: String,
     pub last_edited_time: String,
@@ -24,6 +26,7 @@ pub enum BlockType {
     Code,
     BulletedListItem,
     NumberedListItem,
+    Equation,
     Unsupported(String),
 }
 

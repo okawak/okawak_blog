@@ -7,7 +7,6 @@ pub mod models;
 pub use client::NotionClient;
 pub use config::{Config, load_config};
 pub use markdown::to_markdown;
-pub use models::{BlockInfo, PageInfo};
 
 use std::error::Error;
 use std::fs;
@@ -28,7 +27,7 @@ pub async fn run_main(config: Config) -> Result<(), Box<dyn Error>> {
 
         // ファイル出力
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
-        let file_path = format!("{}/dist/{}.md", manifest_dir, page.id);
+        let file_path = format!("{}/dist/{}/{}.md", manifest_dir, page.category, page.id);
         if let Some(parent) = Path::new(&file_path).parent() {
             fs::create_dir_all(parent)?;
         }

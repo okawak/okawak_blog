@@ -2,12 +2,15 @@ use crate::config::Config;
 use crate::database::extract_pages;
 use crate::markdown::extract_blocks;
 use crate::models::{BlockInfo, PageInfo};
+use governor::{DefaultDirectRateLimiter, Quota};
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::error::Error;
+use std::num::NonZeroU32;
 
 /// ページ分割されたデータを処理する構造体
 /// 内部処理のみに用いるのでpubではない
+#[derive(Debug)]
 struct Pagination<T> {
     contents: Vec<T>,
     next_cursor: Option<String>,
@@ -16,6 +19,7 @@ struct Pagination<T> {
 pub struct NotionClient {
     pub client: Client,
     pub config: Config,
+    limiter: DefaultDirectRateLimiter,
 }
 
 /// Notion APIクライアント
@@ -23,13 +27,20 @@ pub struct NotionClient {
 /// 実際のHTTPリクエスト処理は内部で行っており、具体的な処理はハードコードされている
 impl NotionClient {
     pub fn new(config: Config) -> Self {
+        // 1秒あたり2リクエストのレートリミッターを設定
+        // 実際には3リクエスト可能だが安全のため、2リクエストに設定
+        let quota =
+            Quota::per_second(NonZeroU32::new(2).unwrap()).allow_burst(NonZeroU32::new(2).unwrap());
+        let limiter = governor::RateLimiter::direct(quota);
         NotionClient {
             client: Client::new(),
             config,
+            limiter,
         }
     }
 
     async fn get(&self, url: &str) -> Result<Value, Box<dyn Error>> {
+        self.limiter.until_ready().await;
         let res = self
             .client
             .get(url)
@@ -44,6 +55,7 @@ impl NotionClient {
     }
 
     async fn post(&self, url: &str, body: &str) -> Result<Value, Box<dyn Error>> {
+        self.limiter.until_ready().await;
         let res = self
             .client
             .post(url)
@@ -141,14 +153,11 @@ impl NotionClient {
     ) -> Result<Pagination<BlockInfo>, Box<dyn Error>> {
         let url = if let Some(cursor) = next_cursor {
             format!(
-                "https://api.notion.com/v1/blocks/{}/children?page_size=100&start_cursor={}",
+                "https://api.notion.com/v1/blocks/{}/children?start_cursor={}",
                 page.id, cursor
             )
         } else {
-            format!(
-                "https://api.notion.com/v1/blocks/{}/children?page_size=100",
-                page.id
-            )
+            format!("https://api.notion.com/v1/blocks/{}/children", page.id)
         };
         let json_response = self.get(&url).await?;
         let next_cursor = if json_response
