@@ -20,6 +20,7 @@ target/
 .vscode
 config.json
 output.json
+tmp*
 dist/
 
 # System files
