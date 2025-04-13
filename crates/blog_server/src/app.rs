@@ -1,10 +1,13 @@
+use crate::components::{footer::Footer, header::Header};
 use leptos::prelude::*;
-use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
-    StaticSegment,
     components::{Route, Router, Routes},
+    path, StaticSegment,
 };
 
+/// サーバーサイドレンダリングのためのシェル関数
+/// この関数はHTMLドキュメント全体を生成します
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
         <!DOCTYPE html>
@@ -23,6 +26,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
     }
 }
 
+/// メインのアプリケーションコンポーネント
 #[component]
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
@@ -36,27 +40,58 @@ pub fn App() -> impl IntoView {
         // sets the document title
         <Title text="ぶくせんの探窟メモ" />
 
-        // content for this welcome page
-        <Router>
-            <main>
-                <Routes fallback=|| "ページが見つかりませんでした。".into_view()>
-                    <Route path=StaticSegment("") view=HomePage />
-                </Routes>
-            </main>
-        </Router>
-    }
-}
+        <div class="app-container">
+            <Header />
 
-/// Renders the home page of your application.
-#[component]
-fn HomePage() -> impl IntoView {
-    // Creates a reactive value to update the button
-    let count = RwSignal::new(0);
-    let on_click = move |_| *count.write() += 1;
+            <Router>
+                <main class="content-container">
+                    <Routes fallback=|| {
+                        view! {
+                            <div class="not-found">ページが見つかりませんでした</div>
+                        }
+                    }>
+                        // トップページルート
+                        <Route path=StaticSegment("") view=crate::routes::home::HomePage />
 
-    view! {
-        <h1>"開発中"</h1>
-        <h1 class="text-3xl font-bold underline">tailwind CSSのテスト</h1>
-        <button on:click=on_click>"ボタン要素: " {count}</button>
+                        // カテゴリーページルート
+                        <Route
+                            path=StaticSegment("statistics")
+                            view=move || {
+                                view! {
+                                    <crate::routes::category::CategoryPage category="statistics" />
+                                }
+                            }
+                        />
+                        <Route
+                            path=StaticSegment("physics")
+                            view=move || {
+                                view! {
+                                    <crate::routes::category::CategoryPage category="physics" />
+                                }
+                            }
+                        />
+                        <Route
+                            path=StaticSegment("daily")
+                            view=move || {
+                                view! { <crate::routes::category::CategoryPage category="daily" /> }
+                            }
+                        />
+                        <Route
+                            path=StaticSegment("tech")
+                            view=move || {
+                                view! { <crate::routes::category::CategoryPage category="tech" /> }
+                            }
+                        />
+
+                        // 記事ページルート - DynamicSegmentを使います
+                        <Route
+                            path=path!("/:category/:slug")
+                            view=crate::routes::article::ArticlePage
+                        />
+                    </Routes>
+                </main>
+            </Router>
+            <Footer />
+        </div>
     }
 }
