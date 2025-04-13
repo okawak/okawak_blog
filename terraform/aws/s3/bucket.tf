@@ -1,7 +1,7 @@
 # S3バケットの作成
 resource "aws_s3_bucket" "myblog_bucket" {
-  bucket        = "okawak-blog-resources-bucket"
-  force_destroy = true
+  bucket        = var.bucket_name
+  force_destroy = var.force_destroy
 }
 
 # バージョニングの有効化
@@ -41,12 +41,6 @@ resource "aws_s3_bucket_public_access_block" "block" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
-
-# ポリシーの設定
-#resource "aws_s3_bucket_policy" "bucket_policy" {
-#  bucket = aws_s3_bucket.mydomain_bucket.id
-#  policy = data.aws_iam_policy_document.s3_main_policy.json
-#}
 
 # 古いバージョンのものを削除する
 resource "aws_s3_bucket_lifecycle_configuration" "lifecycle" {

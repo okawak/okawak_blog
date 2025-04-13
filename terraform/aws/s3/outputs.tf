@@ -9,3 +9,7 @@ output "domain_name" {
 output "origin_id" {
   value = aws_s3_bucket.myblog_bucket.id
 }
+
+output "bucket_arn" {
+  value = aws_s3_bucket.myblog_bucket.arn
+}
