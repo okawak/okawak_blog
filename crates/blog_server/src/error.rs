@@ -1,4 +1,6 @@
+#[cfg(feature = "ssr")]
 use aws_smithy_runtime_api::client::result::SdkError;
+
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -54,6 +56,7 @@ pub fn DisplayError(error: AppError) -> impl IntoView {
 }
 
 /// AWS SDKのエラーをAppErrorに変換するためのFromトレイト実装
+#[cfg(feature = "ssr")]
 impl From<aws_sdk_s3::Error> for AppError {
     fn from(err: aws_sdk_s3::Error) -> Self {
         Self::S3Error(err.to_string())
@@ -61,6 +64,7 @@ impl From<aws_sdk_s3::Error> for AppError {
 }
 
 /// すべてのSdkErrorタイプをAppErrorに変換する汎用実装
+#[cfg(feature = "ssr")]
 impl<E, O> From<SdkError<E, O>> for AppError
 where
     E: std::fmt::Display,

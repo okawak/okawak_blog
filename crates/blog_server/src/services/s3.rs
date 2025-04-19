@@ -1,3 +1,5 @@
+#![cfg(feature = "ssr")]
+
 use crate::error::AppError;
 use crate::models::article::{Article, ArticleSummary};
 use aws_config::meta::region::RegionProviderChain;

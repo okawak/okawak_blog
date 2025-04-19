@@ -3,10 +3,11 @@ pub mod components;
 pub mod error;
 pub mod models;
 pub mod routes;
+#[cfg(feature = "ssr")]
 pub mod services;
 
 // サーバーサイドで使用するための関数やツールをエクスポート
-pub use app::{App, shell};
+pub use app::{shell, App};
 pub use error::AppError;
 
 // クライアントサイドのハイドレーション用エントリーポイント
