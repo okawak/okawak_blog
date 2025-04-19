@@ -34,6 +34,24 @@ pub struct Article {
 }
 
 impl Article {
+    /// デフォルトのインスタンスを生成
+    pub fn default() -> Self {
+        Self {
+            id: String::new(),
+            title: String::new(),
+            slug: String::new(),
+            category: String::new(),
+            content: String::new(),
+            excerpt: String::new(),
+            thumbnail_url: None,
+            tags: vec![],
+            published_at: NaiveDate::from_ymd_opt(1970, 1, 1).unwrap(),
+            updated_at: None,
+            description: String::new(),
+            og_image: None,
+            published: true,
+        }
+    }
     /// 記事のURLを生成
     pub fn url(&self) -> String {
         format!("/{}/{}", self.category, self.slug)

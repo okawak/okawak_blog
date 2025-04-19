@@ -1,5 +1,6 @@
 use crate::components::{ArticleCard, Sidebar};
 use crate::models::article::ArticleSummary;
+#[cfg(feature = "ssr")]
 use crate::services::s3;
 use leptos::prelude::*;
 
@@ -95,6 +96,7 @@ pub fn HomePage() -> impl IntoView {
 }
 
 /// S3バケットから最新記事一覧を取得
+#[cfg(feature = "ssr")]
 async fn fetch_latest_articles() -> Result<Vec<ArticleSummary>, String> {
     // 全カテゴリーから最新記事を集める
     let categories = vec!["statistics", "physics", "daily", "tech"];
@@ -120,4 +122,12 @@ async fn fetch_latest_articles() -> Result<Vec<ArticleSummary>, String> {
     let latest = all_articles.into_iter().take(10).collect();
 
     Ok(latest)
+}
+
+// WASM（hydrate）用 スタブ：型だけ合わせておく
+#[cfg(not(feature = "ssr"))]
+async fn fetch_latest_articles() -> Result<Vec<ArticleSummary>, String> {
+    // クライアントナビゲーション時に呼び出されても型エラーにならないよう、
+    // 空リスト or 適当なエラーを返す
+    Ok(vec![])
 }

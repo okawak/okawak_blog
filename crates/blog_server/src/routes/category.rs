@@ -1,5 +1,6 @@
 use crate::components::{ArticleCard, Sidebar};
 use crate::models::article::ArticleSummary;
+#[cfg(feature = "ssr")]
 use crate::services::s3;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
@@ -193,6 +194,7 @@ pub fn TagPage() -> impl IntoView {
 }
 
 /// カテゴリー別の記事一覧を取得する
+#[cfg(feature = "ssr")]
 async fn fetch_category_articles(category: &str) -> Result<Vec<ArticleSummary>, String> {
     match s3::list_articles(category).await {
         Ok(articles) => Ok(articles),
@@ -203,7 +205,16 @@ async fn fetch_category_articles(category: &str) -> Result<Vec<ArticleSummary>, 
     }
 }
 
+// WASM（hydrate）用 スタブ：型だけ合わせておく
+#[cfg(not(feature = "ssr"))]
+async fn fetch_category_articles(_category: &str) -> Result<Vec<ArticleSummary>, String> {
+    // クライアントナビゲーション時に呼び出されても型エラーにならないよう、
+    // 空リスト or 適当なエラーを返す
+    Ok(vec![])
+}
+
 /// タグで記事を検索する
+#[cfg(feature = "ssr")]
 async fn fetch_tag_articles(tag: &str) -> Result<Vec<ArticleSummary>, String> {
     // すべてのカテゴリーから記事を取得
     let categories = vec!["statistics", "physics", "daily", "tech"];
@@ -234,4 +245,12 @@ async fn fetch_tag_articles(tag: &str) -> Result<Vec<ArticleSummary>, String> {
         .collect();
 
     Ok(filtered_articles)
+}
+
+// WASM（hydrate）用 スタブ：型だけ合わせておく
+#[cfg(not(feature = "ssr"))]
+async fn fetch_tag_articles(_tag: &str) -> Result<Vec<ArticleSummary>, String> {
+    // クライアントナビゲーション時に呼び出されても型エラーにならないよう、
+    // 空リスト or 適当なエラーを返す
+    Ok(vec![])
 }

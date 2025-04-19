@@ -26,3 +26,7 @@ run = 'cargo test -p notion_api --release -- --nocapture'
 [tasks.local_server]
 description = "Run the server locally"
 run = 'cargo leptos serve --release'
+
+[tasks.local_build]
+description = "build the server locally"
+run = 'LEPTOS_TAILWIND_VERSION=v4.1.4 cargo leptos build --release'
