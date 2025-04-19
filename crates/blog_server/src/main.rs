@@ -7,7 +7,7 @@ async fn main() {
     use blog_server::setup_logging;
     use leptos::logging::log;
     use leptos::prelude::{provide_context, *};
-    use leptos_axum::{LeptosRoutes, generate_route_list};
+    use leptos_axum::{LeptosRoutes, file_and_error_handler, generate_route_list};
 
     // initialize the logger
     setup_logging();
@@ -28,30 +28,26 @@ async fn main() {
 
     // Axumルーターを設定
     let app = Router::new()
-        .leptos_routes_with_handler(
-            routes,
+        // SSR 用コンテキストと App シェルを渡す
+        .leptos_routes_with_context(
+            &leptos_options,
+            routes.clone(),
+            // additional_context: リクエスト処理前に呼ばれる
             {
-                let leptos_options = leptos_options.clone();
-                move |cx| {
-                    provide_context(s3_client_ctx.clone());
-                    shell(leptos_options.clone())
+                let s3_client = s3_client.clone();
+                move || {
+                    provide_context(s3_client.clone());
                 }
             },
-            |errors| {
-                log::error!("Error: {:?}", errors);
-                let mut response =
-                    axum::response::Response::new(format!("Error: {:?}", errors).into());
-                *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
-                response
+            // app_fn: HTML ドキュメント全体を生成するシェル
+            {
+                let opts = leptos_options.clone();
+                move || shell(opts.clone())
             },
         )
-        .fallback(leptos_axum::file_and_error_handler_with_context(
-            move |req| {
-                provide_context(s3_client_ctx.clone());
-                shell(leptos_options.clone())(req)
-            },
-        ))
-        .with_state(leptos_options);
+        // 静的ファイル＋404 用ハンドラ（shell 関数だけ渡せば OK）
+        .fallback(file_and_error_handler(shell))
+        .with_state(leptos_options.clone());
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
