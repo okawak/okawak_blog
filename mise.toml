@@ -4,19 +4,33 @@ run = 'sudo systemctl stop okawak_blog'
 
 [tasks.service]
 description = "Copy service file and reload the daemon"
+depends = ["stop"]
 run = 'sudo sh -c "cp -f service/okawak_blog.service /etc/systemd/system/okawak_blog.service && systemctl daemon-reload"'
+
+[tasks.clean]
+description = "Clean the project"
+depends = ["service"]
+run = 'cargo clean'
 
 [tasks.build]
 description = "Build the project"
+depends = ["clean"]
 run = 'cargo leptos build --release'
 
 [tasks.start]
 description = "Start the service"
+depends = ["build"]
 run = 'sudo systemctl daemon-reload && sudo systemctl start okawak_blog'
 
 [tasks.deploy]
 description = "Deploy the project"
-run = ["mise run stop", "mise run service", "mise run build", "mise run start"]
+run = [
+  "mise run stop",
+  "mise run service",
+  "mise run clean",
+  "mise run build",
+  "mise run start",
+]
 alias = "d"
 
 [tasks.local_notion]

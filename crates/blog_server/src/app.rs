@@ -42,9 +42,8 @@ pub fn App() -> impl IntoView {
         <Title text="ぶくせんの探窟メモ" />
 
         <div class="app-container">
-            <Header />
-
             <Router>
+                <Header />
                 <main class="content-container">
                     <Routes fallback=|| {
                         view! {

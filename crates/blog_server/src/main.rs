@@ -5,7 +5,6 @@ async fn main() {
     use blog_server::app::App;
     use blog_server::app::*;
     use blog_server::setup_logging;
-    use leptos::logging::log;
     use leptos::prelude::{provide_context, *};
     use leptos_axum::{LeptosRoutes, file_and_error_handler, generate_route_list};
 
@@ -15,9 +14,11 @@ async fn main() {
 
     // AWS SDK設定
     // 認証情報は環境変数または~/.aws/credentialsから自動的に読み込まれます
-    let aws_config = aws_config::from_env().load().await;
+    let aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region("ap-northeast-1")
+        .load()
+        .await;
     let s3_client = aws_sdk_s3::Client::new(&aws_config);
-    let s3_client_ctx = s3_client.clone();
 
     let conf = get_configuration(None).unwrap();
     let addr = conf.leptos_options.site_addr;

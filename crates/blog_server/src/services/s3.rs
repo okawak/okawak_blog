@@ -298,5 +298,5 @@ struct ArticleMetadataToml {
     #[serde(default)]
     thumbnail_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    status: Option<String>,
+    _status: Option<String>,
 }
