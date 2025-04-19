@@ -2,12 +2,12 @@
 #[tokio::main]
 async fn main() {
     use axum::Router;
+    use blog_server::app::App;
     use blog_server::app::*;
     use chrono::format;
-    use leptos::{logging::log, server_fn::response};
     use leptos::prelude::{provide_context, *};
+    use leptos::{logging::log, server_fn::response};
     use leptos_axum::{LeptosRoutes, generate_route_list};
-    use blog_server::app::App;
 
     // initialize the logger
     setup_logging();
@@ -31,25 +31,26 @@ async fn main() {
     // Axumルーターを設定
     let app = Router::new()
         .leptos_routes_with_handler(
-          &leptos_options,
-          routes,
-          {
-            let leptos_options = leptos_options.clone();
-            move || {
-              provide_context(s3_resource.clone());
-              shell(leptos_options.clone())
-            }
-          },
-          |errors| {
-            log::error!("Error: {:?}", errors);
-            let mut response = axum::response::Response::new(format!("Error: {:?}", errors).into());
-            *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
-            response
-          }
+            &leptos_options,
+            routes,
+            {
+                let leptos_options = leptos_options.clone();
+                move || {
+                    provide_context(s3_resource.clone());
+                    shell(leptos_options.clone())
+                }
+            },
+            |errors| {
+                log::error!("Error: {:?}", errors);
+                let mut response =
+                    axum::response::Response::new(format!("Error: {:?}", errors).into());
+                *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
+                response
+            },
         )
         .fallback(leptos_axum::file_and_error_handler(move || {
-          provide_context(s3_resource.clone());
-          shell(leptos_options.clone())
+            provide_context(s3_resource.clone());
+            shell(leptos_options.clone())
         }))
         .with_state(leptos_options);
 

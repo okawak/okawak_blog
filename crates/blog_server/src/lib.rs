@@ -4,7 +4,6 @@ pub mod error;
 pub mod models;
 pub mod routes;
 pub mod services;
-pub mod utils;
 
 // サーバーサイドで使用するための関数やツールをエクスポート
 pub use app::{shell, App};
@@ -32,22 +31,3 @@ pub fn setup_logging() {
 
     simple_logger::init_with_level(log_level).expect("Failed to initialize logger");
 }
-
-// アプリケーション用のエラータイプ
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum AppError {
-    #[error("S3アクセスエラー: {0}")]
-    S3Error(String),
-
-    #[error("ファイル '{0}' が見つかりません")]
-    FileNotFound(String),
-
-    #[error("Markdownパースエラー: {0}")]
-    MarkdownError(String),
-
-    #[error("内部サーバーエラー: {0}")]
-    ServerError(String),
-}
-
-// エラー処理用のResultタイプエイリアス
-pub type Result<T> = core::result::Result<T, AppError>;

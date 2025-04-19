@@ -1,34 +1,142 @@
-use leptos::*;
-use leptos_router::*;
-use crate::content::{parser::Article, s3};
+use crate::components::{MarkdownRenderer, Sidebar, TagList};
+use crate::models::article::Article;
+use crate::services::s3;
+use leptos::prelude::*;
+use leptos_router::{hooks::use_params_map, params::ParamsMap};
 
-#[server]
-async fn fetch_article(cat: String, slug: String) -> Result<Article, ServerFnError> {
-    let key = format!("{}/{}.md", cat, slug);
-    s3::get(&key).await?.ok_or(ServerFnError::ServerError("not found".into()))
-}
-
+/// 記事詳細ページコンポーネント（シンプル版）
 #[component]
 pub fn ArticlePage() -> impl IntoView {
+    // URLからカテゴリーとスラッグを取得
     let params = use_params_map();
-    let cat  = move || params.with(|m| m.get("cat").cloned().unwrap());
-    let slug = move || params.with(|m| m.get("slug").cloned().unwrap());
+    let category = move || params.with(|p: &ParamsMap| p.get("category").clone().unwrap_or_default());
+    let slug = move || params.with(|p: &ParamsMap| p.get("slug").clone().unwrap_or_default());
 
-    let art = create_resource(
-        move || (cat(), slug()),
-        |(c, s)| async move { fetch_article(c, s).await }
+    // 記事データを取得
+    let article_resource = Resource::new(
+        move || (category(), slug()),
+        |(category, slug)| async move {
+            fetch_article(&category, &slug).await
+        }
     );
 
+    // リソースの状態を管理するシグナル
+    let is_loading = Memo::new(move |_| article_resource.get().is_none());
+    let has_error = Memo::new(move |_| article_resource.get().is_some_and(|result| result.is_err()));
+    let error_message = Memo::new(move |_| {
+        match article_resource.get() {
+            Some(Err(e)) => e.to_string(),
+            _ => String::from("記事の読み込みに失敗しました")
+        }
+    });
+
+    // 記事データを個別のシグナルに分解
+    let article_title = Memo::new(move |_| {
+        article_resource.get()
+            .and_then(|result| result.ok())
+            .map(|article| article.title.clone())
+            .unwrap_or_default()
+    });
+
+    let article_content = Memo::new(move |_| {
+        article_resource.get()
+            .and_then(|result| result.ok())
+            .map(|article| article.content.clone())
+            .unwrap_or_default()
+    });
+
+    let article_category = Memo::new(move |_| {
+        article_resource.get()
+            .and_then(|result| result.ok())
+            .map(|article| article.category.clone())
+            .unwrap_or_default()
+    });
+
+    let article_tags = Memo::new(move |_| {
+        article_resource.get()
+            .and_then(|result| result.ok())
+            .map(|article| article.tags.clone())
+            .unwrap_or_default()
+    });
+
+    let article_date = Memo::new(move |_| {
+        article_resource.get()
+            .and_then(|result| result.ok())
+            .map(|article| article.date_formatted())
+            .unwrap_or_default()
+    });
+
+    let has_article = Memo::new(move |_| {
+        article_resource.get().is_some_and(|result| result.is_ok())
+    });
+
     view! {
-        <Transition fallback=|| view!"Loading…">
-            {move || art.get().map(|a| view! {
-                <article class="prose mx-auto p-4">
-                    <h1 class="mb-2">{a.fm.title}</h1>
-                    <p class="text-sm text-gray-500">{a.fm.date.to_string()}</p>
-                    // XSS 対策するなら ammonia などで sanitize
-                    <div inner_html=a.html></div>
-                </article>
-            })}
-        </Transition>
+        <div class="article-page">
+            <div class="main-content">
+                // ローディング状態の表示
+                <Show when=move || is_loading.get() fallback=|| ()>
+                    <div class="loading">記事を読み込み中...</div>
+                </Show>
+
+                // エラー状態の表示
+                <Show when=move || has_error.get() fallback=|| ()>
+                    <div class="error">
+                        <h2>エラーが発生しました</h2>
+                        <p>{move || error_message.get()}</p>
+                        <a href="/" class="back-link">
+                            ホームに戻る
+                        </a>
+                    </div>
+                </Show>
+
+                // 記事内容の表示（シンプル化）
+                <Show when=move || has_article.get() fallback=|| ()>
+                    <article class="article-content">
+                        <header class="article-header">
+                            <div class="article-meta">
+                                <a
+                                    href=move || format!("/{}", article_category.get())
+                                    class="category-link"
+                                >
+                                    {move || get_category_display_name(article_category.get())}
+                                </a>
+                                <time>{move || article_date.get()}</time>
+                            </div>
+                            <h1>{move || article_title.get()}</h1>
+                            // タグリストのプロパティ修正: tagsをSignal::derivedを使って変換
+                            <TagList tags=Signal::derive(move || article_tags.get()).get() />
+                        </header>
+
+                        // シンプル化されたMarkdown表示
+                        <div class="article-body">
+                            <MarkdownRenderer
+                                content=article_content.get()
+                                enable_toc=true
+                                enable_mathjax=true
+                            />
+                        </div>
+                    </article>
+                </Show>
+            </div>
+
+            <Sidebar />
+        </div>
     }
+}
+
+/// カテゴリーコードから表示名を取得
+/// 引数のライフタイムと戻り値の静的ライフタイムの不一致を修正
+fn get_category_display_name(category: String) -> &'static str {
+    match category.as_str() {
+        "statistics" => "統計学",
+        "physics" => "物理学",
+        "daily" => "日常",
+        "tech" => "技術",
+        _ => "その他",  // 未知のカテゴリーの場合は静的文字列を返す
+    }
+}
+
+/// 記事データを取得する
+async fn fetch_article(category: &str, slug: &str) -> Result<Article, String> {
+    s3::get_article(category, slug).await
 }
