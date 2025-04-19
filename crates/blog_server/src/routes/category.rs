@@ -12,7 +12,7 @@ pub fn CategoryPage(category: &'static str) -> impl IntoView {
     // カテゴリーに属する記事一覧を取得
     let category_articles = Resource::new(
         move || category,
-        |category| async move { fetch_category_articles(category).await }
+        |category| async move { fetch_category_articles(category).await },
     );
 
     // カテゴリー名から表示名を取得
@@ -26,24 +26,22 @@ pub fn CategoryPage(category: &'static str) -> impl IntoView {
 
     // リソースの状態を管理するシグナル
     let is_loading = Signal::derive(move || category_articles.get().is_none());
-    let has_error = Signal::derive(move || category_articles.get().is_some_and(|result| result.is_err()));
-    let error_message = Signal::derive(move || {
-        match category_articles.get() {
-            Some(Err(e)) => e.to_string(),
-            _ => String::from("不明なエラー")
-        }
+    let has_error = Signal::derive(move || {
+        category_articles
+            .get()
+            .is_some_and(|result| result.is_err())
     });
-    let has_articles = Signal::derive(move || {
-        match category_articles.get() {
-            Some(Ok(articles)) if !articles.is_empty() => true,
-            _ => false
-        }
+    let error_message = Signal::derive(move || match category_articles.get() {
+        Some(Err(e)) => e.to_string(),
+        _ => String::from("不明なエラー"),
     });
-    let articles_data = Signal::derive(move || {
-        match category_articles.get() {
-            Some(Ok(articles)) => articles.clone(),
-            _ => vec![]
-        }
+    let has_articles = Signal::derive(move || match category_articles.get() {
+        Some(Ok(articles)) if !articles.is_empty() => true,
+        _ => false,
+    });
+    let articles_data = Signal::derive(move || match category_articles.get() {
+        Some(Ok(articles)) => articles.clone(),
+        _ => vec![],
     });
 
     view! {
@@ -124,31 +122,25 @@ pub fn TagPage() -> impl IntoView {
     // 残りのコードは同じ
     let tag_articles = Resource::new(
         move || tag(),
-        |tag| async move { fetch_tag_articles(&tag).await }
+        |tag| async move { fetch_tag_articles(&tag).await },
     );
 
     // リソースの状態を管理するシグナル (変更なし)
     let is_loading = Signal::derive(move || tag_articles.get().is_none());
-    let has_error = Signal::derive(move || tag_articles.get().is_some_and(|result| result.is_err()));
-    let error_message = Signal::derive(move || {
-        match tag_articles.get() {
-            Some(Err(e)) => e.to_string(),
-            _ => String::from("不明なエラー")
-        }
+    let has_error =
+        Signal::derive(move || tag_articles.get().is_some_and(|result| result.is_err()));
+    let error_message = Signal::derive(move || match tag_articles.get() {
+        Some(Err(e)) => e.to_string(),
+        _ => String::from("不明なエラー"),
     });
 
-
-    let has_articles = Signal::derive(move || {
-        match tag_articles.get() {
-            Some(Ok(articles)) if !articles.is_empty() => true,
-            _ => false
-        }
+    let has_articles = Signal::derive(move || match tag_articles.get() {
+        Some(Ok(articles)) if !articles.is_empty() => true,
+        _ => false,
     });
-    let articles_data = Signal::derive(move || {
-        match tag_articles.get() {
-            Some(Ok(articles)) => articles.clone(),
-            _ => vec![]
-        }
+    let articles_data = Signal::derive(move || match tag_articles.get() {
+        Some(Ok(articles)) => articles.clone(),
+        _ => vec![],
     });
 
     view! {
@@ -233,7 +225,12 @@ async fn fetch_tag_articles(tag: &str) -> Result<Vec<ArticleSummary>, String> {
     // 指定されたタグを持つ記事のみをフィルタリング
     let filtered_articles = all_articles
         .into_iter()
-        .filter(|article| article.tags.iter().any(|t| t.to_lowercase() == tag.to_lowercase()))
+        .filter(|article| {
+            article
+                .tags
+                .iter()
+                .any(|t| t.to_lowercase() == tag.to_lowercase())
+        })
         .collect();
 
     Ok(filtered_articles)

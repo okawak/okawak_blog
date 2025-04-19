@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use leptos::prelude::*;
-use pulldown_cmark::{html, Options, Parser};
+use pulldown_cmark::{Options, Parser, html};
 
 /// Markdownをレンダリングするコンポーネント
 ///
@@ -24,10 +24,14 @@ pub fn MarkdownRenderer(
                 "markdown-content"
             };
             (html.clone(), class)
-        },
-        Err(e) => {
-            (format!("<div class=\"markdown-error\"><p>Markdownの処理中にエラーが発生しました: {}</p></div>", e), "")
         }
+        Err(e) => (
+            format!(
+                "<div class=\"markdown-error\"><p>Markdownの処理中にエラーが発生しました: {}</p></div>",
+                e
+            ),
+            "",
+        ),
     };
 
     view! {

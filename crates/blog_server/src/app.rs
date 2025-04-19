@@ -1,9 +1,10 @@
 use crate::components::{footer::Footer, header::Header};
 use leptos::prelude::*;
-use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
+use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
+    StaticSegment,
     components::{Route, Router, Routes},
-    path, StaticSegment,
+    path,
 };
 
 /// サーバーサイドレンダリングのためのシェル関数

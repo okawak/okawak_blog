@@ -9,66 +9,68 @@ use leptos_router::{hooks::use_params_map, params::ParamsMap};
 pub fn ArticlePage() -> impl IntoView {
     // URLからカテゴリーとスラッグを取得
     let params = use_params_map();
-    let category = move || params.with(|p: &ParamsMap| p.get("category").clone().unwrap_or_default());
+    let category =
+        move || params.with(|p: &ParamsMap| p.get("category").clone().unwrap_or_default());
     let slug = move || params.with(|p: &ParamsMap| p.get("slug").clone().unwrap_or_default());
 
     // 記事データを取得
     let article_resource = Resource::new(
         move || (category(), slug()),
-        |(category, slug)| async move {
-            fetch_article(&category, &slug).await
-        }
+        |(category, slug)| async move { fetch_article(&category, &slug).await },
     );
 
     // リソースの状態を管理するシグナル
     let is_loading = Memo::new(move |_| article_resource.get().is_none());
-    let has_error = Memo::new(move |_| article_resource.get().is_some_and(|result| result.is_err()));
-    let error_message = Memo::new(move |_| {
-        match article_resource.get() {
-            Some(Err(e)) => e.to_string(),
-            _ => String::from("記事の読み込みに失敗しました")
-        }
+    let has_error =
+        Memo::new(move |_| article_resource.get().is_some_and(|result| result.is_err()));
+    let error_message = Memo::new(move |_| match article_resource.get() {
+        Some(Err(e)) => e.to_string(),
+        _ => String::from("記事の読み込みに失敗しました"),
     });
 
     // 記事データを個別のシグナルに分解
     let article_title = Memo::new(move |_| {
-        article_resource.get()
+        article_resource
+            .get()
             .and_then(|result| result.ok())
             .map(|article| article.title.clone())
             .unwrap_or_default()
     });
 
     let article_content = Memo::new(move |_| {
-        article_resource.get()
+        article_resource
+            .get()
             .and_then(|result| result.ok())
             .map(|article| article.content.clone())
             .unwrap_or_default()
     });
 
     let article_category = Memo::new(move |_| {
-        article_resource.get()
+        article_resource
+            .get()
             .and_then(|result| result.ok())
             .map(|article| article.category.clone())
             .unwrap_or_default()
     });
 
     let article_tags = Memo::new(move |_| {
-        article_resource.get()
+        article_resource
+            .get()
             .and_then(|result| result.ok())
             .map(|article| article.tags.clone())
             .unwrap_or_default()
     });
 
     let article_date = Memo::new(move |_| {
-        article_resource.get()
+        article_resource
+            .get()
             .and_then(|result| result.ok())
             .map(|article| article.date_formatted())
             .unwrap_or_default()
     });
 
-    let has_article = Memo::new(move |_| {
-        article_resource.get().is_some_and(|result| result.is_ok())
-    });
+    let has_article =
+        Memo::new(move |_| article_resource.get().is_some_and(|result| result.is_ok()));
 
     view! {
         <div class="article-page">
@@ -132,7 +134,7 @@ fn get_category_display_name(category: String) -> &'static str {
         "physics" => "物理学",
         "daily" => "日常",
         "tech" => "技術",
-        _ => "その他",  // 未知のカテゴリーの場合は静的文字列を返す
+        _ => "その他", // 未知のカテゴリーの場合は静的文字列を返す
     }
 }
 

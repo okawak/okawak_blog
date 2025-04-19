@@ -7,34 +7,26 @@ use leptos::prelude::*;
 #[component]
 pub fn HomePage() -> impl IntoView {
     // 最新記事一覧を取得
-    let latest_articles = Resource::new(
-        || (),
-        |_| async move { fetch_latest_articles().await }
-    );
+    let latest_articles = Resource::new(|| (), |_| async move { fetch_latest_articles().await });
 
     // 手動でローディング状態を管理
     // 初期状態: get() が None を返す場合はロード中
     // エラー状態: get() が Some(Err(_)) を返す場合はエラー
     // 完了状態: get() が Some(Ok(_)) を返す場合は読み込み完了
     let is_loading = Signal::derive(move || latest_articles.get().is_none());
-    let has_error = Signal::derive(move || latest_articles.get().is_some_and(|result| result.is_err()));
-    let error_message = Signal::derive(move || {
-        match latest_articles.get() {
-            Some(Err(e)) => e.to_string(),
-            _ => String::from("不明なエラー")
-        }
+    let has_error =
+        Signal::derive(move || latest_articles.get().is_some_and(|result| result.is_err()));
+    let error_message = Signal::derive(move || match latest_articles.get() {
+        Some(Err(e)) => e.to_string(),
+        _ => String::from("不明なエラー"),
     });
-    let has_articles = Signal::derive(move || {
-        match latest_articles.get() {
-            Some(Ok(articles)) if !articles.is_empty() => true,
-            _ => false
-        }
+    let has_articles = Signal::derive(move || match latest_articles.get() {
+        Some(Ok(articles)) if !articles.is_empty() => true,
+        _ => false,
     });
-    let articles_data = Signal::derive(move || {
-        match latest_articles.get() {
-            Some(Ok(articles)) => articles.clone(),
-            _ => vec![]
-        }
+    let articles_data = Signal::derive(move || match latest_articles.get() {
+        Some(Ok(articles)) => articles.clone(),
+        _ => vec![],
     });
 
     view! {

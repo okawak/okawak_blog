@@ -6,7 +6,7 @@ pub mod routes;
 pub mod services;
 
 // サーバーサイドで使用するための関数やツールをエクスポート
-pub use app::{shell, App};
+pub use app::{App, shell};
 pub use error::AppError;
 
 // クライアントサイドのハイドレーション用エントリーポイント
