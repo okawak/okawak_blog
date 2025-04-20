@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap");
 
-@theme {
+:root {
   --font-sans: "Noto Sans JP", sans-serif;
   --color-bg: #1f1a17;
   --color-bg-soft: #2b2522;

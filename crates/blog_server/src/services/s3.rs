@@ -10,7 +10,7 @@ use regex::Regex;
 use serde::Deserialize;
 
 /// S3バケット名
-const BUCKET_NAME: &str = "blog-okawak-app";
+const BUCKET_NAME: &str = "okawak-blog-resources-bucket";
 
 /// S3クライアントを初期化する
 async fn create_s3_client() -> Result<Client, AppError> {
