@@ -36,18 +36,10 @@ pub fn HomePage() -> impl IntoView {
                 <section class="profile-section">
                     <h1>ぶくせんの探窟メモ</h1>
                     <div class="profile-content">
-                        <div class="profile-image">
-                            <img src="/assets/images/profile.jpg" alt="プロフィール画像" />
-                        </div>
+                        // <img src="/assets/images/profile.jpg" alt="プロフィール画像" />
+                        <div class="profile-image"></div>
                         <div class="profile-text">
-                            <p>
-                                "こんにちは、岡わかです。このブログでは統計学、物理学、技術、そして日常の事柄について"
-                                "考えたことを記録しています。"
-                            </p>
-                            <p>
-                                "専門は物理学ですが、データ分析や数学的なトピックについても興味を持っています。"
-                                "このブログが何か新しい発見や学びのきっかけになれば嬉しいです。"
-                            </p>
+                            <p>"気になったことをメモしておくブログです。"</p>
                         </div>
                     </div>
                 </section>

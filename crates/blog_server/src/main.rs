@@ -4,12 +4,15 @@ async fn main() {
     use axum::Router;
     use blog_server::app::App;
     use blog_server::app::*;
-    use blog_server::setup_logging;
     use leptos::prelude::{provide_context, *};
     use leptos_axum::{LeptosRoutes, file_and_error_handler, generate_route_list};
 
     // initialize the logger
-    setup_logging();
+    let env = env_logger::Env::default()
+        .filter_or("RUST_LOG", "info")
+        .write_style_or("LOG_STYLE", "auto");
+
+    env_logger::init_from_env(env);
     log::info!("Starting server...");
 
     // AWS SDK設定
