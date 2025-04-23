@@ -13,17 +13,3 @@
   --color-danger: #a45a52;
   --color-highlight: #8aa99f;
 }
-
-@layer base {
-  body {
-    font-family: var(--font-sans);
-    background-color: var(--color-bg);
-    color: var(--color-text);
-    @apply antialiased leading-relaxed;
-  }
-
-  ::selection {
-    background-color: var(--color-highlight);
-    color: var(--color-bg);
-  }
-}

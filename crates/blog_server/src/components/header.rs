@@ -1,38 +1,61 @@
-use crate::components::NavigationItem;
+use crate::components::{get_main_nav_items, NavigationItem};
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
+use reactive_stores::Store;
+use stylance::import_style;
+
+import_style!(header_style, "header.module.scss");
+
+#[derive(Store, Clone)]
+pub struct NavItemsStore {
+    #[store(key: String = |item| item.href.clone())]
+    items: Vec<NavigationItem>,
+}
 
 /// サイトヘッダーコンポーネント
 #[component]
 pub fn Header() -> impl IntoView {
-    // 現在のパスを取得して、アクティブなナビゲーション項目を判断するために使用
     let location = use_location();
-    let current_path = move || location.pathname.get();
-
-    // クロージャを明示的な変数に格納し、型情報を提供
-    let nav_items: Box<dyn Fn() -> Vec<NavigationItem> + Send + 'static> =
-        Box::new(move || crate::components::get_main_nav_items(&current_path()));
+    let current = move || location.pathname.get();
+    let nav_store = Store::new(NavItemsStore {
+        items: get_main_nav_items(&current()),
+    });
 
     view! {
-        <header class="site-header">
-            <div class="header-container">
-                <div class="logo">
-                    <a href="/">
-                        <h1>ぶくせんの探窟メモ</h1>
-                    </a>
-                </div>
+        <header class=header_style::header>
+            <div class=header_style::container>
+                <a href="/">
+                    <h1 class=header_style::logo>{"ぶくせんの探窟メモ"}</h1>
+                </a>
 
-                <nav class="main-nav">
-                    <Navigation items=nav_items />
+                <nav>
+                    <ul class=header_style::nav_list>
+                        <For
+                            each=move || nav_store.items()
+                            key=|child| child.read().href.clone()
+                            children=move |child| {
+                                let nav = child.read();
+                                let href = nav.href.clone();
+                                let title = nav.title.clone();
+                                let active_class = if nav.is_active {
+                                    header_style::nav_item_active
+                                } else {
+                                    header_style::nav_item
+                                };
+                                view! {
+                                    <li class=active_class>
+                                        <a class=header_style::nav_link href=href>
+                                            {title}
+                                        </a>
+                                    </li>
+                                }
+                            }
+                        />
+                    </ul>
                 </nav>
 
-                <div class="social-links">
-                    <a
-                        href="https://github.com/okawak"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="GitHub"
-                    >
+                <div class=header_style::social_links>
+                    <a href="https://github.com/okawak" class=header_style::social_icon>
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 24 24"
@@ -45,7 +68,7 @@ pub fn Header() -> impl IntoView {
                             />
                         </svg>
                     </a>
-                    <a href="_blank" target="_blank" rel="noopener noreferrer" title="Twitter">
+                    <a href="https://twitter.com/okawak" class=header_style::social_icon>
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 24 24"
@@ -61,29 +84,5 @@ pub fn Header() -> impl IntoView {
                 </div>
             </div>
         </header>
-    }
-}
-
-/// ナビゲーションコンポーネント
-#[component]
-fn Navigation(
-    #[prop(into)] items: Box<dyn Fn() -> Vec<NavigationItem> + Send + 'static>,
-) -> impl IntoView {
-    view! {
-        <ul class="nav-list">
-            {move || {
-                items()
-                    .into_iter()
-                    .map(|item| {
-                        let active_class = if item.is_active { "active" } else { "" };
-                        view! {
-                            <li class=active_class>
-                                <a href=item.href>{item.title}</a>
-                            </li>
-                        }
-                    })
-                    .collect_view()
-            }}
-        </ul>
     }
 }

@@ -656,8 +656,10 @@ dependencies = [
  "leptos_router",
  "log",
  "pulldown-cmark",
+ "reactive_stores",
  "regex",
  "serde",
+ "stylance",
  "thiserror 2.0.12",
  "tokio",
  "toml",
@@ -764,7 +766,7 @@ dependencies = [
  "pathdiff",
  "serde",
  "toml",
- "winnow",
+ "winnow 0.7.4",
 ]
 
 [[package]]
@@ -3162,6 +3164,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "siphasher"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
+
+[[package]]
 name = "slab"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3215,6 +3223,41 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "stylance"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb98ec3b593f005791976cb36947af5bc64c1d8b5c37ae3a909076287f1be20e"
+dependencies = [
+ "stylance-macros",
+]
+
+[[package]]
+name = "stylance-core"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4e6b833937b4a01d1f67db7a1dbd220d35271cee8f8581086467a25e16f7946"
+dependencies = [
+ "anyhow",
+ "serde",
+ "siphasher",
+ "toml",
+ "winnow 0.5.40",
+]
+
+[[package]]
+name = "stylance-macros"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "138509d238319b5fdd75df17b9d3aab696c56bb2dbb9641cbf87647a68bb3361"
+dependencies = [
+ "anyhow",
+ "proc-macro2",
+ "quote",
+ "stylance-core",
+ "syn",
+]
 
 [[package]]
 name = "subtle"
@@ -3525,7 +3568,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow",
+ "winnow 0.7.4",
 ]
 
 [[package]]
@@ -4120,6 +4163,15 @@ name = "windows_x86_64_msvc"
 version = "0.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "271414315aff87387382ec3d271b52d7ae78726f5d44ac98b4f4030c91880486"
+
+[[package]]
+name = "winnow"
+version = "0.5.40"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f593a95398737aeed53e489c785df13f3618e41dbcd6718c6addbf1395aa6876"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "winnow"

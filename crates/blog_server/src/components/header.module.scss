@@ -1,0 +1,45 @@
+@import "tailwindcss"; /* Tailwind CSS v4 の CSS-first 設定 :contentReference[oaicite:4]{index=4} */
+
+@theme {
+  --color-abyss-dark: #0f0c0a;
+  --color-abyss-earth: #3b3028;
+  --color-abyss-amber: #ffb86c;
+  --color-abyss-cream: #f5e6c4;
+}
+
+.header {
+  @apply bg-[var(--color-abyss-dark)] text-[var(--color-abyss-cream)]
+         flex items-center justify-between px-4 py-3;
+}
+
+.container {
+  @apply container mx-auto flex items-center justify-between;
+}
+
+.logo {
+  @apply text-2xl font-bold;
+}
+
+.nav_list {
+  @apply flex space-x-6;
+}
+
+.nav_item {
+  @apply border-b-2 border-transparent;
+}
+
+.nav_item_active {
+  @apply border-b-2 border-[var(--color-abyss-amber)];
+}
+
+.nav_link {
+  @apply hover:text-[var(--color-abyss-amber)];
+}
+
+.social_links {
+  @apply flex space-x-4;
+}
+
+.social_icon {
+  @apply hover:text-[var(--color-abyss-amber)];
+}

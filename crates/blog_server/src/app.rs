@@ -1,10 +1,9 @@
 use crate::components::{footer::Footer, header::Header};
 use leptos::prelude::*;
-use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
-    StaticSegment,
     components::{Route, Router, Routes},
-    path,
+    path, StaticSegment,
 };
 
 /// サーバーサイドレンダリングのためのシェル関数
@@ -55,6 +54,18 @@ pub fn App() -> impl IntoView {
 
                         // カテゴリーページルート
                         <Route
+                            path=StaticSegment("tech")
+                            view=move || {
+                                view! { <crate::routes::category::CategoryPage category="tech" /> }
+                            }
+                        />
+                        <Route
+                            path=StaticSegment("daily")
+                            view=move || {
+                                view! { <crate::routes::category::CategoryPage category="daily" /> }
+                            }
+                        />
+                        <Route
                             path=StaticSegment("statistics")
                             view=move || {
                                 view! {
@@ -70,17 +81,10 @@ pub fn App() -> impl IntoView {
                                 }
                             }
                         />
+                        <Route path=path!("/tech/:slug") view=crate::routes::article::ArticlePage />
                         <Route
-                            path=StaticSegment("daily")
-                            view=move || {
-                                view! { <crate::routes::category::CategoryPage category="daily" /> }
-                            }
-                        />
-                        <Route
-                            path=StaticSegment("tech")
-                            view=move || {
-                                view! { <crate::routes::category::CategoryPage category="tech" /> }
-                            }
+                            path=path!("/daily/:slug")
+                            view=crate::routes::article::ArticlePage
                         />
                         <Route
                             path=path!("/statistics/:slug")
@@ -90,11 +94,6 @@ pub fn App() -> impl IntoView {
                             path=path!("/physics/:slug")
                             view=crate::routes::article::ArticlePage
                         />
-                        <Route
-                            path=path!("/daily/:slug")
-                            view=crate::routes::article::ArticlePage
-                        />
-                        <Route path=path!("/tech/:slug") view=crate::routes::article::ArticlePage />
                     </Routes>
                 </main>
             </Router>
