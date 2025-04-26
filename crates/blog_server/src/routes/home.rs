@@ -1,122 +1,110 @@
-use crate::components::{ArticleCard, Sidebar};
+use crate::components::ArticleCard;
 use crate::models::article::ArticleSummary;
 #[cfg(feature = "ssr")]
 use crate::services::s3;
 use leptos::prelude::*;
+use reactive_stores::Store;
+use stylance::import_style;
+
+import_style!(home_style, "home.module.scss");
+
+#[server]
+pub async fn get_latest_articles() -> Result<Vec<ArticleSummary>, ServerFnError> {
+    s3::fetch_latest_articles()
+        .await
+        .map_err(|e| ServerFnError::ServerError(e.to_string()))
+}
+
+#[derive(Store, Clone)]
+pub struct ArticlesData {
+    #[store(key: String = |article: &ArticleSummary| article.id.clone())]
+    rows: Vec<ArticleSummary>,
+}
 
 /// ホームページコンポーネント
 #[component]
 pub fn HomePage() -> impl IntoView {
     // 最新記事一覧を取得
-    let latest_articles = Resource::new(|| (), |_| async move { fetch_latest_articles().await });
+    let latest_articles = Resource::<Result<Vec<ArticleSummary>, String>>::new(
+        || (),
+        move |_| {
+            async move {
+                // SSR/CSR 両方で get_latest_articles を呼ぶ
+                get_latest_articles().await.map_err(|e| e.to_string())
+            }
+        },
+    );
 
-    // 手動でローディング状態を管理
-    // 初期状態: get() が None を返す場合はロード中
-    // エラー状態: get() が Some(Err(_)) を返す場合はエラー
-    // 完了状態: get() が Some(Ok(_)) を返す場合は読み込み完了
-    let is_loading = Signal::derive(move || latest_articles.get().is_none());
-    let has_error =
-        Signal::derive(move || latest_articles.get().is_some_and(|result| result.is_err()));
-    let error_message = Signal::derive(move || match latest_articles.get() {
-        Some(Err(e)) => e.to_string(),
-        _ => String::from("不明なエラー"),
-    });
-    let has_articles = Signal::derive(move || match latest_articles.get() {
-        Some(Ok(articles)) if !articles.is_empty() => true,
-        _ => false,
-    });
-    let articles_data = Signal::derive(move || match latest_articles.get() {
-        Some(Ok(articles)) => articles.clone(),
-        _ => vec![],
+    let articles_store = Store::new(ArticlesData { rows: vec![] });
+    Effect::new(move |_| {
+        if let Some(Ok(articles)) = latest_articles.get() {
+            // rows() でストアフィールドを取って mutate
+            let rows = articles_store.rows();
+            *rows.write() = articles.clone();
+        }
     });
 
     view! {
-        <div class="home-page">
-            <div class="main-content">
-                <section class="profile-section">
+        <div class=home_style::home_page>
+            <div class=home_style::main_content>
+                <section class=home_style::profile_section>
                     <h1>{"ホーム"}</h1>
-                    <div class="profile-content">
-                        <div class="profile-image"></div>
-                        <div class="profile-text">
-                            <p>{"気になったことをメモしておくブログです。"}</p>
-                        </div>
+                    <div class=home_style::profile_text>
+                        <p>{"気になったことをメモしておくブログです。"}</p>
                     </div>
                 </section>
 
-                <section class="latest-articles">
-                    <h2>最新の記事</h2>
-
-                    // ローディング状態の表示
-                    <Show when=move || is_loading.get() fallback=|| ()>
-                        <div class="loading">記事を読み込み中...</div>
-                    </Show>
-
-                    // エラー状態の表示
-                    <Show when=move || has_error.get() fallback=|| ()>
-                        <div class="error">
-                            "記事の読み込みに失敗しました: " {error_message}
-                        </div>
-                    </Show>
-
-                    // 記事がない場合の表示
-                    <Show
-                        when=move || !is_loading.get() && !has_error.get() && !has_articles.get()
-                        fallback=|| ()
-                    >
-                        <div class="no-articles">記事がありません</div>
-                    </Show>
-
-                    // 記事一覧の表示
-                    <Show when=move || has_articles.get() fallback=|| ()>
-                        <div class="article-list">
-                            <For
-                                each=move || articles_data.get()
-                                key=|article| article.id.clone()
-                                let:article
+                <section class=home_style::latest_articles>
+                    <h2>{"最近の記事"}</h2>
+                    <Suspense fallback=|| {
+                        view! { <div class=home_style::loading>"記事を読み込み中..."</div> }
+                    }>
+                        <ErrorBoundary fallback=|error| {
+                            view! {
+                                <div class=home_style::error>
+                                    "記事の読み込みに失敗しました: "
+                                    {format!("{error:?}")}
+                                </div>
+                            }
+                        }>
+                            <Show
+                                when=move || {
+                                    matches!(
+                                        latest_articles.get(),
+                                        Some(Ok(articles))
+                                        if !articles.is_empty()
+                                    )
+                                }
+                                fallback=|| {
+                                    view! {
+                                        <div class=home_style::no_articles>
+                                            "記事がありません"
+                                        </div>
+                                    }
+                                }
                             >
-                                <ArticleCard article=article.clone() />
-                            </For>
-                        </div>
-                    </Show>
+                                <div class=home_style::article_list>
+                                    <For
+                                        each=move || articles_store.rows()
+                                        key=|entry| entry.read().id.clone()
+                                        children=move |entry| {
+                                            view! { <ArticleCard article=entry.read().clone() /> }
+                                        }
+                                    />
+
+                                </div>
+                            </Show>
+                        </ErrorBoundary>
+                    </Suspense>
                 </section>
             </div>
-
-            <Sidebar />
         </div>
     }
 }
 
-/// S3バケットから最新記事一覧を取得
-#[cfg(feature = "ssr")]
-async fn fetch_latest_articles() -> Result<Vec<ArticleSummary>, String> {
-    // 全カテゴリーから最新記事を集める
-    let categories = vec!["statistics", "physics", "daily", "tech"];
-    let mut all_articles = Vec::new();
-
-    for category in categories {
-        match s3::list_articles(category).await {
-            Ok(mut articles) => {
-                all_articles.append(&mut articles);
-            }
-            Err(e) => {
-                log::error!("カテゴリー{category}の記事取得に失敗: {e}");
-                // エラーがあっても他のカテゴリーは読み込む
-                continue;
-            }
-        }
-    }
-
-    // 投稿日時の降順でソート
-    all_articles.sort_by(|a, b| b.published_at.cmp(&a.published_at));
-
-    // 最大10件に制限
-    let latest = all_articles.into_iter().take(10).collect();
-
-    Ok(latest)
-}
-
 // WASM（hydrate）用 スタブ：型だけ合わせておく
 #[cfg(not(feature = "ssr"))]
+#[allow(dead_code)]
 async fn fetch_latest_articles() -> Result<Vec<ArticleSummary>, String> {
     // クライアントナビゲーション時に呼び出されても型エラーにならないよう、
     // 空リスト or 適当なエラーを返す

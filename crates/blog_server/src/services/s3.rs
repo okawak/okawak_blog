@@ -2,9 +2,9 @@
 
 use crate::error::AppError;
 use crate::models::article::{Article, ArticleSummary};
-use aws_config::meta::region::RegionProviderChain;
-use aws_sdk_s3::{Client, config::Region};
+use aws_sdk_s3::Client;
 use chrono::NaiveDate;
+use leptos::context::use_context;
 use log;
 use regex::Regex;
 use serde::Deserialize;
@@ -12,24 +12,10 @@ use serde::Deserialize;
 /// S3バケット名
 const BUCKET_NAME: &str = "okawak-blog-resources-bucket";
 
-/// S3クライアントを初期化する
-async fn create_s3_client() -> Result<Client, AppError> {
-    let region_provider = RegionProviderChain::first_try(Region::new("ap-northeast-1"));
-
-    let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
-        .region(region_provider)
-        .load()
-        .await;
-
-    Ok(Client::new(&config))
-}
-
 /// カテゴリー内の記事一覧を取得する
-pub async fn list_articles(category: &str) -> Result<Vec<ArticleSummary>, String> {
-    let client = match create_s3_client().await {
-        Ok(client) => client,
-        Err(e) => return Err(format!("S3クライアントの初期化に失敗: {}", e)),
-    };
+pub async fn list_articles(category: &str) -> Result<Vec<ArticleSummary>, AppError> {
+    let client: Client = use_context()
+        .ok_or_else(|| AppError::S3Error("S3クライアントの初期化に失敗".to_string()))?;
 
     // S3バケット内のオブジェクトをリストアップ
     // 指定したカテゴリのフォルダ内のファイルを検索
@@ -40,21 +26,31 @@ pub async fn list_articles(category: &str) -> Result<Vec<ArticleSummary>, String
         prefix
     );
 
-    let list_objects_result = match client
+    let list_objects_result = client
         .list_objects_v2()
         .bucket(BUCKET_NAME)
         .prefix(&prefix)
         .send()
         .await
-    {
-        Ok(result) => result,
-        Err(e) => return Err(format!("S3バケットのオブジェクトリスト取得に失敗: {}", e)),
-    };
+        .map_err(|e| {
+            log::error!("S3オブジェクトリスト取得エラー: {}", e);
+            AppError::S3Error(format!("S3オブジェクトリスト取得エラー: {}", e))
+        })?;
 
-    let objects = match list_objects_result.contents {
-        Some(objects) => objects,
-        None => return Ok(vec![]), // オブジェクトが存在しない場合は空のリストを返す
-    };
+    let objects: Vec<_> = list_objects_result
+        .contents
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|obj| {
+            match &obj.key {
+                Some(key) => {
+                    // フォルダマーカー（末尾 '/'）を除外＆.md ファイルだけ
+                    !key.ends_with('/') && key.ends_with(".md")
+                }
+                None => false,
+            }
+        })
+        .collect();
 
     log::info!(
         "カテゴリ '{}' で {} 件のオブジェクトが見つかりました",
@@ -65,11 +61,6 @@ pub async fn list_articles(category: &str) -> Result<Vec<ArticleSummary>, String
     let mut articles = Vec::new();
     for object in objects {
         if let Some(key) = object.key {
-            // .mdファイルのみを処理
-            if !key.ends_with(".md") {
-                continue;
-            }
-
             // キー（パス）から記事IDとスラッグを抽出
             let parts: Vec<&str> = key.split('/').collect();
             if parts.len() < 2 {
@@ -110,12 +101,30 @@ pub async fn list_articles(category: &str) -> Result<Vec<ArticleSummary>, String
     Ok(articles)
 }
 
+pub async fn fetch_latest_articles() -> Result<Vec<ArticleSummary>, AppError> {
+    // 全カテゴリーから最新記事を集める
+    let categories = vec!["tech", "daily", "statistics", "physics"];
+    let mut all_articles = Vec::new();
+
+    for category in categories {
+        if let Ok(mut v) = list_articles(category).await {
+            all_articles.append(&mut v);
+        } else {
+            log::error!("カテゴリー {category} の記事取得に失敗");
+        }
+    }
+
+    // 投稿日時の降順でソート
+    all_articles.sort_by(|a, b| b.published_at.cmp(&a.published_at));
+
+    // 最大10件に制限
+    Ok(all_articles.into_iter().take(10).collect())
+}
+
 /// 記事の詳細を取得する
-pub async fn get_article(category: &str, slug: &str) -> Result<Article, String> {
-    let client = match create_s3_client().await {
-        Ok(client) => client,
-        Err(e) => return Err(format!("S3クライアントの初期化に失敗: {}", e)),
-    };
+pub async fn get_article(category: &str, slug: &str) -> Result<Article, AppError> {
+    let client: Client = use_context()
+        .ok_or_else(|| AppError::S3Error("S3クライアントの初期化に失敗".to_string()))?;
 
     let key = format!("{}/{}.md", category, slug);
     log::info!("S3バケット '{}' から記事 '{}' を取得", BUCKET_NAME, key);
@@ -129,30 +138,43 @@ pub async fn get_article(category: &str, slug: &str) -> Result<Article, String> 
         .await
     {
         Ok(result) => result,
-        Err(e) => return Err(format!("記事の取得に失敗: {}", e)),
+        Err(e) => return Err(AppError::S3Error(format!("記事の取得に失敗: {}", e))),
     };
 
     // ファイル内容を文字列として読み込む
     let byte_stream = get_object_result.body;
     let bytes = match byte_stream.collect().await {
         Ok(bytes) => bytes.into_bytes(),
-        Err(e) => return Err(format!("ファイル内容の読み込みに失敗: {}", e)),
+        Err(e) => {
+            return Err(AppError::S3Error(format!(
+                "ファイル内容の読み込みに失敗: {}",
+                e
+            )));
+        }
     };
 
     let content = match std::str::from_utf8(&bytes) {
         Ok(content) => content,
-        Err(e) => return Err(format!("UTF-8文字列への変換に失敗: {}", e)),
+        Err(e) => {
+            return Err(AppError::S3Error(format!(
+                "UTF-8文字列への変換に失敗: {}",
+                e
+            )));
+        }
     };
 
     // Markdownファイルを解析
     match parse_markdown_article(content, category, slug) {
         Ok(article) => Ok(article),
-        Err(e) => Err(format!("Markdownファイルの解析に失敗: {}", e)),
+        Err(e) => Err(AppError::S3Error(format!(
+            "Markdownファイルの解析に失敗: {}",
+            e
+        ))),
     }
 }
 
 /// Markdownファイルのメタデータを取得
-async fn get_article_metadata(client: &Client, key: &str) -> Result<ArticleMetadata, String> {
+async fn get_article_metadata(client: &Client, key: &str) -> Result<ArticleMetadata, AppError> {
     // S3オブジェクトをGET
     let get_object_result = match client
         .get_object()
@@ -162,19 +184,34 @@ async fn get_article_metadata(client: &Client, key: &str) -> Result<ArticleMetad
         .await
     {
         Ok(result) => result,
-        Err(e) => return Err(format!("ファイルの取得に失敗: {}", e)),
+        Err(e) => {
+            return Err(AppError::MarkdownError(format!(
+                "ファイルの取得に失敗: {}",
+                e
+            )));
+        }
     };
 
     // ファイルの先頭部分のみを取得して解析
     let byte_stream = get_object_result.body;
     let bytes = match byte_stream.collect().await {
         Ok(bytes) => bytes.into_bytes(),
-        Err(e) => return Err(format!("ファイル内容の読み込みに失敗: {}", e)),
+        Err(e) => {
+            return Err(AppError::MarkdownError(format!(
+                "ファイル内容の読み込みに失敗: {}",
+                e
+            )));
+        }
     };
 
     let content = match std::str::from_utf8(&bytes) {
         Ok(content) => content,
-        Err(e) => return Err(format!("UTF-8文字列への変換に失敗: {}", e)),
+        Err(e) => {
+            return Err(AppError::MarkdownError(format!(
+                "UTF-8文字列への変換に失敗: {}",
+                e
+            )));
+        }
     };
 
     // フロントマターを解析
@@ -182,7 +219,7 @@ async fn get_article_metadata(client: &Client, key: &str) -> Result<ArticleMetad
 }
 
 /// Markdownファイルからフロントマターを抽出してメタデータを構築
-fn extract_metadata_from_markdown(content: &str) -> Result<ArticleMetadata, String> {
+fn extract_metadata_from_markdown(content: &str) -> Result<ArticleMetadata, AppError> {
     // フロントマターを検索
     // フロントマターは+++で囲まれている（TOMLフォーマット）
     let front_matter_pattern = Regex::new(r"^\+\+\+([\s\S]*?)\+\+\+").unwrap();
@@ -192,16 +229,27 @@ fn extract_metadata_from_markdown(content: &str) -> Result<ArticleMetadata, Stri
             if let Some(matched) = captures.get(1) {
                 matched.as_str()
             } else {
-                return Err("フロントマターが見つかりませんでした".to_string());
+                return Err(AppError::MarkdownError(
+                    "フロントマターが見つかりませんでした".to_string(),
+                ));
             }
         }
-        None => return Err("フロントマターが見つかりませんでした".to_string()),
+        None => {
+            return Err(AppError::MarkdownError(
+                "フロントマターが見つかりませんでした".to_string(),
+            ));
+        }
     };
 
     // TOMLとしてパース
     let parsed = match toml::from_str::<ArticleMetadataToml>(front_matter) {
         Ok(parsed) => parsed,
-        Err(e) => return Err(format!("フロントマターの解析に失敗: {}", e)),
+        Err(e) => {
+            return Err(AppError::MarkdownError(format!(
+                "フロントマターの解析に失敗: {}",
+                e
+            )));
+        }
     };
 
     // 日付文字列をNaiveDateに変換
@@ -229,7 +277,7 @@ fn extract_metadata_from_markdown(content: &str) -> Result<ArticleMetadata, Stri
 }
 
 /// Markdownファイルを解析して記事オブジェクトを構築
-fn parse_markdown_article(content: &str, category: &str, slug: &str) -> Result<Article, String> {
+fn parse_markdown_article(content: &str, category: &str, slug: &str) -> Result<Article, AppError> {
     // フロントマターからメタデータを抽出
     let metadata = extract_metadata_from_markdown(content)?;
 

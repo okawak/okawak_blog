@@ -1,4 +1,5 @@
 use crate::components::{MarkdownRenderer, Sidebar, TagList};
+use crate::error::AppError;
 use crate::models::article::Article;
 #[cfg(feature = "ssr")]
 use crate::services::s3;
@@ -141,13 +142,13 @@ fn get_category_display_name(category: String) -> &'static str {
 
 /// 記事データを取得する
 #[cfg(feature = "ssr")]
-async fn fetch_article(category: &str, slug: &str) -> Result<Article, String> {
+async fn fetch_article(category: &str, slug: &str) -> Result<Article, AppError> {
     s3::get_article(category, slug).await
 }
 
 // WASM（hydrate）用 スタブ：型だけ合わせておく
 #[cfg(not(feature = "ssr"))]
-async fn fetch_article(_category: &str, _slug: &str) -> Result<Article, String> {
+async fn fetch_article(_category: &str, _slug: &str) -> Result<Article, AppError> {
     // クライアントナビゲーション時に呼び出されても型エラーにならないよう、
     // 空リスト or 適当なエラーを返す
     Ok(Article::default())

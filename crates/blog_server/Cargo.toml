@@ -158,7 +158,10 @@ extensions = [".module.scss", ".module.css"]
 # scss_prelude
 # When generating an scss file stylance-cli will prepend this string
 # Useful to include a @use statement to all scss modules.
-scss_prelude = '@use "main" as *;'
+scss_prelude = """
+@use "main" as *;
+@use "sass:color";
+"""
 
 # hash_len
 # Controls how long the hash name used in scoped classes should be.

@@ -38,7 +38,6 @@ async fn main() {
             routes.clone(),
             // additional_context: リクエスト処理前に呼ばれる
             {
-                let s3_client = s3_client.clone();
                 move || {
                     provide_context(s3_client.clone());
                 }

@@ -1,10 +1,10 @@
 use crate::models::article::ArticleSummary;
 use leptos::prelude::*;
+use stylance::import_style;
+
+import_style!(article_card_style, "article_card.module.scss");
 
 /// 記事のカードコンポーネント
-///
-/// 記事のサマリー情報を表示するためのカードUIを提供します。
-/// タイトル、日付、カテゴリー、タグなどの基本情報を表示します。
 #[component]
 pub fn ArticleCard(article: ArticleSummary) -> impl IntoView {
     // 基本的なURLとカテゴリー情報を設定
@@ -24,15 +24,15 @@ pub fn ArticleCard(article: ArticleSummary) -> impl IntoView {
     let article_url_for_readmore = article_url.clone(); // 「続きを読む」リンク用にクローン
 
     view! {
-        <article class="article-card">
-            <div class="article-meta">
-                <span class="article-date">{article.date_formatted}</span>
-                <a href=category_url class="article-category">
+        <article class=article_card_style::article_card>
+            <div class=article_card_style::article_meta>
+                <span class=article_card_style::article_date>{article.date_formatted}</span>
+                <a href=category_url class=article_card_style::article_category>
                     {category_display_name}
                 </a>
             </div>
 
-            <h2 class="article-title">
+            <h2 class=article_card_style::article_title>
                 <a href=article_url>{article.title}</a>
             </h2>
 
@@ -40,7 +40,7 @@ pub fn ArticleCard(article: ArticleSummary) -> impl IntoView {
                 .thumbnail_url
                 .map(move |url| {
                     view! {
-                        <div class="article-thumbnail">
+                        <div class=article_card_style::article_thumbnail>
                             // クローンした変数を使用
                             <a href=article_url_for_thumbnail>
                                 <img
@@ -53,27 +53,27 @@ pub fn ArticleCard(article: ArticleSummary) -> impl IntoView {
                     }
                 })}
 
-            <div class="article-excerpt">
+            <div class=article_card_style::article_excerpt>
                 <p>{article.excerpt}</p>
             </div>
 
-            <div class="article-footer">
-                <div class="article-tags">
+            <div class=article_card_style::article_footer>
+                <div class=article_card_style::article_tags>
                     {article
                         .tags
                         .iter()
                         .map(|tag| {
-                            let tag_url = format!("/tag/{}", tag);
+                            let tag_url = format!("/tag/{tag}");
                             view! {
-                                <a href=tag_url class="article-tag">
-                                    {format!("#{}", tag)}
+                                <a href=tag_url class=article_card_style::article_tag>
+                                    {format!("#{tag}")}
                                 </a>
                             }
                         })
                         .collect_view()}
                 </div>
                 // クローンした変数を使用
-                <a href=article_url_for_readmore class="read-more-link">
+                <a href=article_url_for_readmore class=article_card_style::read_more_link>
                     続きを読む
                 </a>
             </div>

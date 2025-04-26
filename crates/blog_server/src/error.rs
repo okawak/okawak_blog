@@ -35,7 +35,7 @@ impl AppError {
 #[component]
 pub fn ErrorTemplate(#[prop(into)] err: String) -> impl IntoView {
     // エラーをログに記録
-    log::error!("Error: {}", err);
+    log::error!("Error: {err}");
 
     view! {
         <div class="error-container">

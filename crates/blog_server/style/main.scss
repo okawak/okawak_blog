@@ -1,11 +1,12 @@
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap");
 
-// カラーパレット
-$bg-color: #1f1a17;
-$bg-soft: #2b2522;
-$text-color: #eae3dc;
-$text-soft: #b5a99e;
-$accent-color: #c2b280;
+$color-bg-dark: #0d0a08;
+$color-bg-mid: #2b1f1a;
+$color-bg-light: #3b2c25;
+$color-text: #e1d9d1;
+$color-text-soft: #a89b90;
+$color-accent: #c2a262;
+
 $font-sans: "Noto Sans JP", sans-serif;
 
 body {

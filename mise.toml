@@ -44,3 +44,7 @@ run = 'AWS_PROFILE=blog-s3 cargo leptos serve --release'
 [tasks.stylance]
 description = "Run the Stylance locally"
 run = "stylance crates/blog_server"
+
+[tasks.format]
+description = "Format the code"
+run = ["cargo fmt --all", "leptosfmt ./**/*.rs"]

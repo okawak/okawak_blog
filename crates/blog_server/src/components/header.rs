@@ -21,14 +21,34 @@ pub fn Header() -> impl IntoView {
         items: get_main_nav_items(&current()),
     });
 
+    let (menu_open, set_menu_open) = signal(false);
+
     view! {
-        <header class=header_style::header>
+        <header class=header_style::header class:open=move || menu_open.get()>
             <div class=header_style::container>
                 <a href="/">
                     <h1 class=header_style::logo>{"ぶくせんの探窟メモ"}</h1>
                 </a>
 
-                <nav>
+                // ハンバーガーボタン
+                <button
+                    class=header_style::menu_toggle
+                    on:click=move |_| set_menu_open.update(|v| *v = !*v)
+                    aria-label="Toggle menu"
+                >
+                    <span class=header_style::bar></span>
+                    <span class=header_style::bar></span>
+                    <span class=header_style::bar></span>
+                </button>
+
+                <nav class=move || {
+                    let state = if menu_open.get() {
+                        header_style::open
+                    } else {
+                        header_style::closed
+                    };
+                    format!("{} {}", header_style::nav_container, state)
+                }>
                     <ul class=header_style::nav_list>
                         <For
                             each=move || nav_store.items()
@@ -52,13 +72,17 @@ pub fn Header() -> impl IntoView {
                             }
                         />
                     </ul>
+                    <div class=header_style::social_links>
+                        <a
+                            href="https://github.com/okawak"
+                            class=header_style::social_icon
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <i class="fab fa-github"></i>
+                        </a>
+                    </div>
                 </nav>
-
-                <div class=header_style::social_links>
-                    <a href="https://github.com/okawak" class=header_style::social_icon>
-                        <i class="fab fa-github"></i>
-                    </a>
-                </div>
             </div>
         </header>
     }

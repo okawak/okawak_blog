@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
 /// 完全な記事データを表す構造体
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Article {
     /// 記事のユニークID
     pub id: String,
@@ -34,24 +34,6 @@ pub struct Article {
 }
 
 impl Article {
-    /// デフォルトのインスタンスを生成
-    pub fn default() -> Self {
-        Self {
-            id: String::new(),
-            title: String::new(),
-            slug: String::new(),
-            category: String::new(),
-            content: String::new(),
-            excerpt: String::new(),
-            thumbnail_url: None,
-            tags: vec![],
-            published_at: NaiveDate::from_ymd_opt(1970, 1, 1).unwrap(),
-            updated_at: None,
-            description: String::new(),
-            og_image: None,
-            published: true,
-        }
-    }
     /// 記事のURLを生成
     pub fn url(&self) -> String {
         format!("/{}/{}", self.category, self.slug)
@@ -102,7 +84,7 @@ impl HasMetadata for Article {
 
 /// 記事の概要情報を表す構造体
 /// 一覧表示などに使用されます
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ArticleSummary {
     /// 記事のユニークID
     pub id: String,
