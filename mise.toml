@@ -5,7 +5,7 @@ run = 'sudo systemctl stop okawak_blog'
 [tasks.service]
 description = "Copy service file and reload the daemon"
 depends = ["stop"]
-run = 'sudo sh -c "cp -f service/okawak_blog.service /etc/systemd/system/okawak_blog.service && systemctl daemon-reload"'
+run = 'sudo sh -c "cp -f service/okawak_blog.service /etc/systemd/system/okawak_blog.service"'
 
 [tasks.clean]
 description = "Clean the project"
@@ -15,7 +15,7 @@ run = 'cargo clean'
 [tasks.build]
 description = "Build the project"
 depends = ["clean"]
-run = 'cargo leptos build --release'
+run = 'cargo leptos build --release -p blog_server'
 
 [tasks.start]
 description = "Start the service"
@@ -39,4 +39,8 @@ run = 'cargo test -p notion_api --release -- --nocapture'
 
 [tasks.local_server]
 description = "build the server locally"
-run = 'LEPTOS_TAILWIND_VERSION=v4.1.4 AWS_PROFILE=blog-s3 cargo leptos serve --release'
+run = 'AWS_PROFILE=blog-s3 cargo leptos serve --release'
+
+[tasks.stylance]
+description = "Run the Stylance locally"
+run = "stylance crates/blog_server"

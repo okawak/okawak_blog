@@ -13,7 +13,7 @@
 // ——————————————————————
 // ヘッダー全体
 // ——————————————————————
-.header {
+.header-9a30164 {
   width: 100%;
   background: $bg-color;
   color: $text-color;
@@ -23,7 +23,7 @@
   top: 0;
   z-index: 10;
 
-  & .container {
+  & .container-9a30164 {
     @include container;
     display: flex;
     align-items: center;
@@ -35,7 +35,7 @@
 // ——————————————————————
 // ロゴ
 // ——————————————————————
-.logo {
+.logo-9a30164 {
   font-size: 1.6rem;
   font-weight: bold;
   color: $accent-color;
@@ -46,7 +46,7 @@
 // ——————————————————————
 // ナビゲーション
 // ——————————————————————
-.nav_list {
+.nav_list-9a30164 {
   list-style: none;
   display: flex;
   gap: 1.5rem;
@@ -56,14 +56,14 @@
   }
 }
 
-.nav_item {
+.nav_item-9a30164 {
   position: relative;
 
-  &.nav_item_active .nav_link {
+  &.nav_item_active-9a30164 .nav_link-9a30164 {
     color: $accent-color;
   }
 
-  &.nav_item_active .nav_link::after {
+  &.nav_item_active-9a30164 .nav_link-9a30164::after {
     content: "";
     position: absolute;
     bottom: -0.25rem;
@@ -74,7 +74,7 @@
   }
 }
 
-.nav_link {
+.nav_link-9a30164 {
   color: $text-color;
   text-decoration: none;
   transition: color 0.2s ease;
@@ -87,12 +87,12 @@
 // ——————————————————————
 // SNS アイコン
 // ——————————————————————
-.social_links {
+.social_links-9a30164 {
   display: flex;
   align-items: center;
   gap: 1rem;
 
-  .social_icon {
+  .social_icon-9a30164 {
     width: 1.5rem;
     height: 1.5rem;
     //color: $text-color;
