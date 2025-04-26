@@ -1,10 +1,60 @@
-// header.module.scss
 @use "main" as *;
+
+// footer.module.scss
+
+// ——————————————————————
+// フッター全体
+// ——————————————————————
+.site-footer-a93d381 {
+  background: $bg-soft; // ヘッダーよりも少し明るいダーク
+  color: $text-soft; // 少し落ち着いたテキストカラー
+  font-family: $font-sans;
+  padding: 1rem 0;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+
+  // コピーライト部
+  .copyright-a93d381 {
+    font-size: 0.875rem;
+    line-height: 1.5;
+
+    p {
+      margin: 0.25rem 0;
+    }
+
+    small {
+      color: $text-soft;
+    }
+
+    a {
+      color: $accent-color;
+      text-decoration: none;
+      transition: color 0.2s ease;
+
+      &:hover {
+        color: lighten($accent-color, 10%);
+      }
+    }
+  }
+}
+
+// ——————————————————————
+// モバイル対応
+// ——————————————————————
+@media (max-width: 768px) {
+  .site-footer-a93d381 {
+    .copyright-a93d381 {
+      width: 100%;
+    }
+  }
+}
+
+
+// header.module.scss
 
 // ——————————————————————
 // コンテナー共通ミックスイン
 // ——————————————————————
-@mixin container {
+@mixin header-container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 1rem;
@@ -24,7 +74,7 @@
   z-index: 10;
 
   & .container-9a30164 {
-    @include container;
+    @include header-container;
     display: flex;
     align-items: center;
     justify-content: space-between;

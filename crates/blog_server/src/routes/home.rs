@@ -34,12 +34,11 @@ pub fn HomePage() -> impl IntoView {
         <div class="home-page">
             <div class="main-content">
                 <section class="profile-section">
-                    <h1>ぶくせんの探窟メモ</h1>
+                    <h1>{"ホーム"}</h1>
                     <div class="profile-content">
-                        // <img src="/assets/images/profile.jpg" alt="プロフィール画像" />
                         <div class="profile-image"></div>
                         <div class="profile-text">
-                            <p>"気になったことをメモしておくブログです。"</p>
+                            <p>{"気になったことをメモしておくブログです。"}</p>
                         </div>
                     </div>
                 </section>

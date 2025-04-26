@@ -1,4 +1,8 @@
 use crate::components::{footer::Footer, header::Header};
+use crate::routes::article::ArticlePage;
+use crate::routes::category::CategoryPage;
+use crate::routes::home::HomePage;
+use crate::routes::not_found::NotFoundPage;
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
@@ -49,55 +53,40 @@ pub fn App() -> impl IntoView {
                 <Header />
                 <main class="content-container">
                     <Routes fallback=|| {
-                        view! {
-                            <div class="not-found">ページが見つかりませんでした</div>
-                        }
+                        view! { <NotFoundPage /> }
                     }>
                         // トップページルート
-                        <Route path=StaticSegment("") view=crate::routes::home::HomePage />
+                        <Route path=StaticSegment("") view=HomePage />
 
                         // カテゴリーページルート
                         <Route
                             path=StaticSegment("tech")
                             view=move || {
-                                view! { <crate::routes::category::CategoryPage category="tech" /> }
+                                view! { <CategoryPage category="tech" /> }
                             }
                         />
                         <Route
                             path=StaticSegment("daily")
                             view=move || {
-                                view! { <crate::routes::category::CategoryPage category="daily" /> }
+                                view! { <CategoryPage category="daily" /> }
                             }
                         />
                         <Route
                             path=StaticSegment("statistics")
                             view=move || {
-                                view! {
-                                    <crate::routes::category::CategoryPage category="statistics" />
-                                }
+                                view! { <CategoryPage category="statistics" /> }
                             }
                         />
                         <Route
                             path=StaticSegment("physics")
                             view=move || {
-                                view! {
-                                    <crate::routes::category::CategoryPage category="physics" />
-                                }
+                                view! { <CategoryPage category="physics" /> }
                             }
                         />
-                        <Route path=path!("/tech/:slug") view=crate::routes::article::ArticlePage />
-                        <Route
-                            path=path!("/daily/:slug")
-                            view=crate::routes::article::ArticlePage
-                        />
-                        <Route
-                            path=path!("/statistics/:slug")
-                            view=crate::routes::article::ArticlePage
-                        />
-                        <Route
-                            path=path!("/physics/:slug")
-                            view=crate::routes::article::ArticlePage
-                        />
+                        <Route path=path!("/tech/:slug") view=ArticlePage />
+                        <Route path=path!("/daily/:slug") view=ArticlePage />
+                        <Route path=path!("/statistics/:slug") view=ArticlePage />
+                        <Route path=path!("/physics/:slug") view=ArticlePage />
                     </Routes>
                 </main>
             </Router>

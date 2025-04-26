@@ -4,7 +4,7 @@ use leptos_router::hooks::use_location;
 use reactive_stores::Store;
 use stylance::import_style;
 
-import_style!(header_style, "./header.module.scss");
+import_style!(header_style, "header.module.scss");
 
 #[derive(Store, Clone)]
 pub struct NavItemsStore {
