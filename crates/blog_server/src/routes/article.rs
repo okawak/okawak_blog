@@ -123,7 +123,7 @@ pub fn ArticlePage(cat: &'static str) -> impl IntoView {
                 </Show>
             </div>
 
-            <Sidebar category=cat />
+            <Sidebar category=cat class="" />
         </div>
     }
 }

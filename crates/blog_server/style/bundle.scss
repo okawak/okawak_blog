@@ -117,6 +117,75 @@
 }
 
 
+.category_header-3eea9ed {
+  @include fixed-content;
+
+  h1 {
+    margin: 0;
+    font-family: $font-sans;
+    font-size: 2rem;
+    color: $color-text;
+    position: relative;
+    display: inline-block;
+
+    &::after {
+      content: "";
+      display: block;
+      width: 3rem;
+      height: 0.25rem;
+      background: $color-accent;
+      margin: 0.5rem auto 0;
+      border-radius: 2px;
+    }
+  }
+
+  .category_description-3eea9ed {
+    margin-top: 0.75rem;
+    font-family: $font-sans;
+    font-size: 1rem;
+    color: $color-text-soft;
+  }
+}
+
+.articles_section-3eea9ed {
+  .articles_title-3eea9ed {
+    font-family: $font-sans;
+    font-size: 1.75rem;
+    color: $color-text;
+    margin-bottom: 1rem;
+    position: relative;
+
+    &::after {
+      content: "";
+      position: absolute;
+      bottom: -0.25rem;
+      left: 0;
+      width: 3rem;
+      height: 0.25rem;
+      background: $color-accent;
+      border-radius: 2px;
+    }
+  }
+
+  .article_list-3eea9ed {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+    gap: 1.5rem;
+  }
+
+  .loading-3eea9ed,
+  .error-3eea9ed,
+  .no_articles-3eea9ed {
+    padding: 2rem;
+    text-align: center;
+    background: rgba($color-bg-light, 0.4);
+    border-radius: 0.5rem;
+    color: $color-text-soft;
+    font-size: 1rem;
+  }
+}
+
+
 // footer.module.scss
 .site_footer-a93d381 {
   background: linear-gradient(90deg, $color-bg-mid 0%, $color-bg-dark 100%);
@@ -332,80 +401,61 @@
 
 
 .home-page-19eb089 {
-  background: linear-gradient(to bottom, $color-bg-mid 0%, $color-bg-dark 100%);
-  color: $color-text;
-  font-family: $font-sans;
-  min-height: 100vh;
-  padding: 2rem;
+  @include page-base;
 
-  .main-content-19eb089 {
-    max-width: 64rem;
-    margin: 0 auto;
+  // プロフィールセクション
+  .profile-section-19eb089 {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    @include fixed-content;
 
-    // プロフィールセクション
-    .profile-section-19eb089 {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      gap: 1rem;
-      padding: 1.5rem;
-      background: rgba($color-bg-light, 0.6);
-      border-radius: 1rem;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-
-      h1 {
+    .profile-text-19eb089 {
+      p {
         margin: 0;
-        font-size: 2rem;
-        color: $color-text;
-      }
-
-      .profile-text-19eb089 {
-        p {
-          margin: 0;
-          font-size: 1rem;
-          color: $color-text-soft;
-        }
-      }
-    }
-
-    // 記事一覧セクション
-    .latest-articles-19eb089 {
-      margin-top: 3rem;
-
-      h2 {
-        position: relative;
-        font-size: 1.75rem;
-        margin-bottom: 1rem;
-        &::after {
-          content: "";
-          position: absolute;
-          bottom: -0.25rem;
-          left: 0;
-          width: 3rem;
-          height: 0.25rem;
-          background: $color-accent;
-          border-radius: 2px;
-        }
-      }
-
-      .loading-19eb089,
-      .error-19eb089,
-      .no-articles-19eb089 {
-        padding: 2rem;
-        text-align: center;
-        background: rgba($color-bg-light, 0.4);
-        border-radius: 0.5rem;
         font-size: 1rem;
         color: $color-text-soft;
       }
+    }
+  }
 
-      .article-list-19eb089 {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
-        gap: 1.5rem;
-        margin-top: 1.5rem;
+  // 記事一覧セクション
+  .latest-articles-19eb089 {
+    margin-top: 3rem;
+
+    h2 {
+      position: relative;
+      font-size: 1.75rem;
+      margin-bottom: 1rem;
+      &::after {
+        content: "";
+        position: absolute;
+        bottom: -0.25rem;
+        left: 0;
+        width: 3rem;
+        height: 0.25rem;
+        background: $color-accent;
+        border-radius: 2px;
       }
+    }
+
+    .loading-19eb089,
+    .error-19eb089,
+    .no-articles-19eb089 {
+      padding: 2rem;
+      text-align: center;
+      background: rgba($color-bg-light, 0.4);
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      color: $color-text-soft;
+    }
+
+    .article-list-19eb089 {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.5rem;
     }
   }
 }
@@ -428,4 +478,25 @@
 h1,
 h2 {
   animation: glow 4s ease-in-out infinite;
+}
+
+
+// レイアウト用スタイル
+.layout-723248a {
+  @include page-base;
+  display: flex;
+  gap: 2rem;
+
+  // サイドバー領域
+  .sidebar-723248a {
+    flex: 0 0 16rem;
+  }
+
+  // メインコンテンツ領域
+  .content-723248a {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
 }

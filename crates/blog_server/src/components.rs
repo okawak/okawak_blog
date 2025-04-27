@@ -36,6 +36,16 @@ pub fn get_main_nav_items(current_path: &str) -> Vec<NavigationItem> {
             is_active: current_path == "/",
         },
         NavigationItem {
+            title: "技術".into(),
+            href: "/tech".into(),
+            is_active: current_path == "/tech" || current_path.starts_with("/tech/"),
+        },
+        NavigationItem {
+            title: "日常".into(),
+            href: "/daily".into(),
+            is_active: current_path == "/daily" || current_path.starts_with("/daily/"),
+        },
+        NavigationItem {
             title: "統計学".into(),
             href: "/statistics".into(),
             is_active: current_path == "/statistics" || current_path.starts_with("/statistics/"),
@@ -44,16 +54,6 @@ pub fn get_main_nav_items(current_path: &str) -> Vec<NavigationItem> {
             title: "物理学".into(),
             href: "/physics".into(),
             is_active: current_path == "/physics" || current_path.starts_with("/physics/"),
-        },
-        NavigationItem {
-            title: "日常".into(),
-            href: "/daily".into(),
-            is_active: current_path == "/daily" || current_path.starts_with("/daily/"),
-        },
-        NavigationItem {
-            title: "技術".into(),
-            href: "/tech".into(),
-            is_active: current_path == "/tech" || current_path.starts_with("/tech/"),
         },
     ]
 }

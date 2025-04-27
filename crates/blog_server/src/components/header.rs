@@ -1,25 +1,15 @@
 use crate::components::{NavigationItem, get_main_nav_items};
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
-use reactive_stores::Store;
 use stylance::import_style;
 
 import_style!(header_style, "header.module.scss");
-
-#[derive(Store, Clone)]
-pub struct NavItemsStore {
-    #[store(key: String = |item| item.href.clone())]
-    items: Vec<NavigationItem>,
-}
 
 /// サイトヘッダーコンポーネント
 #[component]
 pub fn Header() -> impl IntoView {
     let location = use_location();
-    let current = move || location.pathname.get();
-    let nav_store = Store::new(NavItemsStore {
-        items: get_main_nav_items(&current()),
-    });
+    let nav_items = Memo::new(move |_| get_main_nav_items(&location.pathname.get()));
 
     let (menu_open, set_menu_open) = signal(false);
 
@@ -51,21 +41,21 @@ pub fn Header() -> impl IntoView {
                 }>
                     <ul class=header_style::nav_list>
                         <For
-                            each=move || nav_store.items()
-                            key=|child| child.read().href.clone()
+                            each=move || nav_items.get()
+                            key=|item: &NavigationItem| item.href.clone()
                             children=move |child| {
-                                let nav = child.read();
-                                let href = nav.href.clone();
-                                let title = nav.title.clone();
-                                let active_class = if nav.is_active {
-                                    header_style::nav_item_active
-                                } else {
-                                    header_style::nav_item
+                                let href = child.href.clone();
+                                let active_class = move || {
+                                    if location.pathname.get() == href {
+                                        header_style::nav_item_active
+                                    } else {
+                                        header_style::nav_item
+                                    }
                                 };
                                 view! {
                                     <li class=active_class>
-                                        <a class=header_style::nav_link href=href>
-                                            {title}
+                                        <a class=header_style::nav_link href=child.href>
+                                            {child.title}
                                         </a>
                                     </li>
                                 }

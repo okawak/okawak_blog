@@ -1,0 +1,19 @@
+// レイアウト用スタイル
+.layout {
+  @include page-base;
+  display: flex;
+  gap: 2rem;
+
+  // サイドバー領域
+  .sidebar {
+    flex: 0 0 16rem;
+  }
+
+  // メインコンテンツ領域
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+}

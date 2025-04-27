@@ -103,9 +103,14 @@ pub async fn list_articles(category: &str) -> Result<Vec<ArticleSummary>, AppErr
     Ok(articles)
 }
 
-pub async fn fetch_latest_articles() -> Result<Vec<ArticleSummary>, AppError> {
+pub async fn fetch_latest_articles(category: String) -> Result<Vec<ArticleSummary>, AppError> {
     // 全カテゴリーから最新記事を集める
-    let categories = vec!["tech", "daily", "statistics", "physics"];
+    let categories;
+    if category.is_empty() {
+        categories = vec!["tech", "daily", "statistics", "physics"];
+    } else {
+        categories = vec![&category];
+    }
     let mut all_articles = Vec::new();
 
     for category in categories {
