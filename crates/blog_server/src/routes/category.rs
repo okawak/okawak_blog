@@ -107,7 +107,7 @@ pub fn CategoryPage(category: &'static str) -> impl IntoView {
                 </Show>
             </div>
 
-            <Sidebar />
+            <Sidebar category=category />
         </div>
     }
 }
@@ -187,8 +187,6 @@ pub fn TagPage() -> impl IntoView {
                     </div>
                 </Show>
             </div>
-
-            <Sidebar />
         </div>
     }
 }

@@ -8,7 +8,7 @@ use leptos_router::{hooks::use_params_map, params::ParamsMap};
 
 /// 記事詳細ページコンポーネント（シンプル版）
 #[component]
-pub fn ArticlePage() -> impl IntoView {
+pub fn ArticlePage(cat: &'static str) -> impl IntoView {
     // URLからカテゴリーとスラッグを取得
     let params = use_params_map();
     let category =
@@ -123,7 +123,7 @@ pub fn ArticlePage() -> impl IntoView {
                 </Show>
             </div>
 
-            <Sidebar />
+            <Sidebar category=cat />
         </div>
     }
 }

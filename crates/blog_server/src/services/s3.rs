@@ -9,26 +9,26 @@ use log;
 use regex::Regex;
 use serde::Deserialize;
 
-/// S3バケット名
-const BUCKET_NAME: &str = "okawak-blog-resources-bucket";
-
 /// カテゴリー内の記事一覧を取得する
 pub async fn list_articles(category: &str) -> Result<Vec<ArticleSummary>, AppError> {
     let client: Client = use_context()
         .ok_or_else(|| AppError::S3Error("S3クライアントの初期化に失敗".to_string()))?;
+
+    let bucket_name =
+        std::env::var("AWS_BUCKET_NAME").unwrap_or_else(|_| "bucket-name".to_string());
 
     // S3バケット内のオブジェクトをリストアップ
     // 指定したカテゴリのフォルダ内のファイルを検索
     let prefix = format!("{}/", category);
     log::info!(
         "S3バケット '{}' のプレフィックス '{}' で記事を検索",
-        BUCKET_NAME,
-        prefix
+        &bucket_name,
+        &prefix
     );
 
     let list_objects_result = client
         .list_objects_v2()
-        .bucket(BUCKET_NAME)
+        .bucket(&bucket_name)
         .prefix(&prefix)
         .send()
         .await
@@ -79,11 +79,13 @@ pub async fn list_articles(category: &str) -> Result<Vec<ArticleSummary>, AppErr
                         title: metadata.title,
                         slug: slug.to_string(),
                         category: category.to_string(),
-                        excerpt: metadata.description.clone().unwrap_or_default(),
-                        thumbnail_url: metadata.thumbnail_url,
+                        group: metadata.group,
+                        priority_level: metadata.priority_level,
+                        summary: metadata.summary,
                         tags: metadata.tags,
-                        published_at: metadata.published_at,
-                        date_formatted: metadata.published_at.format("%Y年%m月%d日").to_string(),
+                        published_date: metadata.published_at,
+                        published_at: metadata.published_at.format("%Y年%m月%d日").to_string(),
+                        updated_at: metadata.updated_at.format("%Y年%m月%d日").to_string(),
                     };
                     articles.push(summary);
                 }
@@ -96,7 +98,7 @@ pub async fn list_articles(category: &str) -> Result<Vec<ArticleSummary>, AppErr
     }
 
     // 投稿日時の降順でソート
-    articles.sort_by(|a, b| b.published_at.cmp(&a.published_at));
+    articles.sort_by(|a, b| b.published_date.cmp(&a.published_date));
 
     Ok(articles)
 }
@@ -115,7 +117,7 @@ pub async fn fetch_latest_articles() -> Result<Vec<ArticleSummary>, AppError> {
     }
 
     // 投稿日時の降順でソート
-    all_articles.sort_by(|a, b| b.published_at.cmp(&a.published_at));
+    all_articles.sort_by(|a, b| b.published_date.cmp(&a.published_date));
 
     // 最大10件に制限
     Ok(all_articles.into_iter().take(10).collect())
@@ -126,13 +128,16 @@ pub async fn get_article(category: &str, slug: &str) -> Result<Article, AppError
     let client: Client = use_context()
         .ok_or_else(|| AppError::S3Error("S3クライアントの初期化に失敗".to_string()))?;
 
+    let bucket_name =
+        std::env::var("AWS_BUCKET_NAME").unwrap_or_else(|_| "bucket-name".to_string());
+
     let key = format!("{}/{}.md", category, slug);
-    log::info!("S3バケット '{}' から記事 '{}' を取得", BUCKET_NAME, key);
+    log::info!("S3バケット '{}' から記事 '{}' を取得", &bucket_name, key);
 
     // S3からMarkdownファイルを取得
     let get_object_result = match client
         .get_object()
-        .bucket(BUCKET_NAME)
+        .bucket(&bucket_name)
         .key(&key)
         .send()
         .await
@@ -175,10 +180,12 @@ pub async fn get_article(category: &str, slug: &str) -> Result<Article, AppError
 
 /// Markdownファイルのメタデータを取得
 async fn get_article_metadata(client: &Client, key: &str) -> Result<ArticleMetadata, AppError> {
+    let bucket_name =
+        std::env::var("AWS_BUCKET_NAME").unwrap_or_else(|_| "bucket-name".to_string());
     // S3オブジェクトをGET
     let get_object_result = match client
         .get_object()
-        .bucket(BUCKET_NAME)
+        .bucket(&bucket_name)
         .key(key)
         .send()
         .await
@@ -220,8 +227,7 @@ async fn get_article_metadata(client: &Client, key: &str) -> Result<ArticleMetad
 
 /// Markdownファイルからフロントマターを抽出してメタデータを構築
 fn extract_metadata_from_markdown(content: &str) -> Result<ArticleMetadata, AppError> {
-    // フロントマターを検索
-    // フロントマターは+++で囲まれている（TOMLフォーマット）
+    // frontmatter, between +++
     let front_matter_pattern = Regex::new(r"^\+\+\+([\s\S]*?)\+\+\+").unwrap();
 
     let front_matter = match front_matter_pattern.captures(content) {
@@ -261,18 +267,25 @@ fn extract_metadata_from_markdown(content: &str) -> Result<ArticleMetadata, AppE
         Err(_) => chrono::Local::now().naive_local().date(),
     };
 
-    // 更新日時を変換（指定されている場合）
-    let updated_date = parsed.last_edited_time.as_ref().and_then(|date_str| {
-        NaiveDate::parse_from_str(date_str.split('T').next().unwrap_or(""), "%Y-%m-%d").ok()
-    });
+    // 更新日時をNaiveDateに変換
+    let updated_date = match NaiveDate::parse_from_str(
+        &parsed.last_edited_time.split('T').next().unwrap_or(""),
+        "%Y-%m-%d",
+    ) {
+        Ok(date) => date,
+        Err(_) => chrono::Local::now().naive_local().date(),
+    };
 
     Ok(ArticleMetadata {
+        id: parsed.id,
         title: parsed.title,
-        description: parsed.description,
+        category: parsed.category,
+        group: parsed.group,
+        priority_level: parsed.priority_level,
+        tags: parsed.tags,
+        summary: parsed.summary,
         published_at: published_date,
         updated_at: updated_date,
-        tags: parsed.tags,
-        thumbnail_url: parsed.thumbnail_url,
     })
 }
 
@@ -285,66 +298,67 @@ fn parse_markdown_article(content: &str, category: &str, slug: &str) -> Result<A
     let front_matter_pattern = Regex::new(r"^\+\+\+([\s\S]*?)\+\+\+").unwrap();
     let body = front_matter_pattern.replace(content, "").trim().to_string();
 
-    // 記事の最初の150文字を抜粋として使用（HTMLタグを除去）
-    let plain_content = strip_html_tags(&body);
-    let excerpt = if plain_content.len() > 150 {
-        format!("{}...", &plain_content[..150])
-    } else {
-        plain_content
-    };
-
-    // OGP画像はサムネイルURLがあればそれを使用、なければデフォルト画像
-    let og_image = metadata.thumbnail_url.clone();
-
     // 記事オブジェクトを構築
     let article = Article {
         id: format!("{}/{}", category, slug),
         title: metadata.title,
         slug: slug.to_string(),
         category: category.to_string(),
-        content: body,
-        excerpt,
-        published_at: metadata.published_at,
-        updated_at: metadata.updated_at,
-        description: metadata.description.unwrap_or_default(),
+        group: metadata.group,
+        priority_level: metadata.priority_level,
+        summary: metadata.summary,
         tags: metadata.tags,
-        thumbnail_url: metadata.thumbnail_url,
-        og_image,
-        published: true, // デフォルトで公開する
+        published_date: metadata.published_at,
+        published_at: metadata.published_at.format("%Y年%m月%d日").to_string(),
+        updated_at: metadata.updated_at.format("%Y年%m月%d日").to_string(),
+        content: body,
     };
 
     Ok(article)
 }
 
 /// HTMLタグを除去する簡易関数
-fn strip_html_tags(html: &str) -> String {
-    let re = Regex::new(r"<[^>]*>").unwrap();
-    re.replace_all(html, "").to_string()
-}
+//fn strip_html_tags(html: &str) -> String {
+//    let re = Regex::new(r"<[^>]*>").unwrap();
+//    re.replace_all(html, "").to_string()
+//}
 
 /// S3ファイルから解析したメタデータ
+/// 日付の処理が加えられている
+#[allow(dead_code)]
 struct ArticleMetadata {
+    id: String,
     title: String,
-    description: Option<String>,
-    published_at: NaiveDate,
-    updated_at: Option<NaiveDate>,
+    category: String,
+    group: String,
+    priority_level: i32,
     tags: Vec<String>,
-    thumbnail_url: Option<String>,
+    summary: String,
+    published_at: NaiveDate,
+    updated_at: NaiveDate,
 }
 
 /// フロントマターをパースするための構造体
 #[derive(Deserialize)]
 struct ArticleMetadataToml {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
     title: String,
     #[serde(default)]
-    description: Option<String>,
-    created_time: String,
+    category: String,
     #[serde(default)]
-    last_edited_time: Option<String>,
+    group: String,
+    #[serde(default)]
+    priority_level: i32,
     #[serde(default)]
     tags: Vec<String>,
     #[serde(default)]
-    thumbnail_url: Option<String>,
+    summary: String,
+    #[serde(default)]
+    created_time: String,
+    #[serde(default)]
+    last_edited_time: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     _status: Option<String>,
 }

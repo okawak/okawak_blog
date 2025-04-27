@@ -17,8 +17,10 @@ async fn main() {
 
     // AWS SDK設定
     // 認証情報は環境変数または~/.aws/credentialsから自動的に読み込まれます
+    let aws_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "ap-northeast-1".to_string());
+    let aws_region = Some(aws_config::Region::new(aws_region));
     let aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
-        .region("ap-northeast-1")
+        .region(aws_region)
         .load()
         .await;
     let s3_client = aws_sdk_s3::Client::new(&aws_config);

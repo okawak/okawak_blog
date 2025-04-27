@@ -56,19 +56,6 @@
     }
   }
 
-  // サムネイル
-  .article_thumbnail {
-    width: 100%;
-    a {
-      display: block;
-      img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
-    }
-  }
-
   // 抜粋
   .article_excerpt {
     flex-grow: 1;

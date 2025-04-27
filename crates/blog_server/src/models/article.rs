@@ -13,24 +13,22 @@ pub struct Article {
     pub slug: String,
     /// 記事が所属するカテゴリー
     pub category: String,
-    /// 記事の内容（Markdown形式）
-    pub content: String,
+    /// カテゴリーの中のグループの名前
+    pub group: String,
+    /// 記事の優先順位
+    pub priority_level: i32,
     /// 記事の要約文
-    pub excerpt: String,
-    /// サムネイル画像のURL（オプショナル）
-    pub thumbnail_url: Option<String>,
+    pub summary: String,
     /// 記事に関連するタグのリスト
     pub tags: Vec<String>,
-    /// 投稿日時
-    pub published_at: NaiveDate,
-    /// 最終更新日時（オプショナル）
-    pub updated_at: Option<NaiveDate>,
-    /// SEO用のメタ説明
-    pub description: String,
-    /// OGP画像のURL（ソーシャル共有用）
-    pub og_image: Option<String>,
-    /// 記事を公開するかどうか
-    pub published: bool,
+    /// フォーマット無しの投稿日
+    pub published_date: NaiveDate,
+    /// フォーマット済みの投稿日
+    pub published_at: String,
+    /// フォーマット済みの最終変更日
+    pub updated_at: String,
+    /// 記事の内容（Markdown形式）
+    pub content: String,
 }
 
 impl Article {
@@ -41,7 +39,7 @@ impl Article {
 
     /// 記事の投稿日を「YYYY年MM月DD日」形式でフォーマット
     pub fn date_formatted(&self) -> String {
-        self.published_at.format("%Y年%m月%d日").to_string()
+        self.published_date.format("%Y年%m月%d日").to_string()
     }
 
     /// 記事の概要を取得
@@ -51,11 +49,13 @@ impl Article {
             title: self.title.clone(),
             slug: self.slug.clone(),
             category: self.category.clone(),
-            excerpt: self.excerpt.clone(),
-            thumbnail_url: self.thumbnail_url.clone(),
+            group: self.group.clone(),
+            priority_level: self.priority_level,
+            summary: self.summary.clone(),
             tags: self.tags.clone(),
-            published_at: self.published_at,
-            date_formatted: self.date_formatted(),
+            published_date: self.published_date,
+            published_at: self.published_at.clone(),
+            updated_at: self.updated_at.clone(),
         }
     }
 }
@@ -66,19 +66,11 @@ impl HasMetadata for Article {
     }
 
     fn description(&self) -> &str {
-        &self.description
-    }
-
-    fn og_image(&self) -> Option<&str> {
-        self.og_image.as_deref()
+        &self.summary
     }
 
     fn published_at(&self) -> NaiveDate {
-        self.published_at
-    }
-
-    fn updated_at(&self) -> Option<NaiveDate> {
-        self.updated_at
+        self.published_date
     }
 }
 
@@ -94,16 +86,20 @@ pub struct ArticleSummary {
     pub slug: String,
     /// 記事が所属するカテゴリー
     pub category: String,
+    /// カテゴリーの中のグループの名前
+    pub group: String,
+    /// 記事の優先順位
+    pub priority_level: i32,
     /// 記事の要約文
-    pub excerpt: String,
-    /// サムネイル画像のURL（オプショナル）
-    pub thumbnail_url: Option<String>,
+    pub summary: String,
     /// 記事に関連するタグのリスト
     pub tags: Vec<String>,
-    /// 投稿日時
-    pub published_at: NaiveDate,
-    /// フォーマット済みの日付文字列
-    pub date_formatted: String,
+    /// フォーマット無しの投稿日
+    pub published_date: NaiveDate,
+    /// フォーマット済みの投稿日
+    pub published_at: String,
+    /// フォーマット済みの最終変更日
+    pub updated_at: String,
 }
 
 impl ArticleSummary {

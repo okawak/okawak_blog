@@ -24,14 +24,8 @@ pub trait HasMetadata {
     /// SEO用の説明文を取得します
     fn description(&self) -> &str;
 
-    /// オープングラフ画像のURLを取得します（ソーシャル共有用）
-    fn og_image(&self) -> Option<&str>;
-
     /// 投稿日時を取得します
     fn published_at(&self) -> NaiveDate;
-
-    /// 更新日時を取得します
-    fn updated_at(&self) -> Option<NaiveDate>;
 }
 
 /// ページネーション情報を保持する構造体

@@ -62,32 +62,52 @@ pub fn App() -> impl IntoView {
                         // カテゴリーページルート
                         <Route
                             path=StaticSegment("tech")
-                            view=move || {
+                            view=|| {
                                 view! { <CategoryPage category="tech" /> }
                             }
                         />
                         <Route
                             path=StaticSegment("daily")
-                            view=move || {
+                            view=|| {
                                 view! { <CategoryPage category="daily" /> }
                             }
                         />
                         <Route
                             path=StaticSegment("statistics")
-                            view=move || {
+                            view=|| {
                                 view! { <CategoryPage category="statistics" /> }
                             }
                         />
                         <Route
                             path=StaticSegment("physics")
-                            view=move || {
+                            view=|| {
                                 view! { <CategoryPage category="physics" /> }
                             }
                         />
-                        <Route path=path!("/tech/:slug") view=ArticlePage />
-                        <Route path=path!("/daily/:slug") view=ArticlePage />
-                        <Route path=path!("/statistics/:slug") view=ArticlePage />
-                        <Route path=path!("/physics/:slug") view=ArticlePage />
+                        <Route
+                            path=path!("/tech/:slug")
+                            view=|| {
+                                view! { <ArticlePage cat="tech" /> }
+                            }
+                        />
+                        <Route
+                            path=path!("/daily/:slug")
+                            view=|| {
+                                view! { <ArticlePage cat="daily" /> }
+                            }
+                        />
+                        <Route
+                            path=path!("/statistics/:slug")
+                            view=|| {
+                                view! { <ArticlePage cat="statistics" /> }
+                            }
+                        />
+                        <Route
+                            path=path!("/physics/:slug")
+                            view=|| {
+                                view! { <ArticlePage cat="physics" /> }
+                            }
+                        />
                     </Routes>
                 </main>
             </Router>
