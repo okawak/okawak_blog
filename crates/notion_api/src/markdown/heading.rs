@@ -16,5 +16,5 @@ pub fn process(value: &Value, size: u8) -> Result<String, Box<dyn Error>> {
             }
         }
     }
-    Ok(format!("{}\n\n", title).to_string())
+    Ok(format!("{title}\n\n").to_string())
 }

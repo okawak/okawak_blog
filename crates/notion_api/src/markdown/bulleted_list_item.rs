@@ -20,26 +20,26 @@ pub fn process(value: &Value) -> Result<String, Box<dyn Error>> {
             content = content.trim_matches('"').to_string();
             // 装飾を適用
             if is_bold {
-                content = format!("**{}**", content);
+                content = format!("**{content}**");
             }
             if is_italic {
-                content = format!("_{}_", content);
+                content = format!("_{content}_");
             }
             if is_underline {
-                content = format!("<u>{}</u>", content);
+                content = format!("<u>{content}</u>");
             }
             if is_strikethrough {
-                content = format!("~~{}~~", content);
+                content = format!("~~{content}~~");
             }
             if is_code {
-                content = format!("`{}`", content);
+                content = format!("`{content}`");
             }
 
             let link = text.get("link").unwrap();
             if let Some(raw_url) = link.get("url") {
                 let tmp_url = raw_url.to_string();
                 let url = tmp_url.trim_matches('"');
-                list_item.push_str(&format!("[{}]({})", content, url));
+                list_item.push_str(&format!("[{content}]({url})"));
             } else {
                 list_item.push_str(&content);
             }
@@ -56,7 +56,7 @@ pub fn process(value: &Value) -> Result<String, Box<dyn Error>> {
 
             let mut content = expression.trim_matches('"').to_string();
             content = content.replace("\\\\", "\\");
-            content = format!("$ {} $", content);
+            content = format!("$ {content} $");
             // 装飾を適用
             // if is_bold {
             //     content = format!("**{}**", content);
@@ -77,5 +77,5 @@ pub fn process(value: &Value) -> Result<String, Box<dyn Error>> {
             list_item.push_str(&content);
         }
     }
-    Ok(format!("{}\n\n", list_item).to_string())
+    Ok(format!("{list_item}\n\n").to_string())
 }
