@@ -1,4 +1,4 @@
-use crate::components::{get_main_nav_items, NavigationItem};
+use crate::components::{NavigationItem, get_main_nav_items};
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 use reactive_stores::Store;

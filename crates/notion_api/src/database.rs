@@ -28,6 +28,19 @@ pub fn extract_pages(json: &Value) -> Result<Vec<PageInfo>, Box<dyn Error>> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            let group = properties
+                .get("グループ")
+                .and_then(|v| v.get("select"))
+                .and_then(|v| v.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let priority_level = properties
+                .get("優先度")
+                .and_then(|v| v.get("number"))
+                .and_then(|v| v.as_i64())
+                .map(|v| v as i32)
+                .unwrap_or(0);
             let tags = properties
                 .get("タグ")
                 .and_then(|v| v.get("multi_select"))
@@ -40,6 +53,14 @@ pub fn extract_pages(json: &Value) -> Result<Vec<PageInfo>, Box<dyn Error>> {
                         .map(|s| s.to_string())
                 })
                 .collect();
+            let summary = properties
+                .get("要約")
+                .and_then(|v| v.get("rich_text"))
+                .and_then(|v| v.get(0))
+                .and_then(|v| v.get("plain_text"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let created_time = page
                 .get("created_time")
                 .and_then(|v| v.as_str())
@@ -61,7 +82,10 @@ pub fn extract_pages(json: &Value) -> Result<Vec<PageInfo>, Box<dyn Error>> {
                 id,
                 title,
                 category,
+                group,
+                priority_level,
                 tags,
+                summary,
                 created_time,
                 last_edited_time,
                 status,
@@ -96,11 +120,24 @@ mod tests {
                                 {"name": "タグ2"}
                             ]
                         },
+                        "グループ": {
+                            "select": {
+                                "name": "基礎",
+                             }
+                        },
                         "ステータス": {
                             "status": {
                                 "name": "完了"
                             }
                         },
+                        "要約": {
+                            "rich_text": [
+                                {
+                                    "plain_text": "likelihoodの概念と、それを使った最尤推定の方法のイメージについてのページです。",
+                                }
+                            ]
+                        },
+                        "優先度": { "number": 1 },
                         "カテゴリー": {
                             "select": {
                                 "name": "テスト"

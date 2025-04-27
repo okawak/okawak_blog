@@ -14,7 +14,7 @@ pub fn extract_blocks(json: &Value) -> Result<Vec<BlockInfo>, Box<dyn Error>> {
     let results = json
         .get("results")
         .and_then(|v| v.as_array())
-        .ok_or(format!("No results array: {:?}", json))?;
+        .ok_or(format!("No results array: {json:?}"))?;
     let blocks = results
         .iter()
         .map(|block| {
@@ -46,20 +46,31 @@ pub fn extract_blocks(json: &Value) -> Result<Vec<BlockInfo>, Box<dyn Error>> {
 
 /// ページの子ブロックのJSONデータをMarkdown形式の文字列に変換する
 pub fn to_markdown(page_info: &PageInfo, blocks: &[BlockInfo]) -> Result<String, Box<dyn Error>> {
-    let mut markdown = String::new();
     // frontmatter
-    markdown.push_str("+++\n");
-    markdown.push_str(&format!("title = \"{}\"\n", page_info.title));
-    markdown.push_str(&format!("category = \"{}\"\n", page_info.category));
-    markdown.push_str(&format!("id = \"{}\"\n", page_info.id));
-    markdown.push_str(&format!("tags = [\"{}\"]\n", page_info.tags.join("\", \"")));
-    markdown.push_str(&format!("created_time = \"{}\"\n", page_info.created_time));
-    markdown.push_str(&format!(
-        "last_edited_time = \"{}\"\n",
-        page_info.last_edited_time
-    ));
-    markdown.push_str(&format!("status = \"{}\"\n", page_info.status));
-    markdown.push_str("+++\n");
+    let mut markdown = format!(
+        "+++\n\
+      id = \"{}\"\n\
+      title = \"{}\"\n\
+      category = \"{}\"\n\
+      group = \"{}\"\n\
+      priority_level = {}\n\
+      tags = [\"{}\"]\n\
+      summary = \"{}\"\n\
+      created_time = \"{}\"\n\
+      last_edited_time = \"{}\"\n\
+      status = \"{}\"\n\
+      +++\n",
+        page_info.id,
+        page_info.title,
+        page_info.category,
+        page_info.group,
+        page_info.priority_level,
+        page_info.tags.join("\", \""),
+        page_info.summary,
+        page_info.created_time,
+        page_info.last_edited_time,
+        page_info.status
+    );
 
     // body
     for block in blocks {
@@ -92,7 +103,7 @@ pub fn to_markdown(page_info: &PageInfo, blocks: &[BlockInfo]) -> Result<String,
                 markdown.push_str(equation::process(&block.content)?.as_str());
             }
             BlockType::Unsupported(type_name) => {
-                println!("Unsupported block type: {}", type_name);
+                println!("Unsupported block type: {type_name}");
             }
         }
     }
