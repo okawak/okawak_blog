@@ -43,9 +43,10 @@ pub fn ArticleCard(article: ArticleSummary) -> impl IntoView {
                         .tags
                         .iter()
                         .map(|tag| {
-                            let tag_url = format!("/tag/{tag}");
+                            let _tag_url = format!("/tag/{tag}");
                             view! {
-                                <a href=tag_url class=article_card_style::article_tag>
+                                // <a href=tag_url class=article_card_style::article_tag>
+                                <a href="/" class=article_card_style::article_tag>
                                     {format!("#{tag}")}
                                 </a>
                             }

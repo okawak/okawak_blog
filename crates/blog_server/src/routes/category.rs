@@ -12,7 +12,7 @@ import_style!(category_style, "category.module.scss");
 /// 特定のカテゴリの記事一覧を取得するサーバー関数
 #[server]
 pub async fn get_latest_articles(category: String) -> Result<Vec<ArticleSummary>, ServerFnError> {
-    s3::fetch_latest_articles(category)
+    s3::fetch_latest_articles(category, 5)
         .await
         .map_err(|e| ServerFnError::ServerError(e.to_string()))
 }

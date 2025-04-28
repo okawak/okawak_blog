@@ -10,7 +10,7 @@ use regex::Regex;
 use serde::Deserialize;
 
 /// カテゴリー内の記事一覧を取得する
-pub async fn list_articles(category: &str) -> Result<Vec<ArticleSummary>, AppError> {
+pub async fn list_articles(category: String) -> Result<Vec<ArticleSummary>, AppError> {
     let client: Client = use_context()
         .ok_or_else(|| AppError::S3Error("S3クライアントの初期化に失敗".to_string()))?;
 
@@ -103,7 +103,10 @@ pub async fn list_articles(category: &str) -> Result<Vec<ArticleSummary>, AppErr
     Ok(articles)
 }
 
-pub async fn fetch_latest_articles(category: String) -> Result<Vec<ArticleSummary>, AppError> {
+pub async fn fetch_latest_articles(
+    category: String,
+    number: usize,
+) -> Result<Vec<ArticleSummary>, AppError> {
     // 全カテゴリーから最新記事を集める
     let categories;
     if category.is_empty() {
@@ -114,7 +117,7 @@ pub async fn fetch_latest_articles(category: String) -> Result<Vec<ArticleSummar
     let mut all_articles = Vec::new();
 
     for category in categories {
-        if let Ok(mut v) = list_articles(category).await {
+        if let Ok(mut v) = list_articles(category.to_string()).await {
             all_articles.append(&mut v);
         } else {
             log::error!("カテゴリー {category} の記事取得に失敗");
@@ -125,7 +128,7 @@ pub async fn fetch_latest_articles(category: String) -> Result<Vec<ArticleSummar
     all_articles.sort_by(|a, b| b.published_date.cmp(&a.published_date));
 
     // 最大10件に制限
-    Ok(all_articles.into_iter().take(10).collect())
+    Ok(all_articles.into_iter().take(number).collect())
 }
 
 /// 記事の詳細を取得する

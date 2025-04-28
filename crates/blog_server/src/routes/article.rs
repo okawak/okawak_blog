@@ -5,6 +5,9 @@ use crate::models::article::Article;
 use crate::services::s3;
 use leptos::prelude::*;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
+use stylance::import_style;
+
+import_style!(layout_style, "layout.module.scss");
 
 /// 記事詳細ページコンポーネント（シンプル版）
 #[component]

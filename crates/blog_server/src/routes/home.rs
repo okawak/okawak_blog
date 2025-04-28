@@ -11,7 +11,7 @@ import_style!(home_style, "home.module.scss");
 /// 全てのカテゴリの記事一覧を取得するサーバー関数
 #[server]
 pub async fn get_latest_articles() -> Result<Vec<ArticleSummary>, ServerFnError> {
-    s3::fetch_latest_articles(String::new())
+    s3::fetch_latest_articles(String::new(), 10)
         .await
         .map_err(|e| ServerFnError::ServerError(e.to_string()))
 }

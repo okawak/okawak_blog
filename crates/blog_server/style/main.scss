@@ -10,6 +10,7 @@ $color-accent: #c2a262;
 $font-sans: "Noto Sans JP", sans-serif;
 $header-height: 90px;
 $padding-whole: 2rem;
+$sidebar-width: 13rem;
 
 @mixin page-base {
   background: linear-gradient(to bottom, $color-bg-mid 0%, $color-bg-dark 100%);
