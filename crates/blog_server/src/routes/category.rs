@@ -53,8 +53,20 @@ pub fn CategoryPage(category: &'static str) -> impl IntoView {
         _ => category,
     };
 
+    // レスポンシブデザインのためのメニューオープン状態
+    let (menu_open, set_menu_open) = signal(false);
+
     view! {
-        <div class=layout_style::layout>
+        <div class=move || {
+            let state = if menu_open.get() { layout_style::open } else { "" };
+            format!("{} {}", layout_style::layout, state)
+        }>
+            // ハンバーガーアイコン
+            <button
+                class=layout_style::toggle_icon
+                on:click=move |_| set_menu_open.update(|v| *v = !*v)
+                aria-label="Toggle sidebar"
+            ></button>
             // サイドバー
             <Sidebar class=layout_style::sidebar category=category />
             <div class=layout_style::content>

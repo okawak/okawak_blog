@@ -1,16 +1,18 @@
 // header.module.scss
 .header {
+  height: $header-height;
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 999;
   background: linear-gradient(90deg, $color-bg-dark 0%, $color-bg-mid 100%);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
 
   .container {
+    height: 100%;
     position: relative;
     max-width: 64rem;
     margin: 0 auto;
-    padding: 0.75rem 1.5rem;
+    padding: 0 1.5rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -26,11 +28,14 @@
     }
 
     .logo {
+      margin: 0;
+      line-height: normal;
       font-family: $font-sans;
       font-size: 1.5rem;
       font-weight: bold;
       color: $color-text;
       text-decoration: none;
+      line-height: $header-height;
       transition: color 0.3s ease;
 
       &:hover {
@@ -127,20 +132,20 @@
   @media (max-width: 768px) {
     .container {
       flex-wrap: wrap;
-
-      .logo {
-        flex: 1 0 100%;
-        text-align: center;
-        margin-bottom: 0.5rem;
-      }
+      justify-content: center;
 
       .menu_toggle {
         display: block;
+        position: absolute;
+        top: 50%;
+        right: 1.5rem;
+        transform: translateY(-50%);
+        z-index: 200;
       }
 
       .nav_container {
         position: absolute;
-        top: 100%;
+        top: $header-height;
         right: 1.5rem; // ハンバーガーと同じ右端
         background: linear-gradient(
           90deg,

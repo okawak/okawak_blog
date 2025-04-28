@@ -8,13 +8,15 @@ $color-text-soft: #a89b90;
 $color-accent: #c2a262;
 
 $font-sans: "Noto Sans JP", sans-serif;
+$header-height: 90px;
+$padding-whole: 2rem;
 
 @mixin page-base {
   background: linear-gradient(to bottom, $color-bg-mid 0%, $color-bg-dark 100%);
   color: $color-text;
   font-family: $font-sans;
   min-height: 100vh;
-  padding: 2rem;
+  padding: $padding-whole;
   margin: 0 auto;
 }
 

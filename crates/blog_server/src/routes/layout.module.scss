@@ -1,19 +1,90 @@
-// レイアウト用スタイル
+// layout.module.scss
+$sidebar-width: 13rem;
+
 .layout {
-  @include page-base;
   display: flex;
   gap: 2rem;
+  position: relative;
 
-  // サイドバー領域
+  // サイドバー表示アイコン（モバイルでのみ）
+  .toggle-icon {
+    display: none;
+    position: fixed;
+    top: $header-height / 2 - 12.5px; // 12.5pxはアイコンの高さの半分
+    left: 1rem;
+    z-index: 1000;
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 1.5rem;
+    color: $color-text;
+    cursor: pointer;
+
+    &::before {
+      content: "\f054"; /* FontAwesome: chevron-right */
+      font-family: "Font Awesome 5 Free";
+      font-weight: 900;
+      display: block;
+    }
+  }
+  &.open {
+    .toggle-icon::before {
+      content: "\f053"; /* FontAwesome: chevron-left */
+      font-family: "Font Awesome 5 Free";
+      font-weight: 900;
+      display: block;
+    }
+  }
+
+  // サイドバー領域 (layoutのみで、詳細なスタイルはsidebar.module.scssに記載)
   .sidebar {
-    flex: 0 0 16rem;
+    flex: 0 0 $sidebar-width;
   }
 
   // メインコンテンツ領域
   .content {
+    @include page-base;
     flex: 1;
     display: flex;
     flex-direction: column;
     gap: 2rem;
+    z-index: 100;
+    transition: transform 0.3s ease;
+  }
+}
+
+// レスポンシブ（モバイル）
+@media (max-width: 768px) {
+  .layout {
+    width: 100%;
+    overflow-x: hidden;
+
+    // 別アイコンに変更: 矢印で開閉制御
+    .toggle-icon {
+      display: block;
+    }
+
+    // Sidebarをオフスクリーンに
+    .sidebar {
+      display: block; // 常に存在
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: $sidebar-width;
+      z-index: 300;
+      transform: translateX(-100%); // 左へ隠す
+      transition: transform 0.3s ease;
+    }
+
+    // メニュー開閉でsidebarをスライド表示
+    &.open {
+      .sidebar {
+        transform: translateX(0); // スライドイン
+      }
+      .content {
+        transform: translateX($sidebar-width); // 右へスライド
+      }
+    }
   }
 }
