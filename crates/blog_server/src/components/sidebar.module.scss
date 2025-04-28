@@ -72,8 +72,9 @@
       }
     }
 
-    // エラー表示用
-    .error {
+    .loading,
+    .error,
+    .no_articles {
       color: $color-accent;
       background: rgba($color-bg-light, 0.7);
       padding: 1rem;

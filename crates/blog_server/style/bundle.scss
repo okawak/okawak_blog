@@ -704,8 +704,9 @@ h2 {
       }
     }
 
-    // エラー表示用
-    .error-3d38891 {
+    .loading-3d38891,
+    .error-3d38891,
+    .no_articles-3d38891 {
       color: $color-accent;
       background: rgba($color-bg-light, 0.7);
       padding: 1rem;

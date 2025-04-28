@@ -27,7 +27,10 @@ pub fn ArticlePage(category: &'static str) -> impl IntoView {
     // 記事データを取得
     let article_resource = Resource::new(
         move || (category.to_string(), slug()),
-        move |(category_name, slug_value)| async move { get_article(category_name, slug_value).await },
+        move |(category_name, slug_value)| async move {
+            log::info!("slug_value: {slug_value}");
+            get_article(category_name, slug_value).await
+        },
     );
 
     // レスポンシブデザインのためのメニューオープン状態

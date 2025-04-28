@@ -85,18 +85,33 @@ pub fn Sidebar(category: &'static str, class: &'static str) -> impl IntoView {
     view! {
         <aside class=move || { format!("{} {}", class, sidebar_style::sidebar) }>
             <div class=sidebar_style::sidebar_section>
-                <Show
-                    when=move || matches!(article_summaries.get(), Some(Ok(_)))
-                    fallback=move || {
+                <Suspense fallback=|| {
+                    view! { <div class=sidebar_style::loading>"記事を読み込み中..."</div> }
+                }>
+                    <ErrorBoundary fallback=|error| {
                         view! {
-                            <p class=sidebar_style::error>
-                                {"記事の取得に失敗しました。"}
-                            </p>
+                            <div class=sidebar_style::error>
+                                "記事の読み込みに失敗しました: "
+                                {format!("{error:?}")}
+                            </div>
                         }
-                    }
-                >
-                    {move || { article_summaries.get().and_then(Result::ok).map(render_sidebar) }}
-                </Show>
+                    }>
+                        <Show
+                            when=move || matches!(article_summaries.get(), Some(Ok(_)))
+                            fallback=move || {
+                                view! {
+                                    <p class=sidebar_style::no_articles>
+                                        {"記事がありません。"}
+                                    </p>
+                                }
+                            }
+                        >
+                            {move || {
+                                article_summaries.get().and_then(Result::ok).map(render_sidebar)
+                            }}
+                        </Show>
+                    </ErrorBoundary>
+                </Suspense>
             </div>
         </aside>
     }
