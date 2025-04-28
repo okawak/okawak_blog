@@ -3,9 +3,6 @@ use leptos::prelude::*;
 use pulldown_cmark::{Options, Parser, html};
 
 /// Markdownをレンダリングするコンポーネント
-///
-/// 与えられたMarkdown文字列をHTMLに変換して表示します。
-/// 数式（MathJax）、シンタックスハイライト、目次などの機能をサポートします。
 #[component]
 pub fn MarkdownRenderer(
     #[prop(into)] content: String,

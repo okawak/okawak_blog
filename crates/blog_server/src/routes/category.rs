@@ -61,7 +61,7 @@ pub fn CategoryPage(category: &'static str) -> impl IntoView {
             let state = if menu_open.get() { layout_style::open } else { "" };
             format!("{} {}", layout_style::layout, state)
         }>
-            // ハンバーガーアイコン
+            // toggleボタン(モバイル用)
             <button
                 class=layout_style::toggle_icon
                 on:click=move |_| set_menu_open.update(|v| *v = !*v)

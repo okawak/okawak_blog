@@ -127,7 +127,7 @@ pub async fn fetch_latest_articles(
     // 投稿日時の降順でソート
     all_articles.sort_by(|a, b| b.published_date.cmp(&a.published_date));
 
-    // 最大10件に制限
+    // number 件だけ取得
     Ok(all_articles.into_iter().take(number).collect())
 }
 

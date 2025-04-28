@@ -3,6 +3,7 @@ use crate::models::article::ArticleSummary;
 use crate::services::s3;
 
 use leptos::prelude::*;
+use leptos_router::{hooks::use_params_map, params::ParamsMap};
 use std::collections::HashMap;
 use stylance::import_style;
 
@@ -26,6 +27,9 @@ fn render_sidebar(articles: Vec<ArticleSummary>) -> impl IntoView {
             .push(article);
     }
 
+    let params = use_params_map();
+    let slug = move || params.with(|p: &ParamsMap| p.get("slug").clone().unwrap_or_default());
+
     view! {
         <>
             {grouped
@@ -45,8 +49,13 @@ fn render_sidebar(articles: Vec<ArticleSummary>) -> impl IntoView {
                                             article.category,
                                             article.slug,
                                         );
+                                        let link_style = if slug() == article.slug {
+                                            sidebar_style::article_link_active
+                                        } else {
+                                            sidebar_style::article_link
+                                        };
                                         view! {
-                                            <li class=sidebar_style::article_link>
+                                            <li class=link_style>
                                                 <a href=link>{article.title}</a>
                                             </li>
                                         }

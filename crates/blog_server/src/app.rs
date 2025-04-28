@@ -87,25 +87,25 @@ pub fn App() -> impl IntoView {
                         <Route
                             path=path!("/tech/:slug")
                             view=|| {
-                                view! { <ArticlePage cat="tech" /> }
+                                view! { <ArticlePage category="tech" /> }
                             }
                         />
                         <Route
                             path=path!("/daily/:slug")
                             view=|| {
-                                view! { <ArticlePage cat="daily" /> }
+                                view! { <ArticlePage category="daily" /> }
                             }
                         />
                         <Route
                             path=path!("/statistics/:slug")
                             view=|| {
-                                view! { <ArticlePage cat="statistics" /> }
+                                view! { <ArticlePage category="statistics" /> }
                             }
                         />
                         <Route
                             path=path!("/physics/:slug")
                             view=|| {
-                                view! { <ArticlePage cat="physics" /> }
+                                view! { <ArticlePage category="physics" /> }
                             }
                         />
                     </Routes>

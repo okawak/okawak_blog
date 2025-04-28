@@ -1,5 +1,4 @@
 use crate::components::{MarkdownRenderer, Sidebar, TagList};
-use crate::error::AppError;
 use crate::models::article::Article;
 #[cfg(feature = "ssr")]
 use crate::services::s3;
@@ -8,151 +7,107 @@ use leptos_router::{hooks::use_params_map, params::ParamsMap};
 use stylance::import_style;
 
 import_style!(layout_style, "layout.module.scss");
+import_style!(article_style, "article.module.scss");
 
-/// 記事詳細ページコンポーネント（シンプル版）
+/// 特定の記事を取得するサーバー関数
+#[server]
+pub async fn get_article(category: String, slug: String) -> Result<Article, ServerFnError> {
+    s3::get_article(&category, &slug)
+        .await
+        .map_err(|e| ServerFnError::ServerError(e.to_string()))
+}
+
+/// 記事ページコンポーネント
 #[component]
-pub fn ArticlePage(cat: &'static str) -> impl IntoView {
+pub fn ArticlePage(category: &'static str) -> impl IntoView {
     // URLからカテゴリーとスラッグを取得
     let params = use_params_map();
-    let category =
-        move || params.with(|p: &ParamsMap| p.get("category").clone().unwrap_or_default());
     let slug = move || params.with(|p: &ParamsMap| p.get("slug").clone().unwrap_or_default());
 
     // 記事データを取得
     let article_resource = Resource::new(
-        move || (category(), slug()),
-        |(category, slug)| async move { fetch_article(&category, &slug).await },
+        move || (category.to_string(), slug()),
+        move |(category_name, slug_value)| async move { get_article(category_name, slug_value).await },
     );
 
-    // リソースの状態を管理するシグナル
-    let is_loading = Memo::new(move |_| article_resource.get().is_none());
-    let has_error =
-        Memo::new(move |_| article_resource.get().is_some_and(|result| result.is_err()));
-    let error_message = Memo::new(move |_| match article_resource.get() {
-        Some(Err(e)) => e.to_string(),
-        _ => String::from("記事の読み込みに失敗しました"),
-    });
-
-    // 記事データを個別のシグナルに分解
-    let article_title = Memo::new(move |_| {
-        article_resource
-            .get()
-            .and_then(|result| result.ok())
-            .map(|article| article.title.clone())
-            .unwrap_or_default()
-    });
-
-    let article_content = Memo::new(move |_| {
-        article_resource
-            .get()
-            .and_then(|result| result.ok())
-            .map(|article| article.content.clone())
-            .unwrap_or_default()
-    });
-
-    let article_category = Memo::new(move |_| {
-        article_resource
-            .get()
-            .and_then(|result| result.ok())
-            .map(|article| article.category.clone())
-            .unwrap_or_default()
-    });
-
-    let article_tags = Memo::new(move |_| {
-        article_resource
-            .get()
-            .and_then(|result| result.ok())
-            .map(|article| article.tags.clone())
-            .unwrap_or_default()
-    });
-
-    let article_date = Memo::new(move |_| {
-        article_resource
-            .get()
-            .and_then(|result| result.ok())
-            .map(|article| article.date_formatted())
-            .unwrap_or_default()
-    });
-
-    let has_article =
-        Memo::new(move |_| article_resource.get().is_some_and(|result| result.is_ok()));
+    // レスポンシブデザインのためのメニューオープン状態
+    let (menu_open, set_menu_open) = signal(false);
 
     view! {
-        <div class="article-page">
-            <div class="main-content">
-                // ローディング状態の表示
-                <Show when=move || is_loading.get() fallback=|| ()>
-                    <div class="loading">記事を読み込み中...</div>
-                </Show>
-
-                // エラー状態の表示
-                <Show when=move || has_error.get() fallback=|| ()>
-                    <div class="error">
-                        <h2>エラーが発生しました</h2>
-                        <p>{move || error_message.get()}</p>
-                        <a href="/" class="back-link">
-                            ホームに戻る
-                        </a>
-                    </div>
-                </Show>
-
-                // 記事内容の表示（シンプル化）
-                <Show when=move || has_article.get() fallback=|| ()>
-                    <article class="article-content">
-                        <header class="article-header">
-                            <div class="article-meta">
-                                <a
-                                    href=move || format!("/{}", article_category.get())
-                                    class="category-link"
-                                >
-                                    {move || get_category_display_name(article_category.get())}
-                                </a>
-                                <time>{move || article_date.get()}</time>
+        <div class=move || {
+            let state = if menu_open.get() { layout_style::open } else { "" };
+            format!("{} {}", layout_style::layout, state)
+        }>
+            // toggleボタン(モバイル用)
+            <button
+                class=layout_style::toggle_icon
+                on:click=move |_| set_menu_open.update(|v| *v = !*v)
+                aria-label="Toggle sidebar"
+            ></button>
+            // サイドバー
+            <Sidebar class=layout_style::sidebar category=category />
+            <div class=move || format!("{} {}", layout_style::content, article_style::article_page)>
+                <Suspense fallback=|| {
+                    view! { <div class=article_style::loading>"記事を読み込み中..."</div> }
+                }>
+                    <ErrorBoundary fallback=|error| {
+                        view! {
+                            <div class=article_style::error>
+                                "記事の読み込みに失敗しました: "
+                                {format!("{error:?}")}
                             </div>
-                            <h1>{move || article_title.get()}</h1>
-                            // タグリストのプロパティ修正: tagsをSignal::derivedを使って変換
-                            <TagList tags=Signal::derive(move || article_tags.get()).get() />
-                        </header>
+                        }
+                    }>
+                        <Show
+                            when=move || matches!(article_resource.get(), Some(Ok(_)))
+                            fallback=move || {
+                                view! {
+                                    <div class=article_style::no_articles>
+                                        {"記事がありません。"}
+                                    </div>
+                                }
+                            }
+                        >
+                            {move || {
+                                article_resource
+                                    .get()
+                                    .and_then(Result::ok)
+                                    .map(|article| {
+                                        view! {
+                                            <article class=article_style::article>
+                                                <h1 class=article_style::article_title>{article.title}</h1>
 
-                        // シンプル化されたMarkdown表示
-                        <div class="article-body">
-                            <MarkdownRenderer
-                                content=article_content.get()
-                                enable_toc=true
-                                enable_mathjax=true
-                            />
-                        </div>
-                    </article>
-                </Show>
+                                                <TagList tags=article.tags.clone() />
+
+                                                <div class=article_style::article_meta>
+                                                    <p>{format!("公開日: {}", article.published_at)}</p>
+                                                    <p>{format!("更新日: {}", article.updated_at)}</p>
+                                                </div>
+
+                                                <MarkdownRenderer content=article.content.clone() />
+                                            </article>
+                                        }
+                                    })
+                            }}
+                        </Show>
+                    </ErrorBoundary>
+                </Suspense>
             </div>
-
-            <Sidebar category=cat class="" />
         </div>
     }
 }
 
-/// カテゴリーコードから表示名を取得
-/// 引数のライフタイムと戻り値の静的ライフタイムの不一致を修正
-fn get_category_display_name(category: String) -> &'static str {
-    match category.as_str() {
-        "statistics" => "統計学",
-        "physics" => "物理学",
-        "daily" => "日常",
-        "tech" => "技術",
-        _ => "その他", // 未知のカテゴリーの場合は静的文字列を返す
-    }
-}
-
-/// 記事データを取得する
-#[cfg(feature = "ssr")]
-async fn fetch_article(category: &str, slug: &str) -> Result<Article, AppError> {
-    s3::get_article(category, slug).await
-}
-
-// WASM（hydrate）用 スタブ：型だけ合わせておく
-#[cfg(not(feature = "ssr"))]
-async fn fetch_article(_category: &str, _slug: &str) -> Result<Article, AppError> {
-    // クライアントナビゲーション時に呼び出されても型エラーにならないよう、
-    // 空リスト or 適当なエラーを返す
-    Ok(Article::default())
-}
+// 記事データを取得する
+//#[cfg(feature = "ssr")]
+//async fn fetch_article(category: &str, slug: &str) -> Result<Article, AppError> {
+//    s3::get_article(category, slug).await
+//}
+//
+//// WASM（hydrate）用 スタブ：型だけ合わせておく
+//#[allow(dead_code)]
+//#[cfg(not(feature = "ssr"))]
+//async fn fetch_article(_category: &str, _slug: &str) -> Result<Article, AppError> {
+//    // クライアントナビゲーション時に呼び出されても型エラーにならないよう、
+//    // 空リスト or 適当なエラーを返す
+//    Ok(Article::default())
+//}

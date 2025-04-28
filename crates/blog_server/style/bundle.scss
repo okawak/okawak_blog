@@ -2,6 +2,61 @@
 @use "sass:color";
 
 
+// article.module.scss
+.article-page-670edd8 {
+  .loading-670edd8,
+  .error-670edd8,
+  .no_articles-670edd8 {
+    padding: 2rem;
+    background: rgba($color-bg-light, 0.4);
+    color: $color-text-soft;
+    font-family: $font-sans;
+    text-align: center;
+    border-radius: 0.5rem;
+  }
+
+  // 記事コンテナ
+  .article-670edd8 {
+    background: rgba($color-bg-light, 0.6);
+    padding: 2rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    border-radius: 1rem;
+    font-family: $font-sans;
+    color: $color-text;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+
+    // タイトル
+    .article-title-670edd8 {
+      margin: 0;
+      font-size: 2rem;
+      position: relative;
+      &::after {
+        content: "";
+        display: block;
+        width: 4rem;
+        height: 0.25rem;
+        background: $color-accent;
+        margin-top: 0.5rem;
+        border-radius: 2px;
+      }
+    }
+
+    // メタ情報
+    .article-meta-670edd8 {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.875rem;
+      color: $color-text-soft;
+      p {
+        margin: 0;
+      }
+    }
+  }
+}
+
+
 .article_card-b44b6c1 {
   background: $color-bg-mid;
   border-radius: 1rem;
@@ -524,7 +579,7 @@ h2 {
   // サイドバー領域 (layoutのみで、詳細なスタイルはsidebar.module.scssに記載)
   .sidebar-723248a {
     flex: 0 0 $sidebar-width;
-    min-height: calc(100vh + (2rem * 2)); // contentのpadding
+    align-self: stretch;
   }
 
   // メインコンテンツ領域
@@ -580,7 +635,8 @@ h2 {
   border-radius: 0;
   padding: 0;
   width: 100%;
-  height: 100%;
+  height: auto;
+  min-height: 100%;
   background: rgba($color-bg-mid, 0.9);
   box-shadow: none;
   z-index: 300;
@@ -629,6 +685,22 @@ h2 {
             }
           }
         }
+        .article-link-active-3d38891 {
+          margin: 0;
+
+          a {
+            display: block;
+            color: $color-accent;
+            text-decoration: none;
+            padding: 0.5rem 0;
+            border-radius: 0;
+            transition: color 0.3s ease;
+
+            &:hover {
+              color: $color-text;
+            }
+          }
+        }
       }
     }
 
@@ -642,5 +714,30 @@ h2 {
       font-family: $font-sans;
       text-align: center;
     }
+  }
+}
+
+
+// tag_list.module.scss
+.tag-list-6e271b7 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag-6e271b7 {
+  display: inline-block;
+  background: rgba($color-accent, 0.2);
+  color: $color-accent;
+  font-family: $font-sans;
+  font-size: 0.875rem;
+  text-decoration: none;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.5rem;
+  transition: background 0.3s ease, color 0.3s ease;
+
+  &:hover {
+    background: rgba($color-accent, 0.4);
+    color: $color-text;
   }
 }
