@@ -20,16 +20,16 @@ pub fn process(value: &Value) -> Result<String, Box<dyn Error>> {
             content = content.trim_matches('"').to_string();
             // 装飾を適用
             if is_bold {
-                content = format!("**{content}**");
+                content = format!(" **{content}** ");
             }
             if is_italic {
-                content = format!("_{content}_");
+                content = format!(" _{content}_ ");
             }
             if is_underline {
                 content = format!("<u>{content}</u>");
             }
             if is_strikethrough {
-                content = format!("~~{content}~~");
+                content = format!(" ~~{content}~~ ");
             }
             if is_code {
                 content = format!("`{content}`");
@@ -56,7 +56,7 @@ pub fn process(value: &Value) -> Result<String, Box<dyn Error>> {
 
             let mut content = expression.trim_matches('"').to_string();
             content = content.replace("\\\\", "\\");
-            content = format!("$ {content} $");
+            content = format!("${content}$");
             // 装飾を適用
             // if is_bold {
             //     content = format!("**{}**", content);
