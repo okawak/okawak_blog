@@ -55,7 +55,7 @@ pub fn process(value: &Value) -> Result<String, Box<dyn Error>> {
 
             let mut content = expression.trim_matches('"').to_string();
             content = content.replace("\\\\", "\\");
-            content = format!("$ {content} $");
+            content = format!("${content}$");
             // 装飾を適用
             // if is_bold {
             //     content = format!("**{}**", content);
