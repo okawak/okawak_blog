@@ -74,6 +74,14 @@
       transition: transform 0.3s ease;
     }
 
+    .content {
+      padding: 1rem; // スマホ用のpadding
+      width: calc(100% - 2rem);
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+
     // メニュー開閉でsidebarをスライド表示
     &.open {
       .sidebar {

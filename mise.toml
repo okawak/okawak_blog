@@ -22,17 +22,6 @@ description = "Start the service"
 depends = ["build"]
 run = 'sudo systemctl daemon-reload && sudo systemctl start okawak_blog'
 
-[tasks.deploy]
-description = "Deploy the project"
-run = [
-  "mise run stop",
-  "mise run service",
-  "mise run clean",
-  "mise run build",
-  "mise run start",
-]
-alias = "d"
-
 [tasks.local_notion]
 description = "Run the Notion API project locally"
 run = 'cargo test -p notion_api --release -- --nocapture'

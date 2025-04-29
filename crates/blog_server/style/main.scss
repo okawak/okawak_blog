@@ -53,3 +53,27 @@ body {
   text-align: center;
   margin: 0;
 }
+
+.katex-display {
+  display: block; // default
+  margin: 1em 0; // default
+  text-align: center; // default
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  // スクロールバーのスタイル調整
+  &::-webkit-scrollbar {
+    height: 4px; // 細めのスクロールバー
+  }
+
+  &::-webkit-scrollbar-track {
+    background: rgba($color-bg-mid, 0.2);
+    border-radius: 2px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba($color-accent, 0.5);
+    border-radius: 2px;
+  }
+}

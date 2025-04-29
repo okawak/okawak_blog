@@ -2,7 +2,7 @@ use crate::error::AppError;
 use leptos::html::Div;
 use leptos::prelude::*;
 
-use pulldown_cmark::{html, Options, Parser};
+use pulldown_cmark::{Options, Parser, html};
 use regex::Regex;
 use std::sync::LazyLock;
 use stylance::import_style;
