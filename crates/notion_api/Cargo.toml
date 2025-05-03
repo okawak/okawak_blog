@@ -12,3 +12,4 @@ serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 governor = { version = "0.10", default-features = false, features = ["std"] }
 thiserror = "2"
+url = "2"

@@ -4,17 +4,58 @@ use crate::error::Result;
 use crate::markdown::extract_blocks;
 use crate::models::{BlockInfo, PageInfo};
 use governor::{DefaultDirectRateLimiter, Quota};
-use reqwest::Client;
-use serde_json::{Value, json};
+use reqwest::{Client, Url};
+use serde::Serialize;
 use std::num::NonZeroU32;
 
-/// ページ分割されたデータを処理する構造体
+/// Notion APIのページ分割レスポンス
+/// 受け取るJSONは以下のような形式
+/// Tはデータベースからの場合はPageInfo、ページからの場合はBlockInfo
+/// {
+///   "object": "list",
+///   "results": [
+///     ...
+///   ],
+///   "next_cursor": null,
+///   "has_more": false,
+///   "type": "page_or_database",
+///   "page_or_database": {},
+///   "request_id": "***"
+/// }
 #[derive(Debug)]
-struct Pagination<T> {
-    contents: Vec<T>,
+struct NotionResponse<T> {
+    results: Vec<T>,
     next_cursor: Option<String>,
 }
 
+/// クエリボディ全体の型定義
+/// 送るJSONは以下のような形式(フィルター条件はハードコードしている)
+/// {
+///   "filter": {
+///     "property": "ステータス",
+///       "status": {
+///         "equals": "完了"
+///       }
+///    }
+///   "start_cursor": "***"
+/// }
+#[derive(Serialize)]
+struct QueryBody<'a> {
+    filter: QueryFilter<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start_cursor: Option<&'a str>,
+}
+#[derive(Serialize)]
+struct QueryFilter<'a> {
+    property: &'static str,
+    status: StatusEq<'a>,
+}
+#[derive(Serialize)]
+struct StatusEq<'a> {
+    equals: &'a str,
+}
+
+/// Notion APIクライアント
 pub struct NotionClient {
     pub client: Client,
     pub config: Config,
@@ -25,158 +66,147 @@ pub struct NotionClient {
 /// インターフェースとなる関数は、newとquery_database, query_pageのみ
 /// 実際のHTTPリクエスト処理は内部で行っており、具体的な処理はハードコードされている
 impl NotionClient {
+    /// 新しいNotionClientを生成する
     pub fn new(config: Config) -> Self {
         // 1秒あたり2リクエストのレートリミッターを設定
         // 実際には3リクエスト可能だが安全のため、2リクエストに設定
         let quota =
             Quota::per_second(NonZeroU32::new(2).unwrap()).allow_burst(NonZeroU32::new(2).unwrap());
         let limiter = governor::RateLimiter::direct(quota);
-        NotionClient {
-            client: Client::new(),
+        Self {
+            client: reqwest::Client::new(),
             config,
             limiter,
         }
     }
 
-    /// GETリクエスト
-    async fn http_get(&self, url: &str) -> Result<Value> {
-        self.limiter.until_ready().await;
-        let res = self
-            .client
-            .get(url)
+    /// リクエストの共通部分であるヘッダーを設定する
+    fn request(&self, method: reqwest::Method, url: &str) -> reqwest::RequestBuilder {
+        self.client
+            .request(method, url)
             .header(
                 "Authorization",
                 format!("Bearer {}", self.config.notion_token),
             )
             .header("Notion-Version", "2022-06-28")
+    }
+
+    /// GETリクエスト
+    async fn http_get(&self, url: &str) -> Result<serde_json::Value> {
+        self.limiter.until_ready().await;
+        let resp = self
+            .request(reqwest::Method::GET, url)
             .send()
-            .await?;
-        Ok(res.json().await?)
+            .await?
+            .error_for_status()?;
+        Ok(resp.json().await?)
     }
 
     /// POSTリクエスト
-    async fn http_post(&self, url: &str, body: &str) -> Result<Value> {
+    async fn http_post<B: serde::Serialize + ?Sized>(
+        &self,
+        url: &str,
+        body: &B,
+    ) -> Result<serde_json::Value> {
         self.limiter.until_ready().await;
-        let res = self
-            .client
-            .post(url)
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.config.notion_token),
-            )
-            .header("Notion-Version", "2022-06-28")
+        let resp = self
+            .request(reqwest::Method::POST, url)
             .header("Content-Type", "application/json")
-            .body(body.to_string())
+            .json(body)
             .send()
-            .await?;
-        Ok(res.json().await?)
+            .await?
+            .error_for_status()?;
+        Ok(resp.json().await?)
     }
 
-    pub async fn query_database(&self) -> Result<Vec<PageInfo>> {
-        let mut all_pages = Vec::new();
-        let mut next_cursor: Option<String> = None;
+    /// paginationで分割されたレスポンスを取得するための共通関数
+    async fn paginate_all<T, F, Fut>(&self, mut f: F) -> Result<Vec<T>>
+    where
+        F: FnMut(Option<String>) -> Fut,
+        Fut: std::future::Future<Output = Result<NotionResponse<T>>>,
+    {
+        let mut all = Vec::new();
+        let mut cursor: Option<String> = None;
         loop {
-            let pagination = self.query_database_chunk(next_cursor.as_ref()).await?;
-            all_pages.extend(pagination.contents);
-            if let Some(cursor) = pagination.next_cursor {
-                next_cursor = Some(cursor);
-            } else {
+            let resp = f(cursor.clone()).await?;
+            all.extend(resp.results);
+            cursor = resp.next_cursor;
+            if cursor.is_none() {
                 break;
             }
         }
-        Ok(all_pages)
+        Ok(all)
     }
 
-    async fn query_database_chunk(
-        &self,
-        next_cursor: Option<&String>,
-    ) -> Result<Pagination<PageInfo>> {
-        // ページのステータスが「完了」のものを取得するクエリ
-        // その他のフィルター条件はここに記述可能
-        let mut body_obj = json!({
-            "filter": {
-                "property": "ステータス",
-                "status": { "equals": "完了" }
-            }
-        });
-        if let Some(cursor) = next_cursor {
-            body_obj
-                .as_object_mut()
-                .unwrap()
-                .insert("start_cursor".to_string(), json!(cursor));
+    /// JSONからnext_cursorを抽出(has_more を元に判定)
+    fn get_next_cursor(&self, json: &serde_json::Value) -> Option<String> {
+        if json
+            .get("has_more")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+        {
+            json.get("next_cursor")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        } else {
+            None
         }
-        let body_str = body_obj.to_string();
+    }
 
+    /// データベース全件取得
+    pub async fn fetch_database(&self) -> Result<Vec<PageInfo>> {
+        self.paginate_all(|c| self.fetch_database_chunk(c)).await
+    }
+
+    /// チャンク毎にデータベース情報を取得
+    async fn fetch_database_chunk(
+        &self,
+        start_cursor: Option<String>,
+    ) -> Result<NotionResponse<PageInfo>> {
+        let body = QueryBody {
+            filter: QueryFilter {
+                property: "ステータス",
+                status: StatusEq { equals: "完了" },
+            },
+            start_cursor: start_cursor.as_deref(),
+        };
         let url = format!(
             "https://api.notion.com/v1/databases/{}/query",
             self.config.database_id
         );
-        let json_response = self.http_post(&url, &body_str).await?;
-        let next_cursor = if json_response
-            .get("has_more")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-        {
-            json_response
-                .get("next_cursor")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-        } else {
-            None
-        };
-        let pages = extract_pages(&json_response)?;
-        Ok(Pagination {
-            contents: pages,
+        let json = self.http_post(&url, &body).await?;
+
+        let pages = extract_pages(&json)?;
+        let next_cursor = self.get_next_cursor(&json);
+        Ok(NotionResponse {
+            results: pages,
             next_cursor,
         })
     }
 
-    /// ページの子ブロックを取得し、Markdownに変換してファイルに出力する
-    pub async fn query_page(&self, page: &PageInfo) -> Result<Vec<BlockInfo>> {
-        let mut all_blocks = Vec::new();
-        let mut next_cursor: Option<String> = None;
-        loop {
-            let pagination = self.query_page_chunk(page, next_cursor.as_ref()).await?;
-            all_blocks.extend(pagination.contents);
-            if let Some(cursor) = pagination.next_cursor {
-                next_cursor = Some(cursor);
-            } else {
-                break;
-            }
-        }
-        Ok(all_blocks)
+    /// ページのブロック全件取得
+    pub async fn fetch_page(&self, page: &PageInfo) -> Result<Vec<BlockInfo>> {
+        self.paginate_all(|c| self.fetch_page_chunk(page, c)).await
     }
 
-    async fn query_page_chunk(
+    /// チャンク毎にページ内ブロックを取得
+    async fn fetch_page_chunk(
         &self,
         page: &PageInfo,
-        next_cursor: Option<&String>,
-    ) -> Result<Pagination<BlockInfo>> {
-        let url = if let Some(cursor) = next_cursor {
-            format!(
-                "https://api.notion.com/v1/blocks/{}/children?start_cursor={}",
-                page.id, cursor
-            )
-        } else {
-            format!("https://api.notion.com/v1/blocks/{}/children", page.id)
-        };
-        let json_response = self.http_get(&url).await?;
-        let next_cursor = if json_response
-            .get("has_more")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-        {
-            json_response
-                .get("next_cursor")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-        } else {
-            None
-        };
-
-        let blocks = extract_blocks(&json_response)?;
-        Ok(Pagination {
-            contents: blocks,
+        start_cursor: Option<String>,
+    ) -> Result<NotionResponse<BlockInfo>> {
+        let mut url = Url::parse(&format!(
+            "https://api.notion.com/v1/blocks/{}/children",
+            page.id
+        ))?;
+        if let Some(c) = start_cursor {
+            url.query_pairs_mut().append_pair("start_cursor", &c);
+        }
+        let json = self.http_get(url.as_str()).await?;
+        let blocks = extract_blocks(&json)?;
+        let next_cursor = self.get_next_cursor(&json);
+        Ok(NotionResponse {
+            results: blocks,
             next_cursor,
         })
     }

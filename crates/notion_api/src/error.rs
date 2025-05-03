@@ -9,6 +9,9 @@ pub enum NotionError {
     #[error("JSON parse error: {0}")]
     JsonError(#[from] serde_json::Error),
 
+    #[error("URL parse error: {0}")]
+    UrlParse(#[from] url::ParseError),
+
     #[error("database error: {0}")]
     DatabaseError(String),
 
@@ -27,7 +30,7 @@ pub enum NotionError {
     #[error("data format error: {0}")]
     DataError(String),
 
-    #[error("unexpected error: {0}")]
+    #[error("other error: {0}")]
     Other(String),
 }
 

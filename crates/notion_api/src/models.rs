@@ -1,9 +1,10 @@
+use serde::Deserialize;
 use serde_json::Value;
 
 /// データベースから以下の情報を抽出するため、
 /// データベースの要素にこれらが含まれていることを仮定している
 /// また、他の情報が必要であればここに追記できる
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct PageInfo {
     pub id: String,
     pub title: String,

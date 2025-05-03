@@ -18,12 +18,12 @@ pub async fn run_main(config: Config) -> Result<()> {
     let notion_client = NotionClient::new(config);
 
     // データベースクエリを実行して全ページ情報を取得
-    let pages = notion_client.query_database().await?;
+    let pages = notion_client.fetch_database().await?;
     println!("Retrieved {} pages from Notion API.", pages.len());
     // 各ページの子ブロックを取得してファイルに出力
     for page in pages {
         println!("Processing page: {}", page.title);
-        let blocks = notion_client.query_page(&page).await?;
+        let blocks = notion_client.fetch_page(&page).await?;
         let markdown_str = to_markdown(&page, &blocks)?;
 
         // ファイル出力
