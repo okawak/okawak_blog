@@ -1,6 +1,6 @@
 use crate::config::Config;
-use crate::error::Result;
 use crate::database::extract_pages;
+use crate::error::Result;
 use crate::markdown::extract_blocks;
 use crate::models::{BlockInfo, PageInfo};
 use governor::{DefaultDirectRateLimiter, Quota};

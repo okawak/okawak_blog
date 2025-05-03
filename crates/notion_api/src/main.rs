@@ -1,4 +1,4 @@
-use notion_api::{load_config, run_main, Result};
+use notion_api::{Result, load_config, run_main};
 
 #[tokio::main]
 async fn main() -> Result<()> {

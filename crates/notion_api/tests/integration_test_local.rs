@@ -1,4 +1,4 @@
-use notion_api::{run_main, Config, Result};
+use notion_api::{Config, Result, run_main};
 use std::fs;
 use std::path::Path;
 

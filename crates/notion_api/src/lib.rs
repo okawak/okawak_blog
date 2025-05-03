@@ -1,14 +1,14 @@
 pub mod client;
 pub mod config;
 pub mod database;
+pub mod error;
 pub mod markdown;
 pub mod models;
-pub mod error;
 
 pub use client::NotionClient;
 pub use config::{Config, load_config};
-pub use markdown::to_markdown;
 pub use error::{NotionError, Result};
+pub use markdown::to_markdown;
 
 use std::fs;
 use std::path::Path;
