@@ -40,6 +40,8 @@ jobs:
         run: cargo test -p notion_api -- --ignored
 
       - name: Build and Run the notion_api binary
+        env:
+          RUST_BACKTRACE: 1
         run: cargo run -p notion_api --release
 
       - name: Configure AWS Credentials

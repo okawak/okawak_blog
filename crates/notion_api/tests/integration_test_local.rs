@@ -11,7 +11,7 @@ fn load_test_config() -> Result<Config> {
 }
 
 #[tokio::test]
-async fn integration_test_real_api() -> Result<()> {
+async fn integration_test_real_api() -> anyhow::Result<()> {
     let config = load_test_config()?;
     run_main(config).await
 }
