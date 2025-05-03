@@ -1,15 +1,14 @@
 use crate::config::Config;
+use crate::error::Result;
 use crate::database::extract_pages;
 use crate::markdown::extract_blocks;
 use crate::models::{BlockInfo, PageInfo};
 use governor::{DefaultDirectRateLimiter, Quota};
 use reqwest::Client;
 use serde_json::{Value, json};
-use std::error::Error;
 use std::num::NonZeroU32;
 
 /// ページ分割されたデータを処理する構造体
-/// 内部処理のみに用いるのでpubではない
 #[derive(Debug)]
 struct Pagination<T> {
     contents: Vec<T>,
@@ -39,7 +38,8 @@ impl NotionClient {
         }
     }
 
-    async fn get(&self, url: &str) -> Result<Value, Box<dyn Error>> {
+    /// GETリクエスト
+    async fn http_get(&self, url: &str) -> Result<Value> {
         self.limiter.until_ready().await;
         let res = self
             .client
@@ -54,7 +54,8 @@ impl NotionClient {
         Ok(res.json().await?)
     }
 
-    async fn post(&self, url: &str, body: &str) -> Result<Value, Box<dyn Error>> {
+    /// POSTリクエスト
+    async fn http_post(&self, url: &str, body: &str) -> Result<Value> {
         self.limiter.until_ready().await;
         let res = self
             .client
@@ -71,7 +72,7 @@ impl NotionClient {
         Ok(res.json().await?)
     }
 
-    pub async fn query_database(&self) -> Result<Vec<PageInfo>, Box<dyn Error>> {
+    pub async fn query_database(&self) -> Result<Vec<PageInfo>> {
         let mut all_pages = Vec::new();
         let mut next_cursor: Option<String> = None;
         loop {
@@ -89,7 +90,7 @@ impl NotionClient {
     async fn query_database_chunk(
         &self,
         next_cursor: Option<&String>,
-    ) -> Result<Pagination<PageInfo>, Box<dyn Error>> {
+    ) -> Result<Pagination<PageInfo>> {
         // ページのステータスが「完了」のものを取得するクエリ
         // その他のフィルター条件はここに記述可能
         let mut body_obj = json!({
@@ -110,7 +111,7 @@ impl NotionClient {
             "https://api.notion.com/v1/databases/{}/query",
             self.config.database_id
         );
-        let json_response = self.post(&url, &body_str).await?;
+        let json_response = self.http_post(&url, &body_str).await?;
         let next_cursor = if json_response
             .get("has_more")
             .and_then(|v| v.as_bool())
@@ -131,7 +132,7 @@ impl NotionClient {
     }
 
     /// ページの子ブロックを取得し、Markdownに変換してファイルに出力する
-    pub async fn query_page(&self, page: &PageInfo) -> Result<Vec<BlockInfo>, Box<dyn Error>> {
+    pub async fn query_page(&self, page: &PageInfo) -> Result<Vec<BlockInfo>> {
         let mut all_blocks = Vec::new();
         let mut next_cursor: Option<String> = None;
         loop {
@@ -150,7 +151,7 @@ impl NotionClient {
         &self,
         page: &PageInfo,
         next_cursor: Option<&String>,
-    ) -> Result<Pagination<BlockInfo>, Box<dyn Error>> {
+    ) -> Result<Pagination<BlockInfo>> {
         let url = if let Some(cursor) = next_cursor {
             format!(
                 "https://api.notion.com/v1/blocks/{}/children?start_cursor={}",
@@ -159,7 +160,7 @@ impl NotionClient {
         } else {
             format!("https://api.notion.com/v1/blocks/{}/children", page.id)
         };
-        let json_response = self.get(&url).await?;
+        let json_response = self.http_get(&url).await?;
         let next_cursor = if json_response
             .get("has_more")
             .and_then(|v| v.as_bool())

@@ -1,7 +1,7 @@
+use crate::error::Result;
 use serde_json::Value;
-use std::error::Error;
 
-pub fn process(value: &Value, size: u8) -> Result<String, Box<dyn Error>> {
+pub fn process(value: &Value, size: u8) -> Result<String> {
     let mut title = String::new();
     for _ in 0..size {
         title.push('#');

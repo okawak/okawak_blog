@@ -1,7 +1,7 @@
+use crate::error::Result;
 use serde_json::Value;
-use std::error::Error;
 
-pub fn process(value: &Value) -> Result<String, Box<dyn Error>> {
+pub fn process(value: &Value) -> Result<String> {
     let mut list_item = String::new();
     list_item.push_str("- ");
     for element in value.get("rich_text").unwrap().as_array().unwrap() {

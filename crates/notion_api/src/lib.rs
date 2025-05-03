@@ -3,16 +3,17 @@ pub mod config;
 pub mod database;
 pub mod markdown;
 pub mod models;
+pub mod error;
 
 pub use client::NotionClient;
 pub use config::{Config, load_config};
 pub use markdown::to_markdown;
+pub use error::{NotionError, Result};
 
-use std::error::Error;
 use std::fs;
 use std::path::Path;
 
-pub async fn run_main(config: Config) -> Result<(), Box<dyn Error>> {
+pub async fn run_main(config: Config) -> Result<()> {
     // NotionClientを生成（内部でHTTPクライアントを初期化）
     let notion_client = NotionClient::new(config);
 

@@ -6,15 +6,17 @@ mod link_to_page;
 mod numbered_list_item;
 mod paragraph;
 
+use crate::error::{NotionError, Result};
 use crate::models::{BlockInfo, BlockType, PageInfo};
 use serde_json::Value;
-use std::error::Error;
 
-pub fn extract_blocks(json: &Value) -> Result<Vec<BlockInfo>, Box<dyn Error>> {
+pub fn extract_blocks(json: &Value) -> Result<Vec<BlockInfo>> {
     let results = json
         .get("results")
         .and_then(|v| v.as_array())
-        .ok_or(format!("No results array: {json:?}"))?;
+        .ok_or(NotionError::DataError(format!(
+            "No results array: {json:?}"
+        )))?;
     let blocks = results
         .iter()
         .map(|block| {
@@ -45,7 +47,7 @@ pub fn extract_blocks(json: &Value) -> Result<Vec<BlockInfo>, Box<dyn Error>> {
 }
 
 /// ページの子ブロックのJSONデータをMarkdown形式の文字列に変換する
-pub fn to_markdown(page_info: &PageInfo, blocks: &[BlockInfo]) -> Result<String, Box<dyn Error>> {
+pub fn to_markdown(page_info: &PageInfo, blocks: &[BlockInfo]) -> Result<String> {
     // frontmatter
     let mut markdown = format!(
         "+++\n\

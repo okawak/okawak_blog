@@ -1,14 +1,14 @@
+use crate::error::Result;
 use serde::Deserialize;
 use std::env;
-use std::error::Error;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
     pub notion_token: String,
     pub database_id: String,
 }
 
-pub fn load_config() -> Result<Config, Box<dyn Error>> {
+pub fn load_config() -> Result<Config> {
     let notion_token = env::var("NOTION_TOKEN")?;
     let database_id = env::var("DATABASE_ID")?;
     Ok(Config {

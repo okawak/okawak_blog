@@ -1,6 +1,6 @@
+use crate::error::Result;
 use serde_json::Value;
-use std::error::Error;
 
-pub fn process(value: &Value) -> Result<String, Box<dyn Error>> {
+pub fn process(value: &Value) -> Result<String> {
     Ok(format!("numbered list item: {value:?}\n\n").to_string())
 }

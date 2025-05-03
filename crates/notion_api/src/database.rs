@@ -1,13 +1,15 @@
+use crate::error::{NotionError, Result};
 use crate::models::PageInfo;
 use serde_json::Value;
-use std::error::Error;
 
 /// Notion APIのデータベースレスポンスからPageInfoのベクターを抽出する
-pub fn extract_pages(json: &Value) -> Result<Vec<PageInfo>, Box<dyn Error>> {
+pub fn extract_pages(json: &Value) -> Result<Vec<PageInfo>> {
     let results = json
         .get("results")
         .and_then(|v| v.as_array())
-        .ok_or("No results array")?;
+        .ok_or(NotionError::DataError(format!(
+            "No results array: {json:?}"
+        )))?;
     let pages = results
         .iter()
         .map(|page| {
