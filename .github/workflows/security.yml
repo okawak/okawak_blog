@@ -1,0 +1,19 @@
+name: Security audit
+
+on:
+  schedule:
+    - cron: "0 11 * * 5" # every Friday at 20:00 JST
+  workflow_dispatch:
+
+jobs:
+  security_audit:
+    permissions:
+      contents: read
+      issues: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Audit Rust Dependencies
+        uses: actions-rust-lang/audit@v1
