@@ -9,6 +9,9 @@ pub enum NotionError {
     #[error("JSON parse error: {0}")]
     JsonError(#[from] serde_json::Error),
 
+    #[error("Invalid header value: {0}")]
+    InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
+
     #[error("URL parse error: {0}")]
     UrlParse(#[from] url::ParseError),
 

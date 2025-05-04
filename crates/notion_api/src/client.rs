@@ -4,6 +4,7 @@ use crate::error::Result;
 use crate::markdown::extract_blocks;
 use crate::models::{BlockInfo, PageInfo};
 use governor::{DefaultDirectRateLimiter, Quota};
+use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest::{Client, Url};
 use serde::Serialize;
 use std::num::NonZeroU32;
@@ -81,21 +82,23 @@ impl NotionClient {
     }
 
     /// リクエストの共通部分であるヘッダーを設定する
-    fn request(&self, method: reqwest::Method, url: &str) -> reqwest::RequestBuilder {
-        self.client
-            .request(method, url)
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.config.notion_token),
-            )
-            .header("Notion-Version", "2022-06-28")
+    fn request(&self, method: reqwest::Method, url: &str) -> Result<reqwest::RequestBuilder> {
+        let mut auth_value =
+            HeaderValue::from_str(&format!("Bearer {}", self.config.notion_token))?;
+        auth_value.set_sensitive(true);
+
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, auth_value);
+        headers.insert("Notion-Version", HeaderValue::from_static("2022-06-28"));
+
+        Ok(self.client.request(method, url).headers(headers))
     }
 
     /// GETリクエスト
     async fn http_get(&self, url: &str) -> Result<serde_json::Value> {
         self.limiter.until_ready().await;
         let resp = self
-            .request(reqwest::Method::GET, url)
+            .request(reqwest::Method::GET, url)?
             .send()
             .await?
             .error_for_status()?;
@@ -110,7 +113,7 @@ impl NotionClient {
     ) -> Result<serde_json::Value> {
         self.limiter.until_ready().await;
         let resp = self
-            .request(reqwest::Method::POST, url)
+            .request(reqwest::Method::POST, url)?
             .header("Content-Type", "application/json")
             .json(body)
             .send()
