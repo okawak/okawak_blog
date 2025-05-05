@@ -35,7 +35,7 @@ fn render_sidebar(articles: Vec<ArticleSummary>) -> impl IntoView {
             {grouped
                 .into_iter()
                 .map(|(group_name, mut articles)| {
-                    articles.sort_by_key(|a| a.priority_level);
+                    articles.sort_by(|a, b| b.priority_level.cmp(&a.priority_level));
 
                     view! {
                         <div class=sidebar_style::sidebar_group>
