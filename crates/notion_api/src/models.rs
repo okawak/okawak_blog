@@ -31,6 +31,7 @@ pub enum BlockType {
     BulletedListItem,
     NumberedListItem,
     Equation,
+    BookMark,
     Unsupported(String),
 }
 

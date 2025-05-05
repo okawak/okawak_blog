@@ -1,3 +1,4 @@
+mod bookmark;
 mod bulleted_list_item;
 mod code;
 mod equation;
@@ -34,6 +35,7 @@ pub fn extract_blocks(json: &Value) -> Result<Vec<BlockInfo>> {
                 "bulleted_list_item" => BlockType::BulletedListItem,
                 "numbered_list_item" => BlockType::NumberedListItem,
                 "equation" => BlockType::Equation,
+                "bookmark" => BlockType::BookMark,
                 _ => BlockType::Unsupported(block_type_str.to_string()),
             };
             let content = block.get(block_type_str).unwrap().clone();
@@ -103,6 +105,9 @@ pub fn to_markdown(page_info: &PageInfo, blocks: &[BlockInfo]) -> Result<String>
             }
             BlockType::Equation => {
                 markdown.push_str(equation::process(&block.content)?.as_str());
+            }
+            BlockType::BookMark => {
+                markdown.push_str(bookmark::process(&block.content)?.as_str());
             }
             BlockType::Unsupported(type_name) => {
                 println!("Unsupported block type: {type_name}");
