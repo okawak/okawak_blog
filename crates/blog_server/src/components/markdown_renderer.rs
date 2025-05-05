@@ -1,7 +1,8 @@
+#[cfg(feature = "ssr")]
+use crate::components::bookmark;
 use crate::error::AppError;
 use leptos::html::Div;
 use leptos::prelude::*;
-
 use pulldown_cmark::{Options, Parser, html};
 use regex::Regex;
 use std::sync::LazyLock;
@@ -28,6 +29,14 @@ extern "C" {
     fn render_math_in_element(el: &web_sys::Element, options: JsValue);
 }
 
+#[server]
+pub async fn rewrite_bookmarks(html: String) -> Result<String, ServerFnError> {
+    // OGP カードに差し替え
+    bookmark::rewrite_bookmarks(html)
+        .await
+        .map_err(|e| ServerFnError::Serialization(e.to_string()))
+}
+
 /// Markdownをレンダリングするコンポーネント
 #[component]
 pub fn MarkdownRenderer(
@@ -35,7 +44,7 @@ pub fn MarkdownRenderer(
     #[prop(default = false)] enable_toc: bool,
 ) -> impl IntoView {
     // Markdownを処理
-    let (class_name, html) = match render_markdown(&content, enable_toc) {
+    let (class_name, initial_html) = match render_markdown(&content, enable_toc) {
         Ok(html) => (markdown_style::markdown, html),
         Err(_) => (
             markdown_style::error,
@@ -68,7 +77,62 @@ pub fn MarkdownRenderer(
         });
     }
 
-    view! { <div class=class_name node_ref=container_ref inner_html=html></div> }
+    let html_resource = Resource::new(
+        || (),
+        move |_| {
+            let value = initial_html.clone();
+            async move {
+                // OGP カードに差し替え
+                rewrite_bookmarks(value.clone())
+                    .await
+                    .map_err(|e| e.to_string())
+            }
+        },
+    );
+
+    view! {
+        <div class=class_name node_ref=container_ref>
+            <Suspense fallback=|| {
+                view! { <div class=markdown_style::loading>"記事を読み込み中..."</div> }
+            }>
+                <ErrorBoundary fallback=|error| {
+                    view! {
+                        <div class=markdown_style::error>
+                            "記事の読み込みに失敗しました: " {format!("{error:?}")}
+                        </div>
+                    }
+                }>
+                    <Show
+                        when=move || {
+                            matches!(html_resource.get(), Some(Ok(html)) if !html.is_empty())
+                        }
+                        fallback=|| {
+                            view! {
+                                <div class=markdown_style::no_articles>
+                                    "記事がありません"
+                                </div>
+                            }
+                        }
+                    >
+                        {move || {
+                            html_resource
+                                .get()
+                                .and_then(Result::ok)
+                                .map(|html| {
+                                    view! {
+                                        <div
+                                            class=class_name
+                                            node_ref=container_ref
+                                            inner_html=html
+                                        ></div>
+                                    }
+                                })
+                        }}
+                    </Show>
+                </ErrorBoundary>
+            </Suspense>
+        </div>
+    }
 }
 
 fn render_option() -> Options {

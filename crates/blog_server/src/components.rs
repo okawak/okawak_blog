@@ -5,6 +5,7 @@
 
 // サブモジュールを公開
 pub mod article_card;
+mod bookmark;
 pub mod footer;
 pub mod header;
 pub mod markdown_renderer;

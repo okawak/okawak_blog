@@ -11,6 +11,12 @@ pub enum AppError {
     #[error("S3アクセスエラー: {0}")]
     S3Error(String),
 
+    #[error("rewriteエラー: {0}")]
+    RewriteError(String),
+
+    #[error("reqwestエラー: {0}")]
+    ReqwestError(String),
+
     #[error("ファイル '{0}' が見つかりません")]
     FileNotFound(String),
 
@@ -22,6 +28,20 @@ pub enum AppError {
 
     #[error("認証エラー: {0}")]
     AuthError(String),
+}
+
+// FromトレイトをRewritingErrorに対して実装
+impl From<lol_html::errors::RewritingError> for AppError {
+    fn from(err: lol_html::errors::RewritingError) -> Self {
+        Self::RewriteError(err.to_string())
+    }
+}
+
+// Fromトレイトをreqwest::Errorに対して実装
+impl From<reqwest::Error> for AppError {
+    fn from(err: reqwest::Error) -> Self {
+        Self::ReqwestError(err.to_string())
+    }
 }
 
 impl AppError {

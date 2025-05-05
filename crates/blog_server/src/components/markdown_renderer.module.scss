@@ -128,7 +128,7 @@
 }
 
 // レンダリング失敗時のエラースタイル
-.error {
+.error .loading .no_articles {
   margin: 1rem 0;
   padding: 1rem;
   background: rgba($color-bg-light, 0.4);
