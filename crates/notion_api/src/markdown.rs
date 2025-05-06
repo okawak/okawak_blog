@@ -1,11 +1,14 @@
 mod bookmark;
 mod bulleted_list_item;
 mod code;
+mod divider;
 mod equation;
 mod heading;
+mod image;
 mod link_to_page;
 mod numbered_list_item;
 mod paragraph;
+mod quote;
 
 use crate::error::{NotionError, Result};
 use crate::models::{BlockInfo, BlockType, PageInfo};
@@ -32,10 +35,13 @@ pub fn extract_blocks(json: &Value) -> Result<Vec<BlockInfo>> {
                 "heading_2" => BlockType::Heading2,
                 "heading_3" => BlockType::Heading3,
                 "code" => BlockType::Code,
+                "image" => BlockType::Image,
                 "bulleted_list_item" => BlockType::BulletedListItem,
                 "numbered_list_item" => BlockType::NumberedListItem,
+                "quote" => BlockType::Quote,
                 "equation" => BlockType::Equation,
                 "bookmark" => BlockType::BookMark,
+                "divider" => BlockType::Divider,
                 _ => BlockType::Unsupported(block_type_str.to_string()),
             };
             let content = block.get(block_type_str).unwrap().clone();
@@ -97,8 +103,14 @@ pub fn to_markdown(page_info: &PageInfo, blocks: &[BlockInfo]) -> Result<String>
             BlockType::Code => {
                 markdown.push_str(code::process(&block.content)?.as_str());
             }
+            BlockType::Image => {
+                markdown.push_str(image::process(&block.content)?.as_str());
+            }
             BlockType::BulletedListItem => {
                 markdown.push_str(bulleted_list_item::process(&block.content)?.as_str());
+            }
+            BlockType::Quote => {
+                markdown.push_str(quote::process(&block.content)?.as_str());
             }
             BlockType::NumberedListItem => {
                 markdown.push_str(numbered_list_item::process(&block.content)?.as_str());
@@ -108,6 +120,9 @@ pub fn to_markdown(page_info: &PageInfo, blocks: &[BlockInfo]) -> Result<String>
             }
             BlockType::BookMark => {
                 markdown.push_str(bookmark::process(&block.content)?.as_str());
+            }
+            BlockType::Divider => {
+                markdown.push_str(divider::process(&block.content)?.as_str());
             }
             BlockType::Unsupported(type_name) => {
                 println!("Unsupported block type: {type_name}");

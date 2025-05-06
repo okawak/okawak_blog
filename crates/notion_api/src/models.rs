@@ -28,10 +28,13 @@ pub enum BlockType {
     Heading2,
     Heading3,
     Code,
+    Image,
+    Quote,
     BulletedListItem,
     NumberedListItem,
     Equation,
     BookMark,
+    Divider,
     Unsupported(String),
 }
 

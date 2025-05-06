@@ -2,16 +2,7 @@ use crate::error::Result;
 use serde_json::Value;
 
 pub fn process(value: &Value) -> Result<String> {
-    let mut code_block = String::new();
-    let language = value
-        .get("language")
-        .unwrap()
-        .to_string()
-        .trim_matches('"')
-        .to_string();
-
-    code_block.push_str(&format!("```{language}\n"));
-
+    let mut quote = String::new();
     for element in value.get("rich_text").unwrap().as_array().unwrap() {
         if let Some(text) = element.get("text") {
             // 装飾の取得
@@ -24,7 +15,8 @@ pub fn process(value: &Value) -> Result<String> {
             // 色はまだ対応していない
             let _is_color = annotations.get("color").unwrap().as_str().unwrap();
 
-            let mut content = text.get("content").unwrap().as_str().unwrap().to_string();
+            let mut content = text.get("content").unwrap().to_string();
+            content = content.trim_matches('"').to_string();
             // 装飾を適用
             if is_bold {
                 content = format!(" **{content}** ");
@@ -46,9 +38,9 @@ pub fn process(value: &Value) -> Result<String> {
             if let Some(raw_url) = link.get("url") {
                 let tmp_url = raw_url.to_string();
                 let url = tmp_url.trim_matches('"');
-                code_block.push_str(&format!("[{content}]({url})"));
+                quote.push_str(&format!("[{content}]({url})"));
             } else {
-                code_block.push_str(&content);
+                quote.push_str(&content);
             }
         } else if let Some(equation) = element.get("equation") {
             let expression = equation.get("expression").unwrap().to_string();
@@ -80,9 +72,8 @@ pub fn process(value: &Value) -> Result<String> {
                 content = format!("`{content}`");
             }
 
-            code_block.push_str(&content);
+            quote.push_str(&content);
         }
     }
-    code_block.push_str("\n```");
-    Ok(format!("{code_block}\n\n"))
+    Ok(format!("> {quote}\n\n"))
 }
