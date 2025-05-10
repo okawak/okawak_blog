@@ -26,3 +26,10 @@ module "gh-action" {
   gh-repo    = "okawak_blog"
   gh-branch  = "main"
 }
+
+module "s3_image_uploader" {
+  source        = "./s3_image_uploader"
+  bucket_name   = var.image_bucket_name
+  uploader_name = var.image_uploader_user_name
+  force_destroy = true # terraform destroy 時に中身も削除する
+}
