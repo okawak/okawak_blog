@@ -7,7 +7,7 @@ resource "oci_core_instance" "oraclelinux_instance" {
   shape = "VM.Standard.E4.Flex"
   shape_config {
     ocpus                     = 2
-    memory_in_gbs             = 4
+    memory_in_gbs             = 8
     baseline_ocpu_utilization = "BASELINE_1_8"
   }
 
