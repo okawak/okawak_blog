@@ -28,8 +28,9 @@ pub struct OutputFrontMatter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::*;
 
-    #[test]
+    #[rstest]
     fn test_obsidian_frontmatter_deserialization() {
         let yaml = r#"
 title: "Test Article"
@@ -60,7 +61,7 @@ category: "tech"
         assert_eq!(frontmatter.category, Some("tech".to_string()));
     }
 
-    #[test]
+    #[rstest]
     fn test_obsidian_frontmatter_minimal() {
         let yaml = r#"
 title: "Minimal Article"
@@ -79,7 +80,7 @@ updated: "2025-01-01T00:00:00+09:00"
         assert_eq!(frontmatter.category, None);
     }
 
-    #[test]
+    #[rstest]
     fn test_output_frontmatter_serialization() {
         let frontmatter = OutputFrontMatter {
             title: "Test Output".to_string(),

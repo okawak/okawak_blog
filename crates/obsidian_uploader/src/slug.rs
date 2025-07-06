@@ -38,9 +38,10 @@ pub fn validate_slug_uniqueness(slug: &str, existing_slugs: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::*;
     use std::path::PathBuf;
 
-    #[test]
+    #[rstest]
     fn test_generate_slug() -> Result<()> {
         let title = "Test Article";
         let relative_path = PathBuf::from("tech/rust/test.md");
@@ -57,7 +58,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[rstest]
     fn test_generate_slug_deterministic() -> Result<()> {
         let title = "Same Title";
         let relative_path = PathBuf::from("same/path.md");
@@ -72,7 +73,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[rstest]
     fn test_generate_slug_different_inputs() -> Result<()> {
         let relative_path = PathBuf::from("test/path.md");
         let created = "2025-01-01T00:00:00+09:00";
@@ -86,7 +87,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[rstest]
     fn test_generate_slug_japanese_title() -> Result<()> {
         let title = "日本語のタイトル";
         let relative_path = PathBuf::from("tech/article.md");
@@ -101,7 +102,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[rstest]
     fn test_validate_slug_uniqueness() {
         let existing_slugs = vec!["abc123def456".to_string(), "789xyz012tuv".to_string()];
 
@@ -112,7 +113,7 @@ mod tests {
         assert!(validate_slug_uniqueness("new123slug45", &existing_slugs));
     }
 
-    #[test]
+    #[rstest]
     fn test_slug_collision_resistance() -> Result<()> {
         // 似たような入力でも異なるslugが生成されることを確認
         let base_path = PathBuf::from("tech/test.md");

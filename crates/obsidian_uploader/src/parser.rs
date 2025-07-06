@@ -68,10 +68,11 @@ fn extract_yaml_frontmatter(content: &str) -> Result<Option<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::*;
     use std::fs;
     use tempfile::TempDir;
 
-    #[test]
+    #[rstest]
     fn test_parse_frontmatter_valid() -> Result<()> {
         let content = r#"---
 title: "Test Article"
@@ -102,7 +103,7 @@ This is the article content.
         Ok(())
     }
 
-    #[test]
+    #[rstest]
     fn test_parse_frontmatter_missing() -> Result<()> {
         let content = r#"# Article Without Frontmatter
 
@@ -115,7 +116,7 @@ This article has no frontmatter.
         Ok(())
     }
 
-    #[test]
+    #[rstest]
     fn test_parse_frontmatter_unterminated() {
         let content = r#"---
 title: "Test Article"
@@ -130,7 +131,7 @@ updated: "2025-01-02T00:00:00+09:00"
         assert!(result.is_err());
     }
 
-    #[test]
+    #[rstest]
     fn test_parse_frontmatter_invalid_yaml() {
         let content = r#"---
 title: "Test Article"
@@ -145,7 +146,7 @@ is_completed: true
         assert!(result.is_err());
     }
 
-    #[test]
+    #[rstest]
     fn test_parse_obsidian_file() -> Result<()> {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test.md");
@@ -172,7 +173,7 @@ updated: "2025-01-01T00:00:00+09:00"
         Ok(())
     }
 
-    #[test]
+    #[rstest]
     fn test_extract_yaml_frontmatter() -> Result<()> {
         let content = r#"---
 title: Test
