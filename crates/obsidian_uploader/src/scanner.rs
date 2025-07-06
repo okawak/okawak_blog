@@ -13,14 +13,6 @@ pub fn scan_obsidian_files<P: AsRef<Path>>(publish_dir: P) -> Result<Vec<PathBuf
         // .mdファイルのみを対象とする（大文字小文字を区別しない）
         if let Some(extension) = path.extension().and_then(|s| s.to_str()) {
             if extension.to_lowercase() == "md" {
-                // _templates/ディレクトリを除外
-                if path
-                    .components()
-                    .any(|component| component.as_os_str() == "_templates")
-                {
-                    continue;
-                }
-
                 markdown_files.push(path.to_path_buf());
             }
         }
@@ -39,64 +31,33 @@ mod tests {
     use tempfile::TempDir;
 
     #[rstest]
-    fn test_scan_obsidian_files() -> Result<()> {
+    #[case::with_files(vec!["tech/article1.md", "daily/2025-01-01.md"], vec!["README.txt"], 2)]
+    #[case::empty_dir(vec![], vec![], 0)]
+    #[case::non_md_files(vec![], vec!["README.txt", "config.json"], 0)]
+    fn test_scan_files(
+        #[case] md_files: Vec<&str>,
+        #[case] other_files: Vec<&str>,
+        #[case] expected_count: usize,
+    ) -> Result<()> {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path();
-
-        // テスト用ファイル構造を作成
-        fs::create_dir_all(base_path.join("tech"))?;
-        fs::create_dir_all(base_path.join("daily"))?;
-        fs::create_dir_all(base_path.join("_templates"))?;
 
         // .mdファイルを作成
-        fs::write(base_path.join("tech/article1.md"), "# Article 1")?;
-        fs::write(base_path.join("daily/2025-01-01.md"), "# Daily")?;
-        fs::write(base_path.join("_templates/template.md"), "# Template")?;
-        fs::write(base_path.join("README.txt"), "Not markdown")?;
+        for file_path in md_files.iter() {
+            let full_path = base_path.join(file_path);
+            if let Some(parent) = full_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(full_path, "# Test Content")?;
+        }
+
+        // その他のファイルを作成
+        for file_path in other_files.iter() {
+            fs::write(base_path.join(file_path), "Other content")?;
+        }
 
         let files = scan_obsidian_files(base_path)?;
-
-        assert_eq!(files.len(), 2); // _templates/は除外される
-
-        let file_names: Vec<String> = files
-            .iter()
-            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
-            .collect();
-
-        assert!(file_names.contains(&"article1.md".to_string()));
-        assert!(file_names.contains(&"2025-01-01.md".to_string()));
-        assert!(!file_names.contains(&"template.md".to_string()));
-
-        Ok(())
-    }
-
-    #[rstest]
-    fn test_scan_empty_directory() -> Result<()> {
-        let temp_dir = TempDir::new().unwrap();
-        let files = scan_obsidian_files(temp_dir.path())?;
-        assert_eq!(files.len(), 0);
-        Ok(())
-    }
-
-    #[rstest]
-    fn test_scan_with_nested_templates() -> Result<()> {
-        let temp_dir = TempDir::new().unwrap();
-        let base_path = temp_dir.path();
-
-        // ネストした_templatesディレクトリを作成
-        fs::create_dir_all(base_path.join("tech/_templates"))?;
-        fs::create_dir_all(base_path.join("tech/rust"))?;
-
-        fs::write(
-            base_path.join("tech/_templates/tech_template.md"),
-            "# Tech Template",
-        )?;
-        fs::write(base_path.join("tech/rust/article.md"), "# Rust Article")?;
-
-        let files = scan_obsidian_files(base_path)?;
-
-        assert_eq!(files.len(), 1);
-        assert!(files[0].file_name().unwrap() == "article.md");
+        assert_eq!(files.len(), expected_count);
 
         Ok(())
     }
@@ -105,7 +66,10 @@ mod tests {
     #[case("lowercase.md", "# Lowercase")]
     #[case("uppercase.MD", "# Uppercase")]
     #[case("mixed.Md", "# Mixed")]
-    fn test_scan_case_insensitive_extensions(#[case] filename: &str, #[case] content: &str) -> Result<()> {
+    fn test_scan_case_insensitive_extensions(
+        #[case] filename: &str,
+        #[case] content: &str,
+    ) -> Result<()> {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path();
 

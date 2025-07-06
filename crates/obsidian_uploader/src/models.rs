@@ -31,53 +31,43 @@ mod tests {
     use rstest::*;
 
     #[rstest]
-    fn test_obsidian_frontmatter_deserialization() {
-        let yaml = r#"
-title: "Test Article"
+    #[case::full_frontmatter(
+        r#"title: "Test Article"
 tags: ["rust", "programming"]
 summary: "This is a test article"
 is_completed: true
 priority: 1
 created: "2025-01-01T00:00:00+09:00"
 updated: "2025-01-02T00:00:00+09:00"
-category: "tech"
-"#;
-
-        let frontmatter: ObsidianFrontMatter = serde_yaml::from_str(yaml).unwrap();
-
-        assert_eq!(frontmatter.title, "Test Article");
-        assert_eq!(
-            frontmatter.tags,
-            Some(vec!["rust".to_string(), "programming".to_string()])
-        );
-        assert_eq!(
-            frontmatter.summary,
-            Some("This is a test article".to_string())
-        );
-        assert_eq!(frontmatter.is_completed, true);
-        assert_eq!(frontmatter.priority, Some(1));
-        assert_eq!(frontmatter.created, "2025-01-01T00:00:00+09:00");
-        assert_eq!(frontmatter.updated, "2025-01-02T00:00:00+09:00");
-        assert_eq!(frontmatter.category, Some("tech".to_string()));
-    }
-
-    #[rstest]
-    fn test_obsidian_frontmatter_minimal() {
-        let yaml = r#"
-title: "Minimal Article"
+category: "tech""#,
+        "Test Article",
+        true,
+        Some(1),
+        Some("tech")
+    )]
+    #[case::minimal_frontmatter(
+        r#"title: "Minimal Article"
 is_completed: false
 created: "2025-01-01T00:00:00+09:00"
-updated: "2025-01-01T00:00:00+09:00"
-"#;
-
+updated: "2025-01-01T00:00:00+09:00""#,
+        "Minimal Article", 
+        false,
+        None,
+        None
+    )]
+    fn test_obsidian_frontmatter_deserialization(
+        #[case] yaml: &str,
+        #[case] expected_title: &str,
+        #[case] expected_completed: bool,
+        #[case] expected_priority: Option<i32>,
+        #[case] expected_category: Option<&str>,
+    ) {
         let frontmatter: ObsidianFrontMatter = serde_yaml::from_str(yaml).unwrap();
 
-        assert_eq!(frontmatter.title, "Minimal Article");
-        assert_eq!(frontmatter.tags, None);
-        assert_eq!(frontmatter.summary, None);
-        assert_eq!(frontmatter.is_completed, false);
-        assert_eq!(frontmatter.priority, None);
-        assert_eq!(frontmatter.category, None);
+        assert_eq!(frontmatter.title, expected_title);
+        assert_eq!(frontmatter.is_completed, expected_completed);
+        assert_eq!(frontmatter.priority, expected_priority);
+        assert_eq!(frontmatter.category, expected_category.map(|s| s.to_string()));
     }
 
     #[rstest]

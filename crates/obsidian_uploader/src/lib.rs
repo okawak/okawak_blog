@@ -10,14 +10,11 @@ pub use error::{ObsidianError, Result};
 pub use models::{ObsidianFrontMatter, OutputFrontMatter};
 
 use std::fs;
-use std::path::Path;
 
 /// メイン実行関数
 pub async fn run_main(config: Config) -> Result<()> {
     // 出力ディレクトリの作成
-    if let Some(parent) = Path::new(&config.output_dir).parent() {
-        fs::create_dir_all(parent)?;
-    }
+    fs::create_dir_all(&config.output_dir)?;
 
     // Obsidianファイルをスキャン
     let markdown_files = scanner::scan_obsidian_files(&config.obsidian_dir)?;

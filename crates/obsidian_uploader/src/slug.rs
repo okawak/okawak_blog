@@ -42,90 +42,61 @@ mod tests {
     use std::path::PathBuf;
 
     #[rstest]
-    fn test_generate_slug() -> Result<()> {
-        let title = "Test Article";
-        let relative_path = PathBuf::from("tech/rust/test.md");
+    #[case::english_title("Test Article", "tech/rust/test.md")]
+    #[case::japanese_title("日本語のタイトル", "tech/article.md")]
+    #[case::symbols_title("Test & Special Characters", "daily/test.md")]
+    fn test_generate_slug_formats(#[case] title: &str, #[case] path: &str) -> Result<()> {
+        let relative_path = PathBuf::from(path);
         let created = "2025-01-01T00:00:00+09:00";
 
         let slug = generate_slug(title, &relative_path, created)?;
 
-        // slugの長さは12文字
         assert_eq!(slug.len(), 12);
-
-        // 16進文字のみ含む
         assert!(slug.chars().all(|c| c.is_ascii_hexdigit()));
 
         Ok(())
     }
 
     #[rstest]
-    fn test_generate_slug_deterministic() -> Result<()> {
-        let title = "Same Title";
-        let relative_path = PathBuf::from("same/path.md");
-        let created = "2025-01-01T00:00:00+09:00";
-
-        let slug1 = generate_slug(title, &relative_path, created)?;
-        let slug2 = generate_slug(title, &relative_path, created)?;
-
-        // 同じ入力に対して同じslugが生成される
-        assert_eq!(slug1, slug2);
-
-        Ok(())
-    }
-
-    #[rstest]
-    fn test_generate_slug_different_inputs() -> Result<()> {
+    fn test_generate_slug_deterministic_and_unique() -> Result<()> {
         let relative_path = PathBuf::from("test/path.md");
         let created = "2025-01-01T00:00:00+09:00";
 
-        let slug1 = generate_slug("Title 1", &relative_path, created)?;
-        let slug2 = generate_slug("Title 2", &relative_path, created)?;
+        // 同じ入力では同じslugが生成される
+        let slug1 = generate_slug("Same Title", &relative_path, created)?;
+        let slug2 = generate_slug("Same Title", &relative_path, created)?;
+        assert_eq!(slug1, slug2);
 
-        // 異なる入力に対して異なるslugが生成される
-        assert_ne!(slug1, slug2);
-
-        Ok(())
-    }
-
-    #[rstest]
-    fn test_generate_slug_japanese_title() -> Result<()> {
-        let title = "日本語のタイトル";
-        let relative_path = PathBuf::from("tech/article.md");
-        let created = "2025-01-01T00:00:00+09:00";
-
-        let slug = generate_slug(title, &relative_path, created)?;
-
-        // 日本語タイトルでも正常にslugが生成される
-        assert_eq!(slug.len(), 12);
-        assert!(slug.chars().all(|c| c.is_ascii_hexdigit()));
+        // 異なる入力では異なるslugが生成される
+        let slug3 = generate_slug("Different Title", &relative_path, created)?;
+        assert_ne!(slug1, slug3);
 
         Ok(())
     }
 
     #[rstest]
-    fn test_validate_slug_uniqueness() {
+    #[case::existing_slug("abc123def456", false)]
+    #[case::new_slug("new123slug45", true)]
+    fn test_validate_slug_uniqueness(#[case] slug: &str, #[case] should_be_unique: bool) {
         let existing_slugs = vec!["abc123def456".to_string(), "789xyz012tuv".to_string()];
-
-        // 既存のslugは一意ではない
-        assert!(!validate_slug_uniqueness("abc123def456", &existing_slugs));
-
-        // 新しいslugは一意
-        assert!(validate_slug_uniqueness("new123slug45", &existing_slugs));
+        assert_eq!(validate_slug_uniqueness(slug, &existing_slugs), should_be_unique);
     }
 
     #[rstest]
-    fn test_slug_collision_resistance() -> Result<()> {
-        // 似たような入力でも異なるslugが生成されることを確認
+    #[case::exact_match("Test")]
+    #[case::trailing_space("Test ")]
+    #[case::lowercase("test")]
+    fn test_slug_collision_resistance(#[case] title: &str) -> Result<()> {
         let base_path = PathBuf::from("tech/test.md");
         let created = "2025-01-01T00:00:00+09:00";
+        let base_slug = generate_slug("Test", &base_path, created)?;
+        let test_slug = generate_slug(title, &base_path, created)?;
 
-        let slug1 = generate_slug("Test", &base_path, created)?;
-        let slug2 = generate_slug("Test ", &base_path, created)?; // 末尾にスペース
-        let slug3 = generate_slug("test", &base_path, created)?; // 小文字
-
-        assert_ne!(slug1, slug2);
-        assert_ne!(slug1, slug3);
-        assert_ne!(slug2, slug3);
+        if title == "Test" {
+            assert_eq!(base_slug, test_slug);
+        } else {
+            assert_ne!(base_slug, test_slug);
+        }
 
         Ok(())
     }

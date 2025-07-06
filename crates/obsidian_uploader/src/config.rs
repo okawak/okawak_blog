@@ -35,12 +35,6 @@ impl Config {
             )));
         }
 
-        // 出力ディレクトリの作成
-        if let Some(parent) = self.output_dir.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent)?;
-            }
-        }
 
         Ok(())
     }
@@ -53,31 +47,22 @@ mod tests {
     use tempfile::TempDir;
 
     #[rstest]
-    fn test_config_validation_success() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = Config {
-            obsidian_dir: temp_dir.path().to_path_buf(),
-            output_dir: PathBuf::from("test_output"),
-        };
-
-        assert!(config.validate().is_ok());
-    }
-
-    #[rstest]
-    fn test_config_validation_non_existent_dir() {
-        let config = Config {
-            obsidian_dir: PathBuf::from("/non/existent/path"),
-            output_dir: PathBuf::from("test_output"),
-        };
-
-        assert!(config.validate().is_err());
-    }
-
-    #[rstest]
-    fn test_config_new_with_fixed_paths() {
-        // 固定パスが存在しない場合はエラーが返されることを確認
-        let result = Config::new();
-        // 実際のパスが存在しない場合はエラーが返されるが、テスト環境では未作成でもOK
-        assert!(result.is_err() || result.is_ok());
+    #[case::valid_dir(true, true)]  // 存在するディレクトリ
+    #[case::non_existent_dir(false, false)] // 存在しないパス
+    fn test_config_validation(#[case] path_exists: bool, #[case] should_succeed: bool) {
+        if path_exists {
+            let temp_dir = TempDir::new().unwrap();
+            let config = Config {
+                obsidian_dir: temp_dir.path().to_path_buf(),
+                output_dir: PathBuf::from("test_output"),
+            };
+            assert_eq!(config.validate().is_ok(), should_succeed);
+        } else {
+            let config = Config {
+                obsidian_dir: PathBuf::from("/non/existent/path"),
+                output_dir: PathBuf::from("test_output"),
+            };
+            assert_eq!(config.validate().is_ok(), should_succeed);
+        }
     }
 }
