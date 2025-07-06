@@ -4,24 +4,24 @@ pub type Result<T> = std::result::Result<T, ObsidianError>;
 
 #[derive(Error, Debug)]
 pub enum ObsidianError {
-    #[error("IO error: {0}")]
+    #[error("File system operation failed")]
     IoError(#[from] std::io::Error),
 
-    #[error("YAML parsing error: {0}")]
+    #[error("Failed to parse YAML frontmatter")]
     YamlError(#[from] serde_yaml::Error),
 
-    #[error("Path error: {0}")]
+    #[error("Invalid file path: {0}")]
     PathError(String),
 
     #[error("Configuration error: {0}")]
     ConfigError(String),
 
-    #[error("Parsing error: {0}")]
+    #[error("Failed to parse file content: {0}")]
     ParseError(String),
 
-    #[error("Environment variable error: {0}")]
+    #[error("Environment variable not found or invalid")]
     EnvError(#[from] std::env::VarError),
 
-    #[error("Directory walking error: {0}")]
+    #[error("Failed to traverse directory")]
     WalkDirError(#[from] walkdir::Error),
 }

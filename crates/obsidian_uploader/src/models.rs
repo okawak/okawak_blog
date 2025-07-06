@@ -4,12 +4,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct ObsidianFrontMatter {
     pub title: String,
+    #[serde(default)]
     pub tags: Option<Vec<String>>,
     pub summary: Option<String>,
     pub is_completed: bool,
     pub priority: Option<i32>,
     pub created: String,
     pub updated: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>, // 実際のファイルに存在するが、出力では使用しない
 }
 
@@ -17,8 +19,11 @@ pub struct ObsidianFrontMatter {
 #[derive(Debug, Serialize, PartialEq)]
 pub struct OutputFrontMatter {
     pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<i32>,
     pub created: String,
     pub updated: String,
@@ -50,7 +55,7 @@ category: "tech""#,
 is_completed: false
 created: "2025-01-01T00:00:00+09:00"
 updated: "2025-01-01T00:00:00+09:00""#,
-        "Minimal Article", 
+        "Minimal Article",
         false,
         None,
         None
@@ -67,7 +72,10 @@ updated: "2025-01-01T00:00:00+09:00""#,
         assert_eq!(frontmatter.title, expected_title);
         assert_eq!(frontmatter.is_completed, expected_completed);
         assert_eq!(frontmatter.priority, expected_priority);
-        assert_eq!(frontmatter.category, expected_category.map(|s| s.to_string()));
+        assert_eq!(
+            frontmatter.category,
+            expected_category.map(|s| s.to_string())
+        );
     }
 
     #[rstest]

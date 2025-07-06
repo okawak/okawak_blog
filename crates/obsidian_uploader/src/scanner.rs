@@ -4,19 +4,18 @@ use walkdir::WalkDir;
 
 /// ObsidianのPublishディレクトリ内のMarkdownファイルをスキャンする
 pub fn scan_obsidian_files<P: AsRef<Path>>(publish_dir: P) -> Result<Vec<PathBuf>> {
-    let mut markdown_files = Vec::new();
-
-    for entry in WalkDir::new(publish_dir.as_ref()) {
-        let entry = entry?;
-        let path = entry.path();
-
-        // .mdファイルのみを対象とする（大文字小文字を区別しない）
-        if let Some(extension) = path.extension().and_then(|s| s.to_str()) {
-            if extension.to_lowercase() == "md" {
-                markdown_files.push(path.to_path_buf());
-            }
-        }
-    }
+    let mut markdown_files: Vec<PathBuf> = WalkDir::new(publish_dir.as_ref())
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_file())
+        .filter_map(|entry| {
+            let path = entry.path();
+            path.extension()
+                .and_then(|ext| ext.to_str())
+                .filter(|ext| ext.to_lowercase() == "md")
+                .map(|_| path.to_path_buf())
+        })
+        .collect();
 
     // ファイルパスでソート（一貫性のため、パフォーマンス向上のためsort_unstableを使用）
     markdown_files.sort_unstable();

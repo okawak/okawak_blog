@@ -7,14 +7,19 @@ pub struct Config {
     pub output_dir: PathBuf,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            obsidian_dir: PathBuf::from("crates/obsidian_uploader/obsidian/Publish"),
+            output_dir: PathBuf::from("crates/obsidian_uploader/dist"),
+        }
+    }
+}
+
 impl Config {
     /// 固定パスで設定を初期化
     pub fn new() -> Result<Self> {
-        let config = Config {
-            obsidian_dir: PathBuf::from("crates/obsidian_uploader/obsidian/Publish"),
-            output_dir: PathBuf::from("crates/obsidian_uploader/dist"),
-        };
-
+        let config = Self::default();
         config.validate()?;
         Ok(config)
     }
@@ -35,7 +40,6 @@ impl Config {
             )));
         }
 
-
         Ok(())
     }
 }
@@ -47,7 +51,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[rstest]
-    #[case::valid_dir(true, true)]  // 存在するディレクトリ
+    #[case::valid_dir(true, true)] // 存在するディレクトリ
     #[case::non_existent_dir(false, false)] // 存在しないパス
     fn test_config_validation(#[case] path_exists: bool, #[case] should_succeed: bool) {
         if path_exists {

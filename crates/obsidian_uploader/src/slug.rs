@@ -24,8 +24,10 @@ pub fn generate_slug<P: AsRef<Path>>(
     // 先頭6バイト（12文字の16進文字列）を使用してslugを生成
     let slug = hash_result[..6]
         .iter()
-        .map(|byte| format!("{:02x}", byte))
-        .collect::<String>();
+        .fold(String::with_capacity(12), |mut acc, byte| {
+            acc.push_str(&format!("{:02x}", byte));
+            acc
+        });
 
     Ok(slug)
 }
@@ -79,25 +81,26 @@ mod tests {
     #[case::new_slug("new123slug45", true)]
     fn test_validate_slug_uniqueness(#[case] slug: &str, #[case] should_be_unique: bool) {
         let existing_slugs = vec!["abc123def456".to_string(), "789xyz012tuv".to_string()];
-        assert_eq!(validate_slug_uniqueness(slug, &existing_slugs), should_be_unique);
+        assert_eq!(
+            validate_slug_uniqueness(slug, &existing_slugs),
+            should_be_unique
+        );
     }
 
     #[rstest]
-    #[case::exact_match("Test")]
-    #[case::trailing_space("Test ")]
-    #[case::lowercase("test")]
-    fn test_slug_collision_resistance(#[case] title: &str) -> Result<()> {
+    #[case::exact_match("Test", true)]
+    #[case::trailing_space("Test ", false)]
+    #[case::lowercase("test", false)]
+    fn test_slug_collision_resistance(
+        #[case] title: &str,
+        #[case] should_match: bool,
+    ) -> Result<()> {
         let base_path = PathBuf::from("tech/test.md");
         let created = "2025-01-01T00:00:00+09:00";
         let base_slug = generate_slug("Test", &base_path, created)?;
         let test_slug = generate_slug(title, &base_path, created)?;
 
-        if title == "Test" {
-            assert_eq!(base_slug, test_slug);
-        } else {
-            assert_ne!(base_slug, test_slug);
-        }
-
+        assert_eq!(base_slug == test_slug, should_match);
         Ok(())
     }
 }
