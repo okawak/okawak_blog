@@ -14,34 +14,43 @@ impl Config {
         let obsidian_dir = env::var("OBSIDIAN_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("crates/obsidian_uploader/obsidian"));
-        
+
         let output_dir = env::var("OUTPUT_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("crates/obsidian_uploader/dist"));
-        
+
         let config = Config {
             obsidian_dir,
             output_dir,
         };
-        
+
         config.validate()?;
         Ok(config)
     }
-    
+
     /// 設定値の検証
     fn validate(&self) -> Result<()> {
         if !self.obsidian_dir.exists() {
-            return Err(ObsidianError::ConfigError(
-                format!("Obsidian directory does not exist: {}", self.obsidian_dir.display())
-            ));
+            return Err(ObsidianError::ConfigError(format!(
+                "Obsidian directory does not exist: {}",
+                self.obsidian_dir.display()
+            )));
         }
-        
+
         if !self.obsidian_dir.is_dir() {
-            return Err(ObsidianError::ConfigError(
-                format!("Obsidian path is not a directory: {}", self.obsidian_dir.display())
-            ));
+            return Err(ObsidianError::ConfigError(format!(
+                "Obsidian path is not a directory: {}",
+                self.obsidian_dir.display()
+            )));
         }
-        
+
+        // 出力ディレクトリの作成
+        if let Some(parent) = self.output_dir.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+
         Ok(())
     }
 }
@@ -50,7 +59,7 @@ impl Config {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    
+
     #[test]
     fn test_config_validation_success() {
         let temp_dir = TempDir::new().unwrap();
@@ -58,17 +67,17 @@ mod tests {
             obsidian_dir: temp_dir.path().to_path_buf(),
             output_dir: PathBuf::from("test_output"),
         };
-        
+
         assert!(config.validate().is_ok());
     }
-    
+
     #[test]
     fn test_config_validation_non_existent_dir() {
         let config = Config {
             obsidian_dir: PathBuf::from("/non/existent/path"),
             output_dir: PathBuf::from("test_output"),
         };
-        
+
         assert!(config.validate().is_err());
     }
 }

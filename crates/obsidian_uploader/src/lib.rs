@@ -18,11 +18,11 @@ pub async fn run_main(config: Config) -> Result<()> {
     if let Some(parent) = Path::new(&config.output_dir).parent() {
         fs::create_dir_all(parent)?;
     }
-    
+
     // Obsidianファイルをスキャン
     let markdown_files = scanner::scan_obsidian_files(&config.obsidian_dir)?;
     println!("Found {} markdown files", markdown_files.len());
-    
+
     // is_completed: true のファイルのみフィルタリング
     let mut processed_count = 0;
     for file_path in markdown_files {
@@ -30,11 +30,20 @@ pub async fn run_main(config: Config) -> Result<()> {
             Ok(Some(front_matter)) => {
                 if front_matter.is_completed {
                     // Slug生成
-                    let relative_path = file_path.strip_prefix(&config.obsidian_dir)
-                        .map_err(|_| ObsidianError::PathError(format!("Failed to strip prefix from {}", file_path.display())))?;
-                    
-                    let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
-                    
+                    let relative_path =
+                        file_path.strip_prefix(&config.obsidian_dir).map_err(|_| {
+                            ObsidianError::PathError(format!(
+                                "Failed to strip prefix from {}",
+                                file_path.display()
+                            ))
+                        })?;
+
+                    let slug = slug::generate_slug(
+                        &front_matter.title,
+                        relative_path,
+                        &front_matter.created,
+                    )?;
+
                     // 出力用フロントマターに変換
                     let output_fm = OutputFrontMatter {
                         title: front_matter.title,
@@ -45,7 +54,7 @@ pub async fn run_main(config: Config) -> Result<()> {
                         updated: front_matter.updated,
                         slug,
                     };
-                    
+
                     println!("Processed: {} -> {}", file_path.display(), output_fm.slug);
                     processed_count += 1;
                 }
@@ -60,7 +69,7 @@ pub async fn run_main(config: Config) -> Result<()> {
             }
         }
     }
-    
+
     println!("Successfully processed {} files", processed_count);
     Ok(())
 }

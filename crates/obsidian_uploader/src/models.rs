@@ -28,7 +28,7 @@ pub struct OutputFrontMatter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_obsidian_frontmatter_deserialization() {
         let yaml = r#"
@@ -41,19 +41,25 @@ created: "2025-01-01T00:00:00+09:00"
 updated: "2025-01-02T00:00:00+09:00"
 category: "tech"
 "#;
-        
+
         let frontmatter: ObsidianFrontMatter = serde_yaml::from_str(yaml).unwrap();
-        
+
         assert_eq!(frontmatter.title, "Test Article");
-        assert_eq!(frontmatter.tags, Some(vec!["rust".to_string(), "programming".to_string()]));
-        assert_eq!(frontmatter.summary, Some("This is a test article".to_string()));
+        assert_eq!(
+            frontmatter.tags,
+            Some(vec!["rust".to_string(), "programming".to_string()])
+        );
+        assert_eq!(
+            frontmatter.summary,
+            Some("This is a test article".to_string())
+        );
         assert_eq!(frontmatter.is_completed, true);
         assert_eq!(frontmatter.priority, Some(1));
         assert_eq!(frontmatter.created, "2025-01-01T00:00:00+09:00");
         assert_eq!(frontmatter.updated, "2025-01-02T00:00:00+09:00");
         assert_eq!(frontmatter.category, Some("tech".to_string()));
     }
-    
+
     #[test]
     fn test_obsidian_frontmatter_minimal() {
         let yaml = r#"
@@ -62,9 +68,9 @@ is_completed: false
 created: "2025-01-01T00:00:00+09:00"
 updated: "2025-01-01T00:00:00+09:00"
 "#;
-        
+
         let frontmatter: ObsidianFrontMatter = serde_yaml::from_str(yaml).unwrap();
-        
+
         assert_eq!(frontmatter.title, "Minimal Article");
         assert_eq!(frontmatter.tags, None);
         assert_eq!(frontmatter.summary, None);
@@ -72,7 +78,7 @@ updated: "2025-01-01T00:00:00+09:00"
         assert_eq!(frontmatter.priority, None);
         assert_eq!(frontmatter.category, None);
     }
-    
+
     #[test]
     fn test_output_frontmatter_serialization() {
         let frontmatter = OutputFrontMatter {
@@ -84,9 +90,9 @@ updated: "2025-01-01T00:00:00+09:00"
             updated: "2025-01-02T00:00:00+09:00".to_string(),
             slug: "abc123def456".to_string(),
         };
-        
+
         let yaml = serde_yaml::to_string(&frontmatter).unwrap();
-        
+
         assert!(yaml.contains("title: Test Output"));
         assert!(yaml.contains("slug: abc123def456"));
         assert!(yaml.contains("description: Test description"));
