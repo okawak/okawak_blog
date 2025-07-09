@@ -2507,6 +2507,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "pulldown-cmark 0.11.3",
+ "regex",
  "rstest",
  "serde",
  "serde_yaml",
