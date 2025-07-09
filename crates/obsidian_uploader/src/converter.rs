@@ -1,5 +1,5 @@
 use crate::error::Result;
-use pulldown_cmark::{html, Options, Parser};
+use pulldown_cmark::{Options, Parser, html};
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -13,11 +13,11 @@ pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
 
     // Markdownパーサーを作成
     let parser = Parser::new_ext(markdown_content, options);
-    
+
     // HTMLに変換
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
-    
+
     Ok(html_output)
 }
 
@@ -26,23 +26,24 @@ pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
 /// [[filename|display text]] → <a href="/filename">display text</a>
 pub fn convert_obsidian_links(content: &str) -> String {
     // LazyLockを使用してRegexを一度だけコンパイル
-    static OBSIDIAN_LINK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"\[\[([^\]]+)\]\]").expect("Invalid regex pattern")
-    });
+    static OBSIDIAN_LINK_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\[\[([^\]]+)\]\]").expect("Invalid regex pattern"));
 
-    OBSIDIAN_LINK_REGEX.replace_all(content, |caps: &regex::Captures| {
-        let link_content = &caps[1];
-        
-        // パイプ記号で分割してリンク先と表示テキストを分離
-        if let Some(pipe_pos) = link_content.find('|') {
-            let (link, display_text) = link_content.split_at(pipe_pos);
-            let display_text = &display_text[1..]; // パイプ記号をスキップ
-            format!("<a href=\"/{}\">{}</a>", link, display_text)
-        } else {
-            // 表示テキストが指定されていない場合はリンク名を使用
-            format!("<a href=\"/{}\">{}</a>", link_content, link_content)
-        }
-    }).to_string()
+    OBSIDIAN_LINK_REGEX
+        .replace_all(content, |caps: &regex::Captures| {
+            let link_content = &caps[1];
+
+            // パイプ記号で分割してリンク先と表示テキストを分離
+            if let Some(pipe_pos) = link_content.find('|') {
+                let (link, display_text) = link_content.split_at(pipe_pos);
+                let display_text = &display_text[1..]; // パイプ記号をスキップ
+                format!("<a href=\"/{}\">{}</a>", link, display_text)
+            } else {
+                // 表示テキストが指定されていない場合はリンク名を使用
+                format!("<a href=\"/{}\">{}</a>", link_content, link_content)
+            }
+        })
+        .to_string()
 }
 
 /// フロントマターとHTMLボディを結合してHTMLファイルを生成する
@@ -140,10 +141,10 @@ This is a test with [[Another Article|link]] and **bold** text.
 
         // まずObsidianリンクを変換
         let with_html_links = convert_obsidian_links(markdown_with_obsidian_links);
-        
+
         // 次にMarkdownをHTMLに変換
         let html = convert_markdown_to_html(&with_html_links).unwrap();
-        
+
         assert!(html.contains("<h1>My Article</h1>"));
         assert!(html.contains("<a href=\"/Another Article\">link</a>"));
         assert!(html.contains("<a href=\"/Reference Note\">Reference Note</a>"));

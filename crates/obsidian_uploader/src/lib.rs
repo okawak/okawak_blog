@@ -26,7 +26,9 @@ pub async fn run_main(config: Config) -> Result<()> {
         .into_iter()
         .filter_map(|file_path| {
             match parser::parse_obsidian_file(&file_path) {
-                Ok(Some(front_matter)) if front_matter.is_completed => Some(Ok((file_path, front_matter))),
+                Ok(Some(front_matter)) if front_matter.is_completed => {
+                    Some(Ok((file_path, front_matter)))
+                }
                 Ok(_) => None, // フロントマターなし、またはis_completed: false
                 Err(e) => {
                     eprintln!("Error processing {}: {}", file_path.display(), e);
@@ -38,28 +40,26 @@ pub async fn run_main(config: Config) -> Result<()> {
             result.and_then(|(file_path, front_matter)| {
                 // Markdownファイルの内容を読み取り
                 let markdown_content = fs::read_to_string(&file_path)?;
-                
+
                 // YAMLフロントマターを除去してMarkdownボディを抽出
                 let markdown_body = extract_markdown_body(&markdown_content);
-                
+
                 // Obsidianリンクを変換
                 let markdown_with_links = converter::convert_obsidian_links(&markdown_body);
-                
+
                 // MarkdownをHTMLに変換
                 let html_body = converter::convert_markdown_to_html(&markdown_with_links)?;
-                
+
                 // 相対パスを取得
-                let relative_path = file_path.strip_prefix(&config.obsidian_dir)
-                    .map_err(|_| ObsidianError::PathError(format!(
+                let relative_path = file_path.strip_prefix(&config.obsidian_dir).map_err(|_| {
+                    ObsidianError::PathError(format!(
                         "Failed to strip prefix from {}",
                         file_path.display()
-                    )))?;
+                    ))
+                })?;
 
-                let slug = slug::generate_slug(
-                    &front_matter.title,
-                    relative_path,
-                    &front_matter.created,
-                )?;
+                let slug =
+                    slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
 
                 let output_fm = OutputFrontMatter {
                     title: front_matter.title,
@@ -72,27 +72,26 @@ pub async fn run_main(config: Config) -> Result<()> {
                 };
 
                 // 出力用YAMLを生成
-                let output_yaml = serde_yaml::to_string(&output_fm)
-                    .map_err(|e| ObsidianError::YamlError(e))?;
-                
+                let output_yaml =
+                    serde_yaml::to_string(&output_fm).map_err(|e| ObsidianError::YamlError(e))?;
+
                 // HTMLファイルを生成
                 let html_file_content = converter::generate_html_file(&output_yaml, &html_body);
-                
+
                 // 出力ファイルパスを生成（.md → .html）
-                let output_file_path = config.output_dir.join(
-                    relative_path.with_extension("html")
-                );
-                
+                let output_file_path = config.output_dir.join(relative_path.with_extension("html"));
+
                 // 出力ディレクトリを作成
                 if let Some(parent) = output_file_path.parent() {
                     fs::create_dir_all(parent)?;
                 }
-                
+
                 // HTMLファイルを書き込み
                 fs::write(&output_file_path, html_file_content)?;
 
-                println!("Processed: {} -> {} ({})", 
-                    file_path.display(), 
+                println!(
+                    "Processed: {} -> {} ({})",
+                    file_path.display(),
                     output_file_path.display(),
                     slug
                 );
@@ -111,17 +110,14 @@ pub async fn run_main(config: Config) -> Result<()> {
 /// Markdownファイルの内容からYAMLフロントマターを除去してボディ部分を抽出
 fn extract_markdown_body(content: &str) -> String {
     let content = content.trim_start();
-    
+
     if !content.starts_with("---") {
         return content.to_string();
     }
-    
+
     let lines: Vec<&str> = content.lines().collect();
-    let end_pos = lines
-        .iter()
-        .skip(1)
-        .position(|&line| line.trim() == "---");
-    
+    let end_pos = lines.iter().skip(1).position(|&line| line.trim() == "---");
+
     match end_pos {
         Some(pos) => {
             // フロントマター終了位置の次の行から残りを取得
