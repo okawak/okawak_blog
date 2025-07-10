@@ -9,7 +9,7 @@ edition.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 sha2 = "0.10"
-pulldown-cmark = "0.11"
+pulldown-cmark = "0.13"
 thiserror = "2"
 anyhow = "1"
 walkdir = "2"
@@ -17,5 +17,5 @@ tokio = { version = "1", features = ["full"] }
 regex = "1"
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = "3.20"
 rstest = "0.25"

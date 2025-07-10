@@ -38,19 +38,10 @@ pub async fn run_main(config: Config) -> Result<()> {
         })
         .map(|result| {
             result.and_then(|(file_path, front_matter)| {
-                // Markdownファイルの内容を読み取り
                 let markdown_content = fs::read_to_string(&file_path)?;
-
-                // YAMLフロントマターを除去してMarkdownボディを抽出
                 let markdown_body = extract_markdown_body(&markdown_content);
-
-                // Obsidianリンクを変換
                 let markdown_with_links = converter::convert_obsidian_links(&markdown_body);
-
-                // MarkdownをHTMLに変換
                 let html_body = converter::convert_markdown_to_html(&markdown_with_links)?;
-
-                // 相対パスを取得
                 let relative_path = file_path.strip_prefix(&config.obsidian_dir).map_err(|_| {
                     ObsidianError::PathError(format!(
                         "Failed to strip prefix from {}",
@@ -71,22 +62,14 @@ pub async fn run_main(config: Config) -> Result<()> {
                     slug: slug.clone(),
                 };
 
-                // 出力用YAMLを生成
                 let output_yaml =
                     serde_yaml::to_string(&output_fm).map_err(|e| ObsidianError::YamlError(e))?;
-
-                // HTMLファイルを生成
                 let html_file_content = converter::generate_html_file(&output_yaml, &html_body);
-
-                // 出力ファイルパスを生成（.md → .html）
                 let output_file_path = config.output_dir.join(relative_path.with_extension("html"));
 
-                // 出力ディレクトリを作成
                 if let Some(parent) = output_file_path.parent() {
                     fs::create_dir_all(parent)?;
                 }
-
-                // HTMLファイルを書き込み
                 fs::write(&output_file_path, html_file_content)?;
 
                 println!(
@@ -125,5 +108,37 @@ fn extract_markdown_body(content: &str) -> String {
             body_lines.join("\n")
         }
         None => content.to_string(), // フロントマターが正しく終了していない場合は全体を返す
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+
+    #[rstest]
+    #[case::with_frontmatter(
+        "---\ntitle: Test\n---\n# Content\n\nBody text",
+        "# Content\n\nBody text"
+    )]
+    #[case::no_frontmatter(
+        "# Content\n\nBody text",
+        "# Content\n\nBody text"
+    )]
+    #[case::malformed_frontmatter(
+        "---\ntitle: Test\n# Content\n\nBody text",
+        "---\ntitle: Test\n# Content\n\nBody text"
+    )]
+    #[case::empty_body(
+        "---\ntitle: Test\n---\n",
+        ""
+    )]
+    #[case::whitespace_handling(
+        "   ---\ntitle: Test\n---\n\n# Content",
+        "\n# Content"
+    )]
+    fn test_extract_markdown_body(#[case] input: &str, #[case] expected: &str) {
+        let result = extract_markdown_body(input);
+        assert_eq!(result, expected);
     }
 }
