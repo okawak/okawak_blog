@@ -10,9 +10,9 @@ pub use config::Config;
 pub use error::{ObsidianError, Result};
 pub use models::{ObsidianFrontMatter, OutputFrontMatter};
 
-use std::fs;
-use std::collections::HashMap;
 use converter::{FileInfo, FileMapping};
+use std::collections::HashMap;
+use std::fs;
 
 /// メイン実行関数
 pub async fn run_main(config: Config) -> Result<()> {
@@ -24,16 +24,12 @@ pub async fn run_main(config: Config) -> Result<()> {
     // Phase 1: ファイルマッピングを構築
     let valid_files: Vec<_> = markdown_files
         .into_iter()
-        .filter_map(|file_path| {
-            match parser::parse_obsidian_file(&file_path) {
-                Ok(Some(front_matter)) if front_matter.is_completed => {
-                    Some((file_path, front_matter))
-                }
-                Ok(_) => None,
-                Err(e) => {
-                    eprintln!("Error processing {}: {}", file_path.display(), e);
-                    None
-                }
+        .filter_map(|file_path| match parser::parse_obsidian_file(&file_path) {
+            Ok(Some(front_matter)) if front_matter.is_completed => Some((file_path, front_matter)),
+            Ok(_) => None,
+            Err(e) => {
+                eprintln!("Error processing {}: {}", file_path.display(), e);
+                None
             }
         })
         .collect();
@@ -72,7 +68,7 @@ fn build_file_mapping(
         })?;
 
         let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
-        
+
         let file_name = file_path
             .file_stem()
             .and_then(|s| s.to_str())
