@@ -19,17 +19,14 @@ pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     // KaTeX数式サポートを追加
     let html_with_katex = process_katex_math(&html_output);
 
-    // リッチブックマークを処理
-    let html_with_bookmarks = process_rich_bookmarks(&html_with_katex);
-
-    Ok(html_with_bookmarks)
+    Ok(html_with_katex)
 }
 
 /// KaTeX数式処理：$...$（インライン）と$$...$$（ブロック）を検出してKaTeXクラスを追加
 fn process_katex_math(html_content: &str) -> String {
     // 文字列を段階的に処理して、二重ドルマークを先に処理
     let mut result = html_content.to_string();
-    
+
     // ブロック数式を処理（$$...$$）
     while let Some(start) = result.find("$$") {
         if let Some(end) = result[start + 2..].find("$$") {
@@ -40,7 +37,7 @@ fn process_katex_math(html_content: &str) -> String {
             break;
         }
     }
-    
+
     // インライン数式を処理（$...$）
     let mut pos = 0;
     while let Some(start) = result[pos..].find('$') {
@@ -55,53 +52,10 @@ fn process_katex_math(html_content: &str) -> String {
             break;
         }
     }
-    
+
     result
 }
 
-/// リッチブックマーク処理：シンプルなブックマークをリッチブックマークに変換
-fn process_rich_bookmarks(html_content: &str) -> String {
-    static SIMPLE_BOOKMARK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]+)</a>\s*</div>"#)
-            .expect("Invalid bookmark regex")
-    });
-
-    SIMPLE_BOOKMARK_REGEX.replace_all(html_content, |caps: &regex::Captures| {
-        let url = &caps[1];
-        let title = &caps[2];
-        
-        // URLからドメインを抽出
-        let domain = extract_domain(url);
-        
-        format!(
-            r#"<div class="bookmark">
-  <a class="bookmark-link" href="{}" target="_blank" rel="noopener">
-    <div class="bookmark-content">
-      <div class="bookmark-title">{}</div>
-      <div class="bookmark-description">外部リンク</div>
-      <div class="bookmark-domain">{}</div>
-    </div>
-    <div class="bookmark-thumb"></div>
-  </a>
-</div>"#,
-            url, title, domain
-        )
-    }).to_string()
-}
-
-/// URLからドメインを抽出する補助関数
-fn extract_domain(url: &str) -> &str {
-    if let Some(start) = url.find("://") {
-        let after_protocol = &url[start + 3..];
-        if let Some(end) = after_protocol.find('/') {
-            &after_protocol[..end]
-        } else {
-            after_protocol
-        }
-    } else {
-        url
-    }
-}
 
 /// ObsidianのリンクをHTMLリンクに変換する
 /// [[filename]] → <a href="/filename">filename</a>
@@ -119,14 +73,16 @@ pub fn convert_obsidian_links(content: &str) -> String {
             if let Some(pipe_pos) = link_content.find('|') {
                 let (link, display_text) = link_content.split_at(pipe_pos);
                 let display_text = &display_text[1..]; // パイプ記号をスキップ
-                format!("<a href=\"/{}\">{}</a>", 
-                    html_escape(link), 
+                format!(
+                    "<a href=\"/{}\">{}</a>",
+                    html_escape(link),
                     html_escape(display_text)
                 )
             } else {
                 // 表示テキストが指定されていない場合はリンク名を使用
-                format!("<a href=\"/{}\">{}</a>", 
-                    html_escape(link_content), 
+                format!(
+                    "<a href=\"/{}\">{}</a>",
+                    html_escape(link_content),
                     html_escape(link_content)
                 )
             }
@@ -267,26 +223,6 @@ This is a test with [[Another Article|link]] and **bold** text.
         assert_eq!(result, expected);
     }
 
-    #[rstest]
-    #[case::simple_bookmark(
-        r#"<div class="bookmark">
-  <a href="https://example.com">Example Site</a>
-</div>"#,
-        r#"<div class="bookmark">
-  <a class="bookmark-link" href="https://example.com" target="_blank" rel="noopener">
-    <div class="bookmark-content">
-      <div class="bookmark-title">Example Site</div>
-      <div class="bookmark-description">外部リンク</div>
-      <div class="bookmark-domain">example.com</div>
-    </div>
-    <div class="bookmark-thumb"></div>
-  </a>
-</div>"#
-    )]
-    fn test_rich_bookmark_processing(#[case] input: &str, #[case] expected: &str) {
-        let result = super::process_rich_bookmarks(input);
-        assert_eq!(result, expected);
-    }
 
     #[rstest]
     #[case::html_entities(
@@ -302,13 +238,4 @@ This is a test with [[Another Article|link]] and **bold** text.
         assert_eq!(result, expected);
     }
 
-    #[rstest]
-    #[case::https_url("https://example.com/path", "example.com")]
-    #[case::http_url("http://test.org", "test.org")]
-    #[case::no_protocol("example.com", "example.com")]
-    #[case::with_path("https://docs.rust-lang.org/book/", "docs.rust-lang.org")]
-    fn test_extract_domain(#[case] url: &str, #[case] expected: &str) {
-        let result = super::extract_domain(url);
-        assert_eq!(result, expected);
-    }
 }
