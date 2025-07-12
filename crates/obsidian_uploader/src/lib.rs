@@ -13,6 +13,7 @@ pub use models::{ObsidianFrontMatter, OutputFrontMatter};
 use converter::{FileInfo, FileMapping};
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 
 pub async fn run_main(config: Config) -> Result<()> {
     fs::create_dir_all(&config.output_dir)?;
@@ -48,6 +49,25 @@ pub async fn run_main(config: Config) -> Result<()> {
     Ok(())
 }
 
+/// パスをURL用に正規化（OS固有セパレータをUnix形式に統一）
+fn normalize_path_for_url(path: &Path) -> String {
+    let path_str = path.to_string_lossy();
+    path_str.replace(std::path::MAIN_SEPARATOR, "/")
+}
+
+/// 相対パスを取得する共通処理
+fn get_relative_path<'a>(
+    file_path: &'a Path,
+    base_dir: &Path,
+) -> Result<&'a Path> {
+    file_path.strip_prefix(base_dir).map_err(|_| {
+        ObsidianError::PathError(format!(
+            "Failed to strip prefix from {}",
+            file_path.display()
+        ))
+    })
+}
+
 fn build_file_mapping(
     config: &Config,
     valid_files: &[(std::path::PathBuf, ObsidianFrontMatter)],
@@ -55,36 +75,15 @@ fn build_file_mapping(
     let mut mapping = HashMap::with_capacity(valid_files.len());
 
     for (file_path, front_matter) in valid_files {
-        let relative_path = file_path.strip_prefix(&config.obsidian_dir).map_err(|_| {
-            ObsidianError::PathError(format!(
-                "Failed to strip prefix from {}",
-                file_path.display()
-            ))
-        })?;
-
+        let relative_path = get_relative_path(file_path, &config.obsidian_dir)?;
         let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
 
-        // URL正規化: OS固有のパスセパレータをUnix形式に統一
-        let html_path = {
-            let html_path_buf = relative_path.with_extension("html");
-            let path_str = html_path_buf.to_string_lossy();
-            let normalized_path = path_str.replace(std::path::MAIN_SEPARATOR, "/");
-            format!("/{}", normalized_path)
-        };
-
-        // マッピングキーを相対パス全体に変更（衝突を回避）
-        let mapping_key = {
-            let key_path_buf = relative_path.with_extension("");
-            let path_str = key_path_buf.to_string_lossy();
-            path_str.replace(std::path::MAIN_SEPARATOR, "/")
-        };
+        let relative_path_no_ext = relative_path.with_extension("");
+        let mapping_key = normalize_path_for_url(&relative_path_no_ext);
+        let html_path = format!("/{}", normalize_path_for_url(&relative_path.with_extension("html")));
 
         let file_info = FileInfo {
-            relative_path: {
-                let rel_path_buf = relative_path.with_extension("");
-                let path_str = rel_path_buf.to_string_lossy();
-                path_str.replace(std::path::MAIN_SEPARATOR, "/")
-            },
+            relative_path: mapping_key.clone(),
             slug,
             html_path,
         };
@@ -106,26 +105,10 @@ fn process_obsidian_file(
     let markdown_with_links = converter::convert_obsidian_links(&markdown_body, file_mapping);
     let html_body = converter::convert_markdown_to_html(&markdown_with_links)?;
 
-    let relative_path = file_path.strip_prefix(&config.obsidian_dir).map_err(|_| {
-        ObsidianError::PathError(format!(
-            "Failed to strip prefix from {}",
-            file_path.display()
-        ))
-    })?;
-
-    // file_mappingからslug情報を取得（重複処理を回避）
-    let mapping_key = {
-        let key_path_buf = relative_path.with_extension("");
-        let path_str = key_path_buf.to_string_lossy();
-        path_str.replace(std::path::MAIN_SEPARATOR, "/")
-    };
-
-    let slug = file_mapping
-        .get(&mapping_key)
-        .map(|file_info| file_info.slug.clone())
-        .ok_or_else(|| {
-            ObsidianError::PathError(format!("File mapping not found for: {}", mapping_key))
-        })?;
+    let relative_path = get_relative_path(&file_path, &config.obsidian_dir)?;
+    
+    // シンプルにslugを再生成（パフォーマンスよりもシンプルさを重視）
+    let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
 
     let output_fm = OutputFrontMatter {
         title: front_matter.title,
