@@ -90,15 +90,30 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
             };
 
             // ファイルマッピングからリンク先を解決
-            let href = match file_mapping.get(link_target) {
-                Some(file_info) => file_info.html_path.clone(),
-                None => {
+            // まずファイル名で検索し、見つからない場合は相対パスとしても検索
+            let href = if let Some(file_info) = file_mapping.get(link_target) {
+                file_info.html_path.clone()
+            } else {
+                // 相対パス全体での検索も試行
+                let mut found = false;
+                let mut result_href = format!("/{}", link_target);
+                
+                for (key, file_info) in file_mapping {
+                    if key.ends_with(&format!("/{}", link_target)) || key == link_target {
+                        result_href = file_info.html_path.clone();
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if !found {
                     eprintln!(
                         "Warning: Link target '{}' not found in file mapping",
                         link_target
                     );
-                    format!("/{}", link_target)
                 }
+                
+                result_href
             };
 
             format!(
@@ -157,8 +172,25 @@ mod tests {
 
     #[rstest]
     fn test_obsidian_links_conversion() {
-        // テスト用のファイルマッピングを作成
+        // テスト用のファイルマッピングを作成（相対パス全体をキーとして使用）
         let mut file_mapping = FileMapping::new();
+        file_mapping.insert(
+            "notes/another-note".to_string(),
+            FileInfo {
+                relative_path: "notes/another-note".to_string(),
+                slug: "abc123def".to_string(),
+                html_path: "/notes/another-note.html".to_string(),
+            },
+        );
+        file_mapping.insert(
+            "docs/filename".to_string(),
+            FileInfo {
+                relative_path: "docs/filename".to_string(),
+                slug: "xyz789abc".to_string(),
+                html_path: "/docs/filename.html".to_string(),
+            },
+        );
+        // 後方互換性のためにファイル名のみのキーも追加
         file_mapping.insert(
             "Another Note".to_string(),
             FileInfo {

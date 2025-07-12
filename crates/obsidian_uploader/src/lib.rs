@@ -64,22 +64,32 @@ fn build_file_mapping(
 
         let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
 
-        let file_name = file_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .ok_or_else(|| {
-                ObsidianError::PathError(format!("Invalid file name: {}", file_path.display()))
-            })?;
+        // URL正規化: OS固有のパスセパレータをUnix形式に統一
+        let html_path = {
+            let html_path_buf = relative_path.with_extension("html");
+            let path_str = html_path_buf.to_string_lossy();
+            let normalized_path = path_str.replace(std::path::MAIN_SEPARATOR, "/");
+            format!("/{}", normalized_path)
+        };
 
-        let html_path = format!("/{}", relative_path.with_extension("html").display());
+        // マッピングキーを相対パス全体に変更（衝突を回避）
+        let mapping_key = {
+            let key_path_buf = relative_path.with_extension("");
+            let path_str = key_path_buf.to_string_lossy();
+            path_str.replace(std::path::MAIN_SEPARATOR, "/")
+        };
 
         let file_info = FileInfo {
-            relative_path: relative_path.with_extension("").display().to_string(),
+            relative_path: {
+                let rel_path_buf = relative_path.with_extension("");
+                let path_str = rel_path_buf.to_string_lossy();
+                path_str.replace(std::path::MAIN_SEPARATOR, "/")
+            },
             slug,
             html_path,
         };
 
-        mapping.insert(file_name.to_string(), file_info);
+        mapping.insert(mapping_key, file_info);
     }
 
     Ok(mapping)
@@ -103,7 +113,19 @@ fn process_obsidian_file(
         ))
     })?;
 
-    let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
+    // file_mappingからslug情報を取得（重複処理を回避）
+    let mapping_key = {
+        let key_path_buf = relative_path.with_extension("");
+        let path_str = key_path_buf.to_string_lossy();
+        path_str.replace(std::path::MAIN_SEPARATOR, "/")
+    };
+    
+    let slug = file_mapping
+        .get(&mapping_key)
+        .map(|file_info| file_info.slug.clone())
+        .ok_or_else(|| {
+            ObsidianError::PathError(format!("File mapping not found for: {}", mapping_key))
+        })?;
 
     let output_fm = OutputFrontMatter {
         title: front_matter.title,
@@ -214,7 +236,7 @@ mod tests {
         assert!(result.is_ok());
         let mapping = result.unwrap();
         assert_eq!(mapping.len(), 1);
-        assert!(mapping.contains_key("test"));
+        assert!(mapping.contains_key("test")); // ファイル名がキーとなる
     }
 
     #[rstest]
@@ -231,5 +253,86 @@ mod tests {
         assert!(result.is_ok());
         let mapping = result.unwrap();
         assert_eq!(mapping.len(), 0);
+    }
+
+    #[rstest]
+    fn test_build_file_mapping_path_collision() {
+        use crate::models::ObsidianFrontMatter;
+
+        let temp_dir = TempDir::new().unwrap();
+        let config = Config {
+            obsidian_dir: temp_dir.path().to_path_buf(),
+            output_dir: PathBuf::from("output"),
+        };
+
+        // 同じファイル名だが異なるディレクトリのファイル
+        let file_path1 = temp_dir.path().join("dir1").join("test.md");
+        let file_path2 = temp_dir.path().join("dir2").join("test.md");
+        
+        let front_matter1 = ObsidianFrontMatter {
+            title: "Test Article 1".to_string(),
+            tags: Some(vec!["test1".to_string()]),
+            summary: Some("Test summary 1".to_string()),
+            priority: Some(1),
+            created: "2025-01-01T00:00:00+09:00".to_string(),
+            updated: "2025-01-02T00:00:00+09:00".to_string(),
+            is_completed: true,
+            category: Some("tech".to_string()),
+        };
+
+        let front_matter2 = ObsidianFrontMatter {
+            title: "Test Article 2".to_string(),
+            tags: Some(vec!["test2".to_string()]),
+            summary: Some("Test summary 2".to_string()),
+            priority: Some(2),
+            created: "2025-01-03T00:00:00+09:00".to_string(),
+            updated: "2025-01-04T00:00:00+09:00".to_string(),
+            is_completed: true,
+            category: Some("blog".to_string()),
+        };
+
+        let valid_files = vec![(file_path1, front_matter1), (file_path2, front_matter2)];
+        let result = build_file_mapping(&config, &valid_files);
+
+        assert!(result.is_ok());
+        let mapping = result.unwrap();
+        // 相対パス全体をキーとするため、衝突せずに2つのエントリが存在
+        assert_eq!(mapping.len(), 2);
+        assert!(mapping.contains_key("dir1/test"));
+        assert!(mapping.contains_key("dir2/test"));
+    }
+
+    #[rstest]
+    fn test_build_file_mapping_url_normalization() {
+        use crate::models::ObsidianFrontMatter;
+
+        let temp_dir = TempDir::new().unwrap();
+        let config = Config {
+            obsidian_dir: temp_dir.path().to_path_buf(),
+            output_dir: PathBuf::from("output"),
+        };
+
+        let file_path = temp_dir.path().join("sub").join("dir").join("test.md");
+        let front_matter = ObsidianFrontMatter {
+            title: "URL Test".to_string(),
+            tags: None,
+            summary: None,
+            priority: None,
+            created: "2025-01-01T00:00:00+09:00".to_string(),
+            updated: "2025-01-01T00:00:00+09:00".to_string(),
+            is_completed: true,
+            category: None,
+        };
+
+        let valid_files = vec![(file_path, front_matter)];
+        let result = build_file_mapping(&config, &valid_files);
+
+        assert!(result.is_ok());
+        let mapping = result.unwrap();
+        let file_info = mapping.get("sub/dir/test").unwrap();
+        
+        // URL正規化が適用されているかチェック（Unix形式のスラッシュ）
+        assert_eq!(file_info.html_path, "/sub/dir/test.html");
+        assert_eq!(file_info.relative_path, "sub/dir/test");
     }
 }
