@@ -11,34 +11,41 @@ pub use error::{ObsidianError, Result};
 pub use models::{ObsidianFrontMatter, OutputFrontMatter};
 
 use std::fs;
+use std::collections::HashMap;
+use converter::{FileInfo, FileMapping};
 
 /// メイン実行関数
 pub async fn run_main(config: Config) -> Result<()> {
-    // 出力ディレクトリの作成
     fs::create_dir_all(&config.output_dir)?;
 
-    // Obsidianファイルをスキャン
     let markdown_files = scanner::scan_obsidian_files(&config.obsidian_dir)?;
     println!("Found {} markdown files", markdown_files.len());
 
-    // is_completed: true のファイルのみフィルタリングして処理
-    let processed_files: Result<Vec<_>> = markdown_files
+    // Phase 1: ファイルマッピングを構築
+    let valid_files: Vec<_> = markdown_files
         .into_iter()
         .filter_map(|file_path| {
             match parser::parse_obsidian_file(&file_path) {
                 Ok(Some(front_matter)) if front_matter.is_completed => {
-                    Some(Ok((file_path, front_matter)))
+                    Some((file_path, front_matter))
                 }
-                Ok(_) => None, // フロントマターなし、またはis_completed: false
+                Ok(_) => None,
                 Err(e) => {
                     eprintln!("Error processing {}: {}", file_path.display(), e);
                     None
                 }
             }
         })
-        .map(|result| result.and_then(|(file_path, front_matter)| 
-            process_obsidian_file(&config, file_path, front_matter)
-        ))
+        .collect();
+
+    let file_mapping = build_file_mapping(&config, &valid_files)?;
+
+    // Phase 2: リンク解決を含む実際のファイル処理
+    let processed_files: Result<Vec<_>> = valid_files
+        .into_iter()
+        .map(|(file_path, front_matter)| {
+            process_obsidian_file(&config, file_path, front_matter, &file_mapping)
+        })
         .collect();
 
     let processed_files = processed_files?;
@@ -48,17 +55,57 @@ pub async fn run_main(config: Config) -> Result<()> {
     Ok(())
 }
 
+/// 全ファイルからリンク解決用のマッピングを構築
+fn build_file_mapping(
+    config: &Config,
+    valid_files: &[(std::path::PathBuf, ObsidianFrontMatter)],
+) -> Result<FileMapping> {
+    // 予めサイズを確保してパフォーマンスを向上
+    let mut mapping = HashMap::with_capacity(valid_files.len());
+
+    for (file_path, front_matter) in valid_files {
+        let relative_path = file_path.strip_prefix(&config.obsidian_dir).map_err(|_| {
+            ObsidianError::PathError(format!(
+                "Failed to strip prefix from {}",
+                file_path.display()
+            ))
+        })?;
+
+        let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
+        
+        let file_name = file_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| {
+                ObsidianError::PathError(format!("Invalid file name: {}", file_path.display()))
+            })?;
+
+        let html_path = format!("/{}", relative_path.with_extension("html").display());
+
+        let file_info = FileInfo {
+            relative_path: relative_path.with_extension("").display().to_string(),
+            slug,
+            html_path,
+        };
+
+        mapping.insert(file_name.to_string(), file_info);
+    }
+
+    Ok(mapping)
+}
+
 /// 単一のObsidianファイルを処理してHTMLファイルを生成
 fn process_obsidian_file(
     config: &Config,
     file_path: std::path::PathBuf,
     front_matter: ObsidianFrontMatter,
+    file_mapping: &FileMapping,
 ) -> Result<OutputFrontMatter> {
     let markdown_content = fs::read_to_string(&file_path)?;
     let markdown_body = extract_markdown_body(&markdown_content);
-    let markdown_with_links = converter::convert_obsidian_links(&markdown_body);
+    let markdown_with_links = converter::convert_obsidian_links(&markdown_body, file_mapping);
     let html_body = converter::convert_markdown_to_html(&markdown_with_links)?;
-    
+
     let relative_path = file_path.strip_prefix(&config.obsidian_dir).map_err(|_| {
         ObsidianError::PathError(format!(
             "Failed to strip prefix from {}",
@@ -93,7 +140,7 @@ fn process_obsidian_file(
         output_file_path.display(),
         slug
     );
-    
+
     Ok(output_fm)
 }
 
