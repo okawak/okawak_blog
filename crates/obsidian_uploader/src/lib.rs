@@ -14,14 +14,12 @@ use converter::{FileInfo, FileMapping};
 use std::collections::HashMap;
 use std::fs;
 
-/// メイン実行関数
 pub async fn run_main(config: Config) -> Result<()> {
     fs::create_dir_all(&config.output_dir)?;
 
     let markdown_files = scanner::scan_obsidian_files(&config.obsidian_dir)?;
     println!("Found {} markdown files", markdown_files.len());
 
-    // Phase 1: ファイルマッピングを構築
     let valid_files: Vec<_> = markdown_files
         .into_iter()
         .filter_map(|file_path| match parser::parse_obsidian_file(&file_path) {
@@ -36,7 +34,6 @@ pub async fn run_main(config: Config) -> Result<()> {
 
     let file_mapping = build_file_mapping(&config, &valid_files)?;
 
-    // Phase 2: リンク解決を含む実際のファイル処理
     let processed_files: Result<Vec<_>> = valid_files
         .into_iter()
         .map(|(file_path, front_matter)| {
@@ -51,12 +48,10 @@ pub async fn run_main(config: Config) -> Result<()> {
     Ok(())
 }
 
-/// 全ファイルからリンク解決用のマッピングを構築
 fn build_file_mapping(
     config: &Config,
     valid_files: &[(std::path::PathBuf, ObsidianFrontMatter)],
 ) -> Result<FileMapping> {
-    // 予めサイズを確保してパフォーマンスを向上
     let mut mapping = HashMap::with_capacity(valid_files.len());
 
     for (file_path, front_matter) in valid_files {
@@ -90,7 +85,6 @@ fn build_file_mapping(
     Ok(mapping)
 }
 
-/// 単一のObsidianファイルを処理してHTMLファイルを生成
 fn process_obsidian_file(
     config: &Config,
     file_path: std::path::PathBuf,
@@ -140,7 +134,6 @@ fn process_obsidian_file(
     Ok(output_fm)
 }
 
-/// Markdownファイルの内容からYAMLフロントマターを除去してボディ部分を抽出
 fn extract_markdown_body(content: &str) -> String {
     let content = content.trim_start();
 
@@ -165,6 +158,8 @@ fn extract_markdown_body(content: &str) -> String {
 mod tests {
     use super::*;
     use rstest::*;
+    use tempfile::TempDir;
+    use std::path::PathBuf;
 
     #[rstest]
     #[case::with_frontmatter(
@@ -178,8 +173,63 @@ mod tests {
     )]
     #[case::empty_body("---\ntitle: Test\n---\n", "")]
     #[case::whitespace_handling("   ---\ntitle: Test\n---\n\n# Content", "\n# Content")]
+    #[case::multiple_frontmatter_separators(
+        "---\ntitle: Test\n---\n# Section\n---\nMore content",
+        "# Section\n---\nMore content"
+    )]
+    #[case::frontmatter_with_complex_yaml(
+        "---\ntitle: \"Complex: Title\"\ntags: [\"tag1\", \"tag2\"]\n---\n## Heading",
+        "## Heading"
+    )]
     fn test_extract_markdown_body(#[case] input: &str, #[case] expected: &str) {
         let result = extract_markdown_body(input);
         assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    fn test_build_file_mapping_success() {
+        use crate::models::ObsidianFrontMatter;
+
+        let temp_dir = TempDir::new().unwrap();
+        let config = Config {
+            obsidian_dir: temp_dir.path().to_path_buf(),
+            output_dir: PathBuf::from("output"),
+        };
+
+        let file_path = temp_dir.path().join("test.md");
+        let front_matter = ObsidianFrontMatter {
+            title: "Test Article".to_string(),
+            tags: Some(vec!["test".to_string()]),
+            summary: Some("Test summary".to_string()),
+            priority: Some(1),
+            created: "2025-01-01T00:00:00+09:00".to_string(),
+            updated: "2025-01-02T00:00:00+09:00".to_string(),
+            is_completed: true,
+            category: Some("tech".to_string()),
+        };
+
+        let valid_files = vec![(file_path, front_matter)];
+        let result = build_file_mapping(&config, &valid_files);
+
+        assert!(result.is_ok());
+        let mapping = result.unwrap();
+        assert_eq!(mapping.len(), 1);
+        assert!(mapping.contains_key("test"));
+    }
+
+    #[rstest]
+    fn test_build_file_mapping_empty() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = Config {
+            obsidian_dir: temp_dir.path().to_path_buf(),
+            output_dir: PathBuf::from("output"),
+        };
+
+        let valid_files = vec![];
+        let result = build_file_mapping(&config, &valid_files);
+
+        assert!(result.is_ok());
+        let mapping = result.unwrap();
+        assert_eq!(mapping.len(), 0);
     }
 }

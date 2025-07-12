@@ -18,21 +18,19 @@ pub struct FileInfo {
 /// ファイル名（拡張子なし）からFileInfoへのマッピング
 pub type FileMapping = HashMap<String, FileInfo>;
 
-/// Markdownコンテンツを観察可能なHTMLに変換する
+/// MarkdownコンテンツをHTMLに変換し、KaTeX数式処理を適用する
 pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     let mut options = Options::empty();
-    options.insert(Options::ENABLE_TABLES); // 表を有効
-    options.insert(Options::ENABLE_FOOTNOTES); // 脚注を有効
-    options.insert(Options::ENABLE_STRIKETHROUGH); // 打ち消し線を有効
-    options.insert(Options::ENABLE_TASKLISTS); // タスクリストを有効
-    options.insert(Options::ENABLE_SMART_PUNCTUATION); // スマート引用符を有効
+    options.insert(Options::ENABLE_TABLES); // 表要素の解析を有効化
+    options.insert(Options::ENABLE_FOOTNOTES); // 脚注記法の解析を有効化
+    options.insert(Options::ENABLE_STRIKETHROUGH); // 打ち消し線記法の解析を有効化
+    options.insert(Options::ENABLE_TASKLISTS); // チェックボックス付きタスクリストの解析を有効化
+    options.insert(Options::ENABLE_SMART_PUNCTUATION); // クォート記号の自動変換を有効化
 
     let parser = Parser::new_ext(markdown_content, options);
-    // HTMLの出力サイズを予め確保してパフォーマンスを向上
     let mut html_output = String::with_capacity(markdown_content.len() * 2);
     html::push_html(&mut html_output, parser);
 
-    // KaTeX数式サポートを追加
     let html_with_katex = process_katex_math(&html_output);
 
     Ok(html_with_katex)
@@ -40,7 +38,6 @@ pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
 
 /// KaTeX数式処理：$...$（インライン）と$$...$$（ブロック）を検出してKaTeXクラスを追加
 fn process_katex_math(html_content: &str) -> String {
-    // 容量を予め確保してパフォーマンスを向上
     let mut result = String::with_capacity(html_content.len() + 200);
     result.push_str(html_content);
 
