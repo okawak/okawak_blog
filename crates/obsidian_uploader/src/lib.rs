@@ -56,10 +56,7 @@ fn normalize_path_for_url(path: &Path) -> String {
 }
 
 /// 相対パスを取得する共通処理
-fn get_relative_path<'a>(
-    file_path: &'a Path,
-    base_dir: &Path,
-) -> Result<&'a Path> {
+fn get_relative_path<'a>(file_path: &'a Path, base_dir: &Path) -> Result<&'a Path> {
     file_path.strip_prefix(base_dir).map_err(|_| {
         ObsidianError::PathError(format!(
             "Failed to strip prefix from {}",
@@ -80,7 +77,10 @@ fn build_file_mapping(
 
         let relative_path_no_ext = relative_path.with_extension("");
         let mapping_key = normalize_path_for_url(&relative_path_no_ext);
-        let html_path = format!("/{}", normalize_path_for_url(&relative_path.with_extension("html")));
+        let html_path = format!(
+            "/{}",
+            normalize_path_for_url(&relative_path.with_extension("html"))
+        );
 
         let file_info = FileInfo {
             relative_path: mapping_key.clone(),
@@ -106,7 +106,7 @@ fn process_obsidian_file(
     let html_body = converter::convert_markdown_to_html(&markdown_with_links)?;
 
     let relative_path = get_relative_path(&file_path, &config.obsidian_dir)?;
-    
+
     // シンプルにslugを再生成（パフォーマンスよりもシンプルさを重視）
     let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
 
