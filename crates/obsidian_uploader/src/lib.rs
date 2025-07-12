@@ -158,8 +158,8 @@ fn extract_markdown_body(content: &str) -> String {
 mod tests {
     use super::*;
     use rstest::*;
-    use tempfile::TempDir;
     use std::path::PathBuf;
+    use tempfile::TempDir;
 
     #[rstest]
     #[case::with_frontmatter(
