@@ -119,7 +119,7 @@ fn process_obsidian_file(
         let path_str = key_path_buf.to_string_lossy();
         path_str.replace(std::path::MAIN_SEPARATOR, "/")
     };
-    
+
     let slug = file_mapping
         .get(&mapping_key)
         .map(|file_info| file_info.slug.clone())
@@ -268,7 +268,7 @@ mod tests {
         // 同じファイル名だが異なるディレクトリのファイル
         let file_path1 = temp_dir.path().join("dir1").join("test.md");
         let file_path2 = temp_dir.path().join("dir2").join("test.md");
-        
+
         let front_matter1 = ObsidianFrontMatter {
             title: "Test Article 1".to_string(),
             tags: Some(vec!["test1".to_string()]),
@@ -330,7 +330,7 @@ mod tests {
         assert!(result.is_ok());
         let mapping = result.unwrap();
         let file_info = mapping.get("sub/dir/test").unwrap();
-        
+
         // URL正規化が適用されているかチェック（Unix形式のスラッシュ）
         assert_eq!(file_info.html_path, "/sub/dir/test.html");
         assert_eq!(file_info.relative_path, "sub/dir/test");
