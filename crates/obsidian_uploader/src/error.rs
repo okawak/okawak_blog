@@ -24,4 +24,7 @@ pub enum ObsidianError {
 
     #[error("Failed to traverse directory")]
     WalkDirError(#[from] walkdir::Error),
+
+    #[error("Network request failed: {0}")]
+    NetworkError(String),
 }
