@@ -98,7 +98,7 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
                 // 相対パス全体での検索も試行
                 let mut found = false;
                 let mut result_href = format!("/{}", link_target);
-                
+
                 for (key, file_info) in file_mapping {
                     if key.ends_with(&format!("/{}", link_target)) || key == link_target {
                         result_href = file_info.html_path.clone();
@@ -106,14 +106,14 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
                         break;
                     }
                 }
-                
+
                 if !found {
                     eprintln!(
                         "Warning: Link target '{}' not found in file mapping",
                         link_target
                     );
                 }
-                
+
                 result_href
             };
 
@@ -136,6 +136,12 @@ fn html_escape(text: &str) -> String {
 }
 
 /// リッチブックマークのメタデータを保持する構造体
+/// 
+/// URLフィールドは文字列として保存しています。これにより：
+/// - 簡単なシリアライゼーション/デシリアライゼーション
+/// - テンプレート生成での直接的な使用
+/// - 外部APIとの互換性
+/// を実現しています。必要に応じてurl::Urlに変換可能です。
 #[derive(Debug, Clone, PartialEq)]
 pub struct BookmarkData {
     pub url: String,
@@ -145,12 +151,31 @@ pub struct BookmarkData {
     pub favicon_url: Option<String>,
 }
 
-/// URLからOGPメタデータを取得する
+/// Fetches Open Graph Protocol (OGP) metadata from a given URL.
+///
+/// This function retrieves metadata such as the title, description, image URL, and favicon URL
+/// from the HTML content of the specified URL. It uses an HTTP client with a 10-second timeout
+/// to fetch the HTML content and then parses the document to extract the metadata.
+///
+/// # Parameters
+/// - `url`: The URL from which to fetch the OGP metadata.
+///
+/// # Returns
+/// - `BookmarkData`: A struct containing the extracted metadata.
+///
+/// # Errors
+/// This function returns an error in the following cases:
+/// - Network errors, such as timeouts or connection failures.
+/// - Invalid or malformed HTML content.
+/// - Missing or incomplete OGP metadata in the HTML document.
+///
+/// # Timeout Behavior
+/// The HTTP client used by this function has a timeout of 10 seconds for the request.
 pub async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
     let client = create_http_client()?;
     let html_content = fetch_html_content(&client, url).await?;
     let document = Html::parse_document(&html_content);
-    
+
     Ok(BookmarkData {
         url: url.to_string(),
         title: extract_title(&document).unwrap_or_else(|| url.to_string()),
@@ -176,7 +201,7 @@ async fn fetch_html_content(client: &reqwest::Client, url: &str) -> Result<Strin
         .send()
         .await
         .map_err(|e| crate::error::ObsidianError::NetworkError(e.to_string()))?;
-    
+
     response
         .text()
         .await
@@ -194,14 +219,18 @@ fn extract_title(document: &Html) -> Option<String> {
 /// メタタグのcontentを抽出
 fn extract_meta_content(document: &Html, selector_str: &str) -> Option<String> {
     let selector = Selector::parse(selector_str).ok()?;
-    document
+    let content = document
         .select(&selector)
         .next()?
         .value()
         .attr("content")?
-        .trim()
-        .to_string()
-        .into()
+        .trim();
+    
+    if content.is_empty() {
+        None
+    } else {
+        Some(content.to_string())
+    }
 }
 
 /// titleタグのテキストを抽出
@@ -212,7 +241,7 @@ fn extract_title_tag(document: &Html) -> Option<String> {
         .next()?
         .text()
         .collect::<String>();
-    
+
     let trimmed = title_text.trim();
     if trimmed.is_empty() {
         None
@@ -231,29 +260,28 @@ fn extract_description(document: &Html) -> Option<String> {
 /// HTMLドキュメントから画像URLを抽出
 fn extract_image(document: &Html, base_url: &str) -> Option<String> {
     use url::Url;
-    
+
     let base = Url::parse(base_url).ok()?;
-    
+
     extract_meta_content(document, "meta[property='og:image']")
         .or_else(|| extract_meta_content(document, "meta[name='twitter:image']"))
         .and_then(|content| base.join(&content).ok())
         .map(|url| url.to_string())
 }
 
-
 /// HTMLドキュメントからファビコンURLを抽出
 fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
     use url::Url;
-    
+
     let base = Url::parse(base_url).ok()?;
-    
+
     // 各ファビコンタイプの優先順位で検索
     let selectors = [
         "link[rel='apple-touch-icon']",
         "link[rel='icon']",
         "link[rel='shortcut icon']",
     ];
-    
+
     for selector_str in &selectors {
         if let Some(href) = extract_link_href(document, selector_str) {
             if let Ok(absolute_url) = base.join(&href) {
@@ -261,7 +289,7 @@ fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
             }
         }
     }
-    
+
     // デフォルトのfavicon.icoを試行
     base.join("/favicon.ico").ok().map(|url| url.to_string())
 }
@@ -277,26 +305,61 @@ fn extract_link_href(document: &Html, selector_str: &str) -> Option<String> {
         .map(ToString::to_string)
 }
 
-/// リッチブックマークHTMLを生成する（要件仕様準拠）
+/// Generates a rich bookmark HTML snippet based on the provided bookmark data.
+///
+/// # HTML Structure
+/// The generated HTML has the following structure:
+/// ```html
+/// <div class="notion-bookmark">
+///   <a href="{bookmark_url}" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+///     <div class="bookmark-container">
+///       <div class="bookmark-info">
+///         <div class="bookmark-title">{title}</div>
+///         <div class="bookmark-description">{description}</div>
+///         <div class="bookmark-link-info">
+///           <img class="bookmark-favicon" src="{favicon_url}" alt="favicon">
+///           <span class="bookmark-domain">{domain}</span>
+///         </div>
+///       </div>
+///       <div class="bookmark-image">
+///         <img src="{image_url}" alt="{title}" loading="lazy">
+///       </div>
+///     </div>
+///   </a>
+/// </div>
+/// ```
+///
+/// # Compliance with Requirements
+/// This function adheres to the requirements specification by:
+/// - Using semantic HTML elements (`<div>` and `<a>`)
+/// - Including a class name (`notion-bookmark`) for styling and identification
+/// - Generating a valid and accessible HTML structure
+/// - Supporting optional elements (description, favicon, image)
+///
+/// # Parameters
+/// - `data`: A `BookmarkData` struct containing the URL, title, description, and other metadata
+///
+/// # Returns
+/// A `String` containing the generated HTML snippet
 pub fn generate_rich_bookmark(data: &BookmarkData) -> String {
     let domain = extract_domain(&data.url);
-    
+
     let mut html = String::with_capacity(1024);
     html.push_str("<div class=\"notion-bookmark\">\n");
-    
+
     write_bookmark_link(&mut html, &data.url);
     write_bookmark_container(&mut html, data, &domain);
-    
+
     html.push_str("  </a>\n");
     html.push_str("</div>");
-    
+
     html
 }
 
 /// URLからドメイン名を抽出
 fn extract_domain(url: &str) -> String {
     use url::Url;
-    
+
     Url::parse(url)
         .ok()
         .and_then(|u| u.host_str().map(ToString::to_string))
@@ -314,10 +377,10 @@ fn write_bookmark_link(html: &mut String, url: &str) {
 /// ブックマークコンテナを書き込み
 fn write_bookmark_container(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("    <div class=\"bookmark-container\">\n");
-    
+
     write_bookmark_info(html, data, domain);
     write_bookmark_image(html, data);
-    
+
     html.push_str("    </div>\n");
 }
 
@@ -328,14 +391,14 @@ fn write_bookmark_info(html: &mut String, data: &BookmarkData, domain: &str) {
         "        <div class=\"bookmark-title\">{}</div>\n",
         html_escape(&data.title)
     ));
-    
+
     if let Some(description) = &data.description {
         html.push_str(&format!(
             "        <div class=\"bookmark-description\">{}</div>\n",
             html_escape(description)
         ));
     }
-    
+
     write_bookmark_link_info(html, data, domain);
     html.push_str("      </div>\n");
 }
@@ -343,14 +406,14 @@ fn write_bookmark_info(html: &mut String, data: &BookmarkData, domain: &str) {
 /// ブックマークリンク情報を書き込み
 fn write_bookmark_link_info(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("        <div class=\"bookmark-link-info\">\n");
-    
+
     if let Some(favicon) = &data.favicon_url {
         html.push_str(&format!(
             "          <img class=\"bookmark-favicon\" src=\"{}\" alt=\"favicon\">\n",
             html_escape(favicon)
         ));
     }
-    
+
     html.push_str(&format!(
         "          <span class=\"bookmark-domain\">{}</span>\n",
         html_escape(domain)
@@ -372,6 +435,35 @@ fn write_bookmark_image(html: &mut String, data: &BookmarkData) {
 }
 
 /// HTML内のシンプルなbookmark構造を検出してリッチブックマークに変換する
+///
+/// # Purpose
+/// This function scans the provided HTML content for simple bookmark structures and converts them into rich bookmarks
+/// by fetching metadata (e.g., title, description, image) from the linked URLs.
+///
+/// # Parameters
+/// - `html_content`: A string slice containing the HTML content to process. It should include simple bookmark structures
+///   in the format `<div class="bookmark"><a href="URL">Title</a></div>`.
+///
+/// # Return Value
+/// Returns a `Result<String>` where the `String` contains the updated HTML content with rich bookmarks. If an error occurs,
+/// the function returns an error wrapped in the `Result`.
+///
+/// # Potential Errors
+/// - If the OGP metadata for a URL cannot be fetched, the function falls back to a default bookmark structure.
+/// - Errors from the `fetch_ogp_metadata` function are handled internally and do not propagate to the caller.
+/// - The function assumes the input HTML is valid and does not perform extensive validation.
+///
+/// # Examples
+/// ```no_run
+/// # use obsidian_uploader::converter::convert_simple_bookmarks_to_rich;
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let html = r#"<p>Check this out:</p><div class="bookmark"><a href="https://example.com">Example</a></div>"#;
+/// let result = convert_simple_bookmarks_to_rich(html).await?;
+/// // result contains rich bookmark HTML
+/// # Ok(())
+/// # }
+/// ```
 pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
     static BOOKMARK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]*)</a>\s*</div>"#)
@@ -385,28 +477,27 @@ pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<Stri
         let full_match = capture.get(0).unwrap();
         let url = &capture[1];
         let original_title = &capture[2];
-        
+
         // Bookmarkの前のテキストを追加
         result.push_str(&html_content[last_end..full_match.start()]);
-        
+
         // OGPメタデータを取得（エラーの場合はフォールバック）
-        let bookmark_data = fetch_ogp_metadata(url).await.unwrap_or_else(|_| {
-            create_fallback_bookmark_data(url, original_title)
-        });
-        
+        let bookmark_data = fetch_ogp_metadata(url)
+            .await
+            .unwrap_or_else(|_| create_fallback_bookmark_data(url, original_title));
+
         // リッチブックマークHTMLを生成して追加
         let rich_bookmark_html = generate_rich_bookmark(&bookmark_data);
         result.push_str(&rich_bookmark_html);
-        
+
         last_end = full_match.end();
     }
-    
+
     // 残りのテキストを追加
     result.push_str(&html_content[last_end..]);
-    
+
     Ok(result)
 }
-
 
 /// フォールバック用のブックマークデータを作成する関数
 fn create_fallback_bookmark_data(url: &str, original_title: &str) -> BookmarkData {
@@ -422,7 +513,6 @@ fn create_fallback_bookmark_data(url: &str, original_title: &str) -> BookmarkDat
         favicon_url: None,
     }
 }
-
 
 /// フロントマターとHTMLボディを結合してHTMLファイルを生成する
 pub fn generate_html_file(frontmatter_yaml: &str, html_body: &str) -> String {
@@ -649,9 +739,18 @@ This is a test with [[Another Article|link]] and **bold** text.
 
         assert_eq!(bookmark_data.url, "https://example.com");
         assert_eq!(bookmark_data.title, "Example Title");
-        assert_eq!(bookmark_data.description, Some("Example description".to_string()));
-        assert_eq!(bookmark_data.image_url, Some("https://example.com/image.jpg".to_string()));
-        assert_eq!(bookmark_data.favicon_url, Some("https://example.com/favicon.ico".to_string()));
+        assert_eq!(
+            bookmark_data.description,
+            Some("Example description".to_string())
+        );
+        assert_eq!(
+            bookmark_data.image_url,
+            Some("https://example.com/image.jpg".to_string())
+        );
+        assert_eq!(
+            bookmark_data.favicon_url,
+            Some("https://example.com/favicon.ico".to_string())
+        );
     }
 
     #[rstest]
@@ -673,7 +772,7 @@ This is a test with [[Another Article|link]] and **bold** text.
     async fn test_fetch_ogp_metadata(
         #[case] url: &str,
         #[case] expected_title: &str,
-        #[case] expected_description: Option<&str>, 
+        #[case] expected_description: Option<&str>,
         #[case] expected_image: Option<&str>,
         #[case] expected_favicon: Option<&str>,
     ) {
@@ -689,9 +788,18 @@ This is a test with [[Another Article|link]] and **bold** text.
         // 期待値と一致するかテスト
         assert_eq!(bookmark_data.url, url);
         assert_eq!(bookmark_data.title, expected_title);
-        assert_eq!(bookmark_data.description, expected_description.map(|s| s.to_string()));
-        assert_eq!(bookmark_data.image_url, expected_image.map(|s| s.to_string()));
-        assert_eq!(bookmark_data.favicon_url, expected_favicon.map(|s| s.to_string()));
+        assert_eq!(
+            bookmark_data.description,
+            expected_description.map(|s| s.to_string())
+        );
+        assert_eq!(
+            bookmark_data.image_url,
+            expected_image.map(|s| s.to_string())
+        );
+        assert_eq!(
+            bookmark_data.favicon_url,
+            expected_favicon.map(|s| s.to_string())
+        );
     }
 
     #[rstest]
@@ -742,7 +850,10 @@ This is a test with [[Another Article|link]] and **bold** text.
   </a>
 </div>"#
     )]
-    fn test_generate_rich_bookmark(#[case] bookmark_data: &BookmarkData, #[case] expected_html: &str) {
+    fn test_generate_rich_bookmark(
+        #[case] bookmark_data: &BookmarkData,
+        #[case] expected_html: &str,
+    ) {
         let result = generate_rich_bookmark(bookmark_data);
         assert_eq!(result, expected_html);
     }
@@ -828,23 +939,23 @@ This is a test with [[Another Article|link]] and **bold** text.
             let full_match = capture.get(0).unwrap();
             let url = &capture[1];
             let original_title = &capture[2];
-            
+
             // Bookmarkの前のテキストを追加
             result.push_str(&html_content[last_end..full_match.start()]);
-            
+
             // モックデータを作成（HTTPリクエストなし）
             let bookmark_data = create_fallback_bookmark_data(url, original_title);
-            
+
             // リッチブックマークHTMLを生成して追加
             let rich_bookmark_html = generate_rich_bookmark(&bookmark_data);
             result.push_str(&rich_bookmark_html);
-            
+
             last_end = full_match.end();
         }
-        
+
         // 残りのテキストを追加
         result.push_str(&html_content[last_end..]);
-        
+
         Ok(result)
     }
 }

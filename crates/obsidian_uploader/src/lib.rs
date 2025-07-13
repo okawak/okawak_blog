@@ -102,12 +102,15 @@ async fn process_obsidian_file(
     let markdown_body = extract_markdown_body(&markdown_content);
     let markdown_with_links = converter::convert_obsidian_links(&markdown_body, file_mapping);
     let html_body = converter::convert_markdown_to_html(&markdown_with_links)?;
-    
+
     // HTMLを生成後、シンプルなbookmarkをリッチブックマークに変換
     let html_with_rich_bookmarks = converter::convert_simple_bookmarks_to_rich(&html_body)
         .await
         .unwrap_or_else(|e| {
-            eprintln!("Warning: Failed to convert simple bookmarks to rich bookmarks: {}", e);
+            eprintln!(
+                "Warning: Failed to convert simple bookmarks to rich bookmarks: {}",
+                e
+            );
             html_body
         });
 
