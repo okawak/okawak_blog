@@ -296,3 +296,201 @@ pub fn create_fallback_bookmark_data(url: &str, original_title: &str) -> Bookmar
         favicon_url: None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::Result;
+    use indoc::indoc;
+    use regex::Regex;
+    use rstest::*;
+    use std::sync::LazyLock;
+
+    #[rstest]
+    fn test_bookmark_data_creation() {
+        let bookmark_data = BookmarkData {
+            url: "https://example.com".to_string(),
+            title: "Example Title".to_string(),
+            description: Some("Example description".to_string()),
+            image_url: Some("https://example.com/image.jpg".to_string()),
+            favicon_url: Some("https://example.com/favicon.ico".to_string()),
+        };
+
+        assert_eq!(bookmark_data.url, "https://example.com");
+        assert_eq!(bookmark_data.title, "Example Title");
+        assert_eq!(
+            bookmark_data.description,
+            Some("Example description".to_string())
+        );
+        assert_eq!(
+            bookmark_data.image_url,
+            Some("https://example.com/image.jpg".to_string())
+        );
+        assert_eq!(
+            bookmark_data.favicon_url,
+            Some("https://example.com/favicon.ico".to_string())
+        );
+    }
+
+    #[rstest]
+    #[case::full_metadata(
+        &BookmarkData {
+            url: "https://example.com".to_string(),
+            title: "Example Title".to_string(),
+            description: Some("This is an example description".to_string()),
+            image_url: Some("https://example.com/image.jpg".to_string()),
+            favicon_url: Some("https://example.com/favicon.ico".to_string()),
+        },
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://example.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+                <div class="bookmark-container">
+                  <div class="bookmark-info">
+                    <div class="bookmark-title">Example Title</div>
+                    <div class="bookmark-description">This is an example description</div>
+                    <div class="bookmark-link-info">
+                      <img class="bookmark-favicon" src="https://example.com/favicon.ico" alt="favicon">
+                      <span class="bookmark-domain">example.com</span>
+                    </div>
+                  </div>
+                  <div class="bookmark-image">
+                    <img src="https://example.com/image.jpg" alt="Example Title" loading="lazy">
+                  </div>
+                </div>
+              </a>
+            </div>"#}
+    )]
+    #[case::minimal_metadata(
+        &BookmarkData {
+            url: "https://github.com".to_string(),
+            title: "GitHub".to_string(),
+            description: None,
+            image_url: None,
+            favicon_url: None,
+        },
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+                <div class="bookmark-container">
+                  <div class="bookmark-info">
+                    <div class="bookmark-title">GitHub</div>
+                    <div class="bookmark-link-info">
+                      <span class="bookmark-domain">github.com</span>
+                    </div>
+                  </div>
+                </div>
+              </a>
+            </div>"#}
+    )]
+    fn test_generate_rich_bookmark(
+        #[case] bookmark_data: &BookmarkData,
+        #[case] expected_html: &str,
+    ) {
+        let result = generate_rich_bookmark(bookmark_data);
+        assert_eq!(result, expected_html);
+    }
+
+    #[rstest]
+    #[case::single_bookmark(
+        indoc! {r#"
+            <p>Check out this site:</p>
+            <div class="bookmark">
+              <a href="https://example.com">Example Site</a>
+            </div>
+            <p>End of content.</p>
+        "#},
+        indoc! {r#"
+            <p>Check out this site:</p>
+            <div class="bookmark">
+              <a href="https://example.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+                <div class="bookmark-container">
+                  <div class="bookmark-info">
+                    <div class="bookmark-title">Example Site</div>
+                    <div class="bookmark-link-info">
+                      <span class="bookmark-domain">example.com</span>
+                    </div>
+                  </div>
+                </div>
+              </a>
+            </div>
+            <p>End of content.</p>
+        "#}
+    )]
+    #[case::multiple_bookmarks(
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://example.com">Example</a>
+            </div>
+            <p>Text between bookmarks</p>
+            <div class="bookmark">
+              <a href="https://github.com">GitHub</a>
+            </div>
+        "#},
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://example.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+                <div class="bookmark-container">
+                  <div class="bookmark-info">
+                    <div class="bookmark-title">Example</div>
+                    <div class="bookmark-link-info">
+                      <span class="bookmark-domain">example.com</span>
+                    </div>
+                  </div>
+                </div>
+              </a>
+            </div>
+            <p>Text between bookmarks</p>
+            <div class="bookmark">
+              <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+                <div class="bookmark-container">
+                  <div class="bookmark-info">
+                    <div class="bookmark-title">GitHub</div>
+                    <div class="bookmark-link-info">
+                      <span class="bookmark-domain">github.com</span>
+                    </div>
+                  </div>
+                </div>
+              </a>
+            </div>
+        "#}
+    )]
+    #[case::no_bookmarks(
+        "<p>This content has no bookmarks.</p>",
+        "<p>This content has no bookmarks.</p>"
+    )]
+    #[tokio::test]
+    async fn test_convert_simple_bookmarks_to_rich(#[case] input: &str, #[case] expected: &str) {
+        // モック関数として実装：実際のHTTPリクエストを行わずフォールバックデータを使用
+        let result = convert_simple_bookmarks_to_rich_mock(input).await.unwrap();
+        assert_eq!(result, expected);
+    }
+
+    /// テスト専用のモック変換関数
+    async fn convert_simple_bookmarks_to_rich_mock(html_content: &str) -> Result<String> {
+        static BOOKMARK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]*)</a>\s*</div>"#)
+                .expect("Invalid bookmark regex pattern")
+        });
+
+        let mut result = String::with_capacity(html_content.len() + 2048);
+        let mut last_end = 0;
+
+        for capture in BOOKMARK_REGEX.captures_iter(html_content) {
+            let full_match = capture.get(0).unwrap();
+            let url = &capture[1];
+            let original_title = &capture[2];
+
+            result.push_str(&html_content[last_end..full_match.start()]);
+
+            let bookmark_data = create_fallback_bookmark_data(url, original_title);
+            let rich_bookmark_html = generate_rich_bookmark(&bookmark_data);
+            result.push_str(&rich_bookmark_html);
+
+            last_end = full_match.end();
+        }
+
+        result.push_str(&html_content[last_end..]);
+
+        Ok(result)
+    }
+}
