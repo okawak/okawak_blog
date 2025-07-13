@@ -136,7 +136,7 @@ fn html_escape(text: &str) -> String {
 }
 
 /// リッチブックマークのメタデータを保持する構造体
-/// 
+///
 /// URLフィールドは文字列として保存しています。これにより：
 /// - 簡単なシリアライゼーション/デシリアライゼーション
 /// - テンプレート生成での直接的な使用
@@ -225,7 +225,7 @@ fn extract_meta_content(document: &Html, selector_str: &str) -> Option<String> {
         .value()
         .attr("content")?
         .trim();
-    
+
     if content.is_empty() {
         None
     } else {
