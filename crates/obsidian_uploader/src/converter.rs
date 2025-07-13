@@ -1,4 +1,5 @@
-use crate::error::Result;
+use crate::error::{ObsidianError, Result};
+use indoc::indoc;
 use pulldown_cmark::{Options, Parser, html};
 use regex::Regex;
 use scraper::{Html, Selector};
@@ -187,11 +188,17 @@ pub async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
 
 /// HTTPクライアントを作成
 fn create_http_client() -> Result<reqwest::Client> {
+    let user_agent = format!(
+        "{}/{}", 
+        env!("CARGO_PKG_NAME"), 
+        env!("CARGO_PKG_VERSION")
+    );
+    
     reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+        .user_agent(user_agent)
         .timeout(std::time::Duration::from_secs(10))
         .build()
-        .map_err(|e| crate::error::ObsidianError::NetworkError(e.to_string()))
+        .map_err(|e| ObsidianError::NetworkError(e.to_string()))
 }
 
 /// HTMLコンテンツを取得
@@ -200,12 +207,12 @@ async fn fetch_html_content(client: &reqwest::Client, url: &str) -> Result<Strin
         .get(url)
         .send()
         .await
-        .map_err(|e| crate::error::ObsidianError::NetworkError(e.to_string()))?;
+        .map_err(|e| ObsidianError::NetworkError(e.to_string()))?;
 
     response
         .text()
         .await
-        .map_err(|e| crate::error::ObsidianError::NetworkError(e.to_string()))
+        .map_err(|e| ObsidianError::NetworkError(e.to_string()))
 }
 
 /// HTMLドキュメントからタイトルを抽出
@@ -310,23 +317,27 @@ fn extract_link_href(document: &Html, selector_str: &str) -> Option<String> {
 /// # HTML Structure
 /// The generated HTML has the following structure:
 /// ```html
-/// <div class="notion-bookmark">
-///   <a href="{bookmark_url}" target="_blank" rel="noopener noreferrer" class="bookmark-link">
-///     <div class="bookmark-container">
-///       <div class="bookmark-info">
-///         <div class="bookmark-title">{title}</div>
-///         <div class="bookmark-description">{description}</div>
-///         <div class="bookmark-link-info">
-///           <img class="bookmark-favicon" src="{favicon_url}" alt="favicon">
-///           <span class="bookmark-domain">{domain}</span>
-///         </div>
-///       </div>
-///       <div class="bookmark-image">
-///         <img src="{image_url}" alt="{title}" loading="lazy">
-///       </div>
-///     </div>
-///   </a>
-/// </div>
+#[doc = indoc! {
+    r#"
+    <div class="notion-bookmark">
+      <a href="{bookmark_url}" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+        <div class="bookmark-container">
+          <div class="bookmark-info">
+            <div class="bookmark-title">{title}</div>
+            <div class="bookmark-description">{description}</div>
+            <div class="bookmark-link-info">
+              <img class="bookmark-favicon" src="{favicon_url}" alt="favicon">
+              <span class="bookmark-domain">{domain}</span>
+            </div>
+          </div>
+          <div class="bookmark-image">
+            <img src="{image_url}" alt="{title}" loading="lazy">
+          </div>
+        </div>
+      </a>
+    </div>
+    "#
+}]
 /// ```
 ///
 /// # Compliance with Requirements
