@@ -1,5 +1,4 @@
 use crate::error::{ObsidianError, Result};
-use indoc::indoc;
 use pulldown_cmark::{Options, Parser, html};
 use regex::Regex;
 use scraper::{Html, Selector};
@@ -188,12 +187,8 @@ pub async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
 
 /// HTTPクライアントを作成
 fn create_http_client() -> Result<reqwest::Client> {
-    let user_agent = format!(
-        "{}/{}", 
-        env!("CARGO_PKG_NAME"), 
-        env!("CARGO_PKG_VERSION")
-    );
-    
+    let user_agent = format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+
     reqwest::Client::builder()
         .user_agent(user_agent)
         .timeout(std::time::Duration::from_secs(10))
@@ -317,27 +312,23 @@ fn extract_link_href(document: &Html, selector_str: &str) -> Option<String> {
 /// # HTML Structure
 /// The generated HTML has the following structure:
 /// ```html
-#[doc = indoc! {
-    r#"
-    <div class="notion-bookmark">
-      <a href="{bookmark_url}" target="_blank" rel="noopener noreferrer" class="bookmark-link">
-        <div class="bookmark-container">
-          <div class="bookmark-info">
-            <div class="bookmark-title">{title}</div>
-            <div class="bookmark-description">{description}</div>
-            <div class="bookmark-link-info">
-              <img class="bookmark-favicon" src="{favicon_url}" alt="favicon">
-              <span class="bookmark-domain">{domain}</span>
-            </div>
-          </div>
-          <div class="bookmark-image">
-            <img src="{image_url}" alt="{title}" loading="lazy">
-          </div>
-        </div>
-      </a>
-    </div>
-    "#
-}]
+/// <div class="notion-bookmark">
+///   <a href="{bookmark_url}" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+///     <div class="bookmark-container">
+///       <div class="bookmark-info">
+///         <div class="bookmark-title">{title}</div>
+///         <div class="bookmark-description">{description}</div>
+///         <div class="bookmark-link-info">
+///           <img class="bookmark-favicon" src="{favicon_url}" alt="favicon">
+///           <span class="bookmark-domain">{domain}</span>
+///         </div>
+///       </div>
+///       <div class="bookmark-image">
+///         <img src="{image_url}" alt="{title}" loading="lazy">
+///       </div>
+///     </div>
+///   </a>
+/// </div>
 /// ```
 ///
 /// # Compliance with Requirements
@@ -533,6 +524,7 @@ pub fn generate_html_file(frontmatter_yaml: &str, html_body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use indoc::indoc;
     use rstest::*;
 
     #[rstest]
@@ -822,23 +814,24 @@ This is a test with [[Another Article|link]] and **bold** text.
             image_url: Some("https://example.com/image.jpg".to_string()),
             favicon_url: Some("https://example.com/favicon.ico".to_string()),
         },
-        r#"<div class="notion-bookmark">
-  <a href="https://example.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
-    <div class="bookmark-container">
-      <div class="bookmark-info">
-        <div class="bookmark-title">Example Title</div>
-        <div class="bookmark-description">This is an example description</div>
-        <div class="bookmark-link-info">
-          <img class="bookmark-favicon" src="https://example.com/favicon.ico" alt="favicon">
-          <span class="bookmark-domain">example.com</span>
-        </div>
-      </div>
-      <div class="bookmark-image">
-        <img src="https://example.com/image.jpg" alt="Example Title" loading="lazy">
-      </div>
-    </div>
-  </a>
-</div>"#
+        indoc! {r#"
+            <div class="notion-bookmark">
+              <a href="https://example.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+                <div class="bookmark-container">
+                  <div class="bookmark-info">
+                    <div class="bookmark-title">Example Title</div>
+                    <div class="bookmark-description">This is an example description</div>
+                    <div class="bookmark-link-info">
+                      <img class="bookmark-favicon" src="https://example.com/favicon.ico" alt="favicon">
+                      <span class="bookmark-domain">example.com</span>
+                    </div>
+                  </div>
+                  <div class="bookmark-image">
+                    <img src="https://example.com/image.jpg" alt="Example Title" loading="lazy">
+                  </div>
+                </div>
+              </a>
+            </div>"#}.trim_end()
     )]
     #[case::minimal_metadata(
         &BookmarkData {
@@ -848,18 +841,19 @@ This is a test with [[Another Article|link]] and **bold** text.
             image_url: None,
             favicon_url: None,
         },
-        r#"<div class="notion-bookmark">
-  <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
-    <div class="bookmark-container">
-      <div class="bookmark-info">
-        <div class="bookmark-title">GitHub</div>
-        <div class="bookmark-link-info">
-          <span class="bookmark-domain">github.com</span>
-        </div>
-      </div>
-    </div>
-  </a>
-</div>"#
+        indoc! {r#"
+            <div class="notion-bookmark">
+              <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+                <div class="bookmark-container">
+                  <div class="bookmark-info">
+                    <div class="bookmark-title">GitHub</div>
+                    <div class="bookmark-link-info">
+                      <span class="bookmark-domain">github.com</span>
+                    </div>
+                  </div>
+                </div>
+              </a>
+            </div>"#}.trim_end()
     )]
     fn test_generate_rich_bookmark(
         #[case] bookmark_data: &BookmarkData,
@@ -871,59 +865,63 @@ This is a test with [[Another Article|link]] and **bold** text.
 
     #[rstest]
     #[case::single_bookmark(
-        r#"<p>Check out this site:</p>
-<div class="bookmark">
-  <a href="https://example.com">Example Site</a>
-</div>
-<p>End of content.</p>"#,
-        r#"<p>Check out this site:</p>
-<div class="notion-bookmark">
-  <a href="https://example.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
-    <div class="bookmark-container">
-      <div class="bookmark-info">
-        <div class="bookmark-title">Example Site</div>
-        <div class="bookmark-link-info">
-          <span class="bookmark-domain">example.com</span>
-        </div>
-      </div>
-    </div>
-  </a>
-</div>
-<p>End of content.</p>"#
+        indoc! {r#"
+            <p>Check out this site:</p>
+            <div class="bookmark">
+              <a href="https://example.com">Example Site</a>
+            </div>
+            <p>End of content.</p>"#}.trim_end(),
+        indoc! {r#"
+            <p>Check out this site:</p>
+            <div class="notion-bookmark">
+              <a href="https://example.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+                <div class="bookmark-container">
+                  <div class="bookmark-info">
+                    <div class="bookmark-title">Example Site</div>
+                    <div class="bookmark-link-info">
+                      <span class="bookmark-domain">example.com</span>
+                    </div>
+                  </div>
+                </div>
+              </a>
+            </div>
+            <p>End of content.</p>"#}.trim_end()
     )]
     #[case::multiple_bookmarks(
-        r#"<div class="bookmark">
-  <a href="https://example.com">Example</a>
-</div>
-<p>Text between bookmarks</p>
-<div class="bookmark">
-  <a href="https://github.com">GitHub</a>
-</div>"#,
-        r#"<div class="notion-bookmark">
-  <a href="https://example.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
-    <div class="bookmark-container">
-      <div class="bookmark-info">
-        <div class="bookmark-title">Example</div>
-        <div class="bookmark-link-info">
-          <span class="bookmark-domain">example.com</span>
-        </div>
-      </div>
-    </div>
-  </a>
-</div>
-<p>Text between bookmarks</p>
-<div class="notion-bookmark">
-  <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
-    <div class="bookmark-container">
-      <div class="bookmark-info">
-        <div class="bookmark-title">GitHub</div>
-        <div class="bookmark-link-info">
-          <span class="bookmark-domain">github.com</span>
-        </div>
-      </div>
-    </div>
-  </a>
-</div>"#
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://example.com">Example</a>
+            </div>
+            <p>Text between bookmarks</p>
+            <div class="bookmark">
+              <a href="https://github.com">GitHub</a>
+            </div>"#}.trim_end(),
+        indoc! {r#"
+            <div class="notion-bookmark">
+              <a href="https://example.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+                <div class="bookmark-container">
+                  <div class="bookmark-info">
+                    <div class="bookmark-title">Example</div>
+                    <div class="bookmark-link-info">
+                      <span class="bookmark-domain">example.com</span>
+                    </div>
+                  </div>
+                </div>
+              </a>
+            </div>
+            <p>Text between bookmarks</p>
+            <div class="notion-bookmark">
+              <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+                <div class="bookmark-container">
+                  <div class="bookmark-info">
+                    <div class="bookmark-title">GitHub</div>
+                    <div class="bookmark-link-info">
+                      <span class="bookmark-domain">github.com</span>
+                    </div>
+                  </div>
+                </div>
+              </a>
+            </div>"#}.trim_end()
     )]
     #[case::no_bookmarks(
         "<p>This content has no bookmarks.</p>",
