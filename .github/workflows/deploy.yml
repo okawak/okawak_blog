@@ -21,6 +21,11 @@ jobs:
         with:
           submodules: recursive  # submodule取得
           
+      - name: Update submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --recursive --remote
+          
       - name: Install OpenSSL and dependencies
         run: |
           sudo apt-get update

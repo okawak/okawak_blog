@@ -12,47 +12,46 @@ pub use error::{ObsidianError, Result};
 pub use models::{ObsidianFrontMatter, OutputFrontMatter};
 
 use converter::{FileInfo, FileMapping};
+use log::{error, info, warn};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
 pub async fn run_main(config: Config) -> Result<()> {
     let start_time = std::time::Instant::now();
-    println!("=== Obsidian Uploader Started ===");
-    println!("Input directory: {}", config.obsidian_dir.display());
-    println!("Output directory: {}", config.output_dir.display());
+    info!("=== Obsidian Uploader Started ===");
+    info!("Input directory: {}", config.obsidian_dir.display());
+    info!("Output directory: {}", config.output_dir.display());
 
     fs::create_dir_all(&config.output_dir)?;
 
     let markdown_files = scanner::scan_obsidian_files(&config.obsidian_dir)?;
-    println!("📄 Found {} markdown files", markdown_files.len());
+    info!("📄 Found {} markdown files", markdown_files.len());
 
     let mut skipped_count = 0;
     let mut error_count = 0;
-    
+
     let valid_files: Vec<_> = markdown_files
         .into_iter()
         .filter_map(|file_path| match parser::parse_obsidian_file(&file_path) {
-            Ok(Some(front_matter)) if front_matter.is_completed => {
-                Some((file_path, front_matter))
-            }
+            Ok(Some(front_matter)) if front_matter.is_completed => Some((file_path, front_matter)),
             Ok(_) => {
                 skipped_count += 1;
-                println!("⏭️  Skipped (not completed): {}", file_path.display());
+                warn!("⏭️  Skipped (not completed): {}", file_path.display());
                 None
             }
             Err(e) => {
                 error_count += 1;
-                eprintln!("❌ Error processing {}: {}", file_path.display(), e);
+                error!("❌ Error processing {}: {}", file_path.display(), e);
                 None
             }
         })
         .collect();
 
-    println!("✅ Valid files: {}", valid_files.len());
-    println!("⏭️  Skipped files: {}", skipped_count);
+    info!("✅ Valid files: {}", valid_files.len());
+    info!("⏭️  Skipped files: {}", skipped_count);
     if error_count > 0 {
-        println!("❌ Error files: {}", error_count);
+        warn!("❌ Error files: {}", error_count);
     }
 
     let file_mapping = build_file_mapping(&config, &valid_files)?;
@@ -68,24 +67,24 @@ pub async fn run_main(config: Config) -> Result<()> {
     let duration = start_time.elapsed();
 
     // 処理結果サマリーの出力
-    println!("\n=== Processing Summary ===");
-    println!("✅ Successfully processed: {} files", processed_count);
-    println!("⏭️  Skipped: {} files", skipped_count);
+    info!("\n=== Processing Summary ===");
+    info!("✅ Successfully processed: {} files", processed_count);
+    info!("⏭️  Skipped: {} files", skipped_count);
     if error_count > 0 {
-        println!("❌ Errors: {} files", error_count);
+        warn!("❌ Errors: {} files", error_count);
     }
-    println!("⏱️  Processing time: {:.2?}", duration);
-    println!("📁 Output directory: {}", config.output_dir.display());
-    
+    info!("⏱️  Processing time: {:.2?}", duration);
+    info!("📁 Output directory: {}", config.output_dir.display());
+
     // 処理されたファイルの詳細
     if !processed_files.is_empty() {
-        println!("\n📋 Processed files:");
+        info!("\n📋 Processed files:");
         for file in &processed_files {
-            println!("  • {} ({})", file.title, file.slug);
+            info!("  • {} ({})", file.title, file.slug);
         }
     }
 
-    println!("=== Obsidian Uploader Completed ===");
+    info!("=== Obsidian Uploader Completed ===");
     Ok(())
 }
 
@@ -149,7 +148,7 @@ async fn process_obsidian_file(
     let html_with_rich_bookmarks = bookmark::convert_simple_bookmarks_to_rich(&html_body)
         .await
         .unwrap_or_else(|e| {
-            eprintln!(
+            warn!(
                 "Warning: Failed to convert simple bookmarks to rich bookmarks: {}",
                 e
             );
@@ -180,7 +179,7 @@ async fn process_obsidian_file(
     }
     fs::write(&output_file_path, html_file_content)?;
 
-    println!(
+    info!(
         "✅ Processed: {} -> {} ({})",
         file_path.display(),
         output_file_path.display(),
