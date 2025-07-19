@@ -152,7 +152,8 @@ fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
         }
     }
 
-    base.join("/favicon.ico").ok().map(|url| url.to_string())
+    // 有効なベースURLならfavicon.icoは常に成功するため、unwrapで簡略化
+    Some(base.join("/favicon.ico").unwrap().to_string())
 }
 
 /// linkタグのhref属性を抽出
@@ -289,7 +290,10 @@ pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<Stri
 
         let bookmark_data = fetch_ogp_metadata(url)
             .await
-            .unwrap_or_else(|_| create_fallback_bookmark_data(url, original_title));
+            .unwrap_or_else(|e| {
+                eprintln!("Warning: Failed to fetch OGP metadata for '{}': {}", url, e);
+                create_fallback_bookmark_data(url, original_title)
+            });
 
         let rich_bookmark_html = generate_rich_bookmark(&bookmark_data);
         result.push_str(&rich_bookmark_html);
