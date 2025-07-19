@@ -105,7 +105,7 @@ async fn process_obsidian_file(
     let html_body = converter::convert_markdown_to_html(&markdown_with_links)?;
 
     // HTMLを生成後、シンプルなbookmarkをリッチブックマークに変換
-    let html_with_rich_bookmarks = converter::convert_simple_bookmarks_to_rich(&html_body)
+    let html_with_rich_bookmarks = bookmark::convert_simple_bookmarks_to_rich(&html_body)
         .await
         .unwrap_or_else(|e| {
             eprintln!(

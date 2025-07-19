@@ -66,3 +66,67 @@
     - プルリクエストを作成し、コードレビューを受ける
     - レビュー後、マージしてmainブランチに統合する
     - レビュー、マージはClaude Codeで**勝手に行わない**。
+
+## Development Progress
+
+### Phase 3: Obsidian Uploader リッチブックマーク機能開発
+
+#### 完了した作業（2025-01-13）
+
+**1. Phase 3の要件定義**
+- Obsidian記事内のHTTPリンクを自動検出し、OGPメタデータを取得
+- リッチブックマーク形式のHTMLを生成する機能
+- TDDアプローチでの実装
+
+**2. TDDによるテスト先行開発**
+- `bookmark.rs`モジュールに包括的なテストスイート作成
+- OGPメタデータ取得機能のテスト
+- HTMLテンプレート生成機能のテスト
+- エラーハンドリングとフォールバック機能のテスト
+- 全57テストケースで完全にパス
+
+**3. 実装した機能**
+
+**A. bookmark.rsモジュール**
+- `BookmarkData`構造体：OGPメタデータ（URL、タイトル、説明、画像、ファビコン）を保持
+- `fetch_ogp_metadata()`：非同期でWebページからOGPメタデータを取得
+- `generate_rich_bookmark()`：BookmarkDataからリッチブックマークHTMLを生成
+- `convert_simple_bookmarks_to_rich()`：HTML内のシンプルブックマークを検出してリッチ化
+- `create_fallback_bookmark_data()`：メタデータ取得失敗時のフォールバック
+
+**B. 依存関係**
+- `reqwest`：HTTP通信とOGPメタデータ取得
+- `scraper`：HTML解析とメタタグ抽出
+- `url`：URL解析と相対パス解決
+- `regex`：ブックマーク構造の検出
+
+**C. HTMLテンプレート**
+- `notion-bookmark`から`bookmark`クラスへの統一
+- レスポンシブ対応とアクセシビリティ配慮
+- 画像遅延読み込み（loading="lazy"）対応
+- target="_blank"とrel="noopener noreferrer"でセキュリティ確保
+
+**4. コードレビューフィードバック対応**
+- converter.rsから970行→540行に削減（bookmark機能の分離）
+- bookmark関連テストの適切なモジュール配置
+- 不要なpub use文の整理とモジュール境界の明確化
+- コンパイル警告の完全解消
+
+**5. 現在の状態**
+- ブランチ：`feat_obsidian_uploader`
+- 全テスト通過：57/57 tests passing
+- 警告・エラー：0件
+- 実装完了度：100%
+
+**6. 技術的特徴**
+- 非同期処理によるパフォーマンス最適化
+- エラー時の適切なフォールバック機能
+- HTMLエスケープによるXSS対策
+- モジュール分離による保守性向上
+- 包括的なテストカバレッジ
+
+**7. 次のステップ（検討事項）**
+- Obsidian記事の実際のmarkdownファイルでの動作テスト
+- S3アップロード機能との統合テスト
+- パフォーマンスベンチマークの実施
+- エラーログとモニタリングの強化

@@ -4,8 +4,6 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-// Re-export bookmark function for lib.rs usage
-pub use crate::bookmark::convert_simple_bookmarks_to_rich;
 
 /// ファイル情報を保持する構造体（リンク解決用）
 #[derive(Debug, Clone)]
@@ -349,5 +347,4 @@ This is a test with [[Another Article|link]] and **bold** text.
             "<a href=\"/File &quot;quoted&quot;\">Text with &#x27;quotes&#x27;</a>"
         );
     }
-
 }

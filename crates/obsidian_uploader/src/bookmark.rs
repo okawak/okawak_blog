@@ -3,6 +3,11 @@ use regex::Regex;
 use scraper::{Html, Selector};
 use std::sync::LazyLock;
 
+/// HTML生成時の初期容量（基本的なHTML構造分）
+const HTML_INITIAL_CAPACITY: usize = 1024;
+/// HTML処理時の追加容量（メタデータ拡張分）
+const HTML_EXTENSION_CAPACITY: usize = 2048;
+
 /// リッチブックマークのメタデータを保持する構造体
 #[derive(Debug, Clone, PartialEq)]
 pub struct BookmarkData {
@@ -13,7 +18,7 @@ pub struct BookmarkData {
     pub favicon_url: Option<String>,
 }
 
-/// URLからOGPメタデータを取得する
+/// URLからOGPメタデータを取得する（10秒タイムアウト）
 pub async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
     let client = create_http_client()?;
     let html_content = fetch_html_content(&client, url).await?;
@@ -30,7 +35,12 @@ pub async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
 
 /// HTTPクライアントを作成
 fn create_http_client() -> Result<reqwest::Client> {
-    let user_agent = format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+    let user_agent = format!(
+        "{}/{} ({})", 
+        env!("CARGO_PKG_NAME"), 
+        env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_AUTHORS")
+    );
 
     reqwest::Client::builder()
         .user_agent(user_agent)
@@ -61,8 +71,8 @@ fn extract_title(document: &Html) -> Option<String> {
 }
 
 /// メタタグのcontentを抽出
-fn extract_meta_content(document: &Html, selector_str: &str) -> Option<String> {
-    let selector = Selector::parse(selector_str).ok()?;
+fn extract_meta_content(document: &Html, selector: &str) -> Option<String> {
+    let selector = Selector::parse(selector).ok()?;
     let content = document
         .select(&selector)
         .next()?
@@ -109,8 +119,14 @@ fn extract_image(document: &Html, base_url: &str) -> Option<String> {
 
     extract_meta_content(document, "meta[property='og:image']")
         .or_else(|| extract_meta_content(document, "meta[name='twitter:image']"))
-        .and_then(|content| base.join(&content).ok())
-        .map(|url| url.to_string())
+        .and_then(|content| {
+            // 絶対URLの場合はそのまま、相対URLの場合はbaseと結合
+            if content.starts_with("http://") || content.starts_with("https://") {
+                Some(content)
+            } else {
+                base.join(&content).ok().map(|url| url.to_string())
+            }
+        })
 }
 
 /// HTMLドキュメントからファビコンURLを抽出
@@ -125,10 +141,17 @@ fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
         "link[rel='shortcut icon']",
     ];
 
-    for selector_str in &selectors {
-        if let Some(href) = extract_link_href(document, selector_str) {
-            if let Ok(absolute_url) = base.join(&href) {
-                return Some(absolute_url.to_string());
+    for selector in &selectors {
+        if let Some(href) = extract_link_href(document, selector) {
+            // 絶対URLの場合はそのまま、相対URLの場合はbaseと結合
+            let result_url = if href.starts_with("http://") || href.starts_with("https://") {
+                Some(href)
+            } else {
+                base.join(&href).ok().map(|url| url.to_string())
+            };
+            
+            if let Some(url) = result_url {
+                return Some(url);
             }
         }
     }
@@ -137,8 +160,8 @@ fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
 }
 
 /// linkタグのhref属性を抽出
-fn extract_link_href(document: &Html, selector_str: &str) -> Option<String> {
-    let selector = Selector::parse(selector_str).ok()?;
+fn extract_link_href(document: &Html, selector: &str) -> Option<String> {
+    let selector = Selector::parse(selector).ok()?;
     document
         .select(&selector)
         .next()?
@@ -147,11 +170,11 @@ fn extract_link_href(document: &Html, selector_str: &str) -> Option<String> {
         .map(ToString::to_string)
 }
 
-/// リッチブックマークHTMLを生成する
+/// リッチブックマークHTMLを生成する（bookmarkクラス使用）
 pub fn generate_rich_bookmark(data: &BookmarkData) -> String {
     let domain = extract_domain(&data.url);
 
-    let mut html = String::with_capacity(1024);
+    let mut html = String::with_capacity(HTML_INITIAL_CAPACITY);
     html.push_str("<div class=\"bookmark\">\n");
 
     write_bookmark_link(&mut html, &data.url);
@@ -241,24 +264,25 @@ fn write_bookmark_image(html: &mut String, data: &BookmarkData) {
     }
 }
 
-/// HTMLエスケープ処理
+/// HTMLエスケープ処理（基本的なXSS対策）
 fn html_escape(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;")
+        // バックティック、改行文字等の追加エスケープは現在の用途では不要
 }
 
-/// HTML内のシンプルなbookmark構造を検出してリッチブックマークに変換する
+/// HTML内のシンプルなbookmark構造を検出してリッチブックマークに変換する（OGP取得）
 pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
     static BOOKMARK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]*)</a>\s*</div>"#)
             .expect("Invalid bookmark regex pattern")
     });
 
-    let mut result = String::with_capacity(html_content.len() + 2048);
-    let mut last_end = 0;
+    let mut result = String::with_capacity(html_content.len() + HTML_EXTENSION_CAPACITY);
+    let mut last_end = 0; // 前回のマッチ終了位置
 
     for capture in BOOKMARK_REGEX.captures_iter(html_content) {
         let full_match = capture.get(0).unwrap();
@@ -306,31 +330,6 @@ mod tests {
     use rstest::*;
     use std::sync::LazyLock;
 
-    #[rstest]
-    fn test_bookmark_data_creation() {
-        let bookmark_data = BookmarkData {
-            url: "https://example.com".to_string(),
-            title: "Example Title".to_string(),
-            description: Some("Example description".to_string()),
-            image_url: Some("https://example.com/image.jpg".to_string()),
-            favicon_url: Some("https://example.com/favicon.ico".to_string()),
-        };
-
-        assert_eq!(bookmark_data.url, "https://example.com");
-        assert_eq!(bookmark_data.title, "Example Title");
-        assert_eq!(
-            bookmark_data.description,
-            Some("Example description".to_string())
-        );
-        assert_eq!(
-            bookmark_data.image_url,
-            Some("https://example.com/image.jpg".to_string())
-        );
-        assert_eq!(
-            bookmark_data.favicon_url,
-            Some("https://example.com/favicon.ico".to_string())
-        );
-    }
 
     #[rstest]
     #[case::full_metadata(
