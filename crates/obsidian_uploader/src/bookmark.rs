@@ -35,12 +35,8 @@ pub async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
 
 /// HTTPクライアントを作成
 fn create_http_client() -> Result<reqwest::Client> {
-    let user_agent = format!(
-        "{}/{} ({})", 
-        env!("CARGO_PKG_NAME"), 
-        env!("CARGO_PKG_VERSION"),
-        env!("CARGO_PKG_AUTHORS")
-    );
+    // 標準的なUser-Agent形式を使用（内部パッケージ詳細を公開しない）
+    let user_agent = "obsidian-uploader/1.0 (+https://github.com/okawak/okawak_blog)";
 
     reqwest::Client::builder()
         .user_agent(user_agent)
@@ -149,7 +145,7 @@ fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
             } else {
                 base.join(&href).ok().map(|url| url.to_string())
             };
-            
+
             if let Some(url) = result_url {
                 return Some(url);
             }
@@ -271,7 +267,7 @@ fn html_escape(text: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;")
-        // バックティック、改行文字等の追加エスケープは現在の用途では不要
+    // バックティック、改行文字等の追加エスケープは現在の用途では不要
 }
 
 /// HTML内のシンプルなbookmark構造を検出してリッチブックマークに変換する（OGP取得）
@@ -329,7 +325,6 @@ mod tests {
     use regex::Regex;
     use rstest::*;
     use std::sync::LazyLock;
-
 
     #[rstest]
     #[case::full_metadata(

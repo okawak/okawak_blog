@@ -36,6 +36,7 @@ pub async fn run_main(config: Config) -> Result<()> {
 
     let file_mapping = build_file_mapping(&config, &valid_files)?;
 
+    // 現在は順次処理、将来的にはfutures::stream::iterとbuffer_unorderedで並列処理可能
     let mut processed_files = Vec::with_capacity(valid_files.len());
     for (file_path, front_matter) in valid_files {
         let result = process_obsidian_file(&config, file_path, front_matter, &file_mapping).await?;
