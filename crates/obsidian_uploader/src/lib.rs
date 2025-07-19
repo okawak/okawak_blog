@@ -1,3 +1,4 @@
+pub mod bookmark;
 pub mod config;
 pub mod converter;
 pub mod error;
@@ -35,14 +36,13 @@ pub async fn run_main(config: Config) -> Result<()> {
 
     let file_mapping = build_file_mapping(&config, &valid_files)?;
 
-    let processed_files: Result<Vec<_>> = valid_files
-        .into_iter()
-        .map(|(file_path, front_matter)| {
-            process_obsidian_file(&config, file_path, front_matter, &file_mapping)
-        })
-        .collect();
+    // 現在は順次処理、将来的にはfutures::stream::iterとbuffer_unorderedで並列処理可能
+    let mut processed_files = Vec::with_capacity(valid_files.len());
+    for (file_path, front_matter) in valid_files {
+        let result = process_obsidian_file(&config, file_path, front_matter, &file_mapping).await?;
+        processed_files.push(result);
+    }
 
-    let processed_files = processed_files?;
     let processed_count = processed_files.len();
 
     println!("Successfully processed {} files", processed_count);
@@ -94,7 +94,7 @@ fn build_file_mapping(
     Ok(mapping)
 }
 
-fn process_obsidian_file(
+async fn process_obsidian_file(
     config: &Config,
     file_path: std::path::PathBuf,
     front_matter: ObsidianFrontMatter,
@@ -104,6 +104,17 @@ fn process_obsidian_file(
     let markdown_body = extract_markdown_body(&markdown_content);
     let markdown_with_links = converter::convert_obsidian_links(&markdown_body, file_mapping);
     let html_body = converter::convert_markdown_to_html(&markdown_with_links)?;
+
+    // HTMLを生成後、シンプルなbookmarkをリッチブックマークに変換
+    let html_with_rich_bookmarks = bookmark::convert_simple_bookmarks_to_rich(&html_body)
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "Warning: Failed to convert simple bookmarks to rich bookmarks: {}",
+                e
+            );
+            html_body
+        });
 
     let relative_path = get_relative_path(&file_path, &config.obsidian_dir)?;
 
@@ -121,7 +132,7 @@ fn process_obsidian_file(
     };
 
     let output_yaml = serde_yaml::to_string(&output_fm).map_err(ObsidianError::YamlError)?;
-    let html_file_content = converter::generate_html_file(&output_yaml, &html_body);
+    let html_file_content = converter::generate_html_file(&output_yaml, &html_with_rich_bookmarks);
     let output_file_path = config.output_dir.join(relative_path.with_extension("html"));
 
     if let Some(parent) = output_file_path.parent() {

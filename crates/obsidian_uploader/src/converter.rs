@@ -4,6 +4,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+
 /// ファイル情報を保持する構造体（リンク解決用）
 #[derive(Debug, Clone)]
 pub struct FileInfo {
@@ -97,7 +98,7 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
                 // 相対パス全体での検索も試行
                 let mut found = false;
                 let mut result_href = format!("/{}", link_target);
-                
+
                 for (key, file_info) in file_mapping {
                     if key.ends_with(&format!("/{}", link_target)) || key == link_target {
                         result_href = file_info.html_path.clone();
@@ -105,14 +106,14 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
                         break;
                     }
                 }
-                
+
                 if !found {
                     eprintln!(
                         "Warning: Link target '{}' not found in file mapping",
                         link_target
                     );
                 }
-                
+
                 result_href
             };
 
