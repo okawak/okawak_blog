@@ -1,4 +1,5 @@
 use obsidian_uploader::{Config, run_main};
+use indoc::indoc;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -35,21 +36,22 @@ async fn test_run_main_with_sample_file() {
     // Obsidianディレクトリとサンプルファイルを作成
     fs::create_dir_all(&obsidian_dir).unwrap();
 
-    let sample_content = r#"---
-title: "Test Article"
-tags: ["test"]
-summary: "Test summary"
-priority: 1
-created: "2025-01-01T00:00:00+09:00"
-updated: "2025-01-01T00:00:00+09:00"
-is_completed: true
-category: "tech"
----
+    let sample_content = indoc! {r#"
+        ---
+        title: "Test Article"
+        tags: ["test"]
+        summary: "Test summary"
+        priority: 1
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        is_completed: true
+        category: "tech"
+        ---
 
-# Test Article
+        # Test Article
 
-This is a test article.
-"#;
+        This is a test article.
+    "#};
 
     let sample_file = obsidian_dir.join("test.md");
     fs::write(&sample_file, sample_content).unwrap();
@@ -82,21 +84,22 @@ async fn test_run_main_with_incomplete_file() {
     // Obsidianディレクトリとis_completed: falseのファイルを作成
     fs::create_dir_all(&obsidian_dir).unwrap();
 
-    let incomplete_content = r#"---
-title: "Incomplete Article"
-tags: ["test"]
-summary: "Incomplete summary"
-priority: 1
-created: "2025-01-01T00:00:00+09:00"
-updated: "2025-01-01T00:00:00+09:00"
-is_completed: false
-category: "tech"
----
+    let incomplete_content = indoc! {r#"
+        ---
+        title: "Incomplete Article"
+        tags: ["test"]
+        summary: "Incomplete summary"
+        priority: 1
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        is_completed: false
+        category: "tech"
+        ---
 
-# Incomplete Article
+        # Incomplete Article
 
-This article is not completed.
-"#;
+        This article is not completed.
+    "#};
 
     let sample_file = obsidian_dir.join("incomplete.md");
     fs::write(&sample_file, incomplete_content).unwrap();
