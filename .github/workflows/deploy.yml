@@ -24,14 +24,16 @@ jobs:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: |
-            okawak_blog
+          repositories: >-
+            okawak_blog,
             obsidian
 
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          token: ${{ steps.app-token.outputs.token }}
           submodules: recursive # submodule取得
+          fetch-depth: 1
 
       - name: Update submodules
         run: |
