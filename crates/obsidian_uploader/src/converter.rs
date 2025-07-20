@@ -45,7 +45,7 @@ fn process_katex_math(html_content: &str) -> String {
     while let Some(start) = result.find("$$") {
         if let Some(end) = result[start + 2..].find("$$") {
             let math_content = &result[start + 2..start + 2 + end];
-            let replacement = format!(r#"<div class="katex-display">{}</div>"#, math_content);
+            let replacement = format!(r#"<div class="katex-display">{math_content}</div>"#);
             result.replace_range(start..start + 2 + end + 2, &replacement);
         } else {
             break;
@@ -59,7 +59,7 @@ fn process_katex_math(html_content: &str) -> String {
         if let Some(end) = result[actual_start + 1..].find('$') {
             let actual_end = actual_start + 1 + end;
             let math_content = &result[actual_start + 1..actual_end];
-            let replacement = format!(r#"<span class="katex-inline">{}</span>"#, math_content);
+            let replacement = format!(r#"<span class="katex-inline">{math_content}</span>"#);
             result.replace_range(actual_start..actual_end + 1, &replacement);
             pos = actual_start + replacement.len();
         } else {
@@ -96,10 +96,10 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
             } else {
                 // 相対パス全体での検索も試行
                 let mut found = false;
-                let mut result_href = format!("/{}", link_target);
+                let mut result_href = format!("/{link_target}");
 
                 for (key, file_info) in file_mapping {
-                    if key.ends_with(&format!("/{}", link_target)) || key == link_target {
+                    if key.ends_with(&format!("/{link_target}")) || key == link_target {
                         result_href = file_info.html_path.clone();
                         found = true;
                         break;
@@ -107,10 +107,7 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
                 }
 
                 if !found {
-                    log::warn!(
-                        "Warning: Link target '{}' not found in file mapping",
-                        link_target
-                    );
+                    log::warn!("Warning: Link target '{link_target}' not found in file mapping");
                 }
 
                 result_href
@@ -136,7 +133,7 @@ fn html_escape(text: &str) -> String {
 
 /// フロントマターとHTMLボディを結合してHTMLファイルを生成する
 pub fn generate_html_file(frontmatter_yaml: &str, html_body: &str) -> String {
-    format!("---\n{}\n---\n{}", frontmatter_yaml, html_body)
+    format!("---\n{frontmatter_yaml}\n---\n{html_body}")
 }
 
 #[cfg(test)]
