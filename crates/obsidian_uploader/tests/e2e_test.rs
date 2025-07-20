@@ -209,46 +209,79 @@ async fn test_end_to_end_obsidian_processing() {
 
     // 完成した記事のHTMLが生成されているか確認
     assert!(tech_html.exists(), "Tech article HTML should be generated");
-    assert!(basic_html.exists(), "Basic concepts HTML should be generated");
-    assert!(memory_html.exists(), "Memory practices HTML should be generated");
+    assert!(
+        basic_html.exists(),
+        "Basic concepts HTML should be generated"
+    );
+    assert!(
+        memory_html.exists(),
+        "Memory practices HTML should be generated"
+    );
 
     // 未完成の記事は生成されないことを確認
-    assert!(!blog_html.exists(), "Draft blog HTML should not be generated");
+    assert!(
+        !blog_html.exists(),
+        "Draft blog HTML should not be generated"
+    );
 
     // HTMLファイルの内容検証
     let tech_content = fs::read_to_string(&tech_html).unwrap();
-    assert!(tech_content.contains("Rustでのパフォーマンス最適化"), "Title should be present");
-    assert!(tech_content.contains("fibonacci"), "Code content should be present");
-    
+    assert!(
+        tech_content.contains("Rustでのパフォーマンス最適化"),
+        "Title should be present"
+    );
+    assert!(
+        tech_content.contains("fibonacci"),
+        "Code content should be present"
+    );
+
     // デバッグ出力
-    println!("Tech content: {}", &tech_content[0..1000.min(tech_content.len())]);
-    
+    println!(
+        "Tech content: {}",
+        &tech_content[0..1000.min(tech_content.len())]
+    );
+
     // 内部リンクの検証（実際のリンク形式に合わせる）
-    let has_basic_link = tech_content.contains("basic-rust-concepts") || 
-                        tech_content.contains("基本的なRust概念");
+    let has_basic_link =
+        tech_content.contains("basic-rust-concepts") || tech_content.contains("基本的なRust概念");
     assert!(has_basic_link, "Internal link should be converted");
-    
-    let has_memory_link = tech_content.contains("memory-best-practices") || 
-                         tech_content.contains("メモリ管理のベストプラクティス");
+
+    let has_memory_link = tech_content.contains("memory-best-practices")
+        || tech_content.contains("メモリ管理のベストプラクティス");
     assert!(has_memory_link, "Cross-directory link should work");
 
     // KaTeX数式の処理確認
     let memory_content = fs::read_to_string(&memory_html).unwrap();
-    assert!(memory_content.contains("<div class=\"katex-display\">"), "Display math should be processed");
-    assert!(memory_content.contains("<span class=\"katex-inline\">"), "Inline math should be processed");
+    assert!(
+        memory_content.contains("<div class=\"katex-display\">"),
+        "Display math should be processed"
+    );
+    assert!(
+        memory_content.contains("<span class=\"katex-inline\">"),
+        "Inline math should be processed"
+    );
 
     // フロントマターの検証
-    assert!(tech_content.contains("title: Rustでのパフォーマンス最適化"), "Frontmatter should be present");
+    assert!(
+        tech_content.contains("title: Rustでのパフォーマンス最適化"),
+        "Frontmatter should be present"
+    );
     assert!(tech_content.contains("tags:"), "Tags should be present");
 
     // ディレクトリ構造の保持確認
-    assert!(output_dir.join("tech").exists(), "Tech subdirectory should be preserved");
+    assert!(
+        output_dir.join("tech").exists(),
+        "Tech subdirectory should be preserved"
+    );
 
-    println!("✅ エンドツーエンドテスト完了: {} 個のHTMLファイル生成", 
-             fs::read_dir(&output_dir).unwrap()
-                .filter_map(|entry| entry.ok())
-                .filter(|entry| entry.path().extension().map_or(false, |ext| ext == "html"))
-                .count());
+    println!(
+        "✅ エンドツーエンドテスト完了: {} 個のHTMLファイル生成",
+        fs::read_dir(&output_dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.path().extension().map_or(false, |ext| ext == "html"))
+            .count()
+    );
 }
 
 /// パフォーマンステスト: 大量ファイル処理のテスト
@@ -262,7 +295,8 @@ async fn test_large_volume_processing() {
 
     // 100個のテストファイルを生成
     for i in 0..100 {
-        let content = format!(indoc! {r#"
+        let content = format!(
+            indoc! {r#"
             ---
             title: "Test Article {}"
             tags: ["test", "performance"]
@@ -291,9 +325,21 @@ async fn test_large_volume_processing() {
             ```
 
             Link to [[Test Article {}]] if it exists.
-        "#}, 
-        i, i, (i % 3) + 1, (i % 28) + 1, (i % 24), (i % 28) + 1, (i % 24),
-        i, i, i, i, i, (i + 1) % 100);
+        "#},
+            i,
+            i,
+            (i % 3) + 1,
+            (i % 28) + 1,
+            (i % 24),
+            (i % 28) + 1,
+            (i % 24),
+            i,
+            i,
+            i,
+            i,
+            i,
+            (i + 1) % 100
+        );
 
         let file_path = obsidian_dir.join(format!("test-article-{:03}.md", i));
         fs::write(&file_path, content).unwrap();
@@ -312,21 +358,25 @@ async fn test_large_volume_processing() {
     assert!(result.is_ok(), "Large volume processing should succeed");
 
     // 生成されたファイル数の確認
-    let generated_count = fs::read_dir(&output_dir).unwrap()
+    let generated_count = fs::read_dir(&output_dir)
+        .unwrap()
         .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            entry.path().extension().map_or(false, |ext| ext == "html")
-        })
+        .filter(|entry| entry.path().extension().map_or(false, |ext| ext == "html"))
         .count();
 
     assert_eq!(generated_count, 100, "Should generate 100 HTML files");
 
     // パフォーマンス要件の確認（100ファイルを5秒以内で処理）
-    assert!(duration.as_secs() < 5, 
-            "Should process 100 files in under 5 seconds, took {:?}", duration);
+    assert!(
+        duration.as_secs() < 5,
+        "Should process 100 files in under 5 seconds, took {:?}",
+        duration
+    );
 
-    println!("✅ パフォーマンステスト完了: {}個のファイルを{:.2?}で処理", 
-             generated_count, duration);
+    println!(
+        "✅ パフォーマンステスト完了: {}個のファイルを{:.2?}で処理",
+        generated_count, duration
+    );
 }
 
 /// エラーハンドリングテスト: 部分的失敗時の継続処理
@@ -403,7 +453,10 @@ async fn test_partial_failure_handling() {
 
     // 部分的失敗があっても処理は継続されるべき
     let result = run_main(config).await;
-    assert!(result.is_ok(), "Should continue processing despite partial failures");
+    assert!(
+        result.is_ok(),
+        "Should continue processing despite partial failures"
+    );
 
     // 正常なファイルは処理されるべき
     let valid_html = output_dir.join("valid.html");
@@ -411,11 +464,18 @@ async fn test_partial_failure_handling() {
 
     // 異常なファイルは処理されないべき
     let invalid_html = output_dir.join("invalid.html");
-    assert!(!invalid_html.exists(), "Invalid file should not be processed");
+    assert!(
+        !invalid_html.exists(),
+        "Invalid file should not be processed"
+    );
 
     // 未完成ファイルは処理されないべき
     let incomplete_html = output_dir.join("incomplete.html");
-    assert!(!incomplete_html.exists(), "Incomplete file should not be processed");
+    assert!(
+        !incomplete_html.exists(),
+        "Incomplete file should not be processed"
+    );
 
     println!("✅ エラーハンドリングテスト完了: 部分的失敗時も正常ファイルは処理継続");
 }
+

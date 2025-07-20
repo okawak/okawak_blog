@@ -38,11 +38,8 @@ jobs:
       - name: Update submodules
         run: |
           set -e
-          echo "📦 Syncing submodules..."
           git submodule sync --recursive
-          echo "🔄 Updating submodules to latest..."
           git submodule update --recursive --remote
-          echo "✅ Submodules updated successfully"
 
       - name: Install OpenSSL and dependencies
         run: |
@@ -61,20 +58,13 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Test obsidian_uploader
-        run: |
-          echo "🧪 Running tests for obsidian_uploader..."
-          cargo test -p obsidian_uploader --verbose
-          echo "✅ All tests passed successfully"
+        run: cargo test -p obsidian_uploader
 
       - name: Build obsidian_uploader
-        run: |
-          echo "🔨 Building obsidian_uploader in release mode..."
-          cargo build --release -p obsidian_uploader
-          echo "✅ Build completed successfully"
+        run: cargo build --release -p obsidian_uploader
 
       - name: Run obsidian_uploader
         run: |
-          echo "🚀 Running obsidian_uploader..."
           start_time=$(date +%s)
           RUST_LOG=info cargo run --release -p obsidian_uploader
           end_time=$(date +%s)
@@ -84,7 +74,6 @@ jobs:
           # 処理結果の検証
           if [ -d "crates/obsidian_uploader/dist" ]; then
             file_count=$(find crates/obsidian_uploader/dist -name "*.html" | wc -l)
-            echo "📄 Generated ${file_count} HTML files"
             if [ "$file_count" -eq 0 ]; then
               echo "⚠️  Warning: No HTML files were generated"
             fi
@@ -110,23 +99,16 @@ jobs:
 
       - name: Sync to S3
         run: |
-          echo "☁️  Starting S3 sync..."
           sync_start=$(date +%s)
           
-          # S3同期を実行し、結果を記録
           aws s3 sync ${{ env.UPLOAD_PATH }} s3://${{ secrets.S3_BUCKET }} \
             --delete \
             --content-type "text/html; charset=utf-8" \
-            --cache-control "public, max-age=300" \
-            --output json > s3_sync_result.json
+            --cache-control "public, max-age=300"
           
           sync_end=$(date +%s)
           sync_duration=$((sync_end - sync_start))
           echo "⏱️  S3 sync completed in ${sync_duration} seconds"
-          
-          # 同期結果の検証
-          uploaded_count=$(find ${{ env.UPLOAD_PATH }} -name "*.html" | wc -l)
-          echo "📤 Uploaded ${uploaded_count} files to S3"
           
           # S3バケットの内容確認
           s3_object_count=$(aws s3 ls s3://${{ secrets.S3_BUCKET }}/ --recursive | grep ".html" | wc -l)
