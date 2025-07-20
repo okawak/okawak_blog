@@ -4,7 +4,6 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-
 /// ファイル情報を保持する構造体（リンク解決用）
 #[derive(Debug, Clone)]
 pub struct FileInfo {
@@ -108,7 +107,7 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
                 }
 
                 if !found {
-                    eprintln!(
+                    log::warn!(
                         "Warning: Link target '{}' not found in file mapping",
                         link_target
                     );

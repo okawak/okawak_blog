@@ -3,6 +3,9 @@ use obsidian_uploader::{Config, run_main};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // ロガーを初期化
+    env_logger::init();
+
     // 設定を初期化
     let config = Config::new()?;
 

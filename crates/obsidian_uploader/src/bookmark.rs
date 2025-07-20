@@ -288,12 +288,10 @@ pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<Stri
 
         result.push_str(&html_content[last_end..full_match.start()]);
 
-        let bookmark_data = fetch_ogp_metadata(url)
-            .await
-            .unwrap_or_else(|e| {
-                eprintln!("Warning: Failed to fetch OGP metadata for '{}': {}", url, e);
-                create_fallback_bookmark_data(url, original_title)
-            });
+        let bookmark_data = fetch_ogp_metadata(url).await.unwrap_or_else(|e| {
+            log::warn!("Warning: Failed to fetch OGP metadata for '{}': {}", url, e);
+            create_fallback_bookmark_data(url, original_title)
+        });
 
         let rich_bookmark_html = generate_rich_bookmark(&bookmark_data);
         result.push_str(&rich_bookmark_html);

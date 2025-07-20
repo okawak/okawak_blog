@@ -1,0 +1,82 @@
+name: Deploy Obsidian to S3
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 毎日00:00 UTC
+  workflow_dispatch:     # 手動実行可能
+
+env:
+  RUST_BACKTRACE: 1
+  UPLOAD_PATH: crates/obsidian_uploader/dist
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive  # submodule取得
+          
+      - name: Update submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --recursive --remote
+          
+      - name: Install OpenSSL and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install pkg-config libssl-dev
+          
+      - name: Cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          
+      - name: Test obsidian_uploader
+        run: cargo test -p obsidian_uploader
+        
+      - name: Build obsidian_uploader
+        run: cargo build --release -p obsidian_uploader
+        
+      - name: Run obsidian_uploader
+        run: cargo run --release -p obsidian_uploader
+        
+      - name: Validate AWS secrets
+        run: |
+          if [ -z "${{ secrets.AWS_REGION }}" ] || [ -z "${{ secrets.AWS_ACCOUNT_ID }}" ] || [ -z "${{ secrets.AWS_ROLE_NAME }}" ] || [ -z "${{ secrets.S3_BUCKET }}" ]; then
+            echo "Error: Required AWS secrets are missing"
+            echo "Required: AWS_REGION, AWS_ACCOUNT_ID, AWS_ROLE_NAME, S3_BUCKET"
+            exit 1
+          fi
+          echo "✅ All required AWS secrets are present"
+          
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
+          
+      - name: Sync to S3
+        run: |
+          aws s3 sync ${{ env.UPLOAD_PATH }} s3://${{ secrets.S3_BUCKET }} \
+            --delete \
+            --content-type "text/html; charset=utf-8" \
+            --cache-control "public, max-age=300"
+            
+      - name: Output deployment summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Files processed: $(find ${{ env.UPLOAD_PATH }} -name '*.html' | wc -l)" >> $GITHUB_STEP_SUMMARY
+          echo "- Deployment time: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "- S3 Bucket: ${{ secrets.S3_BUCKET }}" >> $GITHUB_STEP_SUMMARY
