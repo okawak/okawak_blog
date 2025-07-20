@@ -12,27 +12,47 @@ pub use error::{ObsidianError, Result};
 pub use models::{ObsidianFrontMatter, OutputFrontMatter};
 
 use converter::{FileInfo, FileMapping};
+use log::{error, info, warn};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
 pub async fn run_main(config: Config) -> Result<()> {
+    let start_time = std::time::Instant::now();
+    info!("=== Obsidian Uploader Started ===");
+    info!("Input directory: {}", config.obsidian_dir.display());
+    info!("Output directory: {}", config.output_dir.display());
+
     fs::create_dir_all(&config.output_dir)?;
 
     let markdown_files = scanner::scan_obsidian_files(&config.obsidian_dir)?;
-    println!("Found {} markdown files", markdown_files.len());
+    info!("📄 Found {} markdown files", markdown_files.len());
+
+    let mut skipped_count = 0;
+    let mut error_count = 0;
 
     let valid_files: Vec<_> = markdown_files
         .into_iter()
         .filter_map(|file_path| match parser::parse_obsidian_file(&file_path) {
             Ok(Some(front_matter)) if front_matter.is_completed => Some((file_path, front_matter)),
-            Ok(_) => None,
+            Ok(_) => {
+                skipped_count += 1;
+                warn!("⏭️  Skipped (not completed): {}", file_path.display());
+                None
+            }
             Err(e) => {
-                eprintln!("Error processing {}: {}", file_path.display(), e);
+                error_count += 1;
+                error!("❌ Error processing {}: {}", file_path.display(), e);
                 None
             }
         })
         .collect();
+
+    info!("✅ Valid files: {}", valid_files.len());
+    info!("⏭️  Skipped files: {}", skipped_count);
+    if error_count > 0 {
+        warn!("❌ Error files: {}", error_count);
+    }
 
     let file_mapping = build_file_mapping(&config, &valid_files)?;
 
@@ -44,8 +64,27 @@ pub async fn run_main(config: Config) -> Result<()> {
     }
 
     let processed_count = processed_files.len();
+    let duration = start_time.elapsed();
 
-    println!("Successfully processed {} files", processed_count);
+    // 処理結果サマリーの出力
+    info!("\n=== Processing Summary ===");
+    info!("✅ Successfully processed: {} files", processed_count);
+    info!("⏭️  Skipped: {} files", skipped_count);
+    if error_count > 0 {
+        warn!("❌ Errors: {} files", error_count);
+    }
+    info!("⏱️  Processing time: {:.2?}", duration);
+    info!("📁 Output directory: {}", config.output_dir.display());
+
+    // 処理されたファイルの詳細
+    if !processed_files.is_empty() {
+        info!("\n📋 Processed files:");
+        for file in &processed_files {
+            info!("  • {} ({})", file.title, file.slug);
+        }
+    }
+
+    info!("=== Obsidian Uploader Completed ===");
     Ok(())
 }
 
@@ -109,7 +148,7 @@ async fn process_obsidian_file(
     let html_with_rich_bookmarks = bookmark::convert_simple_bookmarks_to_rich(&html_body)
         .await
         .unwrap_or_else(|e| {
-            eprintln!(
+            warn!(
                 "Warning: Failed to convert simple bookmarks to rich bookmarks: {}",
                 e
             );
@@ -140,8 +179,8 @@ async fn process_obsidian_file(
     }
     fs::write(&output_file_path, html_file_content)?;
 
-    println!(
-        "Processed: {} -> {} ({})",
+    info!(
+        "✅ Processed: {} -> {} ({})",
         file_path.display(),
         output_file_path.display(),
         slug
