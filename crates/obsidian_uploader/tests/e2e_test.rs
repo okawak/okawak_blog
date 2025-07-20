@@ -478,4 +478,3 @@ async fn test_partial_failure_handling() {
 
     println!("✅ エラーハンドリングテスト完了: 部分的失敗時も正常ファイルは処理継続");
 }
-
