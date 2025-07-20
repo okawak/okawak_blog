@@ -104,7 +104,7 @@ invalid: yaml: content:
             if should_have_frontmatter {
                 let frontmatter = result.unwrap();
                 assert_eq!(frontmatter.title, "Test Article");
-                assert_eq!(frontmatter.is_completed, true);
+                assert!(frontmatter.is_completed);
             }
         }
     }
@@ -135,7 +135,7 @@ updated: "2025-01-01T00:00:00+09:00"
         if should_have_frontmatter {
             let frontmatter = result.unwrap();
             assert_eq!(frontmatter.title, "File Test");
-            assert_eq!(frontmatter.is_completed, true);
+            assert!(frontmatter.is_completed);
         }
 
         Ok(())

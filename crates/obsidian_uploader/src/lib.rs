@@ -49,9 +49,9 @@ pub async fn run_main(config: Config) -> Result<()> {
         .collect();
 
     info!("✅ Valid files: {}", valid_files.len());
-    info!("⏭️  Skipped files: {}", skipped_count);
+    info!("⏭️  Skipped files: {skipped_count}");
     if error_count > 0 {
-        warn!("❌ Error files: {}", error_count);
+        warn!("❌ Error files: {error_count}");
     }
 
     let file_mapping = build_file_mapping(&config, &valid_files)?;
@@ -68,12 +68,12 @@ pub async fn run_main(config: Config) -> Result<()> {
 
     // 処理結果サマリーの出力
     info!("\n=== Processing Summary ===");
-    info!("✅ Successfully processed: {} files", processed_count);
-    info!("⏭️  Skipped: {} files", skipped_count);
+    info!("✅ Successfully processed: {processed_count} files");
+    info!("⏭️  Skipped: {skipped_count} files");
     if error_count > 0 {
-        warn!("❌ Errors: {} files", error_count);
+        warn!("❌ Errors: {error_count} files");
     }
-    info!("⏱️  Processing time: {:.2?}", duration);
+    info!("⏱️  Processing time: {duration:.2?}");
     info!("📁 Output directory: {}", config.output_dir.display());
 
     // 処理されたファイルの詳細
@@ -148,10 +148,7 @@ async fn process_obsidian_file(
     let html_with_rich_bookmarks = bookmark::convert_simple_bookmarks_to_rich(&html_body)
         .await
         .unwrap_or_else(|e| {
-            warn!(
-                "Warning: Failed to convert simple bookmarks to rich bookmarks: {}",
-                e
-            );
+            warn!("Warning: Failed to convert simple bookmarks to rich bookmarks: {e}");
             html_body
         });
 

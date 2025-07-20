@@ -1,5 +1,5 @@
-use obsidian_uploader::{Config, run_main};
 use indoc::indoc;
+use obsidian_uploader::{Config, run_main};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;

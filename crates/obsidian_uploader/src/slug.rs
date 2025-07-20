@@ -14,7 +14,7 @@ pub fn generate_slug<P: AsRef<Path>>(
         .ok_or_else(|| ObsidianError::PathError("Invalid path encoding".to_string()))?;
 
     // ハッシュ生成元文字列
-    let hash_input = format!("{}/{}/{}", title, relative_path_str, created);
+    let hash_input = format!("{title}/{relative_path_str}/{created}");
 
     // SHA-256ハッシュ計算
     let mut hasher = Sha256::new();
@@ -25,7 +25,7 @@ pub fn generate_slug<P: AsRef<Path>>(
     let slug = hash_result[..6]
         .iter()
         .fold(String::with_capacity(12), |mut acc, byte| {
-            acc.push_str(&format!("{:02x}", byte));
+            acc.push_str(&format!("{byte:02x}"));
             acc
         });
 
