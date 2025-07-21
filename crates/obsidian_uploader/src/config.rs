@@ -10,6 +10,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            // fixed paths for Obsidian and output directories
             obsidian_dir: PathBuf::from("crates/obsidian_uploader/obsidian/Publish"),
             output_dir: PathBuf::from("crates/obsidian_uploader/dist"),
         }
@@ -17,14 +18,13 @@ impl Default for Config {
 }
 
 impl Config {
-    /// 固定パスで設定を初期化
     pub fn new() -> Result<Self> {
         let config = Self::default();
         config.validate()?;
         Ok(config)
     }
 
-    /// 設定値の検証
+    /// validate the obisidan path is valid and exists
     fn validate(&self) -> Result<()> {
         if !self.obsidian_dir.exists() {
             return Err(ObsidianError::ConfigError(format!(

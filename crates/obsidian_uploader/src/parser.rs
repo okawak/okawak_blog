@@ -3,88 +3,84 @@ use crate::models::ObsidianFrontMatter;
 use std::fs;
 use std::path::Path;
 
-/// Obsidianファイルからフロントマターを解析する
-pub fn parse_obsidian_file<P: AsRef<Path>>(file_path: P) -> Result<Option<ObsidianFrontMatter>> {
-    let content = fs::read_to_string(file_path.as_ref())?;
+/// parse Obsidian file, markdown file with frontmatter
+pub fn parse_obsidian_file(path: impl AsRef<Path>) -> Result<Option<ObsidianFrontMatter>> {
+    let content = fs::read_to_string(&path)?;
     parse_frontmatter(&content)
 }
 
-/// 文字列からフロントマターを解析する
+/// parse front matter from a string content
 pub fn parse_frontmatter(content: &str) -> Result<Option<ObsidianFrontMatter>> {
-    // YAMLフロントマター（---で囲まれた部分）を抽出
-    let frontmatter_content = extract_yaml_frontmatter(content)?;
-
-    match frontmatter_content {
-        Some(yaml_content) => {
-            let frontmatter: ObsidianFrontMatter = serde_yaml::from_str(&yaml_content)?;
-            Ok(Some(frontmatter))
-        }
-        None => Ok(None),
-    }
+    extract_yaml_frontmatter(content)?
+        .map(|yaml| serde_yaml::from_str::<ObsidianFrontMatter>(yaml).map_err(Into::into))
+        .transpose()
 }
 
-/// YAMLフロントマターを抽出する
-fn extract_yaml_frontmatter(content: &str) -> Result<Option<String>> {
-    let content = content.trim_start();
-
-    if !content.starts_with("---\n") && !content.starts_with("---\r") {
+/// extract YAML frontmatter from the content
+fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
+    let Some(rest) = text.trim_start().strip_prefix("---\n") else {
         return Ok(None);
+    };
+
+    match rest.split_once("\n---\n") {
+        Some((yaml, _)) => Ok(Some(yaml)),
+        None => Err(ObsidianError::ParseError(
+            "unterminated front‑matter (closing `---` not found)".into(),
+        )),
     }
-
-    let lines: Vec<&str> = content.lines().collect();
-    let end_pos = lines
-        .iter()
-        .skip(1)
-        .position(|&line| line.trim() == "---")
-        .ok_or_else(|| {
-            ObsidianError::ParseError(
-                "Unterminated YAML frontmatter (missing closing ---)".to_string(),
-            )
-        })?;
-
-    let frontmatter = lines[1..end_pos + 1].join("\n");
-    Ok((!frontmatter.is_empty()).then_some(frontmatter))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use indoc::indoc;
     use rstest::*;
-    use std::fs;
     use tempfile::TempDir;
 
     #[rstest]
     #[case::valid_frontmatter(
-        r#"---
-title: "Test Article"
-tags: ["rust", "test"]
-is_completed: true
-created: "2025-01-01T00:00:00+09:00"
-updated: "2025-01-02T00:00:00+09:00"
----
-# Content"#,
+        indoc! {
+            r#"
+            ---
+            title: "Test Article"
+            tags: ["rust", "test"]
+            is_completed: true
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-02T00:00:00+09:00"
+            ---
+            # Content
+            "#},
         true,
         false
     )]
     #[case::no_frontmatter(
-        r#"# Article Without Frontmatter
-This article has no frontmatter."#,
+        indoc! {
+            r#"
+            # Article Without Frontmatter
+            This article has no frontmatter.
+            "#},
         false,
         false
     )]
     #[case::unterminated_frontmatter(
-        r#"---
-title: "Test Article"
-is_completed: true
-# Article Content"#,
+        indoc! {
+            r#"
+            ---
+            tite: "Test Article"
+            is_completed: true
+            # Article Content
+            "#},
         false,
         true
     )]
     #[case::invalid_yaml(
-        r#"---
-invalid: yaml: content:
----
-# Content"#,
+        indoc! {
+            r#"
+            ---
+            invalid: yaml: content:
+            ---
+            # Content
+            "#},
         false,
         true
     )]
@@ -111,13 +107,16 @@ invalid: yaml: content:
 
     #[rstest]
     #[case::valid_file(
-        r#"---
-title: "File Test"
-is_completed: true
-created: "2025-01-01T00:00:00+09:00"
-updated: "2025-01-01T00:00:00+09:00"
----
-# Test Content"#,
+        indoc! {
+            r#"
+            ---
+            title: "File Test"
+            is_completed: true
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
+            ---
+            # Test Content
+            "#},
         true
     )]
     #[case::no_frontmatter_file("# Just content", false)]
@@ -143,13 +142,15 @@ updated: "2025-01-01T00:00:00+09:00"
 
     #[rstest]
     fn test_extract_yaml_frontmatter() -> Result<()> {
-        let content = r#"---
-title: Test
-key: value
----
+        let content = indoc! {
+        r#"
+        ---
+        title: Test
+        key: value
+        ---
 
-Content here
-"#;
+        Content here
+        "#};
 
         let result = extract_yaml_frontmatter(content)?;
         assert!(result.is_some());
@@ -159,5 +160,52 @@ Content here
         assert!(yaml.contains("key: value"));
 
         Ok(())
+    }
+
+    #[rstest]
+    #[case::closing_at_eof(indoc! {r#"
+        ---
+        title: "File Test"
+        is_completed: true
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        ---
+        "#}, true, false)]
+    #[case::no_newline_after_delim(indoc! {r#"
+        ---
+        title: "File Test"
+        is_completed: true
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        ---# Heading
+        "#}, true, true)]
+    #[case::leading_blank_lines(indoc! {r#"
+
+
+        ---
+        title: "File Test"
+        is_completed: true
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        ---
+
+        body
+        "#}, true, false)]
+    #[case::empty_frontmatter(indoc! {r#"
+        ---
+        ---
+        Body
+        "#}, true, true)]
+    fn test_additional_cases(
+        #[case] content: &str,
+        #[case] should_have_frontmatter: bool,
+        #[case] should_error: bool,
+    ) {
+        let result = parse_frontmatter(content);
+
+        assert_eq!(result.is_err(), should_error);
+        if !should_error {
+            assert_eq!(result.unwrap().is_some(), should_have_frontmatter);
+        }
     }
 }

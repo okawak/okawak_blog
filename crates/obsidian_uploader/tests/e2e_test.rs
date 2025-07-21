@@ -12,8 +12,8 @@ async fn test_end_to_end_obsidian_processing() {
 
     // リアルなObsidianディレクトリ構造を作成
     fs::create_dir_all(&obsidian_dir).unwrap();
-    fs::create_dir_all(&obsidian_dir.join("tech")).unwrap();
-    fs::create_dir_all(&obsidian_dir.join("blog")).unwrap();
+    fs::create_dir_all(obsidian_dir.join("tech")).unwrap();
+    fs::create_dir_all(obsidian_dir.join("blog")).unwrap();
 
     // 技術記事のサンプル
     let tech_article = indoc! {r#"
@@ -102,7 +102,7 @@ async fn test_end_to_end_obsidian_processing() {
         fn main() {
             let s1 = String::from("hello");
             let s2 = s1; // s1はもう使えない
-            
+
             println!("{}", s2); // OK
             // println!("{}", s1); // コンパイルエラー
         }
@@ -279,7 +279,7 @@ async fn test_end_to_end_obsidian_processing() {
         fs::read_dir(&output_dir)
             .unwrap()
             .filter_map(|entry| entry.ok())
-            .filter(|entry| entry.path().extension().map_or(false, |ext| ext == "html"))
+            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "html"))
             .count()
     );
 }
@@ -314,8 +314,8 @@ async fn test_large_volume_processing() {
 
             ## Content Section
 
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. 
-            
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+
             ### Code Example
 
             ```rust
@@ -341,7 +341,7 @@ async fn test_large_volume_processing() {
             (i + 1) % 100
         );
 
-        let file_path = obsidian_dir.join(format!("test-article-{:03}.md", i));
+        let file_path = obsidian_dir.join(format!("test-article-{i:03}.md"));
         fs::write(&file_path, content).unwrap();
     }
 
@@ -361,7 +361,7 @@ async fn test_large_volume_processing() {
     let generated_count = fs::read_dir(&output_dir)
         .unwrap()
         .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.path().extension().map_or(false, |ext| ext == "html"))
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "html"))
         .count();
 
     assert_eq!(generated_count, 100, "Should generate 100 HTML files");
@@ -369,14 +369,10 @@ async fn test_large_volume_processing() {
     // パフォーマンス要件の確認（100ファイルを5秒以内で処理）
     assert!(
         duration.as_secs() < 5,
-        "Should process 100 files in under 5 seconds, took {:?}",
-        duration
+        "Should process 100 files in under 5 seconds, took {duration:?}"
     );
 
-    println!(
-        "✅ パフォーマンステスト完了: {}個のファイルを{:.2?}で処理",
-        generated_count, duration
-    );
+    println!("✅ パフォーマンステスト完了: {generated_count}個のファイルを{duration:.2?}で処理");
 }
 
 /// エラーハンドリングテスト: 部分的失敗時の継続処理

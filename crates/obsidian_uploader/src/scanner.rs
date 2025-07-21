@@ -1,25 +1,28 @@
 use crate::error::Result;
+use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 
-/// ObsidianのPublishディレクトリ内のMarkdownファイルをスキャンする
-pub fn scan_obsidian_files<P: AsRef<Path>>(publish_dir: P) -> Result<Vec<PathBuf>> {
-    let mut markdown_files: Vec<PathBuf> = WalkDir::new(publish_dir.as_ref())
-        .into_iter()
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.file_type().is_file())
+/// Scans the specified directory for Markdown files (.md) and returns their paths.
+pub fn scan_obsidian_files(publish_dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
+    let mut md_files: Vec<PathBuf> = WalkBuilder::new(publish_dir.as_ref())
+        .hidden(true) // Exclude hidden files
+        .git_ignore(false) // do NOT respect .gitignore
+        .build() // single threaded walk (for multiple threads, use `build_parallel`)
+        .filter_map(std::result::Result::ok)
         .filter_map(|entry| {
             let path = entry.path();
-            path.extension()
-                .and_then(|ext| ext.to_str())
-                .filter(|ext| ext.to_lowercase() == "md")
-                .map(|_| path.to_path_buf())
+            (entry.file_type().is_some_and(|ft| ft.is_file())
+                && path
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("md")))
+            .then(|| entry.into_path())
         })
         .collect();
 
-    // ファイルパスでソート（一貫性のため、パフォーマンス向上のためsort_unstableを使用）
-    markdown_files.sort_unstable();
-    Ok(markdown_files)
+    // for performance reasons, we use `sort_unstable` instead of `sort`
+    md_files.sort_unstable();
+    Ok(md_files)
 }
 
 #[cfg(test)]
@@ -41,7 +44,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path();
 
-        // .mdファイルを作成
+        // create Markdown file
         for file_path in md_files.iter() {
             let full_path = base_path.join(file_path);
             if let Some(parent) = full_path.parent() {
@@ -50,7 +53,7 @@ mod tests {
             fs::write(full_path, "# Test Content")?;
         }
 
-        // その他のファイルを作成
+        // create other files
         for file_path in other_files.iter() {
             fs::write(base_path.join(file_path), "Other content")?;
         }
@@ -72,13 +75,12 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path();
 
-        // 指定された拡張子でファイルを作成
         fs::write(base_path.join(filename), content)?;
         fs::write(base_path.join("not_markdown.txt"), "Not markdown")?;
 
         let files = scan_obsidian_files(base_path)?;
 
-        assert_eq!(files.len(), 1); // 1つの.mdファイルが検出される
+        assert_eq!(files.len(), 1); // should find one Markdown file
         assert_eq!(files[0].file_name().unwrap().to_string_lossy(), filename);
 
         Ok(())
