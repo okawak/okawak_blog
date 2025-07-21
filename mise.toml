@@ -22,10 +22,6 @@ description = "Start the service"
 depends = ["build"]
 run = 'sudo systemctl daemon-reload && sudo systemctl start okawak_blog'
 
-[tasks.local_notion]
-description = "Run the Notion API project locally"
-run = 'cargo test -p notion_api --release -- --nocapture'
-
 [tasks.local_server]
 description = "build the server locally"
 run = 'AWS_PROFILE=blog-s3 cargo leptos serve --release'
