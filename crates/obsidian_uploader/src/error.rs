@@ -23,7 +23,7 @@ pub enum ObsidianError {
     EnvError(#[from] std::env::VarError),
 
     #[error("Failed to traverse directory")]
-    WalkDirError(#[from] walkdir::Error),
+    WalkDirError(#[from] ignore::Error),
 
     #[error("Network request failed: {0}")]
     NetworkError(String),

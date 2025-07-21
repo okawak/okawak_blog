@@ -1,4 +1,6 @@
-[![Notion Data Upload](https://github.com/okawak/okawak_blog/actions/workflows/notion_data_upload.yml/badge.svg)](https://github.com/okawak/okawak_blog/actions/workflows/notion_data_upload.yml)
+[![Deploy Obsidian to S3](https://github.com/okawak/okawak_blog/actions/workflows/deploy.yml/badge.svg)](https://github.com/okawak/okawak_blog/actions/workflows/deploy.yml)
+
+[![Security audit](https://github.com/okawak/okawak_blog/actions/workflows/security.yml/badge.svg)](https://github.com/okawak/okawak_blog/actions/workflows/security.yml)
 
 # ぶくせんの探窟メモ
 
