@@ -63,7 +63,19 @@ jobs:
         run: cargo build --release -p obsidian_uploader
 
       - name: Run obsidian_uploader
-        run: cargo run --release -p obsidian_uploader
+        run: |
+          RUST_LOG=info cargo run --release -p obsidian_uploader
+          
+          # 処理結果の検証
+          if [ -d "crates/obsidian_uploader/dist" ]; then
+            file_count=$(find crates/obsidian_uploader/dist -name "*.html" | wc -l)
+            if [ "$file_count" -eq 0 ]; then
+              echo "⚠️  Warning: No HTML files were generated"
+            fi
+          else
+            echo "❌ Output directory not found"
+            exit 1
+          fi
 
       - name: Validate AWS secrets
         run: |
@@ -86,10 +98,22 @@ jobs:
             --delete \
             --content-type "text/html; charset=utf-8" \
             --cache-control "public, max-age=300"
+          
+          # S3バケットの内容確認
+          s3_object_count=$(aws s3 ls s3://${{ secrets.S3_BUCKET }}/ --recursive | grep ".html" | wc -l)
+          echo "🪣 S3 bucket now contains ${s3_object_count} HTML files"
 
-      - name: Output deployment summary
+
+      - name: Notify on failure
+        if: failure()
         run: |
-          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Files processed: $(find ${{ env.UPLOAD_PATH }} -name '*.html' | wc -l)" >> $GITHUB_STEP_SUMMARY
-          echo "- Deployment time: $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "- S3 Bucket: ${{ secrets.S3_BUCKET }}" >> $GITHUB_STEP_SUMMARY
+          echo "❌ Deployment failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 Troubleshooting" >> $GITHUB_STEP_SUMMARY
+          echo "Please check the logs above for detailed error information." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Common issues:" >> $GITHUB_STEP_SUMMARY
+          echo "- Submodule update failures" >> $GITHUB_STEP_SUMMARY
+          echo "- AWS credentials or permissions" >> $GITHUB_STEP_SUMMARY
+          echo "- Build or test failures" >> $GITHUB_STEP_SUMMARY
+          echo "- S3 sync issues" >> $GITHUB_STEP_SUMMARY
