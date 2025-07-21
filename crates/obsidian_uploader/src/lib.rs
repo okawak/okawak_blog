@@ -9,7 +9,8 @@ pub mod slug;
 
 pub use config::Config;
 pub use error::{ObsidianError, Result};
-pub use models::{ObsidianFrontMatter, OutputFrontMatter};
+pub use models::OutputFrontMatter;
+pub use parser::ObsidianFrontMatter;
 
 use converter::{FileInfo, FileMapping};
 use log::{error, info, warn};
@@ -240,8 +241,6 @@ mod tests {
 
     #[rstest]
     fn test_build_file_mapping_success() {
-        use crate::models::ObsidianFrontMatter;
-
         let temp_dir = TempDir::new().unwrap();
         let config = Config {
             obsidian_dir: temp_dir.path().to_path_buf(),
@@ -287,8 +286,6 @@ mod tests {
 
     #[rstest]
     fn test_build_file_mapping_path_collision() {
-        use crate::models::ObsidianFrontMatter;
-
         let temp_dir = TempDir::new().unwrap();
         let config = Config {
             obsidian_dir: temp_dir.path().to_path_buf(),
@@ -334,8 +331,6 @@ mod tests {
 
     #[rstest]
     fn test_build_file_mapping_url_normalization() {
-        use crate::models::ObsidianFrontMatter;
-
         let temp_dir = TempDir::new().unwrap();
         let config = Config {
             obsidian_dir: temp_dir.path().to_path_buf(),
