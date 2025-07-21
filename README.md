@@ -1,6 +1,7 @@
-[![Deploy Obsidian to S3](https://github.com/okawak/okawak_blog/actions/workflows/deploy.yml/badge.svg)](https://github.com/okawak/okawak_blog/actions/workflows/deploy.yml)
-
-[![Security audit](https://github.com/okawak/okawak_blog/actions/workflows/security.yml/badge.svg)](https://github.com/okawak/okawak_blog/actions/workflows/security.yml)
+<p>
+  [![Deploy Obsidian to S3](https://github.com/okawak/okawak_blog/actions/workflows/deploy.yml/badge.svg)](https://github.com/okawak/okawak_blog/actions/workflows/deploy.yml)
+  [![Security audit](https://github.com/okawak/okawak_blog/actions/workflows/security.yml/badge.svg)](https://github.com/okawak/okawak_blog/actions/workflows/security.yml)
+</p>
 
 # ぶくせんの探窟メモ
 
