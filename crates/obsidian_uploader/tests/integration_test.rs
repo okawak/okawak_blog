@@ -69,14 +69,14 @@ async fn test_run_main_with_sample_file() {
     let html_files: Vec<_> = fs::read_dir(&output_dir)
         .unwrap()
         .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            entry.path().extension()
-                .map_or(false, |ext| ext == "html")
-        })
+        .filter(|entry| entry.path().extension().map_or(false, |ext| ext == "html"))
         .collect();
-    
-    assert!(!html_files.is_empty(), "At least one HTML file should be generated");
-    
+
+    assert!(
+        !html_files.is_empty(),
+        "At least one HTML file should be generated"
+    );
+
     // HTMLファイルの内容を確認
     let html_file = &html_files[0];
     let html_content = fs::read_to_string(html_file.path()).unwrap();

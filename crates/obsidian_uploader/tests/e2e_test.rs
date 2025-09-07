@@ -206,48 +206,54 @@ async fn test_end_to_end_obsidian_processing() {
         "Rustでのパフォーマンス最適化",
         Path::new("tech/rust-performance.md"),
         "2025-01-15T10:00:00+09:00",
-    ).unwrap();
+    )
+    .unwrap();
     let basic_slug = slug::generate_slug(
         "基本的なRust概念",
         Path::new("basic-rust-concepts.md"),
         "2025-01-15T09:00:00+09:00",
-    ).unwrap();
+    )
+    .unwrap();
     let memory_slug = slug::generate_slug(
         "メモリ管理のベストプラクティス",
         Path::new("tech/memory-best-practices.md"),
         "2025-01-15T11:00:00+09:00",
-    ).unwrap();
-    
+    )
+    .unwrap();
+
     let _tech_html = output_dir.join("tech").join(format!("{tech_slug}.html"));
     let _basic_html = output_dir.join(format!("{basic_slug}.html"));
     let _memory_html = output_dir.join("tech").join(format!("{memory_slug}.html"));
-    
+
     // 未完成記事用（is_completed: false なので生成されない）
     let blog_slug = slug::generate_slug(
         "開発日記",
         Path::new("blog/development-diary.md"),
         "2025-01-15T12:00:00+09:00",
-    ).unwrap();
+    )
+    .unwrap();
     let blog_html = output_dir.join("blog").join(format!("{blog_slug}.html"));
 
     // 完成した記事のHTMLが生成されているか確認（ファイル数で判定）
     let mut html_count = 0;
     let mut tech_html_count = 0;
-    
+
     // techディレクトリ内のHTMLファイル数をカウント
     if let Ok(entries) = fs::read_dir(output_dir.join("tech")) {
-        tech_html_count = entries.filter_map(|e| e.ok())
+        tech_html_count = entries
+            .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().map_or(false, |ext| ext == "html"))
             .count();
     }
-    
+
     // ルートディレクトリ内のHTMLファイル数をカウント
     if let Ok(entries) = fs::read_dir(&output_dir) {
-        html_count = entries.filter_map(|e| e.ok())
+        html_count = entries
+            .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().map_or(false, |ext| ext == "html"))
             .count();
     }
-    
+
     // 期待する数：tech記事2つ（技術記事とメモリ記事）+ 基本記事1つ
     assert_eq!(tech_html_count, 2, "Should generate 2 tech articles");
     assert_eq!(html_count, 1, "Should generate 1 basic article");
@@ -261,25 +267,34 @@ async fn test_end_to_end_obsidian_processing() {
     // HTMLファイルの内容検証（tech ディレクトリ内のファイルから特定のコンテンツを探す）
     let mut performance_file_found = false;
     let mut memory_file_found = false;
-    
+
     if let Ok(entries) = fs::read_dir(output_dir.join("tech")) {
-        let files: Vec<_> = entries.filter_map(|e| e.ok())
+        let files: Vec<_> = entries
+            .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().map_or(false, |ext| ext == "html"))
             .collect();
-        println!("Found HTML files in tech/: {:?}", files.iter().map(|f| f.path()).collect::<Vec<_>>());
-        
+        println!(
+            "Found HTML files in tech/: {:?}",
+            files.iter().map(|f| f.path()).collect::<Vec<_>>()
+        );
+
         for file in files {
             if let Ok(content) = fs::read_to_string(file.path()) {
                 println!("Checking file: {:?}", file.path());
-                
+
                 // 安全な文字列スライス
-                let preview_len = content.char_indices()
+                let preview_len = content
+                    .char_indices()
                     .nth(100)
                     .map(|(i, _)| i)
                     .unwrap_or(content.len());
-                println!("File content preview (first 100 chars): {}", &content[..preview_len]);
-                
-                if content.contains("Rustでのパフォーマンス最適化") && content.contains("fibonacci") {
+                println!(
+                    "File content preview (first 100 chars): {}",
+                    &content[..preview_len]
+                );
+
+                if content.contains("Rustでのパフォーマンス最適化") && content.contains("fibonacci")
+                {
                     performance_file_found = true;
                     println!("Found performance optimization file");
                 }
@@ -292,7 +307,7 @@ async fn test_end_to_end_obsidian_processing() {
     } else {
         println!("Could not read tech directory");
     }
-    
+
     assert!(
         performance_file_found,
         "Performance optimization article should be present in tech directory"
@@ -305,12 +320,14 @@ async fn test_end_to_end_obsidian_processing() {
     // KaTeX数式の処理確認とフロントマター検証
     let mut math_processing_verified = false;
     let mut frontmatter_verified = false;
-    
+
     if let Ok(entries) = fs::read_dir(output_dir.join("tech")) {
         for entry in entries.filter_map(|e| e.ok()) {
             if entry.path().extension().map_or(false, |ext| ext == "html") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
-                    if content.contains("<div class=\"katex-display\">") && content.contains("<span class=\"katex-inline\">") {
+                    if content.contains("<div class=\"katex-display\">")
+                        && content.contains("<span class=\"katex-inline\">")
+                    {
                         math_processing_verified = true;
                     }
                     if content.contains("title:") && content.contains("tags:") {
@@ -320,7 +337,7 @@ async fn test_end_to_end_obsidian_processing() {
             }
         }
     }
-    
+
     assert!(
         math_processing_verified,
         "KaTeX math processing should work in tech files"
@@ -521,7 +538,8 @@ async fn test_partial_failure_handling() {
         "Valid Article",
         Path::new("valid.md"),
         "2025-01-15T10:00:00+09:00",
-    ).unwrap();
+    )
+    .unwrap();
     let valid_html = output_dir.join(format!("{valid_slug}.html"));
     assert!(valid_html.exists(), "Valid file should be processed");
 
@@ -530,7 +548,8 @@ async fn test_partial_failure_handling() {
         "Malformed Article", // invalid.mdのタイトル（仮）
         Path::new("invalid.md"),
         "2025-01-15T10:00:00+09:00",
-    ).unwrap();
+    )
+    .unwrap();
     let invalid_html = output_dir.join(format!("{invalid_slug}.html"));
     assert!(
         !invalid_html.exists(),
