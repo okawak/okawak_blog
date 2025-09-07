@@ -195,7 +195,7 @@ async fn test_end_to_end_obsidian_processing() {
     };
 
     // メイン処理を実行
-    let result = run_main(config).await;
+    let result = run_main(&config).await;
     assert!(result.is_ok(), "run_main should succeed");
 
     // 出力ディレクトリの検証
@@ -352,7 +352,7 @@ async fn test_large_volume_processing() {
 
     // 処理時間の計測
     let start = std::time::Instant::now();
-    let result = run_main(config).await;
+    let result = run_main(&config).await;
     let duration = start.elapsed();
 
     assert!(result.is_ok(), "Large volume processing should succeed");
@@ -448,7 +448,7 @@ async fn test_partial_failure_handling() {
     };
 
     // 部分的失敗があっても処理は継続されるべき
-    let result = run_main(config).await;
+    let result = run_main(&config).await;
     assert!(
         result.is_ok(),
         "Should continue processing despite partial failures"

@@ -11,7 +11,7 @@ pub fn generate_slug<P: AsRef<Path>>(
     let relative_path_str = relative_path
         .as_ref()
         .to_str()
-        .ok_or_else(|| ObsidianError::PathError("Invalid path encoding".to_string()))?;
+        .ok_or_else(|| ObsidianError::Path("Invalid path encoding".to_string()))?;
 
     // ハッシュ生成元文字列
     let hash_input = format!("{title}/{relative_path_str}/{created}");

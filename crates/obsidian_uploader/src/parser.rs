@@ -1,7 +1,6 @@
 use crate::error::{ObsidianError, Result};
 use serde::Deserialize;
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct ObsidianFrontMatter {
@@ -17,10 +16,15 @@ pub struct ObsidianFrontMatter {
     pub category: Option<String>,
 }
 
-/// parse Obsidian file, markdown file with frontmatter
-pub fn parse_obsidian_file(path: impl AsRef<Path>) -> Result<Option<ObsidianFrontMatter>> {
+/// parse Obsidian file with content, returns both frontmatter and full content
+pub fn parse_obsidian_file(
+    path: impl AsRef<Path>,
+) -> Result<Option<(ObsidianFrontMatter, String)>> {
     let content = fs::read_to_string(&path)?;
-    parse_frontmatter(&content)
+    match parse_frontmatter(&content)? {
+        Some(front_matter) => Ok(Some((front_matter, content))),
+        None => Ok(None),
+    }
 }
 
 /// parse front matter from a string content
@@ -38,7 +42,7 @@ fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
 
     match rest.split_once("\n---\n") {
         Some((yaml, _)) => Ok(Some(yaml)),
-        None => Err(ObsidianError::ParseError(
+        None => Err(ObsidianError::Parse(
             "unterminated front‑matter (closing `---` not found)".into(),
         )),
     }
@@ -191,7 +195,7 @@ mod tests {
         assert_eq!(result.is_some(), should_have_frontmatter);
 
         if should_have_frontmatter {
-            let frontmatter = result.unwrap();
+            let (frontmatter, _) = result.unwrap();
             assert_eq!(frontmatter.title, "File Test");
             assert!(frontmatter.is_completed);
         }

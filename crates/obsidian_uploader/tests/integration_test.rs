@@ -19,7 +19,7 @@ async fn test_run_main_with_empty_directory() {
     };
 
     // run_mainを実行
-    let result = run_main(config).await;
+    let result = run_main(&config).await;
     assert!(result.is_ok());
 
     // 出力ディレクトリが作成されていることを確認
@@ -62,7 +62,7 @@ async fn test_run_main_with_sample_file() {
     };
 
     // run_mainを実行
-    let result = run_main(config).await;
+    let result = run_main(&config).await;
     assert!(result.is_ok());
 
     // HTMLファイルが生成されていることを確認
@@ -110,7 +110,7 @@ async fn test_run_main_with_incomplete_file() {
     };
 
     // run_mainを実行
-    let result = run_main(config).await;
+    let result = run_main(&config).await;
     assert!(result.is_ok());
 
     // HTMLファイルが生成されていないことを確認（is_completed: falseのため）

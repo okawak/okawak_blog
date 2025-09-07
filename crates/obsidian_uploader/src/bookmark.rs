@@ -42,7 +42,7 @@ fn create_http_client() -> Result<reqwest::Client> {
         .user_agent(user_agent)
         .timeout(std::time::Duration::from_secs(10))
         .build()
-        .map_err(|e| ObsidianError::NetworkError(e.to_string()))
+        .map_err(|e| ObsidianError::Network(e.to_string()))
 }
 
 /// HTMLコンテンツを取得
@@ -51,12 +51,12 @@ async fn fetch_html_content(client: &reqwest::Client, url: &str) -> Result<Strin
         .get(url)
         .send()
         .await
-        .map_err(|e| ObsidianError::NetworkError(e.to_string()))?;
+        .map_err(|e| ObsidianError::Network(e.to_string()))?;
 
     response
         .text()
         .await
-        .map_err(|e| ObsidianError::NetworkError(e.to_string()))
+        .map_err(|e| ObsidianError::Network(e.to_string()))
 }
 
 /// HTMLドキュメントからタイトルを抽出

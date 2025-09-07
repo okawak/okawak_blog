@@ -27,14 +27,14 @@ impl Config {
     /// validate the obisidan path is valid and exists
     fn validate(&self) -> Result<()> {
         if !self.obsidian_dir.exists() {
-            return Err(ObsidianError::ConfigError(format!(
+            return Err(ObsidianError::Config(format!(
                 "Obsidian directory does not exist: {}",
                 self.obsidian_dir.display()
             )));
         }
 
         if !self.obsidian_dir.is_dir() {
-            return Err(ObsidianError::ConfigError(format!(
+            return Err(ObsidianError::Config(format!(
                 "Obsidian path is not a directory: {}",
                 self.obsidian_dir.display()
             )));

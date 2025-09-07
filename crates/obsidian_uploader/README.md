@@ -1,10 +1,10 @@
 # Obsidian Uploader
 
-ObsidianのMarkdownファイルを解析し、リッチブックマーク付きHTMLファイルを生成するRustアプリケーション。
+ObsidianのMarkdownファイルからHTMLファイルを生成します。
 
 ## 概要
 
-このツールは、Obsidianで作成されたMarkdownファイルを読み取り、以下の処理を行います：
+サブモジュールに登録しているObsidianのリポジトリ内にあるMarkdownファイルを読み取り、以下の処理を行います：
 
 - フロントマター（YAML形式）の解析
 - Obsidianリンクの解決とHTML変換
