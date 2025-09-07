@@ -242,7 +242,7 @@ async fn test_end_to_end_obsidian_processing() {
     if let Ok(entries) = fs::read_dir(output_dir.join("tech")) {
         tech_html_count = entries
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |ext| ext == "html"))
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "html"))
             .count();
     }
 
@@ -250,7 +250,7 @@ async fn test_end_to_end_obsidian_processing() {
     if let Ok(entries) = fs::read_dir(&output_dir) {
         html_count = entries
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |ext| ext == "html"))
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "html"))
             .count();
     }
 
@@ -271,7 +271,7 @@ async fn test_end_to_end_obsidian_processing() {
     if let Ok(entries) = fs::read_dir(output_dir.join("tech")) {
         let files: Vec<_> = entries
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |ext| ext == "html"))
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "html"))
             .collect();
         println!(
             "Found HTML files in tech/: {:?}",
@@ -323,16 +323,16 @@ async fn test_end_to_end_obsidian_processing() {
 
     if let Ok(entries) = fs::read_dir(output_dir.join("tech")) {
         for entry in entries.filter_map(|e| e.ok()) {
-            if entry.path().extension().map_or(false, |ext| ext == "html") {
-                if let Ok(content) = fs::read_to_string(entry.path()) {
-                    if content.contains("<div class=\"katex-display\">")
-                        && content.contains("<span class=\"katex-inline\">")
-                    {
-                        math_processing_verified = true;
-                    }
-                    if content.contains("title:") && content.contains("tags:") {
-                        frontmatter_verified = true;
-                    }
+            if entry.path().extension().is_some_and(|ext| ext == "html")
+                && let Ok(content) = fs::read_to_string(entry.path())
+            {
+                if content.contains("<div class=\"katex-display\">")
+                    && content.contains("<span class=\"katex-inline\">")
+                {
+                    math_processing_verified = true;
+                }
+                if content.contains("title:") && content.contains("tags:") {
+                    frontmatter_verified = true;
                 }
             }
         }
