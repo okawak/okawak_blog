@@ -131,16 +131,9 @@ fn build_file_mapping(config: &Config, valid_files: &[ParsedFile]) -> Result<Fil
 
     for parsed_file in valid_files {
         let relative_path = get_relative_path(&parsed_file.file_path, &config.obsidian_dir)?;
-        let slug = slug::generate_slug(
-            &parsed_file.front_matter.title,
-            relative_path,
-            &parsed_file.front_matter.created,
-        )?;
-
         let relative_path_no_ext = relative_path.with_extension("");
         let mapping_key = normalize_path_for_url(&relative_path_no_ext);
-
-        mapping.insert(mapping_key, slug);
+        mapping.insert(mapping_key, parsed_file.slug.clone());
     }
 
     Ok(mapping)
