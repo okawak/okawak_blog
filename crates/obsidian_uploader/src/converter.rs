@@ -1,28 +1,24 @@
 use crate::error::Result;
 use pulldown_cmark::{Options, Parser, html};
 use regex::Regex;
-use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::{collections::HashMap, path::Path, sync::LazyLock};
 
 /// ファイル名（拡張子なし）からslugへのマッピング
 pub type FileMapping = HashMap<String, String>;
 
 /// キーとslugからHTMLパスを生成
 fn generate_html_path_from_key_and_slug(key: &str, slug: &str) -> String {
-    if let Some(parent) = std::path::Path::new(key).parent() {
-        if parent == std::path::Path::new("") {
-            format!("/{slug}.html")
-        } else {
-            format!(
+    let parent = Path::new(key).parent();
+    if let Some(parent) = parent {
+        let parent_str = parent.to_string_lossy();
+        if !parent_str.is_empty() {
+            return format!(
                 "/{}/{slug}.html",
-                parent
-                    .to_string_lossy()
-                    .replace(std::path::MAIN_SEPARATOR, "/")
-            )
+                parent_str.replace(std::path::MAIN_SEPARATOR, "/")
+            );
         }
-    } else {
-        format!("/{slug}.html")
     }
+    format!("/{slug}.html")
 }
 
 /// MarkdownコンテンツをHTMLに変換し、KaTeX数式処理を適用する
