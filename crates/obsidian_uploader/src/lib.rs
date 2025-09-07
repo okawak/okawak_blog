@@ -46,16 +46,14 @@ pub async fn run_main(config: &Config) -> Result<()> {
         .into_iter()
         .filter_map(|file_path| match parser::parse_obsidian_file(&file_path) {
             Ok(Some((front_matter, content))) if front_matter.is_completed => {
-                let relative_path = get_relative_path(&file_path, &config.obsidian_dir).ok()?;
-                let slug =
-                    slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)
-                        .ok()?;
-                Some(ParsedFile {
-                    file_path,
-                    slug,
-                    content,
-                    front_matter,
-                })
+                match process_valid_file(&file_path, front_matter, content, config) {
+                    Ok(parsed_file) => Some(parsed_file),
+                    Err(e) => {
+                        error_count += 1;
+                        error!("Error processing {}: {}", file_path.display(), e);
+                        None
+                    }
+                }
             }
             Ok(_) => {
                 skipped_count += 1;
@@ -108,6 +106,24 @@ pub async fn run_main(config: &Config) -> Result<()> {
 
     info!("=== Obsidian Uploader Completed ===");
     Ok(())
+}
+
+/// 有効なファイルを処理し、ParsedFileを生成
+fn process_valid_file(
+    file_path: &Path,
+    front_matter: ObsidianFrontMatter,
+    content: String,
+    config: &Config,
+) -> Result<ParsedFile> {
+    let relative_path = get_relative_path(file_path, &config.obsidian_dir)?;
+    let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
+
+    Ok(ParsedFile {
+        file_path: file_path.to_path_buf(),
+        slug,
+        content,
+        front_matter,
+    })
 }
 
 /// パスをURL用に正規化（OS固有セパレータをUnix形式に統一）
