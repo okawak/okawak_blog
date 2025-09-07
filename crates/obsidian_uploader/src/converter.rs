@@ -1,22 +1,25 @@
 use crate::error::Result;
 use pulldown_cmark::{Options, Parser, html};
 use regex::Regex;
-use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::{collections::HashMap, path::Path, sync::LazyLock};
 
-/// ファイル情報を保持する構造体（リンク解決用）
-#[derive(Debug, Clone)]
-pub struct FileInfo {
-    /// Obsidianディレクトリからの相対パス（拡張子なし）
-    pub relative_path: String,
-    /// 生成されるslug
-    pub slug: String,
-    /// HTMLファイルへの最終的なパス
-    pub html_path: String,
+/// ファイル名（拡張子なし）からslugへのマッピング
+pub type FileMapping = HashMap<String, String>;
+
+/// キーとslugからHTMLパスを生成
+fn generate_html_path_from_key_and_slug(key: &str, slug: &str) -> String {
+    let parent = Path::new(key).parent();
+    if let Some(parent) = parent {
+        let parent_str = parent.to_string_lossy();
+        if !parent_str.is_empty() {
+            return format!(
+                "/{}/{slug}.html",
+                parent_str.replace(std::path::MAIN_SEPARATOR, "/")
+            );
+        }
+    }
+    format!("/{slug}.html")
 }
-
-/// ファイル名（拡張子なし）からFileInfoへのマッピング
-pub type FileMapping = HashMap<String, FileInfo>;
 
 /// MarkdownコンテンツをHTMLに変換し、KaTeX数式処理を適用する
 pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
@@ -91,16 +94,16 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
 
             // ファイルマッピングからリンク先を解決
             // まずファイル名で検索し、見つからない場合は相対パスとしても検索
-            let href = if let Some(file_info) = file_mapping.get(link_target) {
-                file_info.html_path.clone()
+            let href = if let Some(slug) = file_mapping.get(link_target) {
+                generate_html_path_from_key_and_slug(link_target, slug)
             } else {
                 // 相対パス全体での検索も試行
                 let mut found = false;
                 let mut result_href = format!("/{link_target}");
 
-                for (key, file_info) in file_mapping {
+                for (key, slug) in file_mapping {
                     if key.ends_with(&format!("/{link_target}")) || key == link_target {
-                        result_href = file_info.html_path.clone();
+                        result_href = generate_html_path_from_key_and_slug(key, slug);
                         found = true;
                         break;
                     }
@@ -171,46 +174,18 @@ mod tests {
     fn test_obsidian_links_conversion() {
         // テスト用のファイルマッピングを作成（相対パス全体をキーとして使用）
         let mut file_mapping = FileMapping::new();
-        file_mapping.insert(
-            "notes/another-note".to_string(),
-            FileInfo {
-                relative_path: "notes/another-note".to_string(),
-                slug: "abc123def".to_string(),
-                html_path: "/notes/another-note.html".to_string(),
-            },
-        );
-        file_mapping.insert(
-            "docs/filename".to_string(),
-            FileInfo {
-                relative_path: "docs/filename".to_string(),
-                slug: "xyz789abc".to_string(),
-                html_path: "/docs/filename.html".to_string(),
-            },
-        );
+        file_mapping.insert("notes/another-note".to_string(), "abc123def".to_string());
+        file_mapping.insert("docs/filename".to_string(), "xyz789abc".to_string());
         // 後方互換性のためにファイル名のみのキーも追加
-        file_mapping.insert(
-            "Another Note".to_string(),
-            FileInfo {
-                relative_path: "notes/another-note".to_string(),
-                slug: "abc123def".to_string(),
-                html_path: "/notes/another-note.html".to_string(),
-            },
-        );
-        file_mapping.insert(
-            "filename".to_string(),
-            FileInfo {
-                relative_path: "docs/filename".to_string(),
-                slug: "xyz789abc".to_string(),
-                html_path: "/docs/filename.html".to_string(),
-            },
-        );
+        file_mapping.insert("Another Note".to_string(), "abc123def".to_string());
+        file_mapping.insert("filename".to_string(), "xyz789abc".to_string());
 
         // 基本的なリンク変換
         let result =
             convert_obsidian_links("Check out [[Another Note]] for more info.", &file_mapping);
         assert_eq!(
             result,
-            "Check out <a href=\"/notes/another-note.html\">Another Note</a> for more info."
+            "Check out <a href=\"/abc123def.html\">Another Note</a> for more info."
         );
 
         // 表示テキスト付きリンク
@@ -218,7 +193,7 @@ mod tests {
             convert_obsidian_links("See [[filename|Custom Display Text]] here.", &file_mapping);
         assert_eq!(
             result,
-            "See <a href=\"/docs/filename.html\">Custom Display Text</a> here."
+            "See <a href=\"/xyz789abc.html\">Custom Display Text</a> here."
         );
 
         // 存在しないリンク（警告が出力されるが、フォールバック動作をテスト）
@@ -267,22 +242,8 @@ This is a test with [[Another Article|link]] and **bold** text.
 
         // テスト用のファイルマッピングを作成
         let mut file_mapping = FileMapping::new();
-        file_mapping.insert(
-            "Another Article".to_string(),
-            FileInfo {
-                relative_path: "articles/another".to_string(),
-                slug: "def456".to_string(),
-                html_path: "/articles/another.html".to_string(),
-            },
-        );
-        file_mapping.insert(
-            "Reference Note".to_string(),
-            FileInfo {
-                relative_path: "notes/reference".to_string(),
-                slug: "ghi789".to_string(),
-                html_path: "/notes/reference.html".to_string(),
-            },
-        );
+        file_mapping.insert("Another Article".to_string(), "def456".to_string());
+        file_mapping.insert("Reference Note".to_string(), "ghi789".to_string());
 
         // まずObsidianリンクを変換
         let with_html_links = convert_obsidian_links(markdown_with_obsidian_links, &file_mapping);
@@ -291,8 +252,8 @@ This is a test with [[Another Article|link]] and **bold** text.
         let html = convert_markdown_to_html(&with_html_links).unwrap();
 
         assert!(html.contains("<h1>My Article</h1>"));
-        assert!(html.contains("<a href=\"/articles/another.html\">link</a>"));
-        assert!(html.contains("<a href=\"/notes/reference.html\">Reference Note</a>"));
+        assert!(html.contains("<a href=\"/def456.html\">link</a>"));
+        assert!(html.contains("<a href=\"/ghi789.html\">Reference Note</a>"));
         assert!(html.contains("<strong>bold</strong>"));
         assert!(html.contains("<ul>"));
     }
@@ -319,21 +280,11 @@ This is a test with [[Another Article|link]] and **bold** text.
     fn test_html_escape_in_links() {
         // テスト用のファイルマッピングを作成
         let mut file_mapping = FileMapping::new();
-        file_mapping.insert(
-            "File with <script>".to_string(),
-            FileInfo {
-                relative_path: "files/script-file".to_string(),
-                slug: "abc123".to_string(),
-                html_path: "/files/script-file.html".to_string(),
-            },
-        );
+        file_mapping.insert("File with <script>".to_string(), "abc123".to_string());
 
         // HTMLエンティティのエスケープテスト（リンク先が存在する場合）
         let result = convert_obsidian_links("[[File with <script>|Display & test]]", &file_mapping);
-        assert_eq!(
-            result,
-            "<a href=\"/files/script-file.html\">Display &amp; test</a>"
-        );
+        assert_eq!(result, "<a href=\"/abc123.html\">Display &amp; test</a>");
 
         // 存在しないファイルでのHTMLエスケープテスト
         let result =
