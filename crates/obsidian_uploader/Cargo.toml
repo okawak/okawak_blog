@@ -6,7 +6,7 @@ description.workspace = true
 edition.workspace = true
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 sha2 = "0.10"
 pulldown-cmark = "0.13"
@@ -17,11 +17,12 @@ tokio = { version = "1", features = ["full"] }
 regex = "1"
 reqwest = { version = "0.12", features = ["json"] }
 scraper = "0.20"
-url = "2.5"
+url = "2"
 log = "0.4"
 env_logger = "0.11"
+futures = "0.3"
 
 [dev-dependencies]
-tempfile = "3.20"
+tempfile = "3"
 rstest = "0.25"
 indoc = "2.0"

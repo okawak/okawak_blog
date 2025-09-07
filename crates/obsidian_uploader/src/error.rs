@@ -5,26 +5,26 @@ pub type Result<T> = std::result::Result<T, ObsidianError>;
 #[derive(Error, Debug)]
 pub enum ObsidianError {
     #[error("File system operation failed")]
-    IoError(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
 
     #[error("Failed to parse YAML frontmatter")]
-    YamlError(#[from] serde_yaml::Error),
+    Yaml(#[from] serde_yaml::Error),
 
     #[error("Invalid file path: {0}")]
-    PathError(String),
+    Path(String),
 
     #[error("Configuration error: {0}")]
-    ConfigError(String),
+    Config(String),
 
     #[error("Failed to parse file content: {0}")]
-    ParseError(String),
+    Parse(String),
 
     #[error("Environment variable not found or invalid")]
-    EnvError(#[from] std::env::VarError),
+    Env(#[from] std::env::VarError),
 
     #[error("Failed to traverse directory")]
-    WalkDirError(#[from] ignore::Error),
+    WalkDir(#[from] ignore::Error),
 
     #[error("Network request failed: {0}")]
-    NetworkError(String),
+    Network(String),
 }

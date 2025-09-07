@@ -29,7 +29,7 @@ jobs:
             obsidian
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ steps.app-token.outputs.token }}
           submodules: recursive # submodule取得
@@ -65,7 +65,7 @@ jobs:
       - name: Run obsidian_uploader
         run: |
           RUST_LOG=info cargo run --release -p obsidian_uploader
-          
+
           # 処理結果の検証
           if [ -d "crates/obsidian_uploader/dist" ]; then
             file_count=$(find crates/obsidian_uploader/dist -name "*.html" | wc -l)
@@ -98,11 +98,10 @@ jobs:
             --delete \
             --content-type "text/html; charset=utf-8" \
             --cache-control "public, max-age=300"
-          
+
           # S3バケットの内容確認
           s3_object_count=$(aws s3 ls s3://${{ secrets.S3_BUCKET }}/ --recursive | grep ".html" | wc -l)
           echo "🪣 S3 bucket now contains ${s3_object_count} HTML files"
-
 
       - name: Notify on failure
         if: failure()

@@ -12,13 +12,23 @@ pub use error::{ObsidianError, Result};
 pub use models::OutputFrontMatter;
 pub use parser::ObsidianFrontMatter;
 
-use converter::{FileInfo, FileMapping};
+use converter::FileMapping;
+use futures::{StreamExt, TryStreamExt, stream};
 use log::{error, info, warn};
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
-pub async fn run_main(config: Config) -> Result<()> {
+/// パース済みのファイル情報を保持する構造体
+struct ParsedFile {
+    file_path: PathBuf,
+    slug: String,
+    content: String,
+    front_matter: ObsidianFrontMatter,
+}
+
+pub async fn run_main(config: &Config) -> Result<()> {
     let start_time = std::time::Instant::now();
     info!("=== Obsidian Uploader Started ===");
     info!("Input directory: {}", config.obsidian_dir.display());
@@ -27,59 +37,68 @@ pub async fn run_main(config: Config) -> Result<()> {
     fs::create_dir_all(&config.output_dir)?;
 
     let markdown_files = scanner::scan_obsidian_files(&config.obsidian_dir)?;
-    info!("📄 Found {} markdown files", markdown_files.len());
+    info!("Found {} markdown files", markdown_files.len());
 
     let mut skipped_count = 0;
     let mut error_count = 0;
 
-    let valid_files: Vec<_> = markdown_files
+    let valid_files: Vec<ParsedFile> = markdown_files
         .into_iter()
         .filter_map(|file_path| match parser::parse_obsidian_file(&file_path) {
-            Ok(Some(front_matter)) if front_matter.is_completed => Some((file_path, front_matter)),
+            Ok(Some((front_matter, content))) if front_matter.is_completed => {
+                match process_valid_file(&file_path, front_matter, content, config) {
+                    Ok(parsed_file) => Some(parsed_file),
+                    Err(e) => {
+                        error_count += 1;
+                        error!("Error processing {}: {}", file_path.display(), e);
+                        None
+                    }
+                }
+            }
             Ok(_) => {
                 skipped_count += 1;
-                warn!("⏭️  Skipped (not completed): {}", file_path.display());
+                warn!("Skipped (not completed): {}", file_path.display());
                 None
             }
             Err(e) => {
                 error_count += 1;
-                error!("❌ Error processing {}: {}", file_path.display(), e);
+                error!("Error processing {}: {}", file_path.display(), e);
                 None
             }
         })
         .collect();
 
-    info!("✅ Valid files: {}", valid_files.len());
-    info!("⏭️  Skipped files: {skipped_count}");
+    info!("Valid files: {}", valid_files.len());
+    info!("Skipped files: {skipped_count}");
     if error_count > 0 {
-        warn!("❌ Error files: {error_count}");
+        warn!("Error files: {error_count}");
     }
 
-    let file_mapping = build_file_mapping(&config, &valid_files)?;
+    let file_mapping = build_file_mapping(config, &valid_files)?;
 
-    // 現在は順次処理、将来的にはfutures::stream::iterとbuffer_unorderedで並列処理可能
-    let mut processed_files = Vec::with_capacity(valid_files.len());
-    for (file_path, front_matter) in valid_files {
-        let result = process_obsidian_file(&config, file_path, front_matter, &file_mapping).await?;
-        processed_files.push(result);
-    }
+    const CONCURRENT_LIMIT: usize = 4;
+    let processed_files: Vec<OutputFrontMatter> = stream::iter(valid_files)
+        .map(|parsed_file| process_parsed_file(config, parsed_file, &file_mapping))
+        .buffer_unordered(CONCURRENT_LIMIT)
+        .try_collect()
+        .await?;
 
     let processed_count = processed_files.len();
     let duration = start_time.elapsed();
 
     // 処理結果サマリーの出力
-    info!("\n=== Processing Summary ===");
-    info!("✅ Successfully processed: {processed_count} files");
-    info!("⏭️  Skipped: {skipped_count} files");
+    info!("=== Processing Summary ===");
+    info!("Successfully processed: {processed_count} files");
+    info!("  Skipped: {skipped_count} files");
     if error_count > 0 {
-        warn!("❌ Errors: {error_count} files");
+        warn!("  Errors: {error_count} files");
     }
-    info!("⏱️  Processing time: {duration:.2?}");
-    info!("📁 Output directory: {}", config.output_dir.display());
+    info!("  Processing time: {duration:.2?}");
+    info!("Output directory: {}", config.output_dir.display());
 
     // 処理されたファイルの詳細
     if !processed_files.is_empty() {
-        info!("\n📋 Processed files:");
+        info!("Processed files:");
         for file in &processed_files {
             info!("  • {} ({})", file.title, file.slug);
         }
@@ -87,6 +106,24 @@ pub async fn run_main(config: Config) -> Result<()> {
 
     info!("=== Obsidian Uploader Completed ===");
     Ok(())
+}
+
+/// 有効なファイルを処理し、ParsedFileを生成
+fn process_valid_file(
+    file_path: &Path,
+    front_matter: ObsidianFrontMatter,
+    content: String,
+    config: &Config,
+) -> Result<ParsedFile> {
+    let relative_path = get_relative_path(file_path, &config.obsidian_dir)?;
+    let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
+
+    Ok(ParsedFile {
+        file_path: file_path.to_path_buf(),
+        slug,
+        content,
+        front_matter,
+    })
 }
 
 /// パスをURL用に正規化（OS固有セパレータをUnix形式に統一）
@@ -98,50 +135,32 @@ fn normalize_path_for_url(path: &Path) -> String {
 /// 相対パスを取得する共通処理
 fn get_relative_path<'a>(file_path: &'a Path, base_dir: &Path) -> Result<&'a Path> {
     file_path.strip_prefix(base_dir).map_err(|_| {
-        ObsidianError::PathError(format!(
+        ObsidianError::Path(format!(
             "Failed to strip prefix from {}",
             file_path.display()
         ))
     })
 }
 
-fn build_file_mapping(
-    config: &Config,
-    valid_files: &[(std::path::PathBuf, ObsidianFrontMatter)],
-) -> Result<FileMapping> {
-    let mut mapping = HashMap::with_capacity(valid_files.len());
+fn build_file_mapping(config: &Config, valid_files: &[ParsedFile]) -> Result<FileMapping> {
+    let mut mapping = FileMapping::with_capacity(valid_files.len());
 
-    for (file_path, front_matter) in valid_files {
-        let relative_path = get_relative_path(file_path, &config.obsidian_dir)?;
-        let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
-
+    for parsed_file in valid_files {
+        let relative_path = get_relative_path(&parsed_file.file_path, &config.obsidian_dir)?;
         let relative_path_no_ext = relative_path.with_extension("");
         let mapping_key = normalize_path_for_url(&relative_path_no_ext);
-        let html_path = format!(
-            "/{}",
-            normalize_path_for_url(&relative_path.with_extension("html"))
-        );
-
-        let file_info = FileInfo {
-            relative_path: mapping_key.clone(),
-            slug,
-            html_path,
-        };
-
-        mapping.insert(mapping_key, file_info);
+        mapping.insert(mapping_key, parsed_file.slug.clone());
     }
 
     Ok(mapping)
 }
 
-async fn process_obsidian_file(
+async fn process_parsed_file(
     config: &Config,
-    file_path: std::path::PathBuf,
-    front_matter: ObsidianFrontMatter,
+    parsed_file: ParsedFile,
     file_mapping: &FileMapping,
 ) -> Result<OutputFrontMatter> {
-    let markdown_content = fs::read_to_string(&file_path)?;
-    let markdown_body = extract_markdown_body(&markdown_content);
+    let markdown_body = extract_markdown_body(&parsed_file.content);
     let markdown_with_links = converter::convert_obsidian_links(&markdown_body, file_mapping);
     let html_body = converter::convert_markdown_to_html(&markdown_with_links)?;
 
@@ -153,36 +172,30 @@ async fn process_obsidian_file(
             html_body
         });
 
-    let relative_path = get_relative_path(&file_path, &config.obsidian_dir)?;
-
-    // シンプルにslugを再生成（パフォーマンスよりもシンプルさを重視）
-    let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
+    let relative_path = get_relative_path(&parsed_file.file_path, &config.obsidian_dir)?;
 
     let output_fm = OutputFrontMatter {
-        title: front_matter.title,
-        tags: front_matter.tags,
-        description: front_matter.summary,
-        priority: front_matter.priority,
-        created: front_matter.created,
-        updated: front_matter.updated,
-        slug: slug.clone(),
+        title: parsed_file.front_matter.title,
+        tags: parsed_file.front_matter.tags,
+        description: parsed_file.front_matter.summary,
+        priority: parsed_file.front_matter.priority,
+        created: parsed_file.front_matter.created,
+        updated: parsed_file.front_matter.updated,
+        slug: parsed_file.slug.clone(),
     };
 
-    let output_yaml = serde_yaml::to_string(&output_fm).map_err(ObsidianError::YamlError)?;
+    let output_yaml = serde_yaml::to_string(&output_fm).map_err(ObsidianError::Yaml)?;
     let html_file_content = converter::generate_html_file(&output_yaml, &html_with_rich_bookmarks);
-    let output_file_path = config.output_dir.join(relative_path.with_extension("html"));
+    let output_file_path = config
+        .output_dir
+        .join(relative_path.with_file_name(format!("{}.html", parsed_file.slug)));
 
     if let Some(parent) = output_file_path.parent() {
         fs::create_dir_all(parent)?;
     }
     fs::write(&output_file_path, html_file_content)?;
 
-    info!(
-        "✅ Processed: {} -> {} ({})",
-        file_path.display(),
-        output_file_path.display(),
-        slug
-    );
+    info!("...processed {}", output_file_path.display());
 
     Ok(output_fm)
 }
@@ -259,7 +272,13 @@ mod tests {
             category: Some("tech".to_string()),
         };
 
-        let valid_files = vec![(file_path, front_matter)];
+        let parsed_file = ParsedFile {
+            file_path,
+            slug: "slug".to_string(),
+            content: "---\ntitle: Test Article\n---\n# Test Content".to_string(),
+            front_matter,
+        };
+        let valid_files = vec![parsed_file];
         let result = build_file_mapping(&config, &valid_files);
 
         assert!(result.is_ok());
@@ -276,7 +295,7 @@ mod tests {
             output_dir: PathBuf::from("output"),
         };
 
-        let valid_files = vec![];
+        let valid_files: Vec<ParsedFile> = vec![];
         let result = build_file_mapping(&config, &valid_files);
 
         assert!(result.is_ok());
@@ -318,7 +337,19 @@ mod tests {
             category: Some("blog".to_string()),
         };
 
-        let valid_files = vec![(file_path1, front_matter1), (file_path2, front_matter2)];
+        let parsed_file1 = ParsedFile {
+            file_path: file_path1,
+            slug: "slug1".to_string(),
+            content: "---\ntitle: Test Article 1\n---\n# Test Content 1".to_string(),
+            front_matter: front_matter1,
+        };
+        let parsed_file2 = ParsedFile {
+            file_path: file_path2,
+            slug: "slug2".to_string(),
+            content: "---\ntitle: Test Article 2\n---\n# Test Content 2".to_string(),
+            front_matter: front_matter2,
+        };
+        let valid_files = vec![parsed_file1, parsed_file2];
         let result = build_file_mapping(&config, &valid_files);
 
         assert!(result.is_ok());
@@ -349,15 +380,21 @@ mod tests {
             category: None,
         };
 
-        let valid_files = vec![(file_path, front_matter)];
+        let parsed_file = ParsedFile {
+            file_path,
+            slug: "slug".to_string(),
+            content: "---\ntitle: URL Test\n---\n# URL Test Content".to_string(),
+            front_matter,
+        };
+        let valid_files = vec![parsed_file];
         let result = build_file_mapping(&config, &valid_files);
 
         assert!(result.is_ok());
         let mapping = result.unwrap();
-        let file_info = mapping.get("sub/dir/test").unwrap();
+        let slug = mapping.get("sub/dir/test").unwrap();
 
         // URL正規化が適用されているかチェック（Unix形式のスラッシュ）
-        assert_eq!(file_info.html_path, "/sub/dir/test.html");
-        assert_eq!(file_info.relative_path, "sub/dir/test");
+        // slugが存在することを確認
+        assert!(!slug.is_empty());
     }
 }

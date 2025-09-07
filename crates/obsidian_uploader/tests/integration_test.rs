@@ -19,7 +19,7 @@ async fn test_run_main_with_empty_directory() {
     };
 
     // run_mainを実行
-    let result = run_main(config).await;
+    let result = run_main(&config).await;
     assert!(result.is_ok());
 
     // 出力ディレクトリが作成されていることを確認
@@ -62,15 +62,24 @@ async fn test_run_main_with_sample_file() {
     };
 
     // run_mainを実行
-    let result = run_main(config).await;
+    let result = run_main(&config).await;
     assert!(result.is_ok());
 
-    // HTMLファイルが生成されていることを確認
-    let html_file = output_dir.join("test.html");
-    assert!(html_file.exists());
+    // HTMLファイルが生成されていることを確認（slugベース）
+    let html_files: Vec<_> = fs::read_dir(&output_dir)
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().extension().map_or(false, |ext| ext == "html"))
+        .collect();
+
+    assert!(
+        !html_files.is_empty(),
+        "At least one HTML file should be generated"
+    );
 
     // HTMLファイルの内容を確認
-    let html_content = fs::read_to_string(&html_file).unwrap();
+    let html_file = &html_files[0];
+    let html_content = fs::read_to_string(html_file.path()).unwrap();
     assert!(html_content.contains("Test Article"));
     assert!(html_content.contains("This is a test article"));
 }
@@ -110,7 +119,7 @@ async fn test_run_main_with_incomplete_file() {
     };
 
     // run_mainを実行
-    let result = run_main(config).await;
+    let result = run_main(&config).await;
     assert!(result.is_ok());
 
     // HTMLファイルが生成されていないことを確認（is_completed: falseのため）
