@@ -69,7 +69,7 @@ async fn test_run_main_with_sample_file() {
     let html_files: Vec<_> = fs::read_dir(&output_dir)
         .unwrap()
         .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.path().extension().map_or(false, |ext| ext == "html"))
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "html"))
         .collect();
 
     assert!(
