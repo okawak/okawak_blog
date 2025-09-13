@@ -1,5 +1,14 @@
 [workspace]
-members = ["./crates/*/"]
+members = [
+    # ブログアプリケーション
+    "crates/blog_core",
+    "crates/blog_server",
+    "crates/blog_web",
+    "crates/shared",
+
+    # 独立ツール
+    "obsidian_uploader",
+]
 resolver = "3"
 
 [workspace.package]
