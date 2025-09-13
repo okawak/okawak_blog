@@ -1,0 +1,15 @@
+[package]
+name = "shared"
+version.workspace = true
+authors.workspace = true
+description = "Shared types and utilities for blog application"
+edition.workspace = true
+
+[dependencies]
+# Minimal shared dependencies
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+[dev-dependencies]
+rstest = "0.25"

@@ -1,74 +1,39 @@
-#![recursion_limit = "512"]
+//! Blog Server Main - サーバー起動エントリーポイント
 
-#[cfg(feature = "ssr")]
+use blog_server::{config::Config, create_app, server::initialize_services};
+use std::net::SocketAddr;
+use tracing_subscriber;
+
 #[tokio::main]
-async fn main() {
-    use axum::Router;
-    use blog_server::app::App;
-    use blog_server::app::*;
-    use leptos::prelude::{provide_context, *};
-    use leptos_axum::{LeptosRoutes, file_and_error_handler, generate_route_list};
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // ログ初期化
+    tracing_subscriber::fmt::init();
 
-    // initialize the logger
-    let env = env_logger::Env::default()
-        .filter_or("RUST_LOG", "info")
-        .write_style_or("LOG_STYLE", "auto");
+    // 設定読み込み
+    let config = Config::load()?;
+    tracing::info!("Configuration loaded: {:?}", config);
 
-    env_logger::init_from_env(env);
-    log::info!("Starting server...");
-
-    // AWS SDK設定
-    // 認証情報は環境変数または~/.aws/credentialsから自動的に読み込まれます
-    let aws_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "ap-northeast-1".to_string());
-    let aws_region = Some(aws_config::Region::new(aws_region));
+    // AWS SDK 初期化
     let aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
-        .region(aws_region)
+        .region(aws_config::Region::new(config.aws.region.clone()))
         .load()
         .await;
     let s3_client = aws_sdk_s3::Client::new(&aws_config);
 
-    let conf = get_configuration(None).unwrap();
-    let addr = conf.leptos_options.site_addr;
-    let leptos_options = conf.leptos_options.clone();
+    // サービス初期化
+    let (repository, storage, search) =
+        initialize_services(s3_client, config.aws.s3_bucket.clone()).await;
 
-    // Generate the list of routes in your Leptos App
-    let routes = generate_route_list(App);
+    // Axum アプリケーション作成
+    let app = create_app(repository, storage, search);
 
-    // Axumルーターを設定
-    let app = Router::new()
-        // SSR 用コンテキストと App シェルを渡す
-        .leptos_routes_with_context(
-            &leptos_options,
-            routes.clone(),
-            // additional_context: リクエスト処理前に呼ばれる
-            {
-                move || {
-                    provide_context(s3_client.clone());
-                }
-            },
-            // app_fn: HTML ドキュメント全体を生成するシェル
-            {
-                let opts = leptos_options.clone();
-                move || shell(opts.clone())
-            },
-        )
-        // 静的ファイル＋404 用ハンドラ（shell 関数だけ渡せば OK）
-        .fallback(file_and_error_handler(shell))
-        .with_state(leptos_options.clone());
+    // サーバー起動
+    let addr = SocketAddr::new(config.server.host.parse()?, config.server.port);
 
-    // run our app with hyper
-    // `axum::Server` is a re-export of `hyper::Server`
-    log::info!("listening on http://{}", &addr);
+    tracing::info!("Server starting on {}", addr);
 
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app.into_make_service())
-        .await
-        .unwrap();
-}
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
 
-#[cfg(not(feature = "ssr"))]
-pub fn main() {
-    // no client-side main function
-    // unless we want this to work with e.g., Trunk for pure client-side testing
-    // see lib.rs for hydration function instead
+    Ok(())
 }
