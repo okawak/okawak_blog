@@ -1,4 +1,4 @@
-use crate::models::article::ArticleSummary;
+use domain::ArticleSummary;
 use leptos::prelude::*;
 use stylance::import_style;
 
@@ -15,7 +15,7 @@ pub fn ArticleCard(article: ArticleSummary) -> impl IntoView {
         "daily" => "日常".to_string(),
         "statistics" => "統計学".to_string(),
         "physics" => "物理学".to_string(),
-        _ => article.category.clone(),
+        _ => article.category.to_string(),
     };
 
     // 各クロージャで使用する変数をクローンしておく
@@ -24,14 +24,14 @@ pub fn ArticleCard(article: ArticleSummary) -> impl IntoView {
     view! {
         <article class=article_card_style::article_card>
             <div class=article_card_style::article_meta>
-                <span class=article_card_style::article_date>{article.published_at}</span>
+                <span class=article_card_style::article_date>{article.published_at.format("%Y年%m月%d日").to_string()}</span>
                 <a href=category_url class=article_card_style::article_category>
                     {category_display_name}
                 </a>
             </div>
 
             <h2 class=article_card_style::article_title>
-                <a href=article_url>{article.title}</a>
+                <a href=article_url>{article.title.to_string()}</a>
             </h2>
             <div class=article_card_style::article_excerpt>
                 <p>{article.summary}</p>

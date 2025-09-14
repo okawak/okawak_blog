@@ -11,18 +11,18 @@ path = "src/main.rs"
 
 [dependencies]
 # 内部依存
-core = { path = "../core" }
+domain = { path = "../domain" }
 shared = { path = "../shared" }
 
 # Web フレームワーク
-axum = "0.7"
+axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower = "0.5"
+tower-http = { version = "0.6.6", features = ["cors", "trace"] }
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 # Database (将来的に追加)
 # sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
@@ -34,11 +34,11 @@ aws-sdk-s3 = { version = "1", default-features = false, features = ["rustls", "r
 # Logging & Error handling
 tracing = "0.1"
 tracing-subscriber = "0.3"
-anyhow = "1.0"
+anyhow = "1"
 thiserror = "2"
 
 # 設定管理
-config = "0.14"
+config = "0.15"
 
 # 日時処理
 chrono = { version = "0.4", features = ["serde"] }

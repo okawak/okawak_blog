@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use aws_sdk_s3::Client as S3Client;
-use core::{CoreError, Result, ports::FileStorage};
+use domain::{CoreError, Result, ports::FileStorage};
 
 /// S3-based file storage implementation
 #[derive(Debug, Clone)]

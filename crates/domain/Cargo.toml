@@ -1,5 +1,5 @@
 [package]
-name = "core"
+name = "domain"
 version.workspace = true
 authors.workspace = true
 description = "Core domain logic and business rules for blog application"
@@ -7,7 +7,7 @@ edition.workspace = true
 
 [dependencies]
 # Core dependencies for domain logic
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
 uuid = { version = "1.0", features = ["v4", "serde"] }
@@ -24,5 +24,5 @@ shared = { path = "../shared" }
 log = "0.4"
 
 [dev-dependencies]
-rstest = "0.25"
+rstest = "0.26"
 tokio-test = "0.4"

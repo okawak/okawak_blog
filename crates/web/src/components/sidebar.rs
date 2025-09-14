@@ -1,10 +1,6 @@
-use crate::models::article::ArticleSummary;
-#[cfg(feature = "ssr")]
-use crate::services::s3;
-
+use domain::ArticleSummary;
 use leptos::prelude::*;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
-use std::collections::HashMap;
 use stylance::import_style;
 
 import_style!(sidebar_style, "sidebar.module.scss");
@@ -12,61 +8,42 @@ import_style!(sidebar_style, "sidebar.module.scss");
 /// 特定のカテゴリの記事全てを取得するサーバー関数
 #[server]
 pub async fn get_all_articles(category: String) -> Result<Vec<ArticleSummary>, ServerFnError> {
-    s3::list_articles(category)
-        .await
-        .map_err(|e| ServerFnError::ServerError(e.to_string()))
+    // TODO: coreクレートのユースケースを使用して記事を取得
+    let _ = category; // 未使用警告を回避
+    Ok(vec![])
 }
 
-/// groupごとに整理してViewを生成する関数
+/// 記事リストを生成する関数
 fn render_sidebar(articles: Vec<ArticleSummary>) -> impl IntoView {
-    let mut grouped: HashMap<String, Vec<ArticleSummary>> = HashMap::new();
-    for article in articles {
-        grouped
-            .entry(article.group.clone())
-            .or_default()
-            .push(article);
-    }
-
     let params = use_params_map();
     let slug = move || params.with(|p: &ParamsMap| p.get("slug").clone().unwrap_or_default());
 
     view! {
-        <>
-            {grouped
-                .into_iter()
-                .map(|(group_name, mut articles)| {
-                    articles.sort_by(|a, b| b.priority_level.cmp(&a.priority_level));
-
-                    view! {
-                        <div class=sidebar_style::sidebar_group>
-                            <h3 class=sidebar_style::group_title>{group_name}</h3>
-                            <ul class=sidebar_style::group_articles>
-                                {articles
-                                    .into_iter()
-                                    .map(|article| {
-                                        let link = format!(
-                                            "/{}/{}",
-                                            article.category,
-                                            article.slug,
-                                        );
-                                        let link_style = if slug() == article.slug {
-                                            sidebar_style::article_link_active
-                                        } else {
-                                            sidebar_style::article_link
-                                        };
-                                        view! {
-                                            <li class=link_style>
-                                                <a href=link>{article.title}</a>
-                                            </li>
-                                        }
-                                    })
-                                    .collect_view()}
-                            </ul>
-                        </div>
-                    }
-                })
-                .collect_view()}
-        </>
+        <div class=sidebar_style::sidebar_group>
+            <h3 class=sidebar_style::group_title>記事一覧</h3>
+            <ul class=sidebar_style::group_articles>
+                {articles
+                    .into_iter()
+                    .map(|article| {
+                        let link = format!(
+                            "/{}/{}",
+                            article.category,
+                            article.slug,
+                        );
+                        let link_style = if slug() == article.slug.to_string() {
+                            sidebar_style::article_link_active
+                        } else {
+                            sidebar_style::article_link
+                        };
+                        view! {
+                            <li class=link_style>
+                                <a href=link>{article.title.to_string()}</a>
+                            </li>
+                        }
+                    })
+                    .collect_view()}
+            </ul>
+        </div>
     }
 }
 

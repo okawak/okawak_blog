@@ -1,7 +1,5 @@
 use crate::components::ArticleCard;
-use crate::models::article::ArticleSummary;
-#[cfg(feature = "ssr")]
-use crate::services::s3;
+use domain::ArticleSummary;
 use leptos::prelude::*;
 use reactive_stores::Store;
 use stylance::import_style;
@@ -11,14 +9,14 @@ import_style!(home_style, "home.module.scss");
 /// 全てのカテゴリの記事一覧を取得するサーバー関数
 #[server]
 pub async fn get_latest_articles() -> Result<Vec<ArticleSummary>, ServerFnError> {
-    s3::fetch_latest_articles(String::new(), 10)
-        .await
-        .map_err(|e| ServerFnError::ServerError(e.to_string()))
+    // TODO: coreクレートのユースケースを使用して記事を取得
+    // let articles = get_latest_articles_usecase().await?;
+    Ok(vec![])
 }
 
 #[derive(Store, Clone)]
 pub struct ArticlesData {
-    #[store(key: String = |article: &ArticleSummary| article.id.clone())]
+    #[store(key: String = |article: &ArticleSummary| article.id.to_string())]
     rows: Vec<ArticleSummary>,
 }
 

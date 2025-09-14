@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use core::Category;
+use domain::Category;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
