@@ -24,7 +24,9 @@ pub fn ArticleCard(article: ArticleSummary) -> impl IntoView {
     view! {
         <article class=article_card_style::article_card>
             <div class=article_card_style::article_meta>
-                <span class=article_card_style::article_date>{article.published_at.format("%Y年%m月%d日").to_string()}</span>
+                <span class=article_card_style::article_date>
+                    {article.published_at.format("%Y年%m月%d日").to_string()}
+                </span>
                 <a href=category_url class=article_card_style::article_category>
                     {category_display_name}
                 </a>

@@ -12,7 +12,9 @@ import_style!(article_style, "article.module.scss");
 pub async fn get_article(category: String, slug: String) -> Result<Article, ServerFnError> {
     // TODO: coreクレートのユースケースを使用して記事を取得
     let _ = (category, slug); // 未使用警告を回避
-    Err(ServerFnError::ServerError("記事取得機能は開発中です".to_string()))
+    Err(ServerFnError::ServerError(
+        "記事取得機能は開発中です".to_string(),
+    ))
 }
 
 /// 記事ページコンポーネント
@@ -76,7 +78,9 @@ pub fn ArticlePage(category: &'static str) -> impl IntoView {
                                     .map(|article| {
                                         view! {
                                             <article class=article_style::article>
-                                                <h1 class=article_style::article_title>{article.title.to_string()}</h1>
+                                                <h1 class=article_style::article_title>
+                                                    {article.title.to_string()}
+                                                </h1>
 
                                                 <TagList tags=article.tags.clone() />
 

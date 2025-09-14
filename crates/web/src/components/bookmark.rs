@@ -1,8 +1,8 @@
 #![cfg(feature = "ssr")]
 
 use crate::error::FrontendError;
-use futures::{stream, StreamExt};
-use lol_html::{element, html_content::ContentType, rewrite_str, RewriteStrSettings};
+use futures::{StreamExt, stream};
+use lol_html::{RewriteStrSettings, element, html_content::ContentType, rewrite_str};
 use scraper::{Html, Selector};
 use std::{
     collections::{HashMap, HashSet},
