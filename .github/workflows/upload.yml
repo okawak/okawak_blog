@@ -1,13 +1,14 @@
-name: Deploy Obsidian to S3
+name: Sync Obsidian to S3
 
 on:
   schedule:
-    - cron: "0 0 * * *" # 毎日00:00 UTC
-  workflow_dispatch: # 手動実行可能
+    # 毎週月曜日の00:00 JSTに実行
+    - cron: "0 15 * * 0"
+  workflow_dispatch:
 
 env:
   RUST_BACKTRACE: 1
-  UPLOAD_PATH: crates/obsidian_uploader/dist
+  UPLOAD_PATH: obsidian_uploader/dist
 
 jobs:
   deploy:
