@@ -1,13 +1,10 @@
 [workspace]
 members = [
-    # ブログアプリケーション
-    "crates/blog_core",
-    "crates/blog_server",
-    "crates/blog_web",
+    "crates/core",
+    "crates/server",
+    "crates/web",
     "crates/shared",
-
-    # 独立ツール
-    "obsidian_uploader",
+    "apps/obsidian_uploader",
 ]
 resolver = "3"
 

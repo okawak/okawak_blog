@@ -1,0 +1,47 @@
+[package]
+name = "server"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
+
+[dependencies]
+# 内部依存
+core = { path = "../core" }
+shared = { path = "../shared" }
+
+# Web フレームワーク
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Database (将来的に追加)
+# sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
+
+# AWS SDK
+aws-config = { version = "1", default-features = false }
+aws-sdk-s3 = { version = "1", default-features = false, features = ["rustls", "rt-tokio"] }
+
+# Logging & Error handling
+tracing = "0.1"
+tracing-subscriber = "0.3"
+anyhow = "1.0"
+thiserror = "2"
+
+# 設定管理
+config = "0.14"
+
+# 日時処理
+chrono = { version = "0.4", features = ["serde"] }
+
+# Async traits
+async-trait = "0.1"
