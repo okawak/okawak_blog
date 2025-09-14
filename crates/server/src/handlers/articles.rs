@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use blog_core::Category;
+use core::Category;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

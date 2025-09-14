@@ -1,5 +1,5 @@
 [package]
-name = "blog_core"
+name = "core"
 version.workspace = true
 authors.workspace = true
 description = "Core domain logic and business rules for blog application"

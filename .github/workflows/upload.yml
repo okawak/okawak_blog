@@ -8,7 +8,7 @@ on:
 
 env:
   RUST_BACKTRACE: 1
-  UPLOAD_PATH: obsidian_uploader/dist
+  UPLOAD_PATH: apps/obsidian_uploader/dist
 
 jobs:
   deploy:
@@ -68,8 +68,8 @@ jobs:
           RUST_LOG=info cargo run --release -p obsidian_uploader
 
           # 処理結果の検証
-          if [ -d "crates/obsidian_uploader/dist" ]; then
-            file_count=$(find crates/obsidian_uploader/dist -name "*.html" | wc -l)
+          if [ -d "${{ env.UPLOAD_PATH }}" ]; then
+            file_count=$(find ${{ env.UPLOAD_PATH }} -name "*.html" | wc -l)
             if [ "$file_count" -eq 0 ]; then
               echo "⚠️  Warning: No HTML files were generated"
             fi

@@ -4,10 +4,10 @@
 #[tokio::main]
 async fn main() {
     use axum::Router;
-    use blog_server::app::App;
-    use blog_server::app::*;
     use leptos::prelude::{provide_context, *};
     use leptos_axum::{LeptosRoutes, file_and_error_handler, generate_route_list};
+    use web::app::App;
+    use web::app::*;
 
     // initialize the logger
     let env = env_logger::Env::default()

@@ -1,17 +1,17 @@
 [package]
-name = "blog_server"
+name = "server"
 version.workspace = true
 authors.workspace = true
 description.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "blog_server"
+name = "server"
 path = "src/main.rs"
 
 [dependencies]
 # 内部依存
-blog_core = { path = "../blog_core" }
+core = { path = "../core" }
 shared = { path = "../shared" }
 
 # Web フレームワーク

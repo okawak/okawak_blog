@@ -1,5 +1,5 @@
 [package]
-name = "blog_web"
+name = "web"
 version.workspace = true
 authors.workspace = true
 description.workspace = true
@@ -9,7 +9,7 @@ edition.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-blog_core = { path = "../blog_core" }
+core = { path = "../core" }
 leptos = { version = "0.7" }
 leptos_router = { version = "0.7" }
 leptos_meta = { version = "0.7" }
@@ -61,18 +61,9 @@ ssr = [
   "leptos_router/ssr",
 ]
 
-# Defines a size-optimized profile for the WASM bundle in release mode
-# move to the root Cargo.toml
-#[profile.wasm-release]
-#inherits = "release"
-#opt-level = 'z'
-#lto = true
-#codegen-units = 1
-#panic = "abort"
-
 [package.metadata.leptos]
 # The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
-output-name = "blog_web"
+output-name = "web"
 
 # The site root folder is where cargo-leptos generate all output. WARNING: all content of this folder will be erased on a rebuild. Use it in your server setup.
 site-root = "target/site"

@@ -1,6 +1,6 @@
 //! Blog Server Main - サーバー起動エントリーポイント
 
-use blog_server::{config::Config, create_app, server::initialize_services};
+use server::{config::Config, create_app, server::initialize_services};
 use std::net::SocketAddr;
 use tracing_subscriber;
 

@@ -1,9 +1,7 @@
 //! Repository Implementation - データアクセス実装
 
 use async_trait::async_trait;
-use blog_core::{
-    Article, ArticleId, ArticleSummary, Category, Result, Slug, ports::ArticleRepository,
-};
+use core::{Article, ArticleId, ArticleSummary, Category, Result, Slug, ports::ArticleRepository};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

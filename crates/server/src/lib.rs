@@ -12,4 +12,4 @@ pub use config::Config;
 pub use server::create_app;
 
 /// Re-export blog_core for convenience
-pub use blog_core;
+pub use core;

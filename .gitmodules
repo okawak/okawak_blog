@@ -1,3 +1,3 @@
 [submodule "crates/obsidian_uploader/obsidian"]
-	path = obsidian_uploader/obsidian
+	path = apps/obsidian_uploader/obsidian
 	url = https://github.com/okawak/obsidian.git

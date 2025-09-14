@@ -15,7 +15,7 @@ run = 'cargo clean'
 [tasks.build]
 description = "Build the project"
 depends = ["clean"]
-run = 'cargo leptos build --release -p blog_server'
+run = 'cargo leptos build --release -p server'
 
 [tasks.start]
 description = "Start the service"
@@ -28,7 +28,7 @@ run = 'AWS_PROFILE=blog-s3 cargo leptos serve --release'
 
 [tasks.stylance]
 description = "Run the Stylance locally"
-run = "stylance crates/blog_server"
+run = "stylance crates/web"
 
 [tasks.format]
 description = "Format the code"

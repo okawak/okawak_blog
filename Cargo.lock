@@ -670,82 +670,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blog_core"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "futures",
- "log",
- "rstest",
- "serde",
- "shared",
- "thiserror 2.0.16",
- "tokio",
- "tokio-test",
- "uuid",
-]
-
-[[package]]
-name = "blog_server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "aws-config",
- "aws-sdk-s3",
- "axum",
- "blog_core",
- "chrono",
- "config 0.14.1",
- "serde",
- "serde_json",
- "shared",
- "thiserror 2.0.16",
- "tokio",
- "tower 0.4.13",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "blog_web"
-version = "0.1.0"
-dependencies = [
- "aws-config",
- "aws-sdk-s3",
- "aws-smithy-runtime-api",
- "axum",
- "blog_core",
- "chrono",
- "console_error_panic_hook",
- "env_logger",
- "futures",
- "html-escape",
- "leptos",
- "leptos_axum",
- "leptos_meta",
- "leptos_router",
- "log",
- "lol_html",
- "pulldown-cmark",
- "reactive_stores",
- "regex",
- "reqwest",
- "scraper 0.23.1",
- "serde",
- "serde-wasm-bindgen",
- "serde_json",
- "stylance",
- "thiserror 2.0.16",
- "tokio",
- "toml 0.8.23",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
 name = "bstr"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -955,6 +879,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb402b8d4c85569410425650ce3eddc7d698ed96d39a73f941b08fb63082f1e7"
 dependencies = [
  "unicode-segmentation",
+]
+
+[[package]]
+name = "core"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "log",
+ "rstest",
+ "serde",
+ "shared",
+ "thiserror 2.0.16",
+ "tokio",
+ "tokio-test",
+ "uuid",
 ]
 
 [[package]]
@@ -3910,6 +3851,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "aws-config",
+ "aws-sdk-s3",
+ "axum",
+ "chrono",
+ "config 0.14.1",
+ "core",
+ "serde",
+ "serde_json",
+ "shared",
+ "thiserror 2.0.16",
+ "tokio",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "server_fn"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4998,6 +4962,42 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "web"
+version = "0.1.0"
+dependencies = [
+ "aws-config",
+ "aws-sdk-s3",
+ "aws-smithy-runtime-api",
+ "axum",
+ "chrono",
+ "console_error_panic_hook",
+ "core",
+ "env_logger",
+ "futures",
+ "html-escape",
+ "leptos",
+ "leptos_axum",
+ "leptos_meta",
+ "leptos_router",
+ "log",
+ "lol_html",
+ "pulldown-cmark",
+ "reactive_stores",
+ "regex",
+ "reqwest",
+ "scraper 0.23.1",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "stylance",
+ "thiserror 2.0.16",
+ "tokio",
+ "toml 0.8.23",
+ "wasm-bindgen",
  "web-sys",
 ]
 
