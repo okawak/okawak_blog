@@ -1,7 +1,7 @@
 //! Search Service Implementation - 検索サービス実装
 
 use async_trait::async_trait;
-use core::{Article, ArticleId, Result, ports::SearchService};
+use domain::{Article, ArticleId, Result, ports::SearchService};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

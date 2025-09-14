@@ -1,8 +1,8 @@
 #![cfg(feature = "ssr")]
 
-use crate::error::AppError;
-use futures::{StreamExt, stream};
-use lol_html::{RewriteStrSettings, element, html_content::ContentType, rewrite_str};
+use crate::error::FrontendError;
+use futures::{stream, StreamExt};
+use lol_html::{element, html_content::ContentType, rewrite_str, RewriteStrSettings};
 use scraper::{Html, Selector};
 use std::{
     collections::{HashMap, HashSet},
@@ -22,7 +22,7 @@ struct Ogp {
     url: String,
 }
 
-async fn fetch_ogp(url: &str) -> Result<Ogp, AppError> {
+async fn fetch_ogp(url: &str) -> Result<Ogp, FrontendError> {
     #[cfg(not(target_arch = "wasm32"))]
     let client = reqwest::Client::builder()
         .timeout(REQ_TIMEOUT)
@@ -65,7 +65,7 @@ async fn fetch_ogp(url: &str) -> Result<Ogp, AppError> {
 }
 
 /// Markdown → HTML 後の文字列を受け取り、OGP カードに差し替えて返す
-pub async fn rewrite_bookmarks(html_in: String) -> Result<String, AppError> {
+pub async fn rewrite_bookmarks(html_in: String) -> Result<String, FrontendError> {
     // ---------- ① URL 一覧収集（重複排除） -----------------
     let urls: HashSet<String> = {
         let sel = Selector::parse(r#"div.notion-bookmark[data-url]"#).unwrap();

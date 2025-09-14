@@ -1,9 +1,9 @@
 #[cfg(feature = "ssr")]
 use crate::components::bookmark;
-use crate::error::AppError;
+use crate::error::FrontendError;
 use leptos::html::Div;
 use leptos::prelude::*;
-use pulldown_cmark::{Options, Parser, html};
+use pulldown_cmark::{html, Options, Parser};
 use regex::Regex;
 use std::sync::LazyLock;
 use stylance::import_style;
@@ -154,7 +154,7 @@ fn markdown_to_html(input: &str, options: Options) -> String {
 }
 
 /// Markdownをレンダリングする関数
-fn render_markdown(markdown: &str, generate_toc: bool) -> Result<String, AppError> {
+fn render_markdown(markdown: &str, generate_toc: bool) -> Result<String, FrontendError> {
     // Markdownのオプション設定
     let options = render_option();
 
