@@ -5,35 +5,49 @@ use thiserror::Error;
 /// フロントエンド用のエラータイプ
 #[derive(Debug, Clone, Error, Serialize, Deserialize)]
 pub enum FrontendError {
-    #[error("ネットワークエラー: {0}")]
-    NetworkError(String),
+    #[error("ネットワークエラー: {message}")]
+    NetworkError { message: String },
 
-    #[error("データの読み込みに失敗しました: {0}")]
-    LoadError(String),
+    #[error("データの読み込みに失敗しました: {message}")]
+    LoadError { message: String },
 
-    #[error("レンダリングエラー: {0}")]
-    RenderError(String),
+    #[error("レンダリングエラー: {message}")]
+    RenderError { message: String },
 
-    #[error("ナビゲーションエラー: {0}")]
-    NavigationError(String),
+    #[error("ナビゲーションエラー: {message}")]
+    NavigationError { message: String },
 }
 
-// FromトレイトをFrontendError用に実装
+// thiserrorと手動実装を組み合わせた簡潔な変換
 impl From<reqwest::Error> for FrontendError {
     fn from(err: reqwest::Error) -> Self {
-        Self::NetworkError(err.to_string())
+        Self::NetworkError {
+            message: err.to_string(),
+        }
+    }
+}
+
+impl From<lol_html::errors::RewritingError> for FrontendError {
+    fn from(err: lol_html::errors::RewritingError) -> Self {
+        Self::RenderError {
+            message: err.to_string(),
+        }
     }
 }
 
 impl FrontendError {
     /// ネットワークエラーを作成するヘルパーメソッド
     pub fn network_error<S: Into<String>>(message: S) -> Self {
-        Self::NetworkError(message.into())
+        Self::NetworkError {
+            message: message.into(),
+        }
     }
 
     /// データ読み込みエラーを作成するヘルパーメソッド
     pub fn load_error<S: Into<String>>(message: S) -> Self {
-        Self::LoadError(message.into())
+        Self::LoadError {
+            message: message.into(),
+        }
     }
 }
 
