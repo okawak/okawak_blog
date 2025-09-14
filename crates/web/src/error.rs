@@ -30,7 +30,7 @@ impl FrontendError {
     pub fn network_error<S: Into<String>>(message: S) -> Self {
         Self::NetworkError(message.into())
     }
-    
+
     /// データ読み込みエラーを作成するヘルパーメソッド
     pub fn load_error<S: Into<String>>(message: S) -> Self {
         Self::LoadError(message.into())
