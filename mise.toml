@@ -22,14 +22,15 @@ description = "Start the service"
 depends = ["build"]
 run = 'sudo systemctl daemon-reload && sudo systemctl start okawak_blog'
 
-[tasks.local_server]
-description = "build the server locally"
-run = 'AWS_PROFILE=blog-s3 cargo leptos serve --release'
-
 [tasks.stylance]
 description = "Run the Stylance locally"
 run = "stylance crates/web"
 
+[tasks.local_server]
+description = "build the server locally"
+depends = ["stylance"]
+run = 'cargo leptos serve --release'
+
 [tasks.format]
 description = "Format the code"
-run = ["cargo fmt --all", "leptosfmt ./**/*.rs"]
+run = ["cargo fmt --all", "leptosfmt ./crates/web/**/*.rs"]

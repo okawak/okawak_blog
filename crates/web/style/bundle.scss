@@ -2,274 +2,35 @@
 @use "sass:color";
 
 
-// article.module.scss
-.article-page-670edd8 {
-  .loading-670edd8,
-  .error-670edd8,
-  .no_articles-670edd8 {
-    padding: 2rem;
-    background: rgba($color-bg-light, 0.4);
-    color: $color-text-soft;
-    font-family: $font-sans;
-    text-align: center;
-    border-radius: 0.5rem;
-  }
-
-  // 記事コンテナ
-  .article-670edd8 {
-    background: rgba($color-bg-light, 0.6);
-    padding: 2rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    border-radius: 1rem;
-    font-family: $font-sans;
-    color: $color-text;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-
-    // タイトル
-    .article-title-670edd8 {
-      margin: 0;
-      font-size: 2rem;
-      position: relative;
-      &::after {
-        content: "";
-        display: block;
-        width: 4rem;
-        height: 0.25rem;
-        background: $color-accent;
-        margin-top: 0.5rem;
-        border-radius: 2px;
-      }
-    }
-
-    // メタ情報
-    .article-meta-670edd8 {
-      display: flex;
-      gap: 1.5rem;
-      font-size: 0.875rem;
-      color: $color-text-soft;
-      p {
-        margin: 0;
-      }
-    }
-  }
-}
-
-
-.article_card-b44b6c1 {
-  background: $color-bg-mid;
-  border-radius: 1rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.7);
-  }
-
-  // メタ情報（日時・カテゴリ）
-  .article_meta-b44b6c1 {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    background: rgba($color-bg-light, 0.8);
-    font-family: $font-sans;
-    font-size: 0.875rem;
-    color: $color-text-soft;
-
-    .article_date-b44b6c1 {
-      text-align: left;
-      margin-right: auto;
-    }
-
-    .article_category-b44b6c1 {
-      color: $color-accent;
-      text-decoration: none;
-      transition: color 0.3s ease;
-
-      &:hover {
-        color: color.scale($color-accent, $lightness: 10%);
-      }
-    }
-  }
-
-  // タイトル
-  .article_title-b44b6c1 {
-    margin: 0;
-    padding: 0.75rem 1rem;
-    font-family: $font-sans;
-    font-size: 1.25rem;
-    line-height: 1.4;
-    a {
-      color: $color-text;
-      text-decoration: none;
-      transition: color 0.3s ease;
-
-      &:hover {
-        color: $color-accent;
-      }
-    }
-  }
-
-  // 抜粋
-  .article_excerpt-b44b6c1 {
-    flex-grow: 1;
-    padding: 0.75rem 1rem;
-    font-family: $font-sans;
-    font-size: 1rem;
-    color: $color-text-soft;
-    line-height: 1.6;
-  }
-
-  // フッター（タグ＋続きを読むリンク）
-  .article_footer-b44b6c1 {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    background: rgba($color-bg-light, 0.8);
-
-    .article_tags-b44b6c1 {
-      a.article_tag-b44b6c1 {
-        display: inline-block;
-        margin-right: 0.5rem;
-        font-family: $font-sans;
-        font-size: 0.875rem;
-        color: $color-text;
-        background: rgba($color-accent, 0.2);
-        padding: 0.25rem 0.5rem;
-        border-radius: 0.5rem;
-        text-decoration: none;
-        transition: background 0.3s ease, color 0.3s ease;
-
-        &:hover {
-          background: $color-accent;
-          color: $color-bg-dark;
-        }
-      }
-    }
-
-    .read_more_link-b44b6c1 {
-      font-family: $font-sans;
-      font-size: 0.875rem;
-      color: $color-accent;
-      text-decoration: none;
-      border: 1px solid $color-accent;
-      border-radius: 0.5rem;
-      padding: 0.25rem 0.75rem;
-      transition: background 0.3s ease, color 0.3s ease;
-
-      &:hover {
-        background: $color-accent;
-        color: $color-bg-dark;
-      }
-    }
-  }
-}
-
-
-.category_header-3eea9ed {
-  @include fixed-content;
-
-  h1 {
-    margin: 0;
-    font-family: $font-sans;
-    font-size: 2rem;
-    color: $color-text;
-    position: relative;
-    display: inline-block;
-
-    &::after {
-      content: "";
-      display: block;
-      width: 3rem;
-      height: 0.25rem;
-      background: $color-accent;
-      margin: 0.5rem auto 0;
-      border-radius: 2px;
-    }
-  }
-
-  .category_description-3eea9ed {
-    margin-top: 0.75rem;
-    font-family: $font-sans;
-    font-size: 1rem;
-    color: $color-text-soft;
-  }
-}
-
-.articles_section-3eea9ed {
-  .articles_title-3eea9ed {
-    font-family: $font-sans;
-    font-size: 1.75rem;
-    color: $color-text;
-    margin-bottom: 1rem;
-    position: relative;
-
-    &::after {
-      content: "";
-      position: absolute;
-      bottom: -0.25rem;
-      left: 0;
-      width: 3rem;
-      height: 0.25rem;
-      background: $color-accent;
-      border-radius: 2px;
-    }
-  }
-
-  .article_list-3eea9ed {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
-    gap: 1.5rem;
-  }
-
-  .loading-3eea9ed,
-  .error-3eea9ed,
-  .no_articles-3eea9ed {
-    padding: 2rem;
-    text-align: center;
-    background: rgba($color-bg-light, 0.4);
-    border-radius: 0.5rem;
-    color: $color-text-soft;
-    font-size: 1rem;
-  }
-}
-
-
 // footer.module.scss
 .site_footer-a93d381 {
-  background: linear-gradient(90deg, $color-bg-mid 0%, $color-bg-dark 100%);
-  color: $color-text-soft;
-  font-family: $font-sans;
-  padding: 2rem 1rem;
-  text-align: center;
-  border-top: 1px solid rgba($color-accent, 0.3);
+    background: linear-gradient(90deg, $color-bg-mid 0%, $color-bg-dark 100%);
+    color: $color-text-soft;
+    font-family: $font-sans;
+    padding: 2rem 1rem;
+    text-align: center;
+    border-top: 1px solid rgba($color-accent, 0.3);
 
-  .copyright-a93d381 {
-    max-width: 64rem;
-    margin: 0 auto;
+    .copyright-a93d381 {
+        max-width: 64rem;
+        margin: 0 auto;
 
-    p {
-      margin: 0.5rem 0;
-      font-size: 0.875rem;
-      line-height: 1.4;
+        p {
+            margin: 0.5rem 0;
+            font-size: 0.875rem;
+            line-height: 1.4;
+        }
+
+        a {
+            color: $color-accent;
+            text-decoration: none;
+            transition: color 0.3s ease;
+
+            &:hover {
+                color: color.adjust($color-accent, $lightness: 10%);
+            }
+        }
     }
-
-    a {
-      color: $color-accent;
-      text-decoration: none;
-      transition: color 0.3s ease;
-
-      &:hover {
-        color: lighten($color-accent, 10%);
-      }
-    }
-  }
 }
 
 
@@ -461,321 +222,156 @@
 
 
 .home-page-19eb089 {
-  @include page-base;
+    @include page-base;
 
-  // プロフィールセクション
-  .profile-section-19eb089 {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-    @include fixed-content;
+    // プロフィールセクション
+    .profile-section-19eb089 {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        @include fixed-content;
 
-    .profile-text-19eb089 {
-      p {
-        margin: 0;
-        font-size: 1rem;
-        color: $color-text-soft;
-      }
-    }
-  }
-
-  // 記事一覧セクション
-  .latest-articles-19eb089 {
-    margin-top: 3rem;
-
-    h2 {
-      position: relative;
-      font-size: 1.75rem;
-      margin-bottom: 1rem;
-      &::after {
-        content: "";
-        position: absolute;
-        bottom: -0.25rem;
-        left: 0;
-        width: 3rem;
-        height: 0.25rem;
-        background: $color-accent;
-        border-radius: 2px;
-      }
+        .profile-text-19eb089 {
+            p {
+                margin: 0;
+                font-size: 1rem;
+                color: $color-text-soft;
+            }
+        }
     }
 
-    .loading-19eb089,
-    .error-19eb089,
-    .no-articles-19eb089 {
-      padding: 2rem;
-      text-align: center;
-      background: rgba($color-bg-light, 0.4);
-      border-radius: 0.5rem;
-      font-size: 1rem;
-      color: $color-text-soft;
+    // 記事一覧セクション
+    .latest-articles-19eb089 {
+        margin-top: 3rem;
+
+        h2 {
+            position: relative;
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+            &::after {
+                content: "";
+                position: absolute;
+                bottom: -0.25rem;
+                left: 0;
+                width: 3rem;
+                height: 0.25rem;
+                background: $color-accent;
+                border-radius: 2px;
+            }
+        }
+
+        .loading-19eb089,
+        .error-19eb089,
+        .no-articles-19eb089 {
+            padding: 2rem;
+            text-align: center;
+            background: rgba($color-bg-light, 0.4);
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            color: $color-text-soft;
+        }
+
+        .article-list-19eb089 {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
     }
 
-    .article-list-19eb089 {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
-      gap: 1.5rem;
-      margin-top: 1.5rem;
+    // thaw-uiテストセクション（ハイブリッドスタイリング環境）
+    .thaw-ui-test-section-19eb089 {
+        margin-top: 2rem;
+        padding: 1.5rem;
+        background: rgba($color-bg-light, 0.3);
+        border: 1px solid rgba($color-accent, 0.2);
+        border-radius: 0.75rem;
+
+        h3 {
+            margin-bottom: 1.5rem;
+            color: $color-accent;
+            font-size: 1.5rem;
+        }
+
+        .component-group-19eb089 {
+            margin-bottom: 1.5rem;
+
+            h4 {
+                margin-bottom: 0.75rem;
+                font-size: 1.125rem;
+                color: $color-text;
+            }
+
+            // thaw-uiコンポーネントとstylanceの調和
+            button {
+                transition: all 0.3s ease;
+
+                &:hover {
+                    transform: translateY(-1px);
+                    box-shadow: 0 4px 8px rgba($color-accent, 0.2);
+                }
+            }
+        }
+
+        // stylance + thaw-ui ハイブリッドレイアウト
+        .hybrid-layout-19eb089 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+
+            .stylance-card-19eb089 {
+                padding: 1rem;
+                background: rgba($color-bg-mid, 0.8);
+                border: 1px solid rgba($color-accent, 0.15);
+                border-radius: 0.5rem;
+                transition: all 0.3s ease;
+
+                &:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 8px 16px rgba($color-accent, 0.15);
+                    border-color: rgba($color-accent, 0.3);
+                }
+
+                p {
+                    margin: 0 0 1rem 0;
+                    color: $color-text;
+                    font-weight: 500;
+                }
+
+                // thaw-uiボタンをstylanceカード内で調整
+                button {
+                    font-size: 0.875rem;
+
+                    &:first-of-type {
+                        margin-right: 0.5rem;
+                    }
+                }
+            }
+        }
     }
-  }
 }
 
 // サブ要素に共通のトランジション
 * {
-  transition: background-color 0.3s ease, color 0.3s ease;
+    transition:
+        background-color 0.3s ease,
+        color 0.3s ease;
 }
 
 // 見出しにほんのりグローアニメ
 @keyframes glow {
-  0%,
-  100% {
-    text-shadow: 0 0 4px rgba($color-accent, 0.8);
-  }
-  50% {
-    text-shadow: 0 0 12px rgba($color-accent, 0.5);
-  }
+    0%,
+    100% {
+        text-shadow: 0 0 4px rgba($color-accent, 0.8);
+    }
+    50% {
+        text-shadow: 0 0 12px rgba($color-accent, 0.5);
+    }
 }
 h1,
 h2 {
-  animation: glow 4s ease-in-out infinite;
-}
-
-
-// layout.module.scss
-.layout-723248a {
-  display: flex;
-  position: relative;
-
-  // サイドバー表示アイコン（モバイルでのみ）
-  .toggle-icon-723248a {
-    display: none;
-    position: fixed;
-    top: $header-height / 2 - 12.5px; // 12.5pxはアイコンの高さの半分
-    left: 1rem;
-    z-index: 1000;
-    background: transparent;
-    border: none;
-    padding: 0;
-    font-size: 1.5rem;
-    color: $color-text;
-    cursor: pointer;
-
-    &::before {
-      content: "\f054"; /* FontAwesome: chevron-right */
-      font-family: "Font Awesome 5 Free";
-      font-weight: 900;
-      display: block;
-    }
-  }
-  &.open-723248a {
-    .toggle-icon-723248a::before {
-      content: "\f053"; /* FontAwesome: chevron-left */
-      font-family: "Font Awesome 5 Free";
-      font-weight: 900;
-      display: block;
-    }
-  }
-
-  // サイドバー領域 (layoutのみで、詳細なスタイルはsidebar.module.scssに記載)
-  .sidebar-723248a {
-    flex: 0 0 $sidebar-width;
-    align-self: stretch;
-  }
-
-  // メインコンテンツ領域
-  .content-723248a {
-    @include page-base;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    z-index: 100;
-    transition: transform 0.3s ease;
-  }
-}
-
-// レスポンシブ（モバイル）
-@media (max-width: 768px) {
-  .layout-723248a {
-    width: 100%;
-    overflow-x: hidden;
-
-    // 別アイコンに変更: 矢印で開閉制御
-    .toggle-icon-723248a {
-      display: block;
-    }
-
-    // Sidebarをオフスクリーンに
-    .sidebar-723248a {
-      display: block; // 常に存在
-      position: absolute;
-      top: 0;
-      left: 0;
-      bottom: 0;
-      width: $sidebar-width;
-      z-index: 300;
-      transform: translateX(-100%); // 左へ隠す
-      transition: transform 0.3s ease;
-    }
-
-    .content-723248a {
-      padding: 1rem; // スマホ用のpadding
-      width: calc(100% - 2rem);
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-      word-break: break-word;
-    }
-
-    // メニュー開閉でsidebarをスライド表示
-    &.open-723248a {
-      .sidebar-723248a {
-        transform: translateX(0); // スライドイン
-      }
-      .content-723248a {
-        transform: translateX($sidebar-width); // 右へスライド
-      }
-    }
-  }
-}
-
-
-// markdown_renderer.module.scss
-.markdown-8cbbfd9 {
-  font-family: $font-sans;
-  color: $color-text;
-  text-align: left;
-  line-height: 1.6;
-
-  p {
-    margin: 0.75rem 0;
-    color: $color-text-soft;
-  }
-
-  h1,
-  h2,
-  h3,
-  h4 {
-    margin: 1.5rem 0 0.75rem;
-    color: $color-text;
-    font-family: $font-sans;
-  }
-  h1 {
-    font-size: 2rem;
-    position: relative;
-  }
-  h1::after {
-    content: "";
-    display: block;
-    width: 4rem;
-    height: 0.25rem;
-    background: $color-accent;
-    margin-top: 0.5rem;
-    border-radius: 2px;
-  }
-  h2 {
-    font-size: 1.5rem;
-  }
-  h3 {
-    font-size: 1.25rem;
-  }
-  h4 {
-    font-size: 1.1rem;
-  }
-
-  ul,
-  ol {
-    margin: 0.75rem 0;
-    padding-left: 1.5rem;
-  }
-  li {
-    margin: 0.5rem 0;
-  }
-
-  strong {
-    color: $color-text;
-    font-weight: 700;
-    padding: 0.1rem 0.25rem;
-    border-radius: 0.25rem;
-    transition: background 0.3s ease;
-  }
-
-  blockquote {
-    margin: 1rem 0;
-    padding-left: 1rem;
-    border-left: 4px solid $color-accent;
-    color: $color-text-soft;
-    background: rgba($color-bg-mid, 0.3);
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 1rem 0;
-    font-size: 0.875rem;
-  }
-  th,
-  td {
-    border: 1px solid $color-bg-light;
-    padding: 0.5rem;
-  }
-  thead th {
-    background: rgba($color-bg-light, 0.4);
-    color: $color-text;
-  }
-
-  //sup.footnote-reference a {
-  //  color: $color-accent;
-  //  text-decoration: none;
-  //}
-  //.footnote-definition {
-  //  margin: 1rem 0;
-  //  padding: 0.75rem 1rem;
-  //  background: rgba($color-bg-mid, 0.3);
-  //  border-left: 3px solid $color-accent;
-  //  font-size: 0.875rem;
-  //  color: $color-text-soft;
-  //}
-
-  del {
-    color: $color-text-soft;
-    text-decoration: line-through;
-  }
-
-  code:not([class^="language-"]) {
-    background: rgba($color-bg-mid, 0.6);
-    padding: 0.2rem 0.4rem;
-    border-radius: 0.25rem;
-  }
-
-  pre {
-    margin: 1rem 0;
-    background: rgba($color-bg-mid, 0.8);
-    padding: 1rem;
-    border-radius: 0.5rem;
-    overflow-x: auto;
-  }
-
-  a {
-    color: $color-accent;
-    text-decoration: underline;
-    &:hover {
-      text-decoration: none;
-    }
-  }
-
-  input[type="checkbox"][disabled] {
-    margin-right: 0.5rem;
-  }
-}
-
-// レンダリング失敗時のエラースタイル
-.error-8cbbfd9 {
-  margin: 1rem 0;
-  padding: 1rem;
-  background: rgba($color-bg-light, 0.4);
-  color: $color-accent;
-  font-family: $font-sans;
-  border-radius: 0.5rem;
-  text-align: center;
+    animation: glow 4s ease-in-out infinite;
 }
 
 
@@ -864,30 +460,5 @@ h2 {
       font-family: $font-sans;
       text-align: center;
     }
-  }
-}
-
-
-// tag_list.module.scss
-.tag-list-6e271b7 {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.tag-6e271b7 {
-  display: inline-block;
-  background: rgba($color-accent, 0.2);
-  color: $color-accent;
-  font-family: $font-sans;
-  font-size: 0.875rem;
-  text-decoration: none;
-  padding: 0.25rem 0.75rem;
-  border-radius: 0.5rem;
-  transition: background 0.3s ease, color 0.3s ease;
-
-  &:hover {
-    background: rgba($color-accent, 0.4);
-    color: $color-text;
   }
 }

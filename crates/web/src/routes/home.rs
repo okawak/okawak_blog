@@ -1,8 +1,8 @@
-use crate::components::ArticleCard;
 use domain::ArticleSummary;
 use leptos::prelude::*;
 use reactive_stores::Store;
 use stylance::import_style;
+use thaw::*;
 
 import_style!(home_style, "home.module.scss");
 
@@ -49,6 +49,45 @@ pub fn HomePage() -> impl IntoView {
                 <div class=home_style::profile_text>
                     <p>{"気になったことをメモしておくブログです。"}</p>
                 </div>
+
+                // thaw-uiコンポーネントのテスト（ハイブリッドスタイリング環境）
+                <div class=home_style::thaw_ui_test_section>
+                    <h3>{"thaw-ui コンポーネントテスト"}</h3>
+
+                    <div class=home_style::component_group>
+                        <h4>{"ボタンコンポーネント"}</h4>
+                        <Space vertical=false>
+                            <Button>{"基本ボタン"}</Button>
+                            <Button>{"アクションボタン"}</Button>
+                        </Space>
+                    </div>
+
+                    <div class=home_style::component_group>
+                        <h4>{"レイアウトコンポーネント"}</h4>
+                        <Space vertical=true>
+                            <div>{"垂直スペース - アイテム1"}</div>
+                            <div>{"垂直スペース - アイテム2"}</div>
+                            <div>{"垂直スペース - アイテム3"}</div>
+                        </Space>
+                    </div>
+
+                    <div class=home_style::component_group>
+                        <h4>{"混合レイアウト（stylance + thaw-ui）"}</h4>
+                        <div class=home_style::hybrid_layout>
+                            <div class=home_style::stylance_card>
+                                <p>{"stylanceスタイルのカード"}</p>
+                                <Space>
+                                    <Button>{"thaw-uiボタン1"}</Button>
+                                    <Button>{"thaw-uiボタン2"}</Button>
+                                </Space>
+                            </div>
+                            <div class=home_style::stylance_card>
+                                <p>{"もう一つのカード"}</p>
+                                <Button>{"単独ボタン"}</Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <section class=home_style::latest_articles>
@@ -80,16 +119,7 @@ pub fn HomePage() -> impl IntoView {
                                 }
                             }
                         >
-                            <div class=home_style::article_list>
-                                <For
-                                    each=move || articles_store.rows()
-                                    key=|entry| entry.read().id.clone()
-                                    children=move |entry| {
-                                        view! { <ArticleCard article=entry.read().clone() /> }
-                                    }
-                                />
-
-                            </div>
+                            <div class=home_style::no_articles>"記事がありません"</div>
                         </Show>
                     </ErrorBoundary>
                 </Suspense>
