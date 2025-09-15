@@ -50,41 +50,66 @@ pub fn HomePage() -> impl IntoView {
                     <p>{"気になったことをメモしておくブログです。"}</p>
                 </div>
 
-                // thaw-uiコンポーネントのテスト（ハイブリッドスタイリング環境）
+                // thaw-ui + stylance統合デモ
                 <div class=home_style::thaw_ui_test_section>
-                    <h3>{"thaw-ui コンポーネントテスト"}</h3>
+                    <h3>{"Leptos 0.8 + thaw-ui + stylance 統合デモ"}</h3>
 
                     <div class=home_style::component_group>
-                        <h4>{"ボタンコンポーネント"}</h4>
+                        <h4>{"テーマ統合ボタン"}</h4>
                         <Space vertical=false>
-                            <Button>{"基本ボタン"}</Button>
+                            <Button>{"プライマリボタン"}</Button>
+                            <Button>{"標準ボタン"}</Button>
                             <Button>{"アクションボタン"}</Button>
                         </Space>
                     </div>
 
                     <div class=home_style::component_group>
-                        <h4>{"レイアウトコンポーネント"}</h4>
+                        <h4>{"レスポンシブレイアウト"}</h4>
                         <Space vertical=true>
-                            <div>{"垂直スペース - アイテム1"}</div>
-                            <div>{"垂直スペース - アイテム2"}</div>
-                            <div>{"垂直スペース - アイテム3"}</div>
+                            <div class=home_style::responsive_demo>
+                                <div>{"モバイルファーストレスポンシブデザイン"}</div>
+                                <div>{"CSS Custom Properties テーマシステム"}</div>
+                                <div>{"stylance + thaw-ui ハイブリッド統合"}</div>
+                            </div>
                         </Space>
                     </div>
 
                     <div class=home_style::component_group>
-                        <h4>{"混合レイアウト（stylance + thaw-ui）"}</h4>
+                        <h4>{"ハイブリッドカードレイアウト"}</h4>
                         <div class=home_style::hybrid_layout>
                             <div class=home_style::stylance_card>
-                                <p>{"stylanceスタイルのカード"}</p>
+                                <h5>{"stylance カスタムスタイル"}</h5>
+                                <p>{"既存のCSS資産を活用しつつ、thaw-uiコンポーネントを統合"}</p>
                                 <Space>
-                                    <Button>{"thaw-uiボタン1"}</Button>
-                                    <Button>{"thaw-uiボタン2"}</Button>
+                                    <Button>{"アクション1"}</Button>
+                                    <Button>{"アクション2"}</Button>
                                 </Space>
                             </div>
                             <div class=home_style::stylance_card>
-                                <p>{"もう一つのカード"}</p>
-                                <Button>{"単独ボタン"}</Button>
+                                <h5>{"テーマ統一"}</h5>
+                                <p>{"CSS Custom Propertiesでstylanceとthaw-uiのテーマを統一"}</p>
+                                <Button>{"詳細を見る"}</Button>
                             </div>
+                            <div class=home_style::stylance_card>
+                                <h5>{"パフォーマンス最適化"}</h5>
+                                <p>{"Leptos 0.8の新機能とthaw-uiによる高速レンダリング"}</p>
+                                <Button>{"もっと見る"}</Button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class=home_style::component_group>
+                        <h4>{"アクセシビリティ対応"}</h4>
+                        <div class=home_style::accessibility_demo>
+                            <Space vertical=true>
+                                <div class=home_style::demo_info>
+                                    {"キーボードナビゲーション、ARIA属性、カラーコントラスト対応"}
+                                </div>
+                                <Space>
+                                    <Button class="focus-visible">{"フォーカス表示"}</Button>
+                                    <Button>{"ARIA対応"}</Button>
+                                </Space>
+                            </Space>
                         </div>
                     </div>
                 </div>

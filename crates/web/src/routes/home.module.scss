@@ -12,8 +12,8 @@
         .profile-text {
             p {
                 margin: 0;
-                font-size: 1rem;
-                color: $color-text-soft;
+                font-size: var(--font-size-base);
+                color: var(--color-text-soft);
             }
         }
     }
@@ -24,7 +24,7 @@
 
         h2 {
             position: relative;
-            font-size: 1.75rem;
+            font-size: var(--font-size-2xl);
             margin-bottom: 1rem;
             &::after {
                 content: "";
@@ -33,8 +33,8 @@
                 left: 0;
                 width: 3rem;
                 height: 0.25rem;
-                background: $color-accent;
-                border-radius: 2px;
+                background: var(--color-accent);
+                border-radius: var(--border-radius-sm);
             }
         }
 
@@ -43,110 +43,181 @@
         .no-articles {
             padding: 2rem;
             text-align: center;
-            background: rgba($color-bg-light, 0.4);
-            border-radius: 0.5rem;
-            font-size: 1rem;
-            color: $color-text-soft;
+            background: var(--color-surface-variant);
+            border-radius: var(--border-radius);
+            font-size: var(--font-size-base);
+            color: var(--color-text-soft);
         }
 
         .article-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
-            gap: 1.5rem;
+            @include responsive-grid(20rem);
             margin-top: 1.5rem;
         }
     }
 
-    // thaw-uiテストセクション（ハイブリッドスタイリング環境）
+    // thaw-ui統合デモセクション（CSS Custom Properties使用）
     .thaw-ui-test-section {
         margin-top: 2rem;
         padding: 1.5rem;
-        background: rgba($color-bg-light, 0.3);
-        border: 1px solid rgba($color-accent, 0.2);
-        border-radius: 0.75rem;
+        background: var(--color-surface);
+        border: 1px solid var(--color-outline);
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow);
 
         h3 {
             margin-bottom: 1.5rem;
-            color: $color-accent;
-            font-size: 1.5rem;
+            color: var(--color-accent);
+            font-size: var(--font-size-2xl);
+            font-weight: 600;
         }
 
         .component-group {
-            margin-bottom: 1.5rem;
+            margin-bottom: 2rem;
 
             h4 {
                 margin-bottom: 0.75rem;
-                font-size: 1.125rem;
-                color: $color-text;
+                font-size: var(--font-size-lg);
+                color: var(--color-text);
+                font-weight: 500;
             }
 
-            // thaw-uiコンポーネントとstylanceの調和
-            button {
-                transition: all 0.3s ease;
+            h5 {
+                margin: 0 0 0.5rem 0;
+                font-size: var(--font-size-base);
+                color: var(--color-text);
+                font-weight: 600;
+            }
 
+            // thaw-uiコンポーネントとの統合スタイル
+            :global(.thaw-button) {
+                font-family: var(--font-family-sans);
+                transition: var(--transition-normal);
+                
                 &:hover {
                     transform: translateY(-1px);
-                    box-shadow: 0 4px 8px rgba($color-accent, 0.2);
+                    box-shadow: var(--shadow);
                 }
             }
         }
 
-        // stylance + thaw-ui ハイブリッドレイアウト
+        // レスポンシブデモエリア
+        .responsive-demo {
+            @include responsive-grid(280px);
+            
+            > div {
+                padding: 1rem;
+                background: var(--color-surface-variant);
+                border: 1px solid var(--color-outline);
+                border-radius: var(--border-radius);
+                text-align: center;
+                color: var(--color-text);
+                font-size: var(--font-size-sm);
+                
+                @include mobile-first {
+                    font-size: var(--font-size-base);
+                }
+            }
+        }
+
+        // ハイブリッドレイアウト（stylance + thaw-ui）
         .hybrid-layout {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1rem;
+            @include responsive-grid(300px);
 
             .stylance-card {
-                padding: 1rem;
-                background: rgba($color-bg-mid, 0.8);
-                border: 1px solid rgba($color-accent, 0.15);
-                border-radius: 0.5rem;
-                transition: all 0.3s ease;
+                padding: 1.25rem;
+                background: var(--color-surface);
+                border: 1px solid var(--color-outline);
+                border-radius: var(--border-radius-lg);
+                transition: var(--transition-normal);
+                box-shadow: var(--shadow-sm);
 
                 &:hover {
                     transform: translateY(-2px);
-                    box-shadow: 0 8px 16px rgba($color-accent, 0.15);
-                    border-color: rgba($color-accent, 0.3);
+                    box-shadow: var(--shadow-lg);
+                    border-color: var(--color-accent);
+                }
+
+                h5 {
+                    margin: 0 0 0.75rem 0;
+                    color: var(--color-accent);
+                    font-size: var(--font-size-lg);
+                    font-weight: 600;
                 }
 
                 p {
                     margin: 0 0 1rem 0;
-                    color: $color-text;
-                    font-weight: 500;
+                    color: var(--color-text);
+                    font-size: var(--font-size-sm);
+                    line-height: 1.5;
                 }
 
                 // thaw-uiボタンをstylanceカード内で調整
-                button {
-                    font-size: 0.875rem;
-
-                    &:first-of-type {
-                        margin-right: 0.5rem;
+                :global(.thaw-button) {
+                    font-size: var(--font-size-sm);
+                    margin-right: 0.5rem;
+                    
+                    &:last-child {
+                        margin-right: 0;
                     }
+                }
+            }
+        }
+
+        // アクセシビリティデモ
+        .accessibility-demo {
+            padding: 1rem;
+            background: var(--color-surface-variant);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--color-outline);
+
+            .demo-info {
+                padding: 0.75rem;
+                background: var(--color-surface);
+                border-radius: var(--border-radius-sm);
+                color: var(--color-text-soft);
+                font-size: var(--font-size-sm);
+                text-align: center;
+            }
+
+            :global(.thaw-button) {
+                &:focus-visible {
+                    outline: 2px solid var(--color-accent);
+                    outline-offset: 2px;
                 }
             }
         }
     }
 }
 
-// サブ要素に共通のトランジション
-* {
-    transition:
-        background-color 0.3s ease,
-        color 0.3s ease;
-}
-
-// 見出しにほんのりグローアニメ
+// アニメーション効果（CSS Custom Properties使用）
 @keyframes glow {
-    0%,
-    100% {
-        text-shadow: 0 0 4px rgba($color-accent, 0.8);
+    0%, 100% {
+        text-shadow: 0 0 4px var(--color-accent-alpha);
     }
     50% {
-        text-shadow: 0 0 12px rgba($color-accent, 0.5);
+        text-shadow: 0 0 12px var(--color-accent);
     }
 }
-h1,
-h2 {
+
+h1, h2 {
     animation: glow 4s ease-in-out infinite;
+}
+
+// レスポンシブ改善
+@include mobile-first {
+    .home-page {
+        .thaw-ui-test-section {
+            padding: 1rem;
+            margin-top: 1.5rem;
+
+            .hybrid-layout {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .responsive-demo {
+                grid-template-columns: 1fr;
+            }
+        }
+    }
 }
