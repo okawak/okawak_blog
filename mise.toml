@@ -10,8 +10,9 @@ description = "Copy service file and reload the daemon"
 depends = ["stop"]
 run = 'sudo sh -c "cp -f service/okawak_blog.service /etc/systemd/system/okawak_blog.service"'
 
-[tasks.start]
+[tasks.deploy]
 description = "Start the service"
+depends = ["service", "bin"]
 run = "sudo systemctl daemon-reload && sudo systemctl start okawak_blog"
 
 [tasks.nginx_stop]
@@ -52,7 +53,7 @@ run = "cargo leptos build --release"
 [tasks.bin]
 description = "Move binary to ./bin"
 depends = ["build"]
-run = "cp ./target/release/web ./bin/okawak_blog"
+run = ["cp ./target/release/web ./bin/okawak_blog", "sudo chown -R root:root ./bin"]
 
 # ========================================
 # 開発用タスク
