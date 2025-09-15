@@ -2,6 +2,7 @@ use crate::components::{NavigationItem, get_main_nav_items};
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 use stylance::import_style;
+use thaw::*;
 
 import_style!(header_style, "header.module.scss");
 
@@ -20,16 +21,17 @@ pub fn Header() -> impl IntoView {
                     <h1 class=header_style::logo>{"ぶくせんの探窟メモ"}</h1>
                 </a>
 
-                // ハンバーガーボタン
-                <button
+                // ハンバーガーボタン（thaw-ui Buttonで置き換え）
+                <Button
                     class=header_style::menu_toggle
-                    on:click=move |_| set_menu_open.update(|v| *v = !*v)
-                    aria-label="Toggle menu"
+                    on_click=move |_| set_menu_open.update(|v| *v = !*v)
                 >
-                    <span class=header_style::bar></span>
-                    <span class=header_style::bar></span>
-                    <span class=header_style::bar></span>
-                </button>
+                    <div class=header_style::hamburger_icon>
+                        <span class=header_style::bar></span>
+                        <span class=header_style::bar></span>
+                        <span class=header_style::bar></span>
+                    </div>
+                </Button>
 
                 <nav class=move || {
                     let state = if menu_open.get() {
@@ -62,15 +64,19 @@ pub fn Header() -> impl IntoView {
                             }
                         />
                     </ul>
+
+                    // ソーシャルリンクにthaw-ui Buttonを使用
                     <div class=header_style::social_links>
-                        <a
-                            href="https://github.com/okawak"
-                            class=header_style::social_icon
-                            target="_blank"
-                            rel="noopener noreferrer"
+                        <Button
+                            class=header_style::social_button
+                            on_click=move |_| {
+                                if let Some(window) = leptos::web_sys::window() {
+                                    let _ = window.open_with_url_and_target("https://github.com/okawak", "_blank");
+                                }
+                            }
                         >
                             <i class="fab fa-github"></i>
-                        </a>
+                        </Button>
                     </div>
                 </nav>
             </div>

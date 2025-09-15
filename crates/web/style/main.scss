@@ -1,5 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap");
 
+// === SCSS変数（基本テーマ定義） ===
 $color-bg-dark: #0d0a08;
 $color-bg-mid: #2b1f1a;
 $color-bg-light: #3b2c25;
@@ -11,6 +12,44 @@ $font-sans: "Noto Sans JP", sans-serif;
 $header-height: 90px;
 $padding-whole: 2rem;
 $sidebar-width: 13rem;
+
+// === CSS Custom Properties（thaw-ui統合とランタイムテーマ） ===
+// thaw-uiコンポーネント用のテーマ橋渡し
+:root {
+  // thaw-ui統合用の基本色（SCSS変数から導出）
+  --color-primary: #{$color-accent};
+  --color-primary-hover: #{lighten($color-accent, 8%)};
+  --color-surface: #{$color-bg-mid};
+  --color-surface-variant: #{$color-bg-light};
+  --color-outline: #{rgba($color-accent, 0.3)};
+  
+  // フォント関連
+  --font-family-sans: #{$font-sans};
+  --font-size-base: 1rem;
+  --font-size-sm: 0.875rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  
+  // レイアウト
+  --header-height: #{$header-height};
+  --sidebar-width: #{$sidebar-width};
+  --padding-page: #{$padding-whole};
+  --border-radius-sm: 0.25rem;
+  --border-radius: 0.5rem;
+  --border-radius-lg: 0.75rem;
+  --border-radius-xl: 1rem;
+  
+  // シャドウ
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.7);
+  
+  // トランジション
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
+}
 
 @mixin page-base {
   background: linear-gradient(to bottom, $color-bg-mid 0%, $color-bg-dark 100%);
@@ -52,6 +91,79 @@ body {
   font-family: $font-sans;
   text-align: center;
   margin: 0;
+  background: $color-bg-dark;
+  color: $color-text;
+  line-height: 1.6;
+}
+
+// === thaw-ui テーマ統合（CSS Custom Properties使用） ===
+// thaw-uiコンポーネントのカスタムスタイル
+.thaw-button {
+  --thaw-button-color-primary: var(--color-primary);
+  --thaw-button-color-primary-hover: var(--color-primary-hover);
+  --thaw-button-background-primary: var(--color-primary);
+  --thaw-button-background-primary-hover: var(--color-primary-hover);
+  --thaw-button-border-color: var(--color-primary);
+  --thaw-button-border-radius: var(--border-radius);
+  --thaw-button-font-family: var(--font-family-sans);
+  --thaw-button-transition: var(--transition-normal);
+  
+  font-family: var(--font-family-sans);
+  transition: var(--transition-normal);
+  border-radius: var(--border-radius);
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+  }
+}
+
+.thaw-space {
+  --thaw-space-gap: 0.75rem;
+}
+
+.thaw-card {
+  --thaw-card-background: var(--color-surface);
+  --thaw-card-border-color: var(--color-outline);
+  --thaw-card-border-radius: var(--border-radius-lg);
+  --thaw-card-box-shadow: var(--shadow);
+  
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow);
+  transition: var(--transition-normal);
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--color-primary);
+  }
+}
+
+// === レスポンシブユーティリティ ===
+@mixin responsive-grid($min-width: 280px) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax($min-width, 1fr));
+  gap: 1.5rem;
+}
+
+@mixin mobile-first {
+  @media (max-width: 768px) {
+    @content;
+  }
+}
+
+@mixin tablet-up {
+  @media (min-width: 769px) {
+    @content;
+  }
+}
+
+@mixin desktop-up {
+  @media (min-width: 1024px) {
+    @content;
+  }
 }
 
 .katex-display {
