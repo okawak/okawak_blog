@@ -57,17 +57,17 @@ pub struct ContentService;
 impl ContentService {
     /// サマリーを自動生成（プレーンテキストの最初の部分）
     pub fn generate_summary(_content: &str, _max_length: usize) -> String {
-        todo!("サマリー生成機能の実装")
+        unimplemented!("generate_summary method not yet implemented")
     }
 
     /// Markdownから基本的な記号を除去
     fn strip_markdown(_content: &str) -> String {
-        todo!("Markdown除去機能の実装")
+        unimplemented!("strip_markdown method not yet implemented")
     }
 
     /// 読了時間を推定（日本語対応）
     pub fn estimate_reading_time(_content: &str) -> usize {
-        todo!("読了時間推定機能の実装")
+        unimplemented!("estimate_reading_time method not yet implemented")
     }
 }
 

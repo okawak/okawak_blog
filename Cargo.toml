@@ -2,6 +2,7 @@
 members = [
     "crates/domain",
     "crates/server",
+    "crates/service",
     "crates/web",
     "crates/shared",
     "apps/obsidian_uploader",

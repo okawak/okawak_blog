@@ -1,16 +1,19 @@
-use domain::ArticleSummary;
+#[cfg(feature = "ssr")]
+use service::ArticleSummary;
+
 use leptos::prelude::*;
 use reactive_stores::Store;
+#[cfg(not(feature = "ssr"))]
+use shared::types::ArticleSummary;
 use stylance::import_style;
 use thaw::*;
 
 import_style!(home_style, "home.module.scss");
 
-/// 全てのカテゴリの記事一覧を取得するサーバー関数
+/// 全てのカテゴリの記事一覧を取得するサーバー関数（ダミー実装）
 #[server]
 pub async fn get_latest_articles() -> Result<Vec<ArticleSummary>, ServerFnError> {
-    // TODO: coreクレートのユースケースを使用して記事を取得
-    // let articles = get_latest_articles_usecase().await?;
+    // 一旦空のリストを返す
     Ok(vec![])
 }
 
@@ -51,68 +54,68 @@ pub fn HomePage() -> impl IntoView {
                 </div>
 
                 // thaw-ui + stylance統合デモ
-                <div class=home_style::thaw_ui_test_section>
-                    <h3>{"Leptos 0.8 + thaw-ui + stylance 統合デモ"}</h3>
+                //<div class=home_style::thaw_ui_test_section>
+                //    <h3>{"Leptos 0.8 + thaw-ui + stylance 統合デモ"}</h3>
 
-                    <div class=home_style::component_group>
-                        <h4>{"テーマ統合ボタン"}</h4>
-                        <Space vertical=false>
-                            <Button>{"プライマリボタン"}</Button>
-                            <Button>{"標準ボタン"}</Button>
-                            <Button>{"アクションボタン"}</Button>
-                        </Space>
-                    </div>
+                //    <div class=home_style::component_group>
+                //        <h4>{"テーマ統合ボタン"}</h4>
+                //        <Space vertical=false>
+                //            <Button>{"プライマリボタン"}</Button>
+                //            <Button>{"標準ボタン"}</Button>
+                //            <Button>{"アクションボタン"}</Button>
+                //        </Space>
+                //    </div>
 
-                    <div class=home_style::component_group>
-                        <h4>{"レスポンシブレイアウト"}</h4>
-                        <Space vertical=true>
-                            <div class=home_style::responsive_demo>
-                                <div>{"モバイルファーストレスポンシブデザイン"}</div>
-                                <div>{"CSS Custom Properties テーマシステム"}</div>
-                                <div>{"stylance + thaw-ui ハイブリッド統合"}</div>
-                            </div>
-                        </Space>
-                    </div>
+                //    <div class=home_style::component_group>
+                //        <h4>{"レスポンシブレイアウト"}</h4>
+                //        <Space vertical=true>
+                //            <div class=home_style::responsive_demo>
+                //                <div>{"モバイルファーストレスポンシブデザイン"}</div>
+                //                <div>{"CSS Custom Properties テーマシステム"}</div>
+                //                <div>{"stylance + thaw-ui ハイブリッド統合"}</div>
+                //            </div>
+                //        </Space>
+                //    </div>
 
-                    <div class=home_style::component_group>
-                        <h4>{"ハイブリッドカードレイアウト"}</h4>
-                        <div class=home_style::hybrid_layout>
-                            <div class=home_style::stylance_card>
-                                <h5>{"stylance カスタムスタイル"}</h5>
-                                <p>{"既存のCSS資産を活用しつつ、thaw-uiコンポーネントを統合"}</p>
-                                <Space>
-                                    <Button>{"アクション1"}</Button>
-                                    <Button>{"アクション2"}</Button>
-                                </Space>
-                            </div>
-                            <div class=home_style::stylance_card>
-                                <h5>{"テーマ統一"}</h5>
-                                <p>{"CSS Custom Propertiesでstylanceとthaw-uiのテーマを統一"}</p>
-                                <Button>{"詳細を見る"}</Button>
-                            </div>
-                            <div class=home_style::stylance_card>
-                                <h5>{"パフォーマンス最適化"}</h5>
-                                <p>{"Leptos 0.8の新機能とthaw-uiによる高速レンダリング"}</p>
-                                <Button>{"もっと見る"}</Button>
-                            </div>
-                        </div>
-                    </div>
+                //    <div class=home_style::component_group>
+                //        <h4>{"ハイブリッドカードレイアウト"}</h4>
+                //        <div class=home_style::hybrid_layout>
+                //            <div class=home_style::stylance_card>
+                //                <h5>{"stylance カスタムスタイル"}</h5>
+                //                <p>{"既存のCSS資産を活用しつつ、thaw-uiコンポーネントを統合"}</p>
+                //                <Space>
+                //                    <Button>{"アクション1"}</Button>
+                //                    <Button>{"アクション2"}</Button>
+                //                </Space>
+                //            </div>
+                //            <div class=home_style::stylance_card>
+                //                <h5>{"テーマ統一"}</h5>
+                //                <p>{"CSS Custom Propertiesでstylanceとthaw-uiのテーマを統一"}</p>
+                //                <Button>{"詳細を見る"}</Button>
+                //            </div>
+                //            <div class=home_style::stylance_card>
+                //                <h5>{"パフォーマンス最適化"}</h5>
+                //                <p>{"Leptos 0.8の新機能とthaw-uiによる高速レンダリング"}</p>
+                //                <Button>{"もっと見る"}</Button>
+                //            </div>
+                //        </div>
+                //    </div>
 
-                    <div class=home_style::component_group>
-                        <h4>{"アクセシビリティ対応"}</h4>
-                        <div class=home_style::accessibility_demo>
-                            <Space vertical=true>
-                                <div class=home_style::demo_info>
-                                    {"キーボードナビゲーション、ARIA属性、カラーコントラスト対応"}
-                                </div>
-                                <Space>
-                                    <Button class="focus-visible">{"フォーカス表示"}</Button>
-                                    <Button>{"ARIA対応"}</Button>
-                                </Space>
-                            </Space>
-                        </div>
-                    </div>
-                </div>
+                //    <div class=home_style::component_group>
+                //        <h4>{"アクセシビリティ対応"}</h4>
+                //        <div class=home_style::accessibility_demo>
+                //            <Space vertical=true>
+                //                <div class=home_style::demo_info>
+                //                    {"キーボードナビゲーション、ARIA属性、カラーコントラスト対応"}
+                //                </div>
+                //                <Space>
+                //                    <Button class="focus-visible">{"フォーカス表示"}</Button>
+                //                    <Button>{"ARIA対応"}</Button>
+                //                </Space>
+                //            </Space>
+                //        </div>
+                //    </div>
+                //</div>
             </section>
 
             <section class=home_style::latest_articles>
