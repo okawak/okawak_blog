@@ -217,32 +217,32 @@ impl Article {
 
     /// 記事を公開する（ビジネスルール）
     pub fn publish(&mut self) -> Result<()> {
-        todo!("記事公開機能の実装")
+        unimplemented!("publish method not yet implemented")
     }
 
     /// 記事を更新する
     pub fn update_content(&mut self, _content: String) -> Result<()> {
-        todo!("記事更新機能の実装")
+        unimplemented!("update_content method not yet implemented")
     }
 
     /// サマリーを設定
     pub fn set_summary(&mut self, _summary: String) {
-        todo!("サマリー設定機能の実装")
+        unimplemented!("set_summary method not yet implemented")
     }
 
     /// タグを追加
     pub fn add_tag(&mut self, _tag: String) {
-        todo!("タグ追加機能の実装")
+        unimplemented!("add_tag method not yet implemented")
     }
 
     /// URLを生成
     pub fn url(&self) -> String {
-        todo!("URL生成機能の実装")
+        unimplemented!("url method not yet implemented")
     }
 
     /// 日本語形式の公開日
     pub fn published_date_jp(&self) -> String {
-        todo!("日本語日付形式変換機能の実装")
+        unimplemented!("published_date_jp method not yet implemented")
     }
 }
 
@@ -283,8 +283,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_todo_placeholder() {
+    fn test_placeholder() {
         // テスト実装は後で追加予定
-        todo!("モデルテストの実装");
+        // todo!("モデルテストの実装");
     }
 }

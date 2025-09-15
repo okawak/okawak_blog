@@ -30,25 +30,30 @@ pub fn get_main_nav_items(current_path: &str) -> Vec<NavigationItem> {
             is_active: current_path == "/",
         },
         NavigationItem {
-            title: "技術".into(),
-            href: "/tech".into(),
-            is_active: current_path == "/tech" || current_path.starts_with("/tech/"),
+            title: "About".into(),
+            href: "/about".into(),
+            is_active: current_path == "/about",
         },
-        NavigationItem {
-            title: "日常".into(),
-            href: "/daily".into(),
-            is_active: current_path == "/daily" || current_path.starts_with("/daily/"),
-        },
-        NavigationItem {
-            title: "統計学".into(),
-            href: "/statistics".into(),
-            is_active: current_path == "/statistics" || current_path.starts_with("/statistics/"),
-        },
-        NavigationItem {
-            title: "物理学".into(),
-            href: "/physics".into(),
-            is_active: current_path == "/physics" || current_path.starts_with("/physics/"),
-        },
+        //NavigationItem {
+        //    title: "技術".into(),
+        //    href: "/tech".into(),
+        //    is_active: current_path == "/tech" || current_path.starts_with("/tech/"),
+        //},
+        //NavigationItem {
+        //    title: "日常".into(),
+        //    href: "/daily".into(),
+        //    is_active: current_path == "/daily" || current_path.starts_with("/daily/"),
+        //},
+        //NavigationItem {
+        //    title: "統計学".into(),
+        //    href: "/statistics".into(),
+        //    is_active: current_path == "/statistics" || current_path.starts_with("/statistics/"),
+        //},
+        //NavigationItem {
+        //    title: "物理学".into(),
+        //    href: "/physics".into(),
+        //    is_active: current_path == "/physics" || current_path.starts_with("/physics/"),
+        //},
     ]
 }
 
@@ -60,10 +65,10 @@ pub fn get_social_links() -> Vec<NavigationItem> {
             href: "https://github.com/okawak".into(),
             is_active: false,
         },
-        NavigationItem {
-            title: "Twitter".into(),
-            href: "https://twitter.com/okawak_".into(),
-            is_active: false,
-        },
+        //NavigationItem {
+        //    title: "Twitter".into(),
+        //    href: "https://twitter.com/okawak_".into(),
+        //    is_active: false,
+        //},
     ]
 }

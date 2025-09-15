@@ -1,15 +1,18 @@
-use domain::ArticleSummary;
+#[cfg(feature = "ssr")]
+use service::ArticleSummary;
+
 use leptos::prelude::*;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
+#[cfg(not(feature = "ssr"))]
+use shared::types::ArticleSummary;
 use stylance::import_style;
 
 import_style!(sidebar_style, "sidebar.module.scss");
 
-/// 特定のカテゴリの記事全てを取得するサーバー関数
+/// 特定のカテゴリの記事全てを取得するサーバー関数（ダミー実装）
 #[server]
-pub async fn get_all_articles(category: String) -> Result<Vec<ArticleSummary>, ServerFnError> {
-    // TODO: coreクレートのユースケースを使用して記事を取得
-    let _ = category; // 未使用警告を回避
+pub async fn get_all_articles(_category: String) -> Result<Vec<ArticleSummary>, ServerFnError> {
+    // 一旦空のリストを返す
     Ok(vec![])
 }
 

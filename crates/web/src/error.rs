@@ -18,18 +18,11 @@ pub enum FrontendError {
     NavigationError { message: String },
 }
 
-// thiserrorと手動実装を組み合わせた簡潔な変換
-impl From<reqwest::Error> for FrontendError {
-    fn from(err: reqwest::Error) -> Self {
-        Self::NetworkError {
-            message: err.to_string(),
-        }
-    }
-}
-
-impl From<lol_html::errors::RewritingError> for FrontendError {
-    fn from(err: lol_html::errors::RewritingError) -> Self {
-        Self::RenderError {
+// サービスエラーからの変換 (SSRモードでのみ有効)
+#[cfg(feature = "ssr")]
+impl From<service::ServiceError> for FrontendError {
+    fn from(err: service::ServiceError) -> Self {
+        Self::LoadError {
             message: err.to_string(),
         }
     }

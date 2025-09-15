@@ -127,7 +127,7 @@ impl ArticleWithContent {
 
 /// HTMLコンテンツを生成（簡易版）
 fn generate_html_content(_article: &Article) -> String {
-    todo!("HTMLコンテンツ生成機能の実装")
+    unimplemented!("generate_html_content function not yet implemented")
 }
 
 // =============================================================================

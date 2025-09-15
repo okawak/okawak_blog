@@ -1,36 +1,99 @@
+# ========================================
+# VPS デプロイ関連タスク
+# ========================================
 [tasks.stop]
 description = "Stop the service"
-run = 'sudo systemctl stop okawak_blog'
+run = "sudo systemctl stop okawak_blog"
 
 [tasks.service]
 description = "Copy service file and reload the daemon"
 depends = ["stop"]
 run = 'sudo sh -c "cp -f service/okawak_blog.service /etc/systemd/system/okawak_blog.service"'
 
+[tasks.start]
+description = "Start the service"
+run = "sudo systemctl daemon-reload && sudo systemctl start okawak_blog"
+
+[tasks.nginx_stop]
+description = "Stop nginx"
+run = "sudo systemctl stop nginx"
+
+[tasks.nginx]
+description = "Copy nginx config"
+run = 'sudo sh -c "cp -f service/nginx_okawak_blog.conf /etc/nginx/conf.d/okawak_blog.conf"'
+
+[tasks.reload_nginx]
+description = "Reload nginx"
+run ="sudo systemctl start nginx"
+
+# ========================================
+# ビルド用タスク
+# ========================================
+[tasks.pull]
+description = "Pull the latest changes from the repository"
+depends = ["check_deps", "stop"]
+run = "git pull origin main"
+
 [tasks.clean]
 description = "Clean the project"
 depends = ["service"]
-run = 'cargo clean'
-
-[tasks.build]
-description = "Build the project"
-depends = ["clean"]
-run = 'cargo leptos build --release -p server'
-
-[tasks.start]
-description = "Start the service"
-depends = ["build"]
-run = 'sudo systemctl daemon-reload && sudo systemctl start okawak_blog'
+run = "cargo clean"
 
 [tasks.stylance]
 description = "Run the Stylance locally"
+depends = ["clean"]
 run = "stylance crates/web"
 
-[tasks.local_server]
-description = "build the server locally"
+[tasks.build]
+description = "Build the project for web"
 depends = ["stylance"]
-run = 'cargo leptos serve --release'
+run = "cargo leptos build --release"
 
+[tasks.bin]
+description = "Move binary to ./bin"
+depends = ["build"]
+run = "cp ./target/release/web ./bin/okawak_blog"
+
+# ========================================
+# 開発用タスク
+# ========================================
 [tasks.format]
 description = "Format the code"
 run = ["cargo fmt --all", "leptosfmt ./crates/web/**/*.rs"]
+
+[tasks.dev]
+description = "Run development server"
+depends = ["format"]
+run = "cargo leptos serve"
+
+# ========================================
+# 運用・監視タスク
+# ========================================
+[tasks.status]
+description = "Check service status"
+run = 'sudo systemctl status okawak_blog'
+
+# ログ確認タスク
+[tasks.logs]
+description = "Show service logs"
+run = 'sudo journalctl -u okawak_blog -f'
+
+# ログ表示（直近の行）
+[tasks.logs-recent]
+description = "Show recent service logs"
+run = 'sudo journalctl -u okawak_blog --lines=50'
+
+# サービス再起動
+[tasks.restart]
+description = "Restart the service"
+run = 'sudo systemctl restart okawak_blog'
+
+# 依存関係チェック
+[tasks.check-deps]
+description = "Check if required tools are installed"
+run = '''
+echo "🔍 依存関係チェック..."
+cargo leptos --version || echo "❌ cargo-leptos が必要です: cargo install cargo-leptos"
+stylance --version || echo "❌ stylance-cli が必要です: cargo install stylance-cli"
+echo "✅ 依存関係チェック完了"
+'''

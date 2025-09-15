@@ -1,18 +1,53 @@
 [Unit]
-Description=Leptos Rust App
-After=network.target
+Description=okawak Blog - Leptos Rust Web Application
+Wants=network-online.target
+After=network-online.target
 
 [Service]
+Type=simple
 User=okawak
 Group=okawak
-ExecStart=/home/okawak/.cargo/bin/cargo leptos serve --release
-WorkingDirectory=/home/okawak/okawak_blog
-Restart=always
+WorkingDirectory=/opt/okawak_blog
+ExecStart=/opt/okawak_blog/bin/okawak_blog
+Restart=on-failure
 RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+
 Environment=AWS_PROFILE=blog-s3
 Environment=AWS_REGION=ap-northeast-1
 Environment=AWS_BUCKET_NAME=okawak-blog-resources-bucket
-Environment=RUST_LOG="info"
+
+StateDirectory=okawak_blog
+LogsDirectory=okawak_blog
+RuntimeDirectory=okawak_blog
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHostname=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=@system-service @network-io
+
+UMask=027
+
+LimitNOFILE=65536
+LimitNPROC=4096
 
 [Install]
 WantedBy=multi-user.target
