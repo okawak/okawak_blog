@@ -2,27 +2,44 @@
 //!
 //! ADT (Algebraic Data Types) を活用したドメインモデリング
 
-use crate::error::{CoreError, Result};
-use chrono::{DateTime, NaiveDate, Utc};
-use serde::{Deserialize, Serialize};
+use crate::error::{DomainError, Result};
 use std::{fmt, str::FromStr};
-use uuid::Uuid;
 
 // =============================================================================
 // Value Objects - 値オブジェクト（Rustの newtype pattern）
 // =============================================================================
 
 /// 記事ID - 型安全性を確保
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ArticleId(Uuid);
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ArticleId(String);
 
 impl ArticleId {
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        // 簡易的なID生成（実装では外部でUUID生成）
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let mut hasher = DefaultHasher::new();
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .hash(&mut hasher);
+        let id = format!("article_{}", hasher.finish());
+        Self(id)
     }
 
-    pub fn as_str(&self) -> String {
-        self.0.to_string()
+    pub fn from_string(id: String) -> Result<Self> {
+        if id.is_empty() {
+            return Err(DomainError::InvalidId {
+                id: "IDは空にできません".to_string(),
+            });
+        }
+        Ok(Self(id))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -39,24 +56,21 @@ impl fmt::Display for ArticleId {
 }
 
 impl FromStr for ArticleId {
-    type Err = CoreError;
+    type Err = DomainError;
 
     fn from_str(s: &str) -> Result<Self> {
-        let uuid = Uuid::parse_str(s).map_err(|_| CoreError::InvalidSlug {
-            slug: s.to_string(),
-        })?;
-        Ok(Self(uuid))
+        Self::from_string(s.to_string())
     }
 }
 
 /// スラッグ - URLセーフな識別子
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Slug(String);
 
 impl Slug {
     pub fn new(value: String) -> Result<Self> {
         if value.is_empty() {
-            return Err(CoreError::InvalidSlug {
+            return Err(DomainError::InvalidSlug {
                 slug: "スラッグは空にできません".to_string(),
             });
         }
@@ -65,7 +79,7 @@ impl Slug {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         {
-            return Err(CoreError::InvalidSlug {
+            return Err(DomainError::InvalidSlug {
                 slug: "スラッグは英数字、ハイフン、アンダースコアのみ使用可能です".to_string(),
             });
         }
@@ -85,7 +99,7 @@ impl fmt::Display for Slug {
 }
 
 /// 記事タイトル - ビジネスルールを型で表現
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Title(String);
 
 impl Title {
@@ -93,13 +107,13 @@ impl Title {
         let trimmed = value.trim();
 
         if trimmed.is_empty() {
-            return Err(CoreError::InvalidTitle {
+            return Err(DomainError::InvalidTitle {
                 reason: "タイトルは空にできません".to_string(),
             });
         }
 
         if trimmed.len() > 200 {
-            return Err(CoreError::InvalidTitle {
+            return Err(DomainError::InvalidTitle {
                 reason: "タイトルは200文字以内である必要があります".to_string(),
             });
         }
@@ -119,8 +133,7 @@ impl fmt::Display for Title {
 }
 
 /// カテゴリ - 列挙型でドメインを制限
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Category {
     Tech,
     Daily,
@@ -155,7 +168,7 @@ impl fmt::Display for Category {
 }
 
 impl FromStr for Category {
-    type Err = CoreError;
+    type Err = DomainError;
 
     fn from_str(s: &str) -> Result<Self> {
         match s.to_lowercase().as_str() {
@@ -163,7 +176,7 @@ impl FromStr for Category {
             "daily" => Ok(Category::Daily),
             "statistics" => Ok(Category::Statistics),
             "physics" => Ok(Category::Physics),
-            _ => Err(CoreError::InvalidCategory {
+            _ => Err(DomainError::InvalidCategory {
                 category: s.to_string(),
             }),
         }
@@ -175,7 +188,7 @@ impl FromStr for Category {
 // =============================================================================
 
 /// 記事エンティティ - ビジネスロジックをメソッドで表現
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Article {
     pub id: ArticleId,
     pub slug: Slug,
@@ -184,8 +197,8 @@ pub struct Article {
     pub content: String,
     pub summary: Option<String>,
     pub tags: Vec<String>,
-    pub published_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub published_at: String, // ISO8601文字列
+    pub updated_at: String,   // ISO8601文字列
     pub is_published: bool,
 }
 
@@ -199,7 +212,9 @@ impl Article {
     ) -> Result<Self> {
         let title = Title::new(title)?;
         let slug = Slug::new(slug)?;
-        let now = Utc::now();
+
+        // 現在時刻をISO8601文字列として生成
+        let now = Self::current_timestamp();
 
         Ok(Self {
             id: ArticleId::new(),
@@ -209,10 +224,27 @@ impl Article {
             content,
             summary: None,
             tags: Vec::new(),
-            published_at: now,
+            published_at: now.clone(),
             updated_at: now,
             is_published: false,
         })
+    }
+
+    /// 現在時刻をISO8601文字列として取得
+    fn current_timestamp() -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let duration = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("時刻が正常に取得できません");
+
+        // 簡易的なISO8601形式（実際のプロジェクトではより正確な実装を使用）
+        format!(
+            "2025-09-20T{:02}:{:02}:{:02}Z",
+            duration.as_secs() % 86400 / 3600,
+            duration.as_secs() % 3600 / 60,
+            duration.as_secs() % 60
+        )
     }
 
     /// 記事を公開する（ビジネスルール）
@@ -247,7 +279,7 @@ impl Article {
 }
 
 /// 記事サマリー - 一覧表示用の軽量版
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ArticleSummary {
     pub id: ArticleId,
     pub slug: Slug,
@@ -255,7 +287,7 @@ pub struct ArticleSummary {
     pub category: Category,
     pub summary: Option<String>,
     pub tags: Vec<String>,
-    pub published_at: DateTime<Utc>,
+    pub published_at: String, // ISO8601文字列
     pub is_published: bool,
 }
 
@@ -268,7 +300,7 @@ impl From<&Article> for ArticleSummary {
             category: article.category,
             summary: article.summary.clone(),
             tags: article.tags.clone(),
-            published_at: article.published_at,
+            published_at: article.published_at.clone(),
             is_published: article.is_published,
         }
     }

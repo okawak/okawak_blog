@@ -1,7 +1,17 @@
-//! REST API Handlers - Axum エンドポイント実装
+//! Handlers - HTTP ハンドラーと Leptos 統合
 
-pub mod articles;
-pub mod health;
+// 新しいモジュール構造（mod.rsを使わない方式）
+pub mod api;
+pub mod ssr;
+pub mod static_files;
 
-pub use articles::*;
-pub use health::*;
+// 既存ハンドラー（段階的に移行）
+pub mod blog_handlers;
+pub mod leptos_integration;
+
+// Re-exports
+pub use api::{AppState, create_api_router};
+pub use ssr::*;
+pub use static_files::*;
+pub use blog_handlers::create_blog_router;
+pub use leptos_integration::*;

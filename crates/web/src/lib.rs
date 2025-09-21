@@ -4,6 +4,7 @@ pub mod app;
 pub mod components;
 pub mod error;
 pub mod routes;
+pub mod types; // web専用型定義
 
 // サーバーサイドで使用するための関数やツールをエクスポート
 pub use app::{App, shell};
