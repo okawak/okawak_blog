@@ -86,7 +86,7 @@ script = '''
 git pull origin main
 '''
 
-[tasks.clean]
+[tasks.clean-project]
 description = "Clean the project"
 script_runner = "@shell"
 dependencies = ["service"]
@@ -97,7 +97,7 @@ cargo clean
 [tasks.stylance]
 description = "Run the Stylance locally"
 script_runner = "@shell"
-dependencies = ["pull", "clean"]
+dependencies = ["pull", "clean-project"]
 script = '''
 stylance crates/web"
 '''
