@@ -102,7 +102,7 @@ script = '''
 stylance crates/web
 '''
 
-[tasks.build]
+[tasks.build-project]
 description = "Build Leptos web frontend"
 script_runner = "@shell"
 dependencies = ["stylance"]
@@ -113,7 +113,7 @@ cargo leptos build --release
 [tasks.bin]
 description = "Move binary to ./bin"
 script_runner = "@shell"
-dependencies = ["build"]
+dependencies = ["build-project"]
 script = '''
 sudo mkdir -p ${BIN_DIR}
 sudo cp ${TARGET_BIN} ${BIN_DIR}/${SERVICE_NAME}
@@ -196,7 +196,7 @@ echo "✅ 依存関係チェック完了"
 
 [tasks.full-deploy]
 description = "Complete deployment flow"
-dependencies = ["check-deps", "pull", "build", "bin", "deploy"]
+dependencies = ["check-deps", "pull", "build-project", "bin", "deploy"]
 
 [tasks.dev-flow]
 description = "Development workflow (Leptos only)"
@@ -215,7 +215,7 @@ cargo leptos serve
 
 [tasks.ci-flow]
 description = "CI workflow for automated builds"
-dependencies = ["check-deps", "format", "build"]
+dependencies = ["check-deps", "format", "build-project"]
 
 [tasks.production-deploy]
 description = "Production deployment with nginx"
@@ -223,7 +223,7 @@ dependencies = ["full-deploy", "nginx-reload"]
 
 [tasks.quick-deploy]
 description = "Quick deployment (rebuild and deploy)"
-dependencies = ["build", "bin", "deploy"]
+dependencies = ["build-project", "bin", "deploy"]
 
 # ========================================
 # テスト関連タスク
@@ -312,9 +312,7 @@ script = '''
 echo "🚀 Available tasks for okawak_blog (Rust-First Architecture):"
 echo ""
 echo "📦 Build & Deploy:"
-echo "  cargo make build         - Build integrated project (Leptos + Server)"
-echo "  cargo make build-web     - Build Leptos web frontend only"
-echo "  cargo make build-server  - Build standalone server only"
+echo "  cargo make build-project - Build integrated project (Leptos + Server)"
 echo "  cargo make deploy        - Deploy to VPS"
 echo "  cargo make full-deploy   - Complete deployment flow"
 echo "  cargo make quick-deploy  - Quick rebuild and deploy"
