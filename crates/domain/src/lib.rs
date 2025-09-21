@@ -1,25 +1,18 @@
-//! Blog Core - ドメインロジックとビジネスルール
+//! Blog Domain - 純粋ドメインロジックとビジネスルール
 //!
-//! Rustの型システムを活用したドメインモデリングと
-//! ビジネスロジックの実装を提供します。
+//! I/Oなし、同期のみの純粋なドメインモデリング。
+//! Rustの型システムを活用したビジネスルールの実装。
 
-// ドメインモデル（Rustの型システムでモデリング）
-pub mod models;
+// ドメインエンティティとバリューオブジェクト
+pub mod entities;
 
-// ビジネスロジック（純粋関数 + 構造体メソッド）
-pub mod services;
+// ビジネスルール（純粋関数のみ）
+pub mod business_rules;
 
-// ユースケース（async関数群）
-pub mod use_cases;
-
-// エラー型（thiserror + Result型）
+// ドメインエラー型
 pub mod error;
 
-// 外部サービス用トレイト（dependency inversion）
-pub mod ports;
-
 // 再エクスポート
-pub use error::{CoreError, Result};
-pub use models::*;
-pub use services::*;
-pub use use_cases::*;
+pub use business_rules::*;
+pub use entities::*;
+pub use error::{DomainError, Result};

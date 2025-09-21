@@ -18,15 +18,7 @@ pub enum FrontendError {
     NavigationError { message: String },
 }
 
-// サービスエラーからの変換 (SSRモードでのみ有効)
-#[cfg(feature = "ssr")]
-impl From<service::ServiceError> for FrontendError {
-    fn from(err: service::ServiceError) -> Self {
-        Self::LoadError {
-            message: err.to_string(),
-        }
-    }
-}
+// DomainError変換を除去（webクレートはdomain非依存）
 
 impl FrontendError {
     /// ネットワークエラーを作成するヘルパーメソッド

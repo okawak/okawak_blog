@@ -71,7 +71,11 @@ pub fn Header() -> impl IntoView {
                             class=header_style::social_button
                             on_click=move |_| {
                                 if let Some(window) = leptos::web_sys::window() {
-                                    let _ = window.open_with_url_and_target("https://github.com/okawak", "_blank");
+                                    let _ = window
+                                        .open_with_url_and_target(
+                                            "https://github.com/okawak",
+                                            "_blank",
+                                        );
                                 }
                             }
                         >

@@ -1,0 +1,318 @@
+# ========================================
+# cargo-make Makefile for okawak_blog
+# ========================================
+
+[config]
+# Enable workspace support
+default_to_workspace = false
+# Use additional profiles for better task definitions
+additional_profiles = ["ci"]
+
+[env]
+# Project specific environment variables
+PROJECT_NAME = "okawak_blog"
+SERVICE_NAME = "okawak_blog"
+SERVICE_FILE = "service/okawak_blog.service"
+NGINX_CONFIG = "service/nginx_okawak_blog.conf"
+BIN_DIR = "./bin"
+TARGET_BIN = "./target/release/server"
+
+# ========================================
+# VPS デプロイ関連タスク
+# ========================================
+
+[tasks.stop]
+description = "Stop the service"
+script = '''
+sudo systemctl stop ${SERVICE_NAME}
+'''
+
+[tasks.service]
+description = "Copy service file and reload the daemon"
+dependencies = ["stop"]
+script = '''
+sudo cp -f ${SERVICE_FILE} /etc/systemd/system/${SERVICE_NAME}.service
+'''
+
+[tasks.deploy]
+description = "Start the service"
+dependencies = ["service", "bin"]
+script = '''
+sudo systemctl daemon-reload
+sudo systemctl start ${SERVICE_NAME}
+'''
+
+[tasks.nginx-stop]
+description = "Stop nginx"
+script = '''
+sudo systemctl stop nginx
+'''
+
+[tasks.nginx-config]
+description = "Copy nginx config"
+script = '''
+sudo cp -f ${NGINX_CONFIG} /etc/nginx/conf.d/${PROJECT_NAME}.conf
+'''
+
+[tasks.nginx-start]
+description = "Start nginx"
+script = '''
+sudo systemctl start nginx
+'''
+
+[tasks.nginx-reload]
+description = "Reload nginx configuration"
+dependencies = ["nginx-config"]
+script = '''
+sudo systemctl reload nginx
+'''
+
+# ========================================
+# ビルド用タスク
+# ========================================
+
+[tasks.pull]
+description = "Pull the latest changes from the repository"
+dependencies = ["check-deps", "stop"]
+script = '''
+git pull origin main
+'''
+
+[tasks.clean]
+description = "Clean the project"
+dependencies = ["service"]
+command = "cargo"
+args = ["clean"]
+
+[tasks.stylance]
+description = "Run the Stylance locally"
+dependencies = ["clean"]
+script = '''
+stylance crates/web
+'''
+
+[tasks.build]
+description = "Build Leptos web frontend"
+dependencies = ["stylance"]
+script = '''
+cargo leptos build --release
+'''
+
+[tasks.bin]
+description = "Move binary to ./bin"
+dependencies = ["build"]
+script = '''
+sudo mkdir -p ${BIN_DIR}
+sudo cp ${TARGET_BIN} ${BIN_DIR}/${SERVICE_NAME}
+sudo chown -R root:root ${BIN_DIR}
+'''
+
+# ========================================
+# 開発用タスク
+# ========================================
+
+[tasks.format]
+description = "Format the code"
+dependencies = ["fmt-rust", "fmt-leptos"]
+
+[tasks.fmt-rust]
+description = "Format the code using cargofmt"
+command = "cargo"
+args = ["fmt", "--all"]
+
+[tasks.fmt-leptos]
+description = "Format the code using leptosfmt"
+command = "leptosfmt"
+args = ["./crates/web/**/*.rs"]
+
+[tasks.dev]
+description = "Run development server"
+dependencies = ["format"]
+script = '''
+cargo leptos serve
+'''
+
+[tasks.watch]
+description = "Watch and rebuild on changes"
+dependencies = ["format"]
+script = '''
+cargo leptos watch
+'''
+
+# ========================================
+# 運用・監視タスク
+# ========================================
+
+[tasks.status]
+description = "Check service status"
+script = '''
+sudo systemctl status ${SERVICE_NAME}
+'''
+
+[tasks.logs]
+description = "Show service logs"
+script = '''
+sudo journalctl -u ${SERVICE_NAME} -f
+'''
+
+[tasks.logs-recent]
+description = "Show recent service logs"
+script = '''
+sudo journalctl -u ${SERVICE_NAME} --lines=50
+'''
+
+[tasks.restart]
+description = "Restart the service"
+script = '''
+sudo systemctl restart ${SERVICE_NAME}
+'''
+
+[tasks.check-deps]
+description = "Check if required tools are installed"
+script = '''
+echo "🔍 依存関係チェック..."
+cargo leptos --version || echo "❌ cargo-leptos が必要です: cargo install cargo-leptos"
+stylance --version || echo "❌ stylance-cli が必要です: cargo install stylance-cli"
+echo "✅ 依存関係チェック完了"
+'''
+
+# ========================================
+# 統合フロー
+# ========================================
+
+[tasks.full-deploy]
+description = "Complete deployment flow"
+dependencies = ["check-deps", "pull", "build", "bin", "deploy"]
+
+[tasks.dev-flow]
+description = "Development workflow (Leptos only)"
+dependencies = ["format", "check-deps"]
+run_task = "dev"
+
+[tasks.integrated-dev]
+description = "Integrated development (Server + Leptos)"
+dependencies = ["format", "check-deps", "build-server"]
+script = '''
+echo "🚀 Starting integrated server..."
+echo "Server binary built. Running Leptos dev server..."
+cargo leptos serve
+'''
+
+[tasks.ci-flow]
+description = "CI workflow for automated builds"
+dependencies = ["check-deps", "format", "build"]
+
+[tasks.production-deploy]
+description = "Production deployment with nginx"
+dependencies = ["full-deploy", "nginx-reload"]
+
+[tasks.quick-deploy]
+description = "Quick deployment (rebuild and deploy)"
+dependencies = ["build", "bin", "deploy"]
+
+# ========================================
+# テスト関連タスク
+# ========================================
+
+[tasks.test]
+description = "Run tests for all crates"
+command = "cargo"
+args = ["test", "--workspace"]
+
+[tasks.test-domain]
+description = "Run domain layer tests (pure)"
+command = "cargo"
+args = ["test", "-p", "domain"]
+
+[tasks.test-server]
+description = "Run server integration tests"
+command = "cargo"
+args = ["test", "-p", "server"]
+
+[tasks.test-web]
+description = "Run web frontend tests"
+command = "cargo"
+args = ["test", "-p", "web"]
+
+[tasks.test-release]
+description = "Run tests in release mode"
+command = "cargo"
+args = ["test", "--workspace", "--release"]
+
+[tasks.clippy]
+description = "Run clippy for code analysis"
+command = "cargo"
+args = ["clippy", "--workspace", "--", "-D", "warnings"]
+
+[tasks.check]
+description = "Check code without building"
+command = "cargo"
+args = ["check", "--workspace"]
+
+[tasks.check-domain]
+description = "Check domain layer compilation"
+command = "cargo"
+args = ["check", "-p", "domain"]
+
+[tasks.check-server]
+description = "Check server compilation"
+command = "cargo"
+args = ["check", "-p", "server"]
+
+# ========================================
+# メンテナンス用タスク
+# ========================================
+[tasks.bloat]
+description = "Analyze binary size"
+command = "cargo"
+args = ["bloat", "--release", "--crates"]
+
+# ========================================
+# ヘルプとドキュメント
+# ========================================
+[tasks.help]
+description = "Show available tasks"
+script = '''
+echo "🚀 Available tasks for okawak_blog (Rust-First Architecture):"
+echo ""
+echo "📦 Build & Deploy:"
+echo "  cargo make build         - Build integrated project (Leptos + Server)"
+echo "  cargo make build-web     - Build Leptos web frontend only"
+echo "  cargo make build-server  - Build standalone server only"
+echo "  cargo make deploy        - Deploy to VPS"
+echo "  cargo make full-deploy   - Complete deployment flow"
+echo "  cargo make quick-deploy  - Quick rebuild and deploy"
+echo ""
+echo "🔧 Development:"
+echo "  cargo make dev           - Start Leptos dev server (frontend only)"
+echo "  cargo make integrated-dev - Integrated development (Server + Leptos)"
+echo "  cargo make watch         - Watch for changes"
+echo "  cargo make format        - Format code"
+echo ""
+echo "📊 Monitoring:"
+echo "  cargo make status        - Check service status"
+echo "  cargo make logs          - Show live logs"
+echo "  cargo make restart       - Restart service"
+echo ""
+echo "🧪 Testing & Quality:"
+echo "  cargo make test          - Run all tests"
+echo "  cargo make test-domain   - Test domain layer (pure)"
+echo "  cargo make test-server   - Test server integration"
+echo "  cargo make test-web      - Test web frontend"
+echo "  cargo make clippy        - Run code analysis"
+echo "  cargo make check         - Quick syntax check"
+echo "  cargo make check-domain  - Check domain compilation"
+echo "  cargo make check-server  - Check server compilation"
+echo ""
+echo "📋 Flows:"
+echo "  cargo make dev-flow      - Development workflow (Leptos)"
+echo "  cargo make integrated-dev - Full stack development"
+echo "  cargo make ci-flow       - CI workflow"
+echo "  cargo make production-deploy - Full production deployment"
+echo ""
+echo "🏗️ Architecture:"
+echo "  domain: Pure domain logic (no I/O, sync only)"
+echo "  server: Unified backend (usecases, ports, infrastructure, handlers)"
+echo "  web: Leptos frontend (SSR + hydration)"
+echo ""
+'''

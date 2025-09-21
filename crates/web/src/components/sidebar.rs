@@ -1,10 +1,6 @@
-#[cfg(feature = "ssr")]
-use service::ArticleSummary;
-
+use crate::types::ArticleSummary;
 use leptos::prelude::*;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
-#[cfg(not(feature = "ssr"))]
-use shared::types::ArticleSummary;
 use stylance::import_style;
 
 import_style!(sidebar_style, "sidebar.module.scss");
