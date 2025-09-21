@@ -11,7 +11,7 @@ pub mod leptos_integration;
 
 // Re-exports
 pub use api::{AppState, create_api_router};
-pub use ssr::*;
-pub use static_files::*;
 pub use blog_handlers::create_blog_router;
 pub use leptos_integration::*;
+pub use ssr::*;
+pub use static_files::*;
