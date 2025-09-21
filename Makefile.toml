@@ -23,12 +23,14 @@ TARGET_BIN = "./target/release/server"
 
 [tasks.stop]
 description = "Stop the service"
+script_runner = "@shell"
 script = '''
 sudo systemctl stop ${SERVICE_NAME}
 '''
 
 [tasks.service]
 description = "Copy service file and reload the daemon"
+script_runner = "@shell"
 dependencies = ["stop"]
 script = '''
 sudo cp -f ${SERVICE_FILE} /etc/systemd/system/${SERVICE_NAME}.service
@@ -36,6 +38,7 @@ sudo cp -f ${SERVICE_FILE} /etc/systemd/system/${SERVICE_NAME}.service
 
 [tasks.deploy]
 description = "Start the service"
+script_runner = "@shell"
 dependencies = ["service", "bin"]
 script = '''
 sudo systemctl daemon-reload
@@ -44,24 +47,28 @@ sudo systemctl start ${SERVICE_NAME}
 
 [tasks.nginx-stop]
 description = "Stop nginx"
+script_runner = "@shell"
 script = '''
 sudo systemctl stop nginx
 '''
 
 [tasks.nginx-config]
 description = "Copy nginx config"
+script_runner = "@shell"
 script = '''
 sudo cp -f ${NGINX_CONFIG} /etc/nginx/conf.d/${PROJECT_NAME}.conf
 '''
 
 [tasks.nginx-start]
 description = "Start nginx"
+script_runner = "@shell"
 script = '''
 sudo systemctl start nginx
 '''
 
 [tasks.nginx-reload]
 description = "Reload nginx configuration"
+script_runner = "@shell"
 dependencies = ["nginx-config"]
 script = '''
 sudo systemctl reload nginx
@@ -73,6 +80,7 @@ sudo systemctl reload nginx
 
 [tasks.pull]
 description = "Pull the latest changes from the repository"
+script_runner = "@shell"
 dependencies = ["check-deps", "stop"]
 script = '''
 git pull origin main
@@ -80,24 +88,31 @@ git pull origin main
 
 [tasks.clean]
 description = "Clean the project"
+script_runner = "@shell"
 dependencies = ["service"]
-command = "cargo"
-args = ["clean"]
+script = '''
+cargo clean
+'''
 
 [tasks.stylance]
 description = "Run the Stylance locally"
-dependencies = ["clean"]
-command = "stylance"
-args = ["crates/web"]
+script_runner = "@shell"
+dependencies = ["pull", "clean"]
+script = '''
+stylance crates/web"
+'''
 
 [tasks.build]
 description = "Build Leptos web frontend"
+script_runner = "@shell"
 dependencies = ["stylance"]
-command = "cargo"
-args = ["leptos", "build", "--release"]
+script = '''
+cargo leptos build --release
+'''
 
 [tasks.bin]
 description = "Move binary to ./bin"
+script_runner = "@shell"
 dependencies = ["build"]
 script = '''
 sudo mkdir -p ${BIN_DIR}
@@ -111,20 +126,15 @@ sudo chown -R root:root ${BIN_DIR}
 
 [tasks.format]
 description = "Format the code"
-dependencies = ["fmt-rust", "fmt-leptos"]
-
-[tasks.fmt-rust]
-description = "Format the code using cargofmt"
-command = "cargo"
-args = ["fmt", "--all"]
-
-[tasks.fmt-leptos]
-description = "Format the code using leptosfmt"
-command = "leptosfmt"
-args = ["./crates/web/**/*.rs"]
+script_runner = "@shell"
+script = '''
+cargo fmt --all
+leptosfmt ./crates/web/**/*.rs
+'''
 
 [tasks.dev]
 description = "Run development server"
+script_runner = "@shell"
 dependencies = ["format"]
 script = '''
 cargo leptos serve
@@ -132,6 +142,7 @@ cargo leptos serve
 
 [tasks.watch]
 description = "Watch and rebuild on changes"
+script_runner = "@shell"
 dependencies = ["format"]
 script = '''
 cargo leptos watch
@@ -143,30 +154,35 @@ cargo leptos watch
 
 [tasks.status]
 description = "Check service status"
+script_runner = "@shell"
 script = '''
 sudo systemctl status ${SERVICE_NAME}
 '''
 
 [tasks.logs]
 description = "Show service logs"
+script_runner = "@shell"
 script = '''
 sudo journalctl -u ${SERVICE_NAME} -f
 '''
 
 [tasks.logs-recent]
 description = "Show recent service logs"
+script_runner = "@shell"
 script = '''
 sudo journalctl -u ${SERVICE_NAME} --lines=50
 '''
 
 [tasks.restart]
 description = "Restart the service"
+script_runner = "@shell"
 script = '''
 sudo systemctl restart ${SERVICE_NAME}
 '''
 
 [tasks.check-deps]
 description = "Check if required tools are installed"
+script_runner = "@shell"
 script = '''
 echo "🔍 依存関係チェック..."
 cargo leptos --version || echo "❌ cargo-leptos が必要です: cargo install cargo-leptos"
@@ -189,6 +205,7 @@ run_task = "dev"
 
 [tasks.integrated-dev]
 description = "Integrated development (Server + Leptos)"
+script_runner = "@shell"
 dependencies = ["format", "check-deps", "build-server"]
 script = '''
 echo "🚀 Starting integrated server..."
@@ -214,62 +231,83 @@ dependencies = ["build", "bin", "deploy"]
 
 [tasks.test]
 description = "Run tests for all crates"
-command = "cargo"
-args = ["test", "--workspace"]
+script_runner = "@shell"
+script = '''
+cargo test --workspace
+'''
 
 [tasks.test-domain]
 description = "Run domain layer tests (pure)"
-command = "cargo"
-args = ["test", "-p", "domain"]
+script_runner = "@shell"
+script = '''
+cargo test -p domain
+'''
 
 [tasks.test-server]
 description = "Run server integration tests"
-command = "cargo"
-args = ["test", "-p", "server"]
+script_runner = "@shell"
+script = '''
+cargo test -p server
+'''
 
 [tasks.test-web]
 description = "Run web frontend tests"
-command = "cargo"
-args = ["test", "-p", "web"]
+script_runner = "@shell"
+script = '''
+cargo test -p web
+'''
 
 [tasks.test-release]
 description = "Run tests in release mode"
-command = "cargo"
-args = ["test", "--workspace", "--release"]
+script_runner = "@shell"
+script = '''
+cargo test --workspace --release
+'''
 
 [tasks.clippy]
 description = "Run clippy for code analysis"
-command = "cargo"
-args = ["clippy", "--workspace", "--", "-D", "warnings"]
+script_runner = "@shell"
+script = '''
+cargo clippy --workspace -- -D warnings
+'''
 
 [tasks.check]
 description = "Check code without building"
-command = "cargo"
-args = ["check", "--workspace"]
+script_runner = "@shell"
+script = '''
+cargo check --workspace
+'''
 
 [tasks.check-domain]
 description = "Check domain layer compilation"
-command = "cargo"
-args = ["check", "-p", "domain"]
+script_runner = "@shell"
+script = '''
+cargo check -p domain
+'''
 
 [tasks.check-server]
 description = "Check server compilation"
-command = "cargo"
-args = ["check", "-p", "server"]
+script_runner = "@shell"
+script = '''
+cargo check -p server
+'''
 
 # ========================================
 # メンテナンス用タスク
 # ========================================
 [tasks.bloat]
 description = "Analyze binary size"
-command = "cargo"
-args = ["bloat", "--release", "--crates"]
+script_runner = "@shell"
+script = '''
+cargo bloat --release --crates
+'''
 
 # ========================================
 # ヘルプとドキュメント
 # ========================================
 [tasks.help]
 description = "Show available tasks"
+script_runner = "@shell"
 script = '''
 echo "🚀 Available tasks for okawak_blog (Rust-First Architecture):"
 echo ""
