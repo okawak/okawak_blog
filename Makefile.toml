@@ -87,16 +87,14 @@ args = ["clean"]
 [tasks.stylance]
 description = "Run the Stylance locally"
 dependencies = ["clean"]
-script = '''
-stylance crates/web
-'''
+command = "stylance"
+args = ["crates/web"]
 
 [tasks.build]
 description = "Build Leptos web frontend"
 dependencies = ["stylance"]
-script = '''
-cargo leptos build --release
-'''
+command = "cargo"
+args = ["leptos", "build", "--release"]
 
 [tasks.bin]
 description = "Move binary to ./bin"
