@@ -99,7 +99,7 @@ description = "Run the Stylance locally"
 script_runner = "@shell"
 dependencies = ["pull", "clean-project"]
 script = '''
-stylance crates/web"
+stylance crates/web
 '''
 
 [tasks.build]
