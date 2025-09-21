@@ -2,6 +2,327 @@
 @use "sass:color";
 
 
+.about-page-c037f20 {
+    @include page-base;
+
+    // ヒーローセクション
+    .hero-section-c037f20 {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 40vh;
+        padding: 3rem 0;
+        background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-variant) 100%);
+        border-radius: var(--border-radius-lg);
+        margin-bottom: 3rem;
+        text-align: center;
+
+        .hero-content-c037f20 {
+            @include fixed-content;
+            max-width: 600px;
+
+            h1 {
+                font-size: var(--font-size-4xl);
+                color: var(--color-accent);
+                margin-bottom: 1rem;
+                font-weight: 700;
+                animation: glow 4s ease-in-out infinite;
+            }
+
+            .hero-description-c037f20 {
+                font-size: var(--font-size-lg);
+                color: var(--color-text-soft);
+                line-height: 1.6;
+                margin: 0;
+            }
+        }
+    }
+
+    // メインコンテンツセクション
+    .content-section-c037f20 {
+        margin-bottom: 4rem;
+
+        .card-grid-c037f20 {
+            @include responsive-grid(350px);
+            gap: 2rem;
+        }
+
+        .content-card-c037f20 {
+            padding: 2rem;
+            background: var(--color-surface);
+            border: 1px solid var(--color-outline);
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--shadow-sm);
+            transition: var(--transition-normal);
+
+            &:hover {
+                transform: translateY(-4px);
+                box-shadow: var(--shadow-lg);
+                border-color: var(--color-accent);
+            }
+
+            h2 {
+                color: var(--color-accent);
+                font-size: var(--font-size-2xl);
+                margin-bottom: 1.5rem;
+                font-weight: 600;
+                position: relative;
+
+                &::after {
+                    content: "";
+                    position: absolute;
+                    bottom: -0.5rem;
+                    left: 0;
+                    width: 2rem;
+                    height: 3px;
+                    background: var(--color-accent);
+                    border-radius: var(--border-radius-sm);
+                }
+            }
+
+            p {
+                color: var(--color-text);
+                line-height: 1.6;
+                margin-bottom: 1rem;
+                font-size: var(--font-size-base);
+
+                &:last-child {
+                    margin-bottom: 0;
+                }
+            }
+        }
+    }
+
+    // 技術スタックエリア
+    .tech-stack-c037f20 {
+        .tech-category-c037f20 {
+            margin-bottom: 1.5rem;
+
+            &:last-child {
+                margin-bottom: 0;
+            }
+
+            h3 {
+                color: var(--color-text);
+                font-size: var(--font-size-lg);
+                margin-bottom: 0.75rem;
+                font-weight: 500;
+            }
+
+            .tech-list-c037f20 {
+                .tech-item-c037f20 {
+                    padding: 0.5rem 0;
+                    color: var(--color-text-soft);
+                    font-size: var(--font-size-sm);
+                    border-left: 3px solid var(--color-accent);
+                    padding-left: 0.75rem;
+                    margin-bottom: 0.5rem;
+
+                    strong {
+                        color: var(--color-text);
+                        font-weight: 600;
+                    }
+                }
+            }
+        }
+    }
+
+    // コンタクトアクション
+    .contact-actions-c037f20 {
+        margin-top: 1.5rem;
+        
+        .thaw-button {
+            font-family: var(--font-family-sans);
+            transition: var(--transition-normal);
+            
+            &:hover {
+                transform: translateY(-1px);
+                box-shadow: var(--shadow);
+            }
+        }
+    }
+
+    // 特徴リスト
+    .feature-list-c037f20 {
+        .feature-item-c037f20 {
+            padding: 1rem;
+            background: var(--color-surface-variant);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--color-outline);
+            margin-bottom: 0.75rem;
+
+            &:last-child {
+                margin-bottom: 0;
+            }
+
+            h4 {
+                color: var(--color-accent);
+                font-size: var(--font-size-base);
+                margin: 0 0 0.5rem 0;
+                font-weight: 600;
+            }
+
+            p {
+                color: var(--color-text-soft);
+                font-size: var(--font-size-sm);
+                margin: 0;
+                line-height: 1.4;
+            }
+        }
+    }
+
+    // デモセクション
+    .demo-section-c037f20 {
+        padding: 3rem 0;
+        background: var(--color-surface-variant);
+        border-radius: var(--border-radius-lg);
+        margin-top: 3rem;
+
+        h2 {
+            text-align: center;
+            color: var(--color-accent);
+            font-size: var(--font-size-3xl);
+            margin-bottom: 2rem;
+            font-weight: 600;
+        }
+
+        .demo-grid-c037f20 {
+            @include responsive-grid(300px);
+            gap: 1.5rem;
+            @include fixed-content;
+        }
+
+        .demo-card-c037f20 {
+            padding: 1.5rem;
+            background: var(--color-surface);
+            border: 1px solid var(--color-outline);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-sm);
+            text-align: center;
+            transition: var(--transition-normal);
+
+            &:hover {
+                transform: translateY(-2px);
+                box-shadow: var(--shadow);
+                border-color: var(--color-accent);
+            }
+
+            h3 {
+                color: var(--color-text);
+                font-size: var(--font-size-lg);
+                margin-bottom: 0.75rem;
+                font-weight: 500;
+            }
+
+            p {
+                color: var(--color-text-soft);
+                font-size: var(--font-size-sm);
+                margin-bottom: 1rem;
+                line-height: 1.5;
+            }
+
+            .thaw-button {
+                font-size: var(--font-size-sm);
+                margin-right: 0.5rem;
+                
+                &:last-child {
+                    margin-right: 0;
+                }
+            }
+        }
+
+        .animation-demo-c037f20 {
+            padding: 1rem;
+            background: var(--color-accent);
+            color: white;
+            border-radius: var(--border-radius);
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition-normal);
+
+            &:hover {
+                transform: scale(1.05) rotate(2deg);
+                box-shadow: var(--shadow-lg);
+            }
+        }
+
+        .responsive-indicator-c037f20 {
+            padding: 0.75rem;
+            background: var(--color-surface-variant);
+            border: 1px dashed var(--color-outline);
+            border-radius: var(--border-radius);
+            color: var(--color-text-soft);
+            font-size: var(--font-size-sm);
+            font-family: var(--font-family-mono);
+        }
+    }
+}
+
+// レスポンシブ調整
+@include mobile-first {
+    .about-page-c037f20 {
+        .hero-section-c037f20 {
+            min-height: 30vh;
+            padding: 2rem 0;
+
+            .hero-content-c037f20 {
+                h1 {
+                    font-size: var(--font-size-3xl);
+                }
+
+                .hero-description-c037f20 {
+                    font-size: var(--font-size-base);
+                }
+            }
+        }
+
+        .content-section-c037f20 {
+            .card-grid-c037f20 {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+
+            .content-card-c037f20 {
+                padding: 1.5rem;
+            }
+        }
+
+        .demo-section-c037f20 {
+            padding: 2rem 0;
+
+            .demo-grid-c037f20 {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .demo-card-c037f20 {
+                padding: 1rem;
+            }
+        }
+    }
+}
+
+// アニメーション効果
+@keyframes glow {
+    0%, 100% {
+        text-shadow: 0 0 4px var(--color-accent-alpha);
+    }
+    50% {
+        text-shadow: 0 0 12px var(--color-accent);
+    }
+}
+
+// ダークモード対応 (将来の拡張用)
+@media (prefers-color-scheme: dark) {
+    .about-page-c037f20 {
+        .hero-section-c037f20 {
+            background: linear-gradient(135deg, var(--color-surface-dark, var(--color-surface)) 0%, var(--color-surface-variant-dark, var(--color-surface-variant)) 100%);
+        }
+    }
+}
+
 // footer.module.scss
 .site_footer-a93d381 {
     background: linear-gradient(90deg, $color-bg-mid 0%, $color-bg-dark 100%);
@@ -36,12 +357,12 @@
 
 // header.module.scss
 .header-9a30164 {
-  height: $header-height;
+  height: var(--header-height);
   position: sticky;
   top: 0;
   z-index: 999;
-  background: linear-gradient(90deg, $color-bg-dark 0%, $color-bg-mid 100%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  background: linear-gradient(90deg, var(--color-bg-dark) 0%, var(--color-bg-mid) 100%);
+  box-shadow: var(--shadow-lg);
 
   .container-9a30164 {
     height: 100%;
@@ -56,43 +377,58 @@
 
     > a {
       text-decoration: none;
-      color: $color-text;
+      color: var(--color-text);
+      transition: var(--transition-normal);
+      
       &:hover {
         text-decoration: none;
-        color: $color-accent;
+        color: var(--color-accent);
       }
     }
 
     .logo-9a30164 {
       margin: 0;
       line-height: normal;
-      font-family: $font-sans;
-      font-size: 1.5rem;
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-2xl);
       font-weight: bold;
-      color: $color-text;
+      color: var(--color-text);
       text-decoration: none;
-      line-height: $header-height;
-      transition: color 0.3s ease;
+      line-height: var(--header-height);
+      transition: var(--transition-normal);
 
       &:hover {
-        color: $color-accent;
+        color: var(--color-accent);
       }
     }
 
+    // thaw-ui Buttonとして実装されたハンバーガーメニュー
     .menu_toggle-9a30164 {
       display: none;
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 0.5rem;
+      background: transparent !important;
+      border: none !important;
+      padding: 0.5rem !important;
+      min-width: auto !important;
+      min-height: auto !important;
 
-      .bar-9a30164 {
-        display: block;
-        width: 1.5rem;
-        height: 2px;
-        background: $color-text;
-        margin: 0.3rem 0;
-        transition: transform 0.3s ease, opacity 0.3s ease;
+      .hamburger_icon-9a30164 {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        
+        .bar-9a30164 {
+          display: block;
+          width: 1.5rem;
+          height: 2px;
+          background: var(--color-text);
+          margin: 0.3rem 0;
+          transition: var(--transition-normal);
+        }
+      }
+
+      &:hover .hamburger_icon-9a30164 .bar-9a30164 {
+        background: var(--color-accent);
       }
     }
 
@@ -118,26 +454,26 @@
 
           &.nav_item-9a30164 a.nav_link-9a30164,
           &.nav_item_active-9a30164 a.nav_link-9a30164 {
-            font-family: $font-sans;
-            font-size: 1rem;
+            font-family: var(--font-family-sans);
+            font-size: var(--font-size-base);
             font-weight: 500;
             text-decoration: none;
             padding: 0.5rem;
             border-bottom: 2px solid transparent;
-            transition: color 0.3s ease, border-color 0.3s ease;
+            transition: var(--transition-normal);
           }
 
           &.nav_item-9a30164 a.nav_link-9a30164 {
-            color: $color-text-soft;
+            color: var(--color-text-soft);
             &:hover {
-              color: $color-text;
-              border-bottom-color: $color-accent;
+              color: var(--color-text);
+              border-bottom-color: var(--color-accent);
             }
           }
 
           &.nav_item_active-9a30164 a.nav_link-9a30164 {
-            color: $color-text;
-            border-bottom-color: $color-accent;
+            color: var(--color-text);
+            border-bottom-color: var(--color-accent);
           }
         }
       }
@@ -146,32 +482,36 @@
         display: flex;
         margin-left: 1.5rem;
 
-        a.social_icon-9a30164 {
-          color: $color-text;
-          font-size: 1.5rem; // アイコンを大きく
-          transition: color 0.3s ease;
-
-          i,
-          svg {
-            color: $color-text !important;
-            fill: currentColor !important;
+        .social_button-9a30164 {
+          background: transparent !important;
+          border: none !important;
+          padding: 0.5rem !important;
+          min-width: auto !important;
+          min-height: auto !important;
+          
+          i {
+            color: var(--color-text) !important;
+            font-size: 1.5rem;
+            transition: var(--transition-normal);
           }
 
-          &:hover {
-            color: $color-accent;
+          &:hover i {
+            color: var(--color-accent) !important;
+            transform: scale(1.1);
           }
         }
       }
     }
   }
 
-  @media (max-width: 768px) {
+  // レスポンシブデザイン
+  @include mobile-first {
     .container-9a30164 {
       flex-wrap: wrap;
       justify-content: center;
 
       .menu_toggle-9a30164 {
-        display: block;
+        display: block !important;
         position: absolute;
         top: 50%;
         right: 1.5rem;
@@ -181,19 +521,16 @@
 
       .nav_container-9a30164 {
         position: absolute;
-        top: $header-height;
-        right: 1.5rem; // ハンバーガーと同じ右端
-        background: linear-gradient(
-          90deg,
-          $color-bg-mid 0%,
-          $color-bg-dark 100%
-        );
-        border-radius: 0.5rem;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        top: var(--header-height);
+        right: 1.5rem;
+        background: linear-gradient(90deg, var(--color-bg-mid) 0%, var(--color-bg-dark) 100%);
+        border-radius: var(--border-radius);
+        box-shadow: var(--shadow-lg);
         padding: 1rem;
         flex-direction: column;
         align-items: flex-end;
         display: none;
+        border: 1px solid var(--color-outline);
 
         &.open-9a30164 {
           display: flex;
@@ -208,12 +545,20 @@
 
           li {
             margin: 0.75rem 0;
+            
+            &:first-child {
+              margin-top: 0;
+            }
+            &:last-child {
+              margin-bottom: 0;
+            }
           }
         }
 
         .social_links-9a30164 {
           justify-content: center;
           margin-top: 1rem;
+          margin-left: 0;
         }
       }
     }
@@ -235,8 +580,8 @@
         .profile-text-19eb089 {
             p {
                 margin: 0;
-                font-size: 1rem;
-                color: $color-text-soft;
+                font-size: var(--font-size-base);
+                color: var(--color-text-soft);
             }
         }
     }
@@ -247,7 +592,7 @@
 
         h2 {
             position: relative;
-            font-size: 1.75rem;
+            font-size: var(--font-size-2xl);
             margin-bottom: 1rem;
             &::after {
                 content: "";
@@ -256,8 +601,8 @@
                 left: 0;
                 width: 3rem;
                 height: 0.25rem;
-                background: $color-accent;
-                border-radius: 2px;
+                background: var(--color-accent);
+                border-radius: var(--border-radius-sm);
             }
         }
 
@@ -266,112 +611,183 @@
         .no-articles-19eb089 {
             padding: 2rem;
             text-align: center;
-            background: rgba($color-bg-light, 0.4);
-            border-radius: 0.5rem;
-            font-size: 1rem;
-            color: $color-text-soft;
+            background: var(--color-surface-variant);
+            border-radius: var(--border-radius);
+            font-size: var(--font-size-base);
+            color: var(--color-text-soft);
         }
 
         .article-list-19eb089 {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
-            gap: 1.5rem;
+            @include responsive-grid(20rem);
             margin-top: 1.5rem;
         }
     }
 
-    // thaw-uiテストセクション（ハイブリッドスタイリング環境）
+    // thaw-ui統合デモセクション（CSS Custom Properties使用）
     .thaw-ui-test-section-19eb089 {
         margin-top: 2rem;
         padding: 1.5rem;
-        background: rgba($color-bg-light, 0.3);
-        border: 1px solid rgba($color-accent, 0.2);
-        border-radius: 0.75rem;
+        background: var(--color-surface);
+        border: 1px solid var(--color-outline);
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow);
 
         h3 {
             margin-bottom: 1.5rem;
-            color: $color-accent;
-            font-size: 1.5rem;
+            color: var(--color-accent);
+            font-size: var(--font-size-2xl);
+            font-weight: 600;
         }
 
         .component-group-19eb089 {
-            margin-bottom: 1.5rem;
+            margin-bottom: 2rem;
 
             h4 {
                 margin-bottom: 0.75rem;
-                font-size: 1.125rem;
-                color: $color-text;
+                font-size: var(--font-size-lg);
+                color: var(--color-text);
+                font-weight: 500;
             }
 
-            // thaw-uiコンポーネントとstylanceの調和
-            button {
-                transition: all 0.3s ease;
+            h5 {
+                margin: 0 0 0.5rem 0;
+                font-size: var(--font-size-base);
+                color: var(--color-text);
+                font-weight: 600;
+            }
 
+            // thaw-uiコンポーネントとの統合スタイル
+            .thaw-button {
+                font-family: var(--font-family-sans);
+                transition: var(--transition-normal);
+                
                 &:hover {
                     transform: translateY(-1px);
-                    box-shadow: 0 4px 8px rgba($color-accent, 0.2);
+                    box-shadow: var(--shadow);
                 }
             }
         }
 
-        // stylance + thaw-ui ハイブリッドレイアウト
+        // レスポンシブデモエリア
+        .responsive-demo-19eb089 {
+            @include responsive-grid(280px);
+            
+            > div {
+                padding: 1rem;
+                background: var(--color-surface-variant);
+                border: 1px solid var(--color-outline);
+                border-radius: var(--border-radius);
+                text-align: center;
+                color: var(--color-text);
+                font-size: var(--font-size-sm);
+                
+                @include mobile-first {
+                    font-size: var(--font-size-base);
+                }
+            }
+        }
+
+        // ハイブリッドレイアウト（stylance + thaw-ui）
         .hybrid-layout-19eb089 {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1rem;
+            @include responsive-grid(300px);
 
             .stylance-card-19eb089 {
-                padding: 1rem;
-                background: rgba($color-bg-mid, 0.8);
-                border: 1px solid rgba($color-accent, 0.15);
-                border-radius: 0.5rem;
-                transition: all 0.3s ease;
+                padding: 1.25rem;
+                background: var(--color-surface);
+                border: 1px solid var(--color-outline);
+                border-radius: var(--border-radius-lg);
+                transition: var(--transition-normal);
+                box-shadow: var(--shadow-sm);
 
                 &:hover {
                     transform: translateY(-2px);
-                    box-shadow: 0 8px 16px rgba($color-accent, 0.15);
-                    border-color: rgba($color-accent, 0.3);
+                    box-shadow: var(--shadow-lg);
+                    border-color: var(--color-accent);
+                }
+
+                h5 {
+                    margin: 0 0 0.75rem 0;
+                    color: var(--color-accent);
+                    font-size: var(--font-size-lg);
+                    font-weight: 600;
                 }
 
                 p {
                     margin: 0 0 1rem 0;
-                    color: $color-text;
-                    font-weight: 500;
+                    color: var(--color-text);
+                    font-size: var(--font-size-sm);
+                    line-height: 1.5;
                 }
 
                 // thaw-uiボタンをstylanceカード内で調整
-                button {
-                    font-size: 0.875rem;
-
-                    &:first-of-type {
-                        margin-right: 0.5rem;
+                .thaw-button {
+                    font-size: var(--font-size-sm);
+                    margin-right: 0.5rem;
+                    
+                    &:last-child {
+                        margin-right: 0;
                     }
+                }
+            }
+        }
+
+        // アクセシビリティデモ
+        .accessibility-demo-19eb089 {
+            padding: 1rem;
+            background: var(--color-surface-variant);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--color-outline);
+
+            .demo-info-19eb089 {
+                padding: 0.75rem;
+                background: var(--color-surface);
+                border-radius: var(--border-radius-sm);
+                color: var(--color-text-soft);
+                font-size: var(--font-size-sm);
+                text-align: center;
+            }
+
+            .thaw-button {
+                &:focus-visible {
+                    outline: 2px solid var(--color-accent);
+                    outline-offset: 2px;
                 }
             }
         }
     }
 }
 
-// サブ要素に共通のトランジション
-* {
-    transition:
-        background-color 0.3s ease,
-        color 0.3s ease;
-}
-
-// 見出しにほんのりグローアニメ
+// アニメーション効果（CSS Custom Properties使用）
 @keyframes glow {
-    0%,
-    100% {
-        text-shadow: 0 0 4px rgba($color-accent, 0.8);
+    0%, 100% {
+        text-shadow: 0 0 4px var(--color-accent-alpha);
     }
     50% {
-        text-shadow: 0 0 12px rgba($color-accent, 0.5);
+        text-shadow: 0 0 12px var(--color-accent);
     }
 }
-h1,
-h2 {
+
+h1, h2 {
     animation: glow 4s ease-in-out infinite;
+}
+
+// レスポンシブ改善
+@include mobile-first {
+    .home-page-19eb089 {
+        .thaw-ui-test-section-19eb089 {
+            padding: 1rem;
+            margin-top: 1.5rem;
+
+            .hybrid-layout-19eb089 {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .responsive-demo-19eb089 {
+                grid-template-columns: 1fr;
+            }
+        }
+    }
 }
 
 

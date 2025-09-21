@@ -17,7 +17,6 @@ TimeoutStopSec=30
 Environment=AWS_PROFILE=blog-s3
 Environment=AWS_REGION=ap-northeast-1
 Environment=AWS_BUCKET_NAME=okawak-blog-resources-bucket
-Environment=LEPTOS_ENV=PROD
 
 StateDirectory=okawak_blog
 LogsDirectory=okawak_blog

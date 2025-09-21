@@ -6,302 +6,311 @@ https://www.okawak.net
 
 ## アーキテクチャ
 
-このプロジェクトは、従来のクリーンアーキテクチャではなく、**Rust-firstアーキテクチャ**を採用しています。これは、Rustの所有権システムとエコシステムに最適化された設計哲学です。
+このプロジェクトは、従来のClean Architectureではなく、**Rust-First Architecture**を採用しています。これは、Rustの所有権システムとゼロコスト抽象化を最大限活用した設計哲学です。
 
-### なぜクリーンアーキテクチャを採用しないのか
+### Rust-First Architecture の原則
 
-1. **trait抽象化の過度な使用**: Rustの所有権システムでは、過度なtrait抽象化がコンパイル時間の増大とコードの複雑化を招く
-2. **OOP的な依存性逆転**: 関数型とゼロコスト抽象化を重視するRustの哲学と相反する
-3. **Leptos Server Functionsとの不整合**: モダンなRust Webエコシステムでは、Server Functionsが推奨パターン
-4. **所有権モデルとの衝突**: 複雑な抽象化層は借用チェッカーとの戦いを生む
-
-### Rust-firstアーキテクチャの原則
-
-#### 1. 具象実装優先
+#### 1. ドメイン純粋性の確保
 ```rust
-// ❌ 過度な抽象化
-trait BlogRepository {
-    async fn get_post(&self, id: &str) -> Result<BlogPost>;
-}
-
-// ✅ 具象実装
-pub struct BlogService {
-    s3: S3Service,
-    config: ServiceConfig,
+// ✅ 純粋関数によるビジネスロジック（I/Oなし、同期のみ）
+pub fn generate_slug_from_title(title: &Title) -> Result<Slug> {
+    // 副作用なし、テスト容易、WASM対応
 }
 ```
 
-#### 2. Leptos Server Functions活用
+#### 2. 統合サーバー設計
 ```rust
-// ✅ Web層との統合にServer Functionsを使用
-#[server(GetBlogPost, "/api")]
-pub async fn get_blog_post(id: String) -> Result<BlogPost, ServerFnError> {
-    // サービス層の具象実装を直接呼び出し
+// ✅ 単一バイナリによる統合デプロイ
+pub fn create_app(repository: Arc<Repository>, storage: Arc<Storage>) -> Router {
+    // Axum + Leptos統合、型安全な依存注入
 }
 ```
 
-#### 3. 所有権フレンドリーな設計
-- 不要な`Arc<dyn Trait>`を避ける
-- `Clone`可能な軽量構造体を優先
-- 借用チェッカーと協調する設計
+#### 3. 型駆動開発
+```rust
+// ✅ 不正な状態をコンパイル時に防ぐ
+pub struct PublishedArticle(Article);  // 公開済み記事のみ
+impl From<DraftArticle> for PublishedArticle { /* ... */ }
+```
 
 ### クレート構成
 
 ```
-web → service → domain
- ↓       ↓       ↓
- UI   ビジネス  コア
-     ロジック   ドメイン
+okawak_blog/
+├── domain/           # 純粋ドメインロジック
+├── server/           # 統合バックエンド
+├── web/              # Leptosフロントエンド
+└── apps/             # 補助アプリケーション
+    └── obsidian_uploader/
 ```
 
-#### `web` クレート
-- **責務**: フロントエンド（Leptos + thaw-ui）
-- **依存**: `service`のみ
-- **特徴**: Server Functionsでサービス層と統合
+#### `domain` クレート - 純粋ドメイン層
+- **責務**: ビジネスルール、エンティティ、純粋関数
+- **特徴**: I/O操作なし、同期のみ、WASM対応
+- **依存**: 最小限（serde, chrono, thiserror, uuid）
 
-#### `service` クレート
-- **責務**: ビジネスロジック、外部システム統合
-- **依存**: `domain`, AWS SDK, 具象実装
-- **特徴**: Rust生態系のベストプラクティスに従った具象実装
+```rust
+// domain/src/business_rules.rs
+pub fn validate_article_content(content: &str) -> Result<(), DomainError> {
+    // 純粋関数によるバリデーション
+}
+```
 
-#### `domain` クレート
-- **責務**: コアビジネスルール、エンティティ
-- **依存**: 最小限（serde, chrono等）
-- **特徴**: pure Rust、trait最小限
+#### `server` クレート - 統合バックエンド
+- **責務**: usecases, ports, infrastructure, handlers
+- **特徴**: 単一バイナリ、Axum + Leptos統合、AWS S3連携
+- **依存**: domain, aws-sdk, axum, leptos-server
 
-### 利点
+```rust
+// server/src/main.rs - 統合エントリーポイント
+#[tokio::main]
+async fn main() -> Result<()> {
+    let app = create_app(repository, storage);
+    axum::serve(listener, app).await
+}
+```
 
-1. **コンパイル時間の短縮**: 複雑なtrait解決が不要
-2. **明確な依存関係**: 具象実装により依存が明確
-3. **Rustエコシステムとの親和性**: Server Functions等モダンパターンの活用
-4. **保守性**: 抽象化層の削減により理解しやすいコード
+#### `web` クレート - Leptosフロントエンド
+- **責務**: SSR + CSR、UI コンポーネント、styling
+- **特徴**: thaw-ui、stylance CSS-in-Rust、server functions
+- **依存**: domain（ドメインロジック共有）, leptos, thaw
+
+### アーキテクチャ決定記録（ADR）
+
+重要なアーキテクチャ決定は [docs/adr/](./docs/adr/) で文書化されています：
+
+- [ADR-0001: Rust-First アーキテクチャの採用](./docs/adr/0001-rust-first-architecture.md)
+- [ADR-0002: ドメイン層の純粋化](./docs/adr/0002-domain-layer-purification.md)
+- [ADR-0003: サーバー層統合設計](./docs/adr/0003-server-layer-integration.md)
+
+### なぜClean Architectureではないのか
+
+1. **WASM互換性**: tokioの`net`機能はWASMで利用不可
+2. **型安全性**: Rustの型システムによるコンパイル時制約
+3. **パフォーマンス**: ゼロコスト抽象化の最大活用
+4. **運用シンプル**: 単一バイナリによるデプロイ簡素化
 
 ## 利用可能なタスク
 
-### 開発環境
-```bash
-# 開発サーバー起動（CSSも含む）
-mise dev
+cargo-makeによる統合ビルドシステムを提供しています。
 
-# CSS生成のみ
-mise css
+### 開発環境
+
+```bash
+# Leptos開発サーバー起動
+cargo make dev
+
+# 統合開発環境（Server + Leptos）
+cargo make integrated-dev
+
+# ファイル変更を監視して自動リビルド
+cargo make watch
 
 # コードフォーマット
-mise format
+cargo make format
 ```
 
-### VPS デプロイ
-```bash
-# 一括デプロイ
-mise deploy
+### ビルド & デプロイ
 
-# 個別実行
-mise stop        # サービス停止
-mise build       # プロダクションビルド
-mise start       # サービス開始
+```bash
+# 統合ビルド（Leptos + Server）
+cargo make build
+
+# Leptosフロントエンドのみ
+cargo make build-web
+
+# サーバーバイナリのみ
+cargo make build-server
+
+# 完全デプロイフロー
+cargo make full-deploy
+
+# 本番環境デプロイ（nginx含む）
+cargo make production-deploy
+```
+
+### テスト & 品質保証
+
+```bash
+# 全テスト実行
+cargo make test
+
+# ドメイン層テスト（純粋）
+cargo make test-domain
+
+# サーバー統合テスト
+cargo make test-server
+
+# Webフロントエンドテスト
+cargo make test-web
+
+# コード解析
+cargo make clippy
+
+# 高速シンタックスチェック
+cargo make check
 ```
 
 ### 運用・監視
+
 ```bash
-mise status      # サービス状態確認
-mise logs        # リアルタイムログ
-mise logs-recent # 最新ログ
-mise restart     # サービス再起動
+cargo make status      # サービス状態確認
+cargo make logs        # リアルタイムログ
+cargo make logs-recent # 最新ログ
+cargo make restart     # サービス再起動
 ```
 
-### ユーティリティ
+### ヘルプ
+
 ```bash
-mise check-deps  # 依存関係チェック
+cargo make help        # 利用可能なタスク一覧
+cargo make check-deps  # 依存関係チェック
 ```
 
-## 準備
+## セットアップ
 
 ### 必要なツール
+
 ```bash
 # Rust インストール
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# mise インストール (タスクランナー)
-curl https://mise.run | sh
+# cargo-make インストール（タスクランナー）
+cargo install cargo-make
 
 # cargo-leptos インストール
 cargo install cargo-leptos
 
-# stylance CLI インストール
+# stylance CLI インストール（CSS-in-Rust）
 cargo install stylance-cli
-
-# AWS CLI インストール (オプション)
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awsclip.zip"
-unzip awsclip.zip
-sudo ./aws/install
 ```
 
-## デプロイ手順
+### 依存関係チェック
 
-### 1. リポジトリクローン
 ```bash
-cd /home/okawak
+cargo make check-deps
+```
+
+## デプロイメント
+
+### 単一バイナリデプロイ
+
+```bash
+# 1. リポジトリクローン
 git clone <repository-url> okawak_blog
 cd okawak_blog
+
+# 2. 依存関係チェック
+cargo make check-deps
+
+# 3. 統合ビルド & デプロイ
+cargo make full-deploy
 ```
 
-### 2. 依存関係チェック
-```bash
-# 必要なツールがインストールされているかチェック
-mise check-deps
-```
+生成される成果物：
+- `/target/release/server` - 統合サーバーバイナリ（12MB）
+- システムサービスとして動作（systemd）
 
-### 3. AWS設定 (必要な場合)
-```bash
-aws configure --profile blog-s3
-# または ~/.aws/config と ~/.aws/credentials を手動設定
-```
+### 設定管理
 
-### 4. 自動デプロイ実行
-```bash
-# 一括デプロイ（CSS生成→ビルド→サービス設定→起動）
-mise deploy
-```
-
-### 5. 個別コマンド実行 (詳細制御が必要な場合)
-
-#### CSS生成
-```bash
-mise css
-```
-
-#### ビルド
-```bash
-mise build
-```
-
-#### サービス設定とデプロイ
-```bash
-# サービス停止→設定コピー→ビルド→起動
-mise stop
-mise service
-mise start
-```
-
-## 運用コマンド
-
-### サービス状態確認
-```bash
-mise status
-```
-
-### ログ確認
-```bash
-# リアルタイムログ
-mise logs
-
-# 最新のログ
-mise logs-recent
-```
-
-### サービス再起動
-```bash
-mise restart
-```
-
-### サービス停止
-```bash
-mise stop
-```
-
-### 開発サーバー起動
-```bash
-mise dev
-```
-
-## 設定ファイル
-
-### systemd サービス設定
+#### systemd サービス設定
 - パス: `/etc/systemd/system/okawak_blog.service`
-- 設定内容: セキュリティ強化、リソース制限、環境変数
+- セキュリティ: NoNewPrivileges, ProtectSystem等の強化設定
 
-### Leptos設定
-- パス: `crates/web/Cargo.toml` の `[package.metadata.leptos]`
-- 本番環境: `env = "PROD"`, `site-addr = "0.0.0.0:8008"`
+#### 環境変数
+- 開発: デフォルト設定で動作
+- 本番: systemdサービス内で設定（AWS認証情報は別途）
 
-### 環境変数
-- 開発用: デフォルト設定で動作
-- 本番用: systemdサービス内で設定（キーは含まず、AWS CLIで別途設定）
+## パフォーマンス特性
+
+### ビルドサイズ
+- Server バイナリ: ~12MB (release build)
+- WASM: ~2MB (gzip済み)
+
+### 実行時性能
+- 起動時間: <100ms
+- メモリ使用量: ~50MB (base)
+- レスポンス時間: <50ms (static content)
+
+## 開発ワークフロー
+
+### 1. ローカル開発
+```bash
+cargo make dev-flow        # Leptos開発サーバー
+cargo make integrated-dev  # Full stack開発
+```
+
+### 2. テスト & 品質チェック
+```bash
+cargo make test-domain     # ドメインロジック検証
+cargo make check-server    # サーバー型チェック
+cargo make clippy          # コード品質確認
+```
+
+### 3. デプロイ
+```bash
+cargo make quick-deploy    # 高速デプロイ
+cargo make production-deploy # 本番デプロイ
+```
 
 ## トラブルシューティング
 
-### サービスが起動しない
+### ビルドエラー
+
 ```bash
-# エラー詳細確認
-mise status
-mise logs-recent
+# WASM関連エラー
+cargo make check-domain    # ドメイン層の純粋性確認
+
+# 依存関係エラー
+cargo make clean
+cargo make check-deps
+cargo make build
+```
+
+### サービス起動エラー
+
+```bash
+# ログ確認
+cargo make logs-recent
+
+# ポート確認
+sudo netstat -tlnp | grep :8008
 
 # 権限確認
-ls -la /home/okawak/okawak_blog/
 sudo chown -R okawak:okawak /home/okawak/okawak_blog/
 ```
 
-### ビルドエラー
-```bash
-# 依存関係確認
-mise check-deps
-mise clean
-mise build
+## アーキテクチャ詳細
 
-# CSS生成エラー
-mise css
+### データフロー
+
+```
+Browser ←→ Leptos SSR ←→ Server Functions ←→ UseCases ←→ Domain Logic
+                           ↓                    ↓
+                      HTTP Handlers      Infrastructure
+                           ↓                    ↓
+                       Axum Router          AWS S3
 ```
 
-### ポート確認
-```bash
-# ポート8008の使用状況
-sudo netstat -tlnp | grep :8008
-sudo ss -tlnp | grep :8008
+### 型安全性
+
+```rust
+// コンパイル時制約の例
+struct DraftArticle { /* ... */ }
+struct PublishedArticle { /* ... */ }
+
+// 公開記事のみを返すAPI
+fn get_published_articles() -> Vec<PublishedArticle> {
+    // DraftArticleは返却不可（コンパイルエラー）
+}
 ```
 
-### ファイアウォール設定
-```bash
-# ufw の場合
-sudo ufw allow 8008
+### WASM互換性
 
-# firewalld の場合
-sudo firewall-cmd --permanent --add-port=8008/tcp
-sudo firewall-cmd --reload
+```rust
+// domain層は完全にWASM対応
+#[cfg(target_arch = "wasm32")]
+fn browser_side_validation(article: &Article) -> bool {
+    domain::validate_article_data(article).is_ok()
+}
 ```
-
-## セキュリティ設定
-
-systemdサービスには以下のセキュリティ機能が有効化されています：
-
-- `NoNewPrivileges=true` - 権限昇格防止
-- `ProtectSystem=strict` - システムディレクトリ保護
-- `ProtectHome=true` - ホームディレクトリ保護
-- `PrivateTmp=true` - 一時ディレクトリ分離
-- `RestrictNamespaces=true` - ネームスペース制限
-
-## 監視とメンテナンス
-
-### ヘルスチェック
-```bash
-# サービス状態
-curl -I http://localhost:8008
-
-# メモリ使用量
-systemctl show okawak_blog --property=MemoryCurrent
-```
-
-### ログローテーション
-journaldが自動でログローテーションを行います。
-
-### バックアップ
-```bash
-# アプリケーションバックアップ
-tar -czf okawak_blog_backup_$(date +%Y%m%d).tar.gz /home/okawak/okawak_blog/
-```
-
-## 更新手順
-
-1. コード更新 (`git pull`)
-2. 依存関係チェック (`mise check-deps`)
-3. デプロイ実行 (`mise deploy`)
-4. 動作確認 (`mise status`)
