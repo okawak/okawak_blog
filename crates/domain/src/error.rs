@@ -17,6 +17,9 @@ pub enum DomainError {
     #[error("無効なカテゴリです: {category}")]
     InvalidCategory { category: String },
 
+    #[error("無効なパスです: {path}")]
+    InvalidPath { path: String },
+
     #[error("ビジネスルール違反: {rule}")]
     BusinessRuleViolation { rule: String },
 
