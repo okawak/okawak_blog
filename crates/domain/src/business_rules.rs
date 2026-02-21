@@ -10,7 +10,7 @@ use std::collections::HashMap;
 // =============================================================================
 
 /// S3パスからSlugを抽出する純粋関数
-/// 
+///
 /// # 例
 /// - "tech/a1b2c3d4e5f6.html" -> "a1b2c3d4e5f6"
 /// - "blog/f6e5d4c3b2a1.html" -> "f6e5d4c3b2a1"
@@ -21,21 +21,21 @@ pub fn extract_slug_from_s3_path(s3_path: &str) -> Result<Slug> {
             path: s3_path.to_string(),
         });
     }
-    
+
     // 先頭のスラッシュは無効なパスとして扱う
     if s3_path.starts_with('/') {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
-    
+
     // 二重スラッシュも無効なパスとして扱う
     if s3_path.contains("//") {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
-    
+
     // "category/slug.html" 形式から "slug.html" を抽出
     let file_name = s3_path
         .split('/')
@@ -43,27 +43,27 @@ pub fn extract_slug_from_s3_path(s3_path: &str) -> Result<Slug> {
         .ok_or_else(|| DomainError::InvalidPath {
             path: s3_path.to_string(),
         })?;
-    
+
     // ".html" 拡張子を除去して slug を取得
     let slug_str = file_name
         .strip_suffix(".html")
         .ok_or_else(|| DomainError::InvalidPath {
             path: s3_path.to_string(),
         })?;
-    
+
     // 空のslugチェック
     if slug_str.is_empty() {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
-    
+
     // Slugエンティティを作成
     Slug::new(slug_str.to_string())
 }
 
 /// S3パスからCategoryを抽出する純粋関数
-/// 
+///
 /// # 例
 /// - "tech/a1b2c3d4e5f6.html" -> Category::Tech
 /// - "daily/9876543210ab.html" -> Category::Daily
@@ -74,21 +74,21 @@ pub fn extract_category_from_s3_path(s3_path: &str) -> Result<Category> {
             path: s3_path.to_string(),
         });
     }
-    
+
     // 先頭のスラッシュは無効なパスとして扱う
     if s3_path.starts_with('/') {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
-    
+
     // "category/file.html" 形式でない場合は無効（スラッシュが含まれている必要がある）
     if !s3_path.contains('/') {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
-    
+
     // パスから最初のセグメント（カテゴリ）を取得
     let category_str = s3_path
         .split('/')
@@ -96,14 +96,14 @@ pub fn extract_category_from_s3_path(s3_path: &str) -> Result<Category> {
         .ok_or_else(|| DomainError::InvalidPath {
             path: s3_path.to_string(),
         })?;
-    
+
     // カテゴリ名が空でないことを確認
     if category_str.is_empty() {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
-    
+
     // 文字列をCategoryに変換（FromStrトレイト使用）
     category_str.parse().map_err(|_| DomainError::InvalidPath {
         path: s3_path.to_string(),
@@ -341,9 +341,9 @@ mod tests {
     #[case("tech/")]
     #[case("tech/file.txt")]
     #[case("")]
-    #[case("tech/slug")]  // .htmlなし
-    #[case("/tech/slug.html")]  // 先頭スラッシュ
-    #[case("tech//slug.html")]  // 二重スラッシュ
+    #[case("tech/slug")] // .htmlなし
+    #[case("/tech/slug.html")] // 先頭スラッシュ
+    #[case("tech//slug.html")] // 二重スラッシュ
     fn test_extract_slug_from_s3_path_failure(#[case] invalid_path: &str) {
         let result = extract_slug_from_s3_path(invalid_path);
         assert!(result.is_err(), "Expected error for path: {}", invalid_path);
@@ -354,7 +354,10 @@ mod tests {
     #[case("daily/f6e5d4c3b2a1.html", Category::Daily)]
     #[case("statistics/abcd1234567e.html", Category::Statistics)]
     #[case("physics/ef123456789a.html", Category::Physics)]
-    fn test_extract_category_from_s3_path_success(#[case] s3_path: &str, #[case] expected_category: Category) {
+    fn test_extract_category_from_s3_path_success(
+        #[case] s3_path: &str,
+        #[case] expected_category: Category,
+    ) {
         let result = extract_category_from_s3_path(s3_path).unwrap();
         assert_eq!(result, expected_category);
     }
@@ -363,8 +366,8 @@ mod tests {
     #[case("")]
     #[case("invalid/file.html")]
     #[case("unknown_category/slug.html")]
-    #[case("/tech/slug.html")]  // 先頭スラッシュ
-    #[case("tech")]  // ファイル名なし
+    #[case("/tech/slug.html")] // 先頭スラッシュ
+    #[case("tech")] // ファイル名なし
     fn test_extract_category_from_s3_path_failure(#[case] invalid_path: &str) {
         let result = extract_category_from_s3_path(invalid_path);
         assert!(result.is_err(), "Expected error for path: {}", invalid_path);
