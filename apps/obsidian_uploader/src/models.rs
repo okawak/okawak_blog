@@ -8,7 +8,6 @@ pub struct ArticleSummaryJson {
     pub category: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<i32>,
@@ -114,5 +113,23 @@ mod tests {
         assert!(json.contains("\"title\":\"Test Output\""));
         assert!(json.contains("\"slug\":\"abc123def456\""));
         assert!(json.contains("\"category\":\"tech\""));
+    }
+
+    #[test]
+    fn test_article_summary_json_keeps_empty_tags_field() {
+        let summary = PublishedArticleSummary {
+            slug: Slug::new("emptytags001".to_string()).unwrap(),
+            title: Title::new("Empty Tags".to_string()).unwrap(),
+            category: Category::Daily,
+            description: None,
+            tags: vec![],
+            priority: None,
+            created_at: "2025-01-01T00:00:00+09:00".to_string(),
+            updated_at: "2025-01-02T00:00:00+09:00".to_string(),
+        };
+
+        let json = serde_json::to_string(&ArticleSummaryJson::from(&summary)).unwrap();
+
+        assert!(json.contains("\"tags\":[]"));
     }
 }
