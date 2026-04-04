@@ -6,8 +6,8 @@ use std::{collections::HashMap, sync::LazyLock};
 /// ファイル名（拡張子なし）からslugへのマッピング
 pub type FileMapping = HashMap<String, String>;
 
-/// キーとslugからHTMLパスを生成
-fn generate_html_path_from_key_and_slug(_key: &str, slug: &str) -> String {
+/// 記事slugから公開URLを生成
+fn generate_article_href(slug: &str) -> String {
     format!("/articles/{slug}.html")
 }
 
@@ -85,7 +85,7 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
             // ファイルマッピングからリンク先を解決
             // まずファイル名で検索し、見つからない場合は相対パスとしても検索
             let href = if let Some(slug) = file_mapping.get(link_target) {
-                generate_html_path_from_key_and_slug(link_target, slug)
+                generate_article_href(slug)
             } else {
                 // 相対パス全体での検索も試行
                 let mut found = false;
@@ -93,7 +93,7 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
 
                 for (key, slug) in file_mapping {
                     if key.ends_with(&format!("/{link_target}")) || key == link_target {
-                        result_href = generate_html_path_from_key_and_slug(key, slug);
+                        result_href = generate_article_href(slug);
                         found = true;
                         break;
                     }

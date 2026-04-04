@@ -115,35 +115,43 @@ pub struct SiteMetadata {
 
 /// Build a summary entry from a publishable article.
 pub fn build_article_summary(article: &PublishableArticle) -> PublishedArticleSummary {
+    build_article_summary_from_meta(&article.meta)
+}
+
+/// Build a summary entry from article metadata.
+pub fn build_article_summary_from_meta(meta: &ArticleMeta) -> PublishedArticleSummary {
     PublishedArticleSummary {
-        slug: article.meta.slug.clone(),
-        title: article.meta.title.clone(),
-        category: article.meta.category,
-        description: article.meta.description.clone(),
-        tags: article.meta.tags.clone(),
-        priority: article.meta.priority,
-        created_at: article.meta.created_at.clone(),
-        updated_at: article.meta.updated_at.clone(),
+        slug: meta.slug.clone(),
+        title: meta.title.clone(),
+        category: meta.category,
+        description: meta.description.clone(),
+        tags: meta.tags.clone(),
+        priority: meta.priority,
+        created_at: meta.created_at.clone(),
+        updated_at: meta.updated_at.clone(),
     }
 }
 
 /// Build the site-wide article index.
-pub fn build_article_index(articles: &[PublishableArticle]) -> Vec<PublishedArticleSummary> {
-    let mut summaries: Vec<_> = articles.iter().map(build_article_summary).collect();
+pub fn build_article_index(article_metas: &[ArticleMeta]) -> Vec<PublishedArticleSummary> {
+    let mut summaries: Vec<_> = article_metas
+        .iter()
+        .map(build_article_summary_from_meta)
+        .collect();
     summaries.sort_by(compare_summaries);
     summaries
 }
 
 /// Build per-category indexes.
-pub fn build_category_indexes(articles: &[PublishableArticle]) -> Vec<CategoryIndex> {
+pub fn build_category_indexes(article_metas: &[ArticleMeta]) -> Vec<CategoryIndex> {
     use std::collections::HashMap;
 
     let mut grouped: HashMap<Category, Vec<PublishedArticleSummary>> = HashMap::new();
-    for article in articles {
+    for article_meta in article_metas {
         grouped
-            .entry(article.meta.category)
+            .entry(article_meta.category)
             .or_default()
-            .push(build_article_summary(article));
+            .push(build_article_summary_from_meta(article_meta));
     }
 
     let mut indexes: Vec<_> = grouped
@@ -158,8 +166,8 @@ pub fn build_category_indexes(articles: &[PublishableArticle]) -> Vec<CategoryIn
 }
 
 /// Build metadata for the generated site.
-pub fn build_site_metadata(articles: &[PublishableArticle]) -> SiteMetadata {
-    let category_indexes = build_category_indexes(articles);
+pub fn build_site_metadata(article_metas: &[ArticleMeta]) -> SiteMetadata {
+    let category_indexes = build_category_indexes(article_metas);
     let categories = category_indexes
         .into_iter()
         .map(|index| CategoryMetadata {
@@ -169,7 +177,7 @@ pub fn build_site_metadata(articles: &[PublishableArticle]) -> SiteMetadata {
         .collect();
 
     SiteMetadata {
-        total_articles: articles.len(),
+        total_articles: article_metas.len(),
         categories,
     }
 }
@@ -216,6 +224,34 @@ mod tests {
     }
 
     #[test]
+    fn test_article_meta_validation() {
+        let valid_input = ArticleMetaInput {
+            slug: Slug::new("valid00000001".to_string()).unwrap(),
+            title: Title::new("Valid".to_string()).unwrap(),
+            category: Category::Tech,
+            description: Some("summary".to_string()),
+            tags: vec!["tag".to_string()],
+            priority: Some(1),
+            created_at: "2025-01-01T00:00:00+09:00".to_string(),
+            updated_at: "2025-01-02T00:00:00+09:00".to_string(),
+        };
+
+        assert!(ArticleMeta::new(valid_input.clone()).is_ok());
+
+        let missing_created_at = ArticleMetaInput {
+            created_at: "   ".to_string(),
+            ..valid_input.clone()
+        };
+        assert!(ArticleMeta::new(missing_created_at).is_err());
+
+        let missing_updated_at = ArticleMetaInput {
+            updated_at: "".to_string(),
+            ..valid_input
+        };
+        assert!(ArticleMeta::new(missing_updated_at).is_err());
+    }
+
+    #[test]
     fn test_build_article_index_orders_by_priority_desc() {
         let articles = vec![
             build_article(
@@ -234,7 +270,8 @@ mod tests {
             ),
         ];
 
-        let index = build_article_index(&articles);
+        let metas: Vec<_> = articles.into_iter().map(|article| article.meta).collect();
+        let index = build_article_index(&metas);
         assert_eq!(index[0].title.as_str(), "High");
         assert_eq!(index[1].title.as_str(), "Low");
     }
@@ -258,7 +295,8 @@ mod tests {
             ),
         ];
 
-        let indexes = build_category_indexes(&articles);
+        let metas: Vec<_> = articles.into_iter().map(|article| article.meta).collect();
+        let indexes = build_category_indexes(&metas);
         assert_eq!(indexes.len(), 2);
         assert_eq!(indexes[0].articles.len(), 1);
         assert_eq!(indexes[1].articles.len(), 1);
