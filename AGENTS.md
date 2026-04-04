@@ -13,14 +13,14 @@
 ## 優先して参照する文書
 
 1. `docs/architecture/re-architecture.md`
-2. `docs/implementation-plans/`
+2. GitHub Issue / PR
 3. `docs/adr/`
 4. `README.md`
 
 ### 参照ルール
 
 - 再設計方針の一次情報は `docs/architecture/re-architecture.md`
-- 個別作業の進め方は `docs/implementation-plans/`
+- 個別作業の進め方と進捗は GitHub Issue / PR を優先する
 - ADR は過去判断の記録として参照し、再設計方針と衝突する場合は移行状況を確認する
 - `README.md` は最終的な目標像の概要説明であり、現行実装の一次情報としては扱わない
 
@@ -58,7 +58,6 @@ okawak_blog/
 │   └── server/
 ├── docs/
 │   ├── architecture/
-│   ├── implementation-plans/
 │   └── adr/
 └── ...
 ```
@@ -145,9 +144,10 @@ okawak_blog/
 
 ### 実装前の準備
 
-- 大きめの実装に入る前に `docs/implementation-plans/` に方針ドキュメントを作成する
-- ドキュメントには実装方針、依存方向、各層の責務を書く
-- 具体的なコード断片を先に設計書へ書き込みすぎない
+- 大きめの実装に入る前に GitHub Issue を作成または更新する
+- Issue には実装方針、依存方向、各層の責務、タスク分解を書く
+- 具体的なコード断片を先に恒久ドキュメントへ書き込みすぎない
+- 恒久的に残す価値がある内容だけを `docs/architecture/` または ADR に反映する
 
 ### TDD
 
@@ -160,6 +160,7 @@ okawak_blog/
 - 責務分割や依存方向を変えたら README / AGENTS / 必要なら ADR を更新する
 - 文書を更新する際は、現状説明と将来方針を分ける
 - 実在しない構成を、現行実装として書かない
+- 実装計画や進捗メモを repo 内 docs に増やし続けない
 
 ## コーディングと設計上の注意
 
