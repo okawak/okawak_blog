@@ -9,8 +9,8 @@ https://www.okawak.net
 ## 関連文書
 
 - [docs/architecture/re-architecture.md](./docs/architecture/re-architecture.md): 目標アーキテクチャへ移行するための設計メモ
-- [docs/implementation-plans/](./docs/implementation-plans/): 個別作業の実装方針
 - [docs/adr/](./docs/adr/): 設計判断の記録
+- GitHub Issues / PRs: 実装計画、進捗、作業単位の管理
 
 ## このリポジトリが担うこと
 
@@ -75,7 +75,6 @@ okawak_blog/
 │   └── server/            # 本番用単一バイナリ
 ├── docs/
 │   ├── architecture/
-│   ├── implementation-plans/
 │   └── adr/
 ├── service/
 └── terraform/
@@ -132,7 +131,8 @@ Obsidian repo
 ## 開発原則
 
 - `domain` 層は純粋関数のみとし、I/O と `async` を持ち込まない
-- 大きめの実装に入る前に `docs/implementation-plans/` に方針を書く
+- 大きめの実装に入る前に GitHub Issue に実装方針とタスク分解を書く
+- 実装中の進捗や判断は GitHub Issue / PR に残し、恒久的な知識だけを `docs/architecture/` や ADR に昇格する
 - 重要な設計判断は ADR として残す
 - `terraform/` は読み取り専用とし、編集やコマンド実行を行わない
 
