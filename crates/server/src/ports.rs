@@ -3,7 +3,6 @@
 
 use async_trait::async_trait;
 use domain::{Article, ArticleSummary};
-use std::sync::Arc;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

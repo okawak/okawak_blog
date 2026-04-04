@@ -1,0 +1,12 @@
+[package]
+name = "application"
+version.workspace = true
+authors.workspace = true
+description = "Application use cases for publisher and site artifacts"
+edition.workspace = true
+
+[dependencies]
+domain = { path = "../domain" }
+
+[dev-dependencies]
+rstest = "0.26"

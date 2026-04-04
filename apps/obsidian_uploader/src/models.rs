@@ -1,41 +1,135 @@
+use domain::{CategoryIndex, PublishedArticleSummary, SiteMetadata};
 use serde::Serialize;
 
-/// 出力用のフロントマター構造
 #[derive(Debug, Serialize, PartialEq)]
-pub struct OutputFrontMatter {
+pub struct ArticleSummaryJson {
+    pub slug: String,
     pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tags: Option<Vec<String>>,
+    pub category: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    pub tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<i32>,
-    pub created: String,
-    pub updated: String,
-    pub slug: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<&PublishedArticleSummary> for ArticleSummaryJson {
+    fn from(summary: &PublishedArticleSummary) -> Self {
+        Self {
+            slug: summary.slug.as_str().to_string(),
+            title: summary.title.as_str().to_string(),
+            category: summary.category.as_str().to_string(),
+            description: summary.description.clone(),
+            tags: summary.tags.clone(),
+            priority: summary.priority,
+            created_at: summary.created_at.clone(),
+            updated_at: summary.updated_at.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ArticleIndexJson {
+    pub articles: Vec<ArticleSummaryJson>,
+}
+
+impl From<&[PublishedArticleSummary]> for ArticleIndexJson {
+    fn from(articles: &[PublishedArticleSummary]) -> Self {
+        Self {
+            articles: articles.iter().map(ArticleSummaryJson::from).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct CategoryIndexJson {
+    pub category: String,
+    pub articles: Vec<ArticleSummaryJson>,
+}
+
+impl From<&CategoryIndex> for CategoryIndexJson {
+    fn from(index: &CategoryIndex) -> Self {
+        Self {
+            category: index.category.as_str().to_string(),
+            articles: index
+                .articles
+                .iter()
+                .map(ArticleSummaryJson::from)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct CategoryMetadataJson {
+    pub category: String,
+    pub article_count: usize,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct SiteMetadataJson {
+    pub total_articles: usize,
+    pub categories: Vec<CategoryMetadataJson>,
+}
+
+impl From<&SiteMetadata> for SiteMetadataJson {
+    fn from(metadata: &SiteMetadata) -> Self {
+        Self {
+            total_articles: metadata.total_articles,
+            categories: metadata
+                .categories
+                .iter()
+                .map(|category| CategoryMetadataJson {
+                    category: category.category.as_str().to_string(),
+                    article_count: category.article_count,
+                })
+                .collect(),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::*;
+    use domain::{Category, Slug, Title};
 
-    #[rstest]
-    fn test_output_frontmatter_serialization() {
-        let frontmatter = OutputFrontMatter {
-            title: "Test Output".to_string(),
-            tags: Some(vec!["test".to_string()]),
+    #[test]
+    fn test_article_summary_json_conversion() {
+        let summary = PublishedArticleSummary {
+            slug: Slug::new("abc123def456".to_string()).unwrap(),
+            title: Title::new("Test Output".to_string()).unwrap(),
+            category: Category::Tech,
             description: Some("Test description".to_string()),
+            tags: vec!["test".to_string()],
             priority: Some(1),
-            created: "2025-01-01T00:00:00+09:00".to_string(),
-            updated: "2025-01-02T00:00:00+09:00".to_string(),
-            slug: "abc123def456".to_string(),
+            created_at: "2025-01-01T00:00:00+09:00".to_string(),
+            updated_at: "2025-01-02T00:00:00+09:00".to_string(),
         };
 
-        let yaml = serde_yaml::to_string(&frontmatter).unwrap();
+        let json = serde_json::to_string(&ArticleSummaryJson::from(&summary)).unwrap();
 
-        assert!(yaml.contains("title: Test Output"));
-        assert!(yaml.contains("slug: abc123def456"));
-        assert!(yaml.contains("description: Test description"));
+        assert!(json.contains("\"title\":\"Test Output\""));
+        assert!(json.contains("\"slug\":\"abc123def456\""));
+        assert!(json.contains("\"category\":\"tech\""));
+    }
+
+    #[test]
+    fn test_article_summary_json_keeps_empty_tags_field() {
+        let summary = PublishedArticleSummary {
+            slug: Slug::new("emptytags001".to_string()).unwrap(),
+            title: Title::new("Empty Tags".to_string()).unwrap(),
+            category: Category::Daily,
+            description: None,
+            tags: vec![],
+            priority: None,
+            created_at: "2025-01-01T00:00:00+09:00".to_string(),
+            updated_at: "2025-01-02T00:00:00+09:00".to_string(),
+        };
+
+        let json = serde_json::to_string(&ArticleSummaryJson::from(&summary)).unwrap();
+
+        assert!(json.contains("\"tags\":[]"));
     }
 }

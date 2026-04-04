@@ -211,52 +211,43 @@ async fn test_end_to_end_obsidian_processing() {
     let basic_slug = slug::generate_slug(
         "基本的なRust概念",
         Path::new("basic-rust-concepts.md"),
-        "2025-01-15T09:00:00+09:00",
+        "2025-01-10T09:00:00+09:00",
     )
     .unwrap();
     let memory_slug = slug::generate_slug(
         "メモリ管理のベストプラクティス",
         Path::new("tech/memory-best-practices.md"),
-        "2025-01-15T11:00:00+09:00",
+        "2025-01-18T11:00:00+09:00",
     )
     .unwrap();
 
-    let _tech_html = output_dir.join("tech").join(format!("{tech_slug}.html"));
-    let _basic_html = output_dir.join(format!("{basic_slug}.html"));
-    let _memory_html = output_dir.join("tech").join(format!("{memory_slug}.html"));
+    let site_root = output_dir.join("site");
+    let articles_dir = site_root.join("articles");
+    let _tech_html = articles_dir.join(format!("{tech_slug}.html"));
+    let _basic_html = articles_dir.join(format!("{basic_slug}.html"));
+    let _memory_html = articles_dir.join(format!("{memory_slug}.html"));
 
     // 未完成記事用（is_completed: false なので生成されない）
     let blog_slug = slug::generate_slug(
-        "開発日記",
+        "開発日記: ブログシステムを作ってみた",
         Path::new("blog/development-diary.md"),
-        "2025-01-15T12:00:00+09:00",
+        "2025-01-20T20:00:00+09:00",
     )
     .unwrap();
-    let blog_html = output_dir.join("blog").join(format!("{blog_slug}.html"));
+    let blog_html = articles_dir.join(format!("{blog_slug}.html"));
 
     // 完成した記事のHTMLが生成されているか確認（ファイル数で判定）
     let mut html_count = 0;
-    let mut tech_html_count = 0;
 
-    // techディレクトリ内のHTMLファイル数をカウント
-    if let Ok(entries) = fs::read_dir(output_dir.join("tech")) {
-        tech_html_count = entries
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().is_some_and(|ext| ext == "html"))
-            .count();
-    }
-
-    // ルートディレクトリ内のHTMLファイル数をカウント
-    if let Ok(entries) = fs::read_dir(&output_dir) {
+    if let Ok(entries) = fs::read_dir(&articles_dir) {
         html_count = entries
             .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().is_some_and(|ext| ext == "html"))
             .count();
     }
 
-    // 期待する数：tech記事2つ（技術記事とメモリ記事）+ 基本記事1つ
-    assert_eq!(tech_html_count, 2, "Should generate 2 tech articles");
-    assert_eq!(html_count, 1, "Should generate 1 basic article");
+    // 期待する数：技術記事2つ + 基本記事1つ
+    assert_eq!(html_count, 3, "Should generate 3 published articles");
 
     // 未完成の記事は生成されないことを確認
     assert!(
@@ -268,13 +259,13 @@ async fn test_end_to_end_obsidian_processing() {
     let mut performance_file_found = false;
     let mut memory_file_found = false;
 
-    if let Ok(entries) = fs::read_dir(output_dir.join("tech")) {
+    if let Ok(entries) = fs::read_dir(&articles_dir) {
         let files: Vec<_> = entries
             .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().is_some_and(|ext| ext == "html"))
             .collect();
         println!(
-            "Found HTML files in tech/: {:?}",
+            "Found HTML files in site/articles: {:?}",
             files.iter().map(|f| f.path()).collect::<Vec<_>>()
         );
 
@@ -305,35 +296,29 @@ async fn test_end_to_end_obsidian_processing() {
             }
         }
     } else {
-        println!("Could not read tech directory");
+        println!("Could not read site/articles directory");
     }
 
     assert!(
         performance_file_found,
-        "Performance optimization article should be present in tech directory"
+        "Performance optimization article should be present in site/articles"
     );
     assert!(
         memory_file_found,
-        "Memory management article should be present in tech directory"
+        "Memory management article should be present in site/articles"
     );
 
-    // KaTeX数式の処理確認とフロントマター検証
+    // KaTeX数式の処理確認
     let mut math_processing_verified = false;
-    let mut frontmatter_verified = false;
 
-    if let Ok(entries) = fs::read_dir(output_dir.join("tech")) {
+    if let Ok(entries) = fs::read_dir(&articles_dir) {
         for entry in entries.filter_map(|e| e.ok()) {
             if entry.path().extension().is_some_and(|ext| ext == "html")
                 && let Ok(content) = fs::read_to_string(entry.path())
+                && content.contains("<div class=\"katex-display\">")
+                && content.contains("<span class=\"katex-inline\">")
             {
-                if content.contains("<div class=\"katex-display\">")
-                    && content.contains("<span class=\"katex-inline\">")
-                {
-                    math_processing_verified = true;
-                }
-                if content.contains("title:") && content.contains("tags:") {
-                    frontmatter_verified = true;
-                }
+                math_processing_verified = true;
             }
         }
     }
@@ -342,20 +327,22 @@ async fn test_end_to_end_obsidian_processing() {
         math_processing_verified,
         "KaTeX math processing should work in tech files"
     );
-    assert!(
-        frontmatter_verified,
-        "Frontmatter should be present in generated files"
-    );
 
-    // ディレクトリ構造の保持確認
-    assert!(
-        output_dir.join("tech").exists(),
-        "Tech subdirectory should be preserved"
-    );
+    let article_index = fs::read_to_string(articles_dir.join("index.json")).unwrap();
+    assert!(article_index.contains(&tech_slug));
+    assert!(article_index.contains(&basic_slug));
+    assert!(article_index.contains(&memory_slug));
+
+    let tech_category_index =
+        fs::read_to_string(site_root.join("categories").join("tech.json")).unwrap();
+    assert!(tech_category_index.contains("\"category\": \"tech\""));
+
+    let site_metadata = fs::read_to_string(site_root.join("metadata").join("site.json")).unwrap();
+    assert!(site_metadata.contains("\"total_articles\": 3"));
 
     println!(
         "✅ エンドツーエンドテスト完了: {} 個のHTMLファイル生成",
-        fs::read_dir(&output_dir)
+        fs::read_dir(&articles_dir)
             .unwrap()
             .filter_map(|entry| entry.ok())
             .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "html"))
@@ -384,7 +371,7 @@ async fn test_large_volume_processing() {
             created: "2025-01-{:02}T{:02}:00:00+09:00"
             updated: "2025-01-{:02}T{:02}:30:00+09:00"
             is_completed: true
-            category: "test"
+            category: "tech"
             ---
 
             # Test Article {}
@@ -437,7 +424,7 @@ async fn test_large_volume_processing() {
     assert!(result.is_ok(), "Large volume processing should succeed");
 
     // 生成されたファイル数の確認
-    let generated_count = fs::read_dir(&output_dir)
+    let generated_count = fs::read_dir(output_dir.join("site").join("articles"))
         .unwrap()
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "html"))
@@ -473,7 +460,7 @@ async fn test_partial_failure_handling() {
         created: "2025-01-15T10:00:00+09:00"
         updated: "2025-01-15T10:30:00+09:00"
         is_completed: true
-        category: "test"
+        category: "tech"
         ---
 
         # Valid Article
@@ -491,7 +478,7 @@ async fn test_partial_failure_handling() {
         created: "2025-01-15T10:00:00+09:00"
         updated: "2025-01-15T10:30:00+09:00"
         is_completed: true
-        category: "test"
+        category: "tech"
         ---
 
         # Invalid YAML Article
@@ -509,7 +496,7 @@ async fn test_partial_failure_handling() {
         created: "2025-01-15T10:00:00+09:00"
         updated: "2025-01-15T10:30:00+09:00"
         is_completed: false
-        category: "test"
+        category: "tech"
         ---
 
         # Incomplete Article
@@ -540,7 +527,10 @@ async fn test_partial_failure_handling() {
         "2025-01-15T10:00:00+09:00",
     )
     .unwrap();
-    let valid_html = output_dir.join(format!("{valid_slug}.html"));
+    let valid_html = output_dir
+        .join("site")
+        .join("articles")
+        .join(format!("{valid_slug}.html"));
     assert!(valid_html.exists(), "Valid file should be processed");
 
     // 異常なファイルは処理されないべき（slugベース）
@@ -550,14 +540,20 @@ async fn test_partial_failure_handling() {
         "2025-01-15T10:00:00+09:00",
     )
     .unwrap();
-    let invalid_html = output_dir.join(format!("{invalid_slug}.html"));
+    let invalid_html = output_dir
+        .join("site")
+        .join("articles")
+        .join(format!("{invalid_slug}.html"));
     assert!(
         !invalid_html.exists(),
         "Invalid file should not be processed"
     );
 
     // 未完成ファイルは処理されないべき
-    let incomplete_html = output_dir.join("incomplete.html");
+    let incomplete_html = output_dir
+        .join("site")
+        .join("articles")
+        .join("incomplete.html");
     assert!(
         !incomplete_html.exists(),
         "Incomplete file should not be processed"

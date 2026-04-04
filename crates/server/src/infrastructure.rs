@@ -17,6 +17,12 @@ impl MemoryArticleRepository {
     }
 }
 
+impl Default for MemoryArticleRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl ArticleRepository for MemoryArticleRepository {
     async fn find_by_id(&self, _id: &str) -> crate::ports::Result<Option<Article>> {

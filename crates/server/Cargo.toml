@@ -29,7 +29,7 @@ web = { path = "../web", features = ["ssr"], optional = true }
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tower = "0.5"
-tower-http = { version = "0.6.8", features = ["cors", "trace", "fs"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 aws-config = { version = "1", default-features = false }

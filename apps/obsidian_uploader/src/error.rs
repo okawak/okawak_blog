@@ -10,6 +10,9 @@ pub enum ObsidianError {
     #[error("Failed to parse YAML frontmatter")]
     Yaml(#[from] serde_yaml::Error),
 
+    #[error("Failed to serialize JSON output")]
+    Json(#[from] serde_json::Error),
+
     #[error("Invalid file path: {0}")]
     Path(String),
 
@@ -27,4 +30,7 @@ pub enum ObsidianError {
 
     #[error("Network request failed: {0}")]
     Network(String),
+
+    #[error("Domain validation failed: {0}")]
+    Domain(#[from] domain::DomainError),
 }

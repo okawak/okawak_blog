@@ -4,7 +4,6 @@ use domain::{Article, ArticleSummary, Category, Slug, Title};
 use std::str::FromStr;
 
 use super::dto::*;
-use crate::error::Result;
 
 /// Domain Article → DTO変換
 impl From<Article> for ArticleDto {
