@@ -65,8 +65,11 @@ async fn test_run_main_with_sample_file() {
     let result = run_main(&config).await;
     assert!(result.is_ok());
 
+    let site_root = output_dir.join("site");
+    let articles_dir = site_root.join("articles");
+
     // HTMLファイルが生成されていることを確認（slugベース）
-    let html_files: Vec<_> = fs::read_dir(&output_dir)
+    let html_files: Vec<_> = fs::read_dir(&articles_dir)
         .unwrap()
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "html"))
@@ -82,6 +85,13 @@ async fn test_run_main_with_sample_file() {
     let html_content = fs::read_to_string(html_file.path()).unwrap();
     assert!(html_content.contains("Test Article"));
     assert!(html_content.contains("This is a test article"));
+
+    let article_index = fs::read_to_string(articles_dir.join("index.json")).unwrap();
+    assert!(article_index.contains("\"articles\""));
+    assert!(article_index.contains("\"category\": \"tech\""));
+
+    let site_metadata = fs::read_to_string(site_root.join("metadata").join("site.json")).unwrap();
+    assert!(site_metadata.contains("\"total_articles\": 1"));
 }
 
 #[tokio::test]
@@ -123,7 +133,10 @@ async fn test_run_main_with_incomplete_file() {
     assert!(result.is_ok());
 
     // HTMLファイルが生成されていないことを確認（is_completed: falseのため）
-    let html_file = output_dir.join("incomplete.html");
+    let html_file = output_dir
+        .join("site")
+        .join("articles")
+        .join("incomplete.html");
     assert!(!html_file.exists());
 }
 

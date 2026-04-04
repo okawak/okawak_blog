@@ -1,6 +1,5 @@
 use leptos::prelude::*;
 use stylance::import_style;
-use thaw::*;
 
 import_style!(about_style, "about.module.scss");
 

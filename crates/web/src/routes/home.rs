@@ -2,7 +2,6 @@ use crate::types::ArticleSummary;
 use leptos::prelude::*;
 use reactive_stores::Store;
 use stylance::import_style;
-use thaw::*;
 
 import_style!(home_style, "home.module.scss");
 

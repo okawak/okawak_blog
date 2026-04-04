@@ -39,7 +39,7 @@ pub fn extract_slug_from_s3_path(s3_path: &str) -> Result<Slug> {
     // "category/slug.html" 形式から "slug.html" を抽出
     let file_name = s3_path
         .split('/')
-        .last()
+        .next_back()
         .ok_or_else(|| DomainError::InvalidPath {
             path: s3_path.to_string(),
         })?;

@@ -5,6 +5,7 @@
 
 // ドメインエンティティとバリューオブジェクト
 pub mod entities;
+pub mod publishable;
 
 // ビジネスルール（純粋関数のみ）
 pub mod business_rules;
@@ -16,3 +17,4 @@ pub mod error;
 pub use business_rules::*;
 pub use entities::*;
 pub use error::{DomainError, Result};
+pub use publishable::*;
