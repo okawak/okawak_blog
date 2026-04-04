@@ -1,300 +1,201 @@
 # AGENTS.md
 
-## プロジェクト情報
-
-このプロジェクトは、RustのLeptosフレームワークを用いてブログを構築することです。
-以下のガイドラインに従って開発を進めてください。
-
 ## 会話ガイドライン
 
 - 常に日本語で会話する
 
-## プロジェクト全体像
+## このリポジトリの位置付け
 
-### システム概要
-- **プロジェクト名**: okawak_blog - 個人ブログシステム（https://www.okawak.net）
-- **アーキテクチャ**: Rust-First Architecture（Clean Architectureではない）
-- **技術スタック**: Rust, Leptos, Axum, AWS S3, thaw-ui, stylance
-- **デプロイ**: 単一バイナリによる統合デプロイ（~12MB）
+`okawak_blog` は、Rust 製のブログ CMS を作るリポジトリではありません。Obsidian で書いた Markdown を公開成果物へ変換し、それを Leptos SSR で配信するための、静的コンテンツ公開基盤 + SSR 表示基盤として扱います。
 
-### ワークスペース構成
+主役は常駐 API サーバーではなく、コンテンツ生成パイプラインです。
 
-#### メインクレート (`crates/`)
-```
+## 優先して参照する文書
+
+1. `docs/architecture/re-architecture.md`
+2. `docs/implementation-plans/`
+3. `docs/adr/`
+4. `README.md`
+
+### 参照ルール
+
+- 再設計方針の一次情報は `docs/architecture/re-architecture.md`
+- 個別作業の進め方は `docs/implementation-plans/`
+- ADR は過去判断の記録として参照し、再設計方針と衝突する場合は移行状況を確認する
+- `README.md` は最終的な目標像の概要説明であり、現行実装の一次情報としては扱わない
+
+## 現在の構成と目標構成を混同しない
+
+### 現在の workspace
+
+```text
 okawak_blog/
-├── domain/           # 純粋ドメインロジック
-├── server/           # 統合バックエンド  
-├── web/              # Leptosフロントエンド
-└── apps/             # 補助アプリケーション
-    └── obsidian_uploader/
+├── crates/
+│   ├── domain/
+│   ├── server/
+│   └── web/
+├── apps/
+│   └── obsidian_uploader/
+├── docs/
+├── service/
+└── terraform/
 ```
 
-- **`domain`**: 純粋ドメインロジック（I/Oなし、同期のみ、WASM対応）
-- **`server`**: 統合バックエンド（Axum + Leptos統合、AWS S3連携）
-- **`web`**: Leptosフロントエンド（SSR + CSR、thaw-ui、stylance CSS-in-Rust）
+### 目標構成
 
-#### アプリケーション (`apps/`)
-- **`obsidian_uploader`**: Obsidianファイル→S3アップローダー
-  - Obsidianはプライベートリポジトリでgit submoduleとして管理
-  - markdownファイルを適切なHTMLに変換してS3にアップロード
+`docs/architecture/re-architecture.md` では、将来的に以下への再編を目指している。
 
-#### インフラ (`terraform/`)
-- AWS S3、OCI等のインフラ定義
-- **注意**: このディレクトリでは**絶対にコマンドを実行しない**
-- **編集禁止**: ファイルの読み取りのみ可能
-
-#### 運用 (`service/`)
-- systemdサービス設定
-- nginx設定  
-- 自動デプロイスクリプト
-
-### データフロー
-```
-Stage 1: Obsidianファイル → obsidian_uploader (GitHub Actions) → AWS S3
-Stage 2: Browser ←→ Leptos SSR ←→ Server Functions ←→ UseCases ←→ Domain Logic
-                           ↓                    ↓
-                      HTTP Handlers      Infrastructure (S3)
-                           ↓                    ↓
-                       Axum Router          AWS S3
+```text
+okawak_blog/
+├── crates/
+│   ├── domain/
+│   ├── application/
+│   ├── infrastructure/
+│   ├── web/
+│   └── shared/
+├── apps/
+│   ├── publisher/
+│   └── server/
+├── docs/
+│   ├── architecture/
+│   ├── implementation-plans/
+│   └── adr/
+└── ...
 ```
 
-## アーキテクチャガイドライン
+### 文書化と実装の注意
 
-### Rust-First Architecture の原則
+- 未作成の crate / app を、現在存在するものとして書かない
+- 「現在の構成」と「移行先の目標構成」を必ず分けて説明する
+- README や設計メモを書くときも、理想像を現状の事実として断定しない
 
-#### 1. ドメイン純粋性の確保
-```rust
-// ✅ 純粋関数によるビジネスロジック（I/Oなし、同期のみ）
-pub fn generate_slug_from_title(title: &Title) -> Result<Slug> {
-    // 副作用なし、テスト容易、WASM対応
-}
-```
+## アーキテクチャ原則
 
-#### 2. 統合サーバー設計
-```rust
-// ✅ 単一バイナリによる統合デプロイ
-pub fn create_app(repository: Arc<Repository>, storage: Arc<Storage>) -> Router {
-    // Axum + Leptos統合、型安全な依存注入
-}
-```
+### コンテンツパイプライン中心
 
-#### 3. 型駆動開発
-```rust
-// ✅ 不正な状態をコンパイル時に防ぐ
-pub struct PublishedArticle(Article);  // 公開済み記事のみ
-impl From<DraftArticle> for PublishedArticle { /* ... */ }
-```
+- Obsidian の Markdown を読み取る
+- Front Matter を検証する
+- 内部リンクや埋め込みを解決する
+- HTML / index JSON を生成する
+- S3 に成果物を配置する
+- Leptos SSR サーバーがそれを読んで配信する
 
-### アーキテクチャ決定記録（ADR）
-重要な設計決定は`docs/adr/`ディレクトリで文書化されています：
-- [ADR-0001: Rust-First アーキテクチャの採用](./docs/adr/0001-rust-first-architecture.md)
-- [ADR-0002: ドメイン層の純粋化](./docs/adr/0002-domain-layer-purification.md)
-- [ADR-0003: サーバー層統合設計](./docs/adr/0003-server-layer-integration.md)
+### Markdown 変換はビルド時
 
-### なぜClean Architectureではないのか
-1. **WASM互換性**: tokioの`net`機能はWASMで利用不可
-2. **型安全性**: Rustの型システムによるコンパイル時制約
-3. **パフォーマンス**: ゼロコスト抽象化の最大活用
-4. **運用シンプル**: 単一バイナリによるデプロイ簡素化
+- Markdown をリクエスト時に毎回変換しない
+- HTML 生成は publisher 側に寄せる
+- SSR サーバーは、成果物読取・ルーティング・メタ情報付与に集中する
 
-## ビルドと実行ガイドライン
+### Rust らしい責務分割
 
-### cargo-makeによる統合ビルドシステム
+- `domain` は純粋関数と小さな型を中心にする
+- `domain` は I/O を知らない
+- `domain` は `async` 前提にしない
+- `domain` は AWS SDK、Leptos、Axum を知らない
+- 外部境界は trait で薄く切る
+- 単一バイナリでの本番運用を優先する
 
-#### 開発環境
-```bash
-# Leptos開発サーバー起動
-cargo make dev
+## 非目標
 
-# 統合開発環境（Server + Leptos）
-cargo make integrated-dev
+明示されない限り、以下は作らない前提で考える。
 
-# ファイル変更を監視して自動リビルド
-cargo make watch
+- DB ベースの記事管理
+- ユーザー認証・認可
+- 管理画面
+- UI からの記事作成・編集
+- マルチユーザー機能
+- SaaS 的 CMS 機能
+- リアルタイム更新基盤
 
-# コードフォーマット
-cargo make format
-```
+## 各ディレクトリの扱い
 
-#### ビルド & デプロイ
-```bash
-# 統合ビルド（Leptos + Server）
-cargo make build
+### `crates/domain`
 
-# Leptosフロントエンドのみ
-cargo make build-web
+- 純粋ドメインロジックを置く
+- I/O 禁止
+- `async/await` 禁止
+- WASM 互換を意識する
 
-# サーバーバイナリのみ
-cargo make build-server
+### `crates/server`
 
-# 完全デプロイフロー
-cargo make full-deploy
+- 現在のサーバー実装
+- 将来的には SSR 公開用途に責務を絞る想定
 
-# 本番環境デプロイ（nginx含む）
-cargo make production-deploy
-```
+### `crates/web`
 
-#### テスト & 品質保証
-```bash
-# 全テスト実行
-cargo make test
+- Leptos UI / SSR ルーティング層
+- 公開成果物を読む側として整理する
 
-# ドメイン層テスト（純粋）
-cargo make test-domain
+### `apps/obsidian_uploader`
 
-# サーバー統合テスト
-cargo make test-server
+- 現在もっとも `publisher` に近いアプリ
+- 今後の再設計では公開成果物生成の主役として育てる前提で扱う
 
-# Webフロントエンドテスト
-cargo make test-web
+### `service`
 
-# コード解析
-cargo make clippy
+- `systemd`、`nginx`、運用補助ファイルを置く
 
-# 高速シンタックスチェック
-cargo make check
-```
+### `terraform`
 
-### 各プロジェクトのビルド
-- 通常のCargoビルド: `cargo build --release -p <package_name>`
-- Leptosフレームワークのビルド: `cargo leptos build --release`
+- 読み取りのみ
+- 編集禁止
+- このディレクトリではコマンドを実行しない
 
-## 開発哲学
+## 開発プロセス
 
-### Test-Driven Development (TDD)
+### 実装前の準備
 
-- 原則としてテスト駆動開発（TDD）で進める
-- 期待される入出力に基づき、まずユニットテストを作成する
-- 実装コードは書かず、テストのみを用意する
-- テストを実行し、失敗を確認する
-- テストが正しいことを確認できた段階でコミットする
-- その後、テストをパスさせる実装を進める
-- 実装中はテストを変更せず、コードを修正し続ける
-- すべてのテストが通過するまで繰り返す
+- 大きめの実装に入る前に `docs/implementation-plans/` に方針ドキュメントを作成する
+- ドキュメントには実装方針、依存方向、各層の責務を書く
+- 具体的なコード断片を先に設計書へ書き込みすぎない
 
-### コーディング標準
+### TDD
 
-- コードはRustの公式スタイルガイドに従う
-- 変数名、関数名は意味のある名前を付ける
-- コメントは必要な箇所にのみ記述し、コードの意図を明確にする
-- Rustのドキュメンテーションコメント（///）を使用して、関数や構造体の説明を記述する
+- 可能な限り TDD で進める
+- 純粋ロジックは先にテストを書く
+- 実装中は、仕様変更でない限りテストを都合よく変えない
 
-### ワークフロー
+### 文書更新
 
-- GitHub Flowを採用
-  - ブランチは機能ごとに分ける
-  - プルリクエストを作成し、コードレビューを受ける
-  - レビュー後、マージしてmainブランチに統合する
-  - **注意**: レビュー、マージはAIエージェントで**勝手に行わない**
+- 責務分割や依存方向を変えたら README / AGENTS / 必要なら ADR を更新する
+- 文書を更新する際は、現状説明と将来方針を分ける
+- 実在しない構成を、現行実装として書かない
 
-## 技術詳細
+## コーディングと設計上の注意
 
-### パフォーマンス特性
-- **ビルドサイズ**: 
-  - Server バイナリ: ~12MB (release build)
-  - WASM: ~2MB (gzip済み)
-- **実行時性能**:
-  - 起動時間: <100ms
-  - メモリ使用量: ~50MB (base)
-  - レスポンス時間: <50ms (static content)
+- 過剰な repository パターンを持ち込まない
+- `shared` 的な置き場を安易に肥大化させない
+- ビルド時に解決できる責務をサーバーランタイムへ持ち込まない
+- `unimplemented!()` 前提の大きなモデルを増やさない
+- 型で状態遷移を表せるなら優先する
 
-### 型安全性とWASM互換性
-```rust
-// コンパイル時制約の例
-struct DraftArticle { /* ... */ }
-struct PublishedArticle { /* ... */ }
+## 実行コマンドの目安
 
-// 公開記事のみを返すAPI
-fn get_published_articles() -> Vec<PublishedArticle> {
-    // DraftArticleは返却不可（コンパイルエラー）
-}
+### 開発
 
-// domain層は完全にWASM対応
-#[cfg(target_arch = "wasm32")]
-fn browser_side_validation(article: &Article) -> bool {
-    domain::validate_article_data(article).is_ok()
-}
-```
+- `cargo make dev`
+- `cargo make integrated-dev`
+- `cargo make watch`
+- `cargo make format`
 
-### 依存関係管理
-- **domain**: 最小限（thiserror のみ）
-- **server**: AWS SDK、Axum、Leptos統合
-- **web**: Leptos、thaw-ui、stylance、型安全なCSS-in-Rust
+### テスト・確認
 
-## 重要な制約事項
+- `cargo make test`
+- `cargo make test-domain`
+- `cargo make test-server`
+- `cargo make test-web`
+- `cargo make clippy`
+- `cargo make check`
+- `cargo make check-domain`
+- `cargo make check-server`
 
-### 必須制約
-1. **ドメイン層は純粋関数のみ**: I/O操作禁止、同期のみ、WASM対応必須
-2. **terraformディレクトリは編集禁止**: 読み取りのみ可能
-3. **Obsidianはgit submodule**: プライベートリポジトリとして管理
-4. **GitHub Actions**: Obsidianファイルの自動S3アップロード
+### デプロイ・運用
 
-### 開発プロセス
+- `cargo make build-project`
+- `cargo make full-deploy`
+- `cargo make production-deploy`
+- `cargo make status`
+- `cargo make logs`
+- `cargo make logs-recent`
 
-#### 実装前の準備
-- **実装方針ドキュメント作成必須**: 具体的な実装に入る前に、必ず`docs/implementation-plans/`に実装方針ドキュメントを作成する
-- **ドキュメント内容**: 実装方針・アーキテクチャ設計・各層の責任のみ記載し、具体的なコードは記載しない
-- **GitHub Issue作成**: 大きな機能追加の場合は、GitHub issueで実装計画を明文化してから開始
-- **レビュー・確認**: 実装方針が確定してから具体的な実装を開始する
-
-#### SSR中心の実装方針
-- **Web層**: Server-Side Rendering (SSR) を中心とした実装
-- **CSR移行**: パフォーマンス上の利点が明確な場合のみ、CSR + SSRのハイブリッドに移行を検討
-- **初期実装**: まずはSSRでシンプルに実装し、必要に応じて段階的にクライアント機能を追加
-
-### 開発時の注意点
-- terraform/ディレクトリでコマンド実行しない
-- ドメイン層でasync/await使用しない
-- 型安全性を最優先に設計する
-- ADRで重要な設計決定を文書化する
-- **実装方針ドキュメント優先**: 具体的なコード実装前に必ず実装方針を文書化
-- **TDD遵守**: テスト駆動開発で進める（テスト→実装→リファクタリング）
-
-## セットアップ
-
-### 必要なツール
-```bash
-# Rust インストール
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# cargo-make インストール（タスクランナー）
-cargo install cargo-make
-
-# cargo-leptos インストール
-cargo install cargo-leptos
-
-# stylance CLI インストール（CSS-in-Rust）
-cargo install stylance-cli
-```
-
-### 依存関係チェック
-```bash
-cargo make check-deps
-```
-
-## トラブルシューティング
-
-### ビルドエラー
-```bash
-# WASM関連エラー
-cargo make check-domain    # ドメイン層の純粋性確認
-
-# 依存関係エラー
-cargo make clean
-cargo make check-deps
-cargo make build
-```
-
-### サービス起動エラー
-```bash
-# ログ確認
-cargo make logs-recent
-
-# ポート確認
-sudo netstat -tlnp | grep :8008
-
-# 権限確認
-sudo chown -R okawak:okawak /home/okawak/okawak_blog/
-```
-
-このガイドラインに従って、Rust-First Architectureの原則を守りながら開発を進めてください。
+`sudo` を伴うタスクは、ローカル開発環境ではなく VPS 前提で扱う。

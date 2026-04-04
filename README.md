@@ -4,313 +4,152 @@
 
 https://www.okawak.net
 
-## アーキテクチャ
+`okawak_blog` は、Obsidian で書いた Markdown を Rust 製の publisher が公開成果物へ変換して S3 に配置し、それを VPS 上の単一バイナリ Leptos SSR サーバーが nginx 配下で公開する、静的コンテンツ公開基盤 + SSR 表示基盤です。
 
-このプロジェクトは、従来のClean Architectureではなく、**Rust-First Architecture**を採用しています。これは、Rustの所有権システムとゼロコスト抽象化を最大限活用した設計哲学です。
+## 関連文書
 
-### Rust-First Architecture の原則
+- [docs/architecture/re-architecture.md](./docs/architecture/re-architecture.md): 目標アーキテクチャへ移行するための設計メモ
+- [docs/implementation-plans/](./docs/implementation-plans/): 個別作業の実装方針
+- [docs/adr/](./docs/adr/): 設計判断の記録
 
-#### 1. ドメイン純粋性の確保
-```rust
-// ✅ 純粋関数によるビジネスロジック（I/Oなし、同期のみ）
-pub fn generate_slug_from_title(title: &Title) -> Result<Slug> {
-    // 副作用なし、テスト容易、WASM対応
-}
-```
+## このリポジトリが担うこと
 
-#### 2. 統合サーバー設計
-```rust
-// ✅ 単一バイナリによる統合デプロイ
-pub fn create_app(repository: Arc<Repository>, storage: Arc<Storage>) -> Router {
-    // Axum + Leptos統合、型安全な依存注入
-}
-```
+- 記事は Obsidian で執筆する
+- 記事ソースは別の Obsidian リポジトリで管理する
+- GitHub Actions またはローカル実行の publisher が公開成果物を生成する
+- 生成した HTML / index JSON / assets を S3 に配置する
+- Leptos SSR サーバーが S3 上の成果物を読んで配信する
+- VPS + `systemd` + `nginx` で単純に運用できる構成を保つ
 
-#### 3. 型駆動開発
-```rust
-// ✅ 不正な状態をコンパイル時に防ぐ
-pub struct PublishedArticle(Article);  // 公開済み記事のみ
-impl From<DraftArticle> for PublishedArticle { /* ... */ }
-```
+## これは何ではないか
 
-### クレート構成
+このプロジェクトは、一般的なブログ CMS や SaaS ブログサービスを作るものではありません。
 
-```
+現時点での非目標は以下です。
+
+- DB を使った記事管理
+- ユーザー認証・認可
+- 管理画面
+- ブラウザ UI からの記事作成・編集
+- マルチユーザー運用
+- 複雑なバックオフィス機能
+
+## 目指すアーキテクチャ
+
+### コンテンツパイプライン中心
+
+主役は常駐 API サーバーではなく、公開成果物生成パイプラインです。
+
+1. Obsidian の Markdown を読む
+2. Front Matter を解釈・検証する
+3. 内部リンクや埋め込みを解決する
+4. Markdown を公開用 HTML に変換する
+5. 記事一覧やカテゴリ一覧などの index データを生成する
+6. 成果物を S3 にアップロードする
+7. Leptos SSR サーバーがそれを読んで公開する
+
+### ビルド時変換
+
+Markdown から HTML への変換はランタイムではなくビルド時に行います。SSR サーバーは、変換済みの HTML と index データを読み、ルーティング、レイアウト、meta 情報の組み立てに集中します。
+
+### Rust らしい責務分割
+
+- 純粋ロジックと I/O を分離する
+- 外部境界は trait で薄く切る
+- 型で不正状態を減らす
+- 単一バイナリでの運用性を優先する
+- ビルド時に解決できる責務をランタイムへ持ち込まない
+
+## 最終的な workspace 像
+
+```text
 okawak_blog/
-├── domain/           # 純粋ドメインロジック
-├── server/           # 統合バックエンド
-├── web/              # Leptosフロントエンド
-└── apps/             # 補助アプリケーション
-    └── obsidian_uploader/
+├── crates/
+│   ├── domain/            # 純粋ドメインモデルとルール
+│   ├── application/       # ユースケース
+│   ├── infrastructure/    # FS/S3/Markdown/YAML 実装
+│   ├── web/               # Leptos SSR 公開 UI
+│   └── shared/            # 必要最小限の共有型のみ
+├── apps/
+│   ├── publisher/         # 公開成果物生成 CLI
+│   └── server/            # 本番用単一バイナリ
+├── docs/
+│   ├── architecture/
+│   ├── implementation-plans/
+│   └── adr/
+├── service/
+└── terraform/
 ```
 
-#### `domain` クレート - 純粋ドメイン層
-- **責務**: ビジネスルール、エンティティ、純粋関数
-- **特徴**: I/O操作なし、同期のみ、WASM対応
-- **依存**: 最小限（serde, chrono, thiserror, uuid）
+### 各層の責務
 
-```rust
-// domain/src/business_rules.rs
-pub fn validate_article_content(content: &str) -> Result<(), DomainError> {
-    // 純粋関数によるバリデーション
-}
+- `crates/domain`: 純粋関数と小さな型を中心にしたドメイン層
+- `crates/application`: build / publish / read のユースケース層
+- `crates/infrastructure`: filesystem, S3, Markdown, YAML など外部境界の実装
+- `crates/web`: Leptos SSR の公開 UI
+- `apps/publisher`: 公開成果物生成とアップロードを担う CLI
+- `apps/server`: S3 上の成果物を読んで配信する本番用サーバー
+
+## 公開成果物のイメージ
+
+```text
+site/
+├── articles/
+│   ├── <slug>.html
+│   └── index.json
+├── categories/
+│   ├── tech.json
+│   ├── daily.json
+│   └── ...
+├── tags/
+│   └── index.json
+├── assets/
+│   └── ...
+└── metadata/
+    └── site.json
 ```
 
-#### `server` クレート - 統合バックエンド
-- **責務**: usecases, ports, infrastructure, handlers
-- **特徴**: 単一バイナリ、Axum + Leptos統合、AWS S3連携
-- **依存**: domain, aws-sdk, axum, leptos-server
+publisher はこれらの成果物を生成し、SSR サーバーはそれらを読んでページを返します。
 
-```rust
-// server/src/main.rs - 統合エントリーポイント
-#[tokio::main]
-async fn main() -> Result<()> {
-    let app = create_app(repository, storage);
-    axum::serve(listener, app).await
-}
+## データフロー
+
+```text
+Obsidian repo
+  -> publisher
+  -> HTML / index JSON / assets を生成
+  -> AWS S3
+  -> Leptos SSR server
+  -> Browser
 ```
 
-#### `web` クレート - Leptosフロントエンド
-- **責務**: SSR + CSR、UI コンポーネント、styling
-- **特徴**: thaw-ui、stylance CSS-in-Rust、server functions
-- **依存**: domain（ドメインロジック共有）, leptos, thaw
+## 運用モデル
 
-### アーキテクチャ決定記録（ADR）
+- VPS 上で Rust 製サーバーバイナリを `systemd` service として起動する
+- `nginx` を前段に置いて HTTPS 終端とリバースプロキシを担当させる
+- アプリケーション本体は単一バイナリとして扱う
+- SSR サーバーは S3 上の成果物を読み、必要に応じて静的ファイルも配信する
 
-重要なアーキテクチャ決定は [docs/adr/](./docs/adr/) で文書化されています：
+## 開発原則
 
-- [ADR-0001: Rust-First アーキテクチャの採用](./docs/adr/0001-rust-first-architecture.md)
-- [ADR-0002: ドメイン層の純粋化](./docs/adr/0002-domain-layer-purification.md)
-- [ADR-0003: サーバー層統合設計](./docs/adr/0003-server-layer-integration.md)
+- `domain` 層は純粋関数のみとし、I/O と `async` を持ち込まない
+- 大きめの実装に入る前に `docs/implementation-plans/` に方針を書く
+- 重要な設計判断は ADR として残す
+- `terraform/` は読み取り専用とし、編集やコマンド実行を行わない
 
-### なぜClean Architectureではないのか
+## 開発コマンド
 
-1. **WASM互換性**: tokioの`net`機能はWASMで利用不可
-2. **型安全性**: Rustの型システムによるコンパイル時制約
-3. **パフォーマンス**: ゼロコスト抽象化の最大活用
-4. **運用シンプル**: 単一バイナリによるデプロイ簡素化
-
-## 利用可能なタスク
-
-cargo-makeによる統合ビルドシステムを提供しています。
-
-### 開発環境
+現在のリポジトリで利用する主要コマンドは以下です。
 
 ```bash
-# Leptos開発サーバー起動
 cargo make dev
-
-# 統合開発環境（Server + Leptos）
 cargo make integrated-dev
-
-# ファイル変更を監視して自動リビルド
 cargo make watch
-
-# コードフォーマット
 cargo make format
-```
-
-### ビルド & デプロイ
-
-```bash
-# 統合ビルド（Leptos + Server）
-cargo make build
-
-# Leptosフロントエンドのみ
-cargo make build-web
-
-# サーバーバイナリのみ
-cargo make build-server
-
-# 完全デプロイフロー
-cargo make full-deploy
-
-# 本番環境デプロイ（nginx含む）
-cargo make production-deploy
-```
-
-### テスト & 品質保証
-
-```bash
-# 全テスト実行
 cargo make test
-
-# ドメイン層テスト（純粋）
 cargo make test-domain
-
-# サーバー統合テスト
 cargo make test-server
-
-# Webフロントエンドテスト
 cargo make test-web
-
-# コード解析
 cargo make clippy
-
-# 高速シンタックスチェック
 cargo make check
-```
-
-### 運用・監視
-
-```bash
-cargo make status      # サービス状態確認
-cargo make logs        # リアルタイムログ
-cargo make logs-recent # 最新ログ
-cargo make restart     # サービス再起動
-```
-
-### ヘルプ
-
-```bash
-cargo make help        # 利用可能なタスク一覧
-cargo make check-deps  # 依存関係チェック
-```
-
-## セットアップ
-
-### 必要なツール
-
-```bash
-# Rust インストール
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# cargo-make インストール（タスクランナー）
-cargo install cargo-make
-
-# cargo-leptos インストール
-cargo install cargo-leptos
-
-# stylance CLI インストール（CSS-in-Rust）
-cargo install stylance-cli
-```
-
-### 依存関係チェック
-
-```bash
 cargo make check-deps
-```
-
-## デプロイメント
-
-### 単一バイナリデプロイ
-
-```bash
-# 1. リポジトリクローン
-git clone <repository-url> okawak_blog
-cd okawak_blog
-
-# 2. 依存関係チェック
-cargo make check-deps
-
-# 3. 統合ビルド & デプロイ
-cargo make full-deploy
-```
-
-生成される成果物：
-- `/target/release/server` - 統合サーバーバイナリ（12MB）
-- システムサービスとして動作（systemd）
-
-### 設定管理
-
-#### systemd サービス設定
-- パス: `/etc/systemd/system/okawak_blog.service`
-- セキュリティ: NoNewPrivileges, ProtectSystem等の強化設定
-
-#### 環境変数
-- 開発: デフォルト設定で動作
-- 本番: systemdサービス内で設定（AWS認証情報は別途）
-
-## パフォーマンス特性
-
-### ビルドサイズ
-- Server バイナリ: ~12MB (release build)
-- WASM: ~2MB (gzip済み)
-
-### 実行時性能
-- 起動時間: <100ms
-- メモリ使用量: ~50MB (base)
-- レスポンス時間: <50ms (static content)
-
-## 開発ワークフロー
-
-### 1. ローカル開発
-```bash
-cargo make dev-flow        # Leptos開発サーバー
-cargo make integrated-dev  # Full stack開発
-```
-
-### 2. テスト & 品質チェック
-```bash
-cargo make test-domain     # ドメインロジック検証
-cargo make check-server    # サーバー型チェック
-cargo make clippy          # コード品質確認
-```
-
-### 3. デプロイ
-```bash
-cargo make quick-deploy    # 高速デプロイ
-cargo make production-deploy # 本番デプロイ
-```
-
-## トラブルシューティング
-
-### ビルドエラー
-
-```bash
-# WASM関連エラー
-cargo make check-domain    # ドメイン層の純粋性確認
-
-# 依存関係エラー
-cargo make clean
-cargo make check-deps
-cargo make build
-```
-
-### サービス起動エラー
-
-```bash
-# ログ確認
-cargo make logs-recent
-
-# ポート確認
-sudo netstat -tlnp | grep :8008
-
-# 権限確認
-sudo chown -R okawak:okawak /home/okawak/okawak_blog/
-```
-
-## アーキテクチャ詳細
-
-### データフロー
-
-```
-Browser ←→ Leptos SSR ←→ Server Functions ←→ UseCases ←→ Domain Logic
-                           ↓                    ↓
-                      HTTP Handlers      Infrastructure
-                           ↓                    ↓
-                       Axum Router          AWS S3
-```
-
-### 型安全性
-
-```rust
-// コンパイル時制約の例
-struct DraftArticle { /* ... */ }
-struct PublishedArticle { /* ... */ }
-
-// 公開記事のみを返すAPI
-fn get_published_articles() -> Vec<PublishedArticle> {
-    // DraftArticleは返却不可（コンパイルエラー）
-}
-```
-
-### WASM互換性
-
-```rust
-// domain層は完全にWASM対応
-#[cfg(target_arch = "wasm32")]
-fn browser_side_validation(article: &Article) -> bool {
-    domain::validate_article_data(article).is_ok()
-}
 ```
