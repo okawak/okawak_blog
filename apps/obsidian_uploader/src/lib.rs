@@ -7,9 +7,11 @@ pub mod parser;
 pub mod scanner;
 pub mod slug;
 
+use application::{SiteArtifacts, build_site_artifacts};
 pub use config::Config;
+use domain::{ArticleBody, ArticleMeta, ArticleMetaInput, Category, Slug, Title};
 pub use error::{ObsidianError, Result};
-pub use models::OutputFrontMatter;
+use models::{ArticleIndexJson, CategoryIndexJson, SiteMetadataJson};
 pub use parser::ObsidianFrontMatter;
 
 use converter::FileMapping;
@@ -19,6 +21,11 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+
+struct RenderedArticle {
+    meta: ArticleMeta,
+    html: String,
+}
 
 /// パース済みのファイル情報を保持する構造体
 struct ParsedFile {
@@ -75,15 +82,25 @@ pub async fn run_main(config: &Config) -> Result<()> {
     }
 
     let file_mapping = build_file_mapping(config, &valid_files)?;
+    let site_directories = prepare_site_directories(config)?;
 
     const CONCURRENT_LIMIT: usize = 4;
-    let processed_files: Vec<OutputFrontMatter> = stream::iter(valid_files)
-        .map(|parsed_file| process_parsed_file(config, parsed_file, &file_mapping))
+    let article_metas: Vec<ArticleMeta> = stream::iter(valid_files)
+        .map(|parsed_file| render_publishable_article(parsed_file, &file_mapping))
         .buffer_unordered(CONCURRENT_LIMIT)
-        .try_collect()
+        .try_fold(Vec::new(), |mut article_metas, rendered_article| {
+            let site_directories = &site_directories;
+            async move {
+                write_article_page(site_directories, &rendered_article)?;
+                article_metas.push(rendered_article.meta);
+                Ok(article_metas)
+            }
+        })
         .await?;
+    let site_artifacts = build_site_artifacts(article_metas);
+    write_site_artifacts(&site_directories, &site_artifacts)?;
 
-    let processed_count = processed_files.len();
+    let processed_count = site_artifacts.article_index.len();
     let duration = start_time.elapsed();
 
     // 処理結果サマリーの出力
@@ -97,10 +114,10 @@ pub async fn run_main(config: &Config) -> Result<()> {
     info!("Output directory: {}", config.output_dir.display());
 
     // 処理されたファイルの詳細
-    if !processed_files.is_empty() {
+    if !site_artifacts.article_index.is_empty() {
         info!("Processed files:");
-        for file in &processed_files {
-            info!("  • {} ({})", file.title, file.slug);
+        for article in &site_artifacts.article_index {
+            info!("  • {} ({})", article.title.as_str(), article.slug.as_str());
         }
     }
 
@@ -156,10 +173,9 @@ fn build_file_mapping(config: &Config, valid_files: &[ParsedFile]) -> Result<Fil
 }
 
 async fn process_parsed_file(
-    config: &Config,
     parsed_file: ParsedFile,
     file_mapping: &FileMapping,
-) -> Result<OutputFrontMatter> {
+) -> Result<RenderedArticle> {
     let markdown_body = extract_markdown_body(&parsed_file.content);
     let markdown_with_links = converter::convert_obsidian_links(&markdown_body, file_mapping);
     let html_body = converter::convert_markdown_to_html(&markdown_with_links)?;
@@ -172,32 +188,105 @@ async fn process_parsed_file(
             html_body
         });
 
-    let relative_path = get_relative_path(&parsed_file.file_path, &config.obsidian_dir)?;
-
-    let output_fm = OutputFrontMatter {
-        title: parsed_file.front_matter.title,
-        tags: parsed_file.front_matter.tags,
+    let category = parse_category(&parsed_file.front_matter)?;
+    let meta = ArticleMeta::new(ArticleMetaInput {
+        slug: Slug::new(parsed_file.slug)?,
+        title: Title::new(parsed_file.front_matter.title)?,
+        category,
         description: parsed_file.front_matter.summary,
+        tags: parsed_file.front_matter.tags.unwrap_or_default(),
         priority: parsed_file.front_matter.priority,
-        created: parsed_file.front_matter.created,
-        updated: parsed_file.front_matter.updated,
-        slug: parsed_file.slug.clone(),
+        created_at: parsed_file.front_matter.created,
+        updated_at: parsed_file.front_matter.updated,
+    })?;
+    let body = ArticleBody::new(html_with_rich_bookmarks)?;
+
+    Ok(RenderedArticle {
+        meta,
+        html: body.html,
+    })
+}
+
+async fn render_publishable_article(
+    parsed_file: ParsedFile,
+    file_mapping: &FileMapping,
+) -> Result<RenderedArticle> {
+    process_parsed_file(parsed_file, file_mapping).await
+}
+
+fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
+    let category = front_matter
+        .category
+        .as_deref()
+        .ok_or_else(|| ObsidianError::Parse("Completed articles require a category".to_string()))?;
+
+    category.parse().map_err(Into::into)
+}
+
+struct SiteDirectories {
+    articles_dir: PathBuf,
+    categories_dir: PathBuf,
+    metadata_dir: PathBuf,
+}
+
+fn prepare_site_directories(config: &Config) -> Result<SiteDirectories> {
+    let site_root = config.output_dir.join("site");
+    let site_directories = SiteDirectories {
+        articles_dir: site_root.join("articles"),
+        categories_dir: site_root.join("categories"),
+        metadata_dir: site_root.join("metadata"),
     };
 
-    let output_yaml = serde_yaml::to_string(&output_fm).map_err(ObsidianError::Yaml)?;
-    let html_file_content = converter::generate_html_file(&output_yaml, &html_with_rich_bookmarks);
-    let output_file_path = config
-        .output_dir
-        .join(relative_path.with_file_name(format!("{}.html", parsed_file.slug)));
+    fs::create_dir_all(&site_directories.articles_dir)?;
+    fs::create_dir_all(&site_directories.categories_dir)?;
+    fs::create_dir_all(&site_directories.metadata_dir)?;
 
-    if let Some(parent) = output_file_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(&output_file_path, html_file_content)?;
+    Ok(site_directories)
+}
 
+fn write_article_page(
+    site_directories: &SiteDirectories,
+    rendered_article: &RenderedArticle,
+) -> Result<()> {
+    let output_file_path = site_directories
+        .articles_dir
+        .join(format!("{}.html", rendered_article.meta.slug.as_str()));
+    fs::write(&output_file_path, &rendered_article.html)?;
     info!("...processed {}", output_file_path.display());
+    Ok(())
+}
 
-    Ok(output_fm)
+fn write_site_artifacts(
+    site_directories: &SiteDirectories,
+    site_artifacts: &SiteArtifacts,
+) -> Result<()> {
+    let article_index = serde_json::to_string_pretty(&ArticleIndexJson::from(
+        site_artifacts.article_index.as_slice(),
+    ))?;
+    fs::write(
+        site_directories.articles_dir.join("index.json"),
+        article_index,
+    )?;
+
+    for category_index in &site_artifacts.category_indexes {
+        let category_index_json =
+            serde_json::to_string_pretty(&CategoryIndexJson::from(category_index))?;
+        fs::write(
+            site_directories
+                .categories_dir
+                .join(format!("{}.json", category_index.category.as_str())),
+            category_index_json,
+        )?;
+    }
+
+    let site_metadata =
+        serde_json::to_string_pretty(&SiteMetadataJson::from(&site_artifacts.site_metadata))?;
+    fs::write(
+        site_directories.metadata_dir.join("site.json"),
+        site_metadata,
+    )?;
+
+    Ok(())
 }
 
 fn extract_markdown_body(content: &str) -> String {

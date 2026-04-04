@@ -312,8 +312,6 @@ impl From<&Article> for ArticleSummary {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_placeholder() {
         // テスト実装は後で追加予定

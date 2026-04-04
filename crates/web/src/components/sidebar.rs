@@ -25,7 +25,7 @@ fn render_sidebar(articles: Vec<ArticleSummary>) -> impl IntoView {
                     .into_iter()
                     .map(|article| {
                         let link = format!("/{}/{}", article.category, article.slug);
-                        let link_style = if slug() == article.slug.to_string() {
+                        let link_style = if slug() == article.slug {
                             sidebar_style::article_link_active
                         } else {
                             sidebar_style::article_link

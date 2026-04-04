@@ -8,7 +8,7 @@ on:
 
 env:
   RUST_BACKTRACE: 1
-  UPLOAD_PATH: apps/obsidian_uploader/dist
+  UPLOAD_PATH: apps/obsidian_uploader/dist/site
 
 jobs:
   deploy:
@@ -97,7 +97,6 @@ jobs:
         run: |
           aws s3 sync ${{ env.UPLOAD_PATH }} s3://${{ secrets.S3_BUCKET }} \
             --delete \
-            --content-type "text/html; charset=utf-8" \
             --cache-control "public, max-age=300"
 
           # S3バケットの内容確認

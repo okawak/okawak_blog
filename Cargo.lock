@@ -95,6 +95,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
+name = "application"
+version = "0.1.0"
+dependencies = [
+ "domain",
+ "rstest",
+]
+
+[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2693,6 +2701,8 @@ name = "obsidian_uploader"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "application",
+ "domain",
  "env_logger",
  "futures",
  "ignore",
@@ -2704,6 +2714,7 @@ dependencies = [
  "rstest",
  "scraper",
  "serde",
+ "serde_json",
  "serde_yaml",
  "sha2 0.11.0",
  "tempfile",
