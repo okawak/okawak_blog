@@ -72,10 +72,9 @@ impl ArtifactReader for LocalArtifactReader {
     }
 
     async fn read_article_html(&self, slug: &Slug) -> Result<String> {
-        Ok(tokio::fs::read_to_string(self.artifact_path(&format!(
-            "articles/{}.html",
-            slug.as_str()
-        )))
+        Ok(tokio::fs::read_to_string(
+            self.artifact_path(&format!("articles/{}.html", slug.as_str())),
+        )
         .await?)
     }
 }
@@ -139,11 +138,10 @@ impl S3ArtifactReader {
             .send()
             .await
             .map_err(|source| InfraError::s3_read(self.location.bucket(), key.clone(), source))?;
-        let bytes = response
-            .body
-            .collect()
-            .await
-            .map_err(|source| InfraError::s3_read(self.location.bucket(), key.clone(), source))?;
+        let bytes =
+            response.body.collect().await.map_err(|source| {
+                InfraError::s3_read(self.location.bucket(), key.clone(), source)
+            })?;
 
         Ok(String::from_utf8(bytes.into_bytes().to_vec())?)
     }
@@ -314,7 +312,10 @@ mod tests {
         let location = S3ArtifactLocation::new("blog-bucket", Some("/site/")).unwrap();
 
         assert_eq!(location.bucket(), "blog-bucket");
-        assert_eq!(location.key_for("articles/index.json"), "site/articles/index.json");
+        assert_eq!(
+            location.key_for("articles/index.json"),
+            "site/articles/index.json"
+        );
         assert_eq!(
             location.key_for("/metadata/site.json"),
             "site/metadata/site.json"
