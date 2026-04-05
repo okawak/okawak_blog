@@ -21,8 +21,6 @@ pub mod server;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod error;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod infrastructure;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod ports;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod usecases;

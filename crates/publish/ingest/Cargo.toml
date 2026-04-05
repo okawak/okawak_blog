@@ -4,17 +4,18 @@ version.workspace = true
 authors.workspace = true
 description = "Publisher-side Obsidian vault reading and markdown rendering"
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
-ignore = "0.4"
-log = "0.4"
-pulldown-cmark = "0.13"
-regex = "1"
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
-thiserror = "2"
+ignore.workspace = true
+log.workspace = true
+pulldown-cmark.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
-indoc = "2"
-rstest = "0.26"
-tempfile = "3"
+indoc.workspace = true
+rstest.workspace = true
+tempfile.workspace = true

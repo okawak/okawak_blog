@@ -4,7 +4,7 @@
 
 このドキュメントは、`okawak_blog` リポジトリのリアーキテクチャ方針を整理し、実装担当の Codex / AI コーディングエージェントに渡すための設計メモである。
 
-現時点では publisher 側と reader 側の責務分離はまだ移行途中である。ただし publisher 専用の artifact 組み立てとローカル書き出しは `crates/publish/artifacts` へ、Obsidian vault 走査と Markdown 変換は `crates/publish/ingest` へ移し始めており、この方向で `crates/publish/` 側へ責務を寄せていく。そのため、既存コードへの過度な互換性維持よりも、今後の保守性・学習価値・実運用のしやすさを優先して再設計する。
+現時点では publisher 側と reader 側の責務分離はまだ移行途中である。ただし publisher 専用の artifact 組み立てとローカル書き出しは `crates/publish/artifacts` へ、Obsidian vault 走査と Markdown 変換は `crates/publish/ingest` へ移し始めており、reader 側にも `crates/site/infra` の first cut として `ArtifactReader` 境界を導入している。`crates/site/infra` には local reader と S3 reader を置き、local は dev / test 用、本番経路は S3 読み取りへ寄せる。この方向で `crates/publish/` と `crates/site/` へ責務を寄せていく。そのため、既存コードへの過度な互換性維持よりも、今後の保守性・学習価値・実運用のしやすさを優先して再設計する。
 
 ---
 
@@ -93,7 +93,7 @@ publisher 側の以下の処理は `crates/publish/` に置く。
 * `crates/domain`: publisher と reader が共有する純粋な契約とルール
 * `crates/site/server`: S3 上の成果物を読むバックエンド
 * `crates/site/web`: Leptos SSR UI
-* `crates/site/infra`: reader 側の S3 読み取り、キャッシュ、設定読込などの infrastructure
+* `crates/site/infra`: reader 側の S3 読み取り、local dev / test reader、キャッシュ、設定読込などの infrastructure
 
 特に `crates/site/infra` は publisher 用の置き場にはしない。Obsidian 読み取り、Markdown renderer、S3 upload をここへ入れないことを明示方針とする。
 
@@ -258,6 +258,7 @@ Leptos サーバーが公開成果物を読むための infrastructure。
 
 ここに以下を置く。
 
+* local filesystem からの artifact 読み取り実装
 * S3 からの成果物読み取り実装
 * 読取キャッシュ
 * 設定読込
@@ -406,6 +407,8 @@ site/
 
 初期実装では以下の方針を推奨する。
 
+* 本番経路では `crates/site/infra` の S3 reader を使う
+* local filesystem reader は dev / test や fixture 検証に限定して残す
 * 起動時に一覧系の index を読み込むか、あるいは短めのキャッシュを持つ
 * 記事本文 HTML は必要時に取得する
 * 必要なら ETag / Last-Modified を使って将来的にキャッシュ最適化する

@@ -4,16 +4,17 @@ version.workspace = true
 authors.workspace = true
 description = "Publisher-side bookmark enrichment"
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
-log = "0.4"
-regex = "1"
-reqwest = { version = "0.13", features = ["json"] }
-scraper = "0.26"
-thiserror = "2"
-url = "2"
+log.workspace = true
+regex.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+scraper.workspace = true
+thiserror.workspace = true
+url.workspace = true
 
 [dev-dependencies]
-indoc = "2"
-rstest = "0.26"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+indoc.workspace = true
+rstest.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
