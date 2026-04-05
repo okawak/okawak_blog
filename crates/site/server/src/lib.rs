@@ -16,11 +16,3 @@ pub mod handlers;
 pub mod presentation;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod server;
-
-// 旧アーキテクチャとの互換性のためのスタブモジュール
-#[cfg(not(target_arch = "wasm32"))]
-pub mod error;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod ports;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod usecases;
