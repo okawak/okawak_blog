@@ -2,14 +2,14 @@
 
 use axum::{Json, http::StatusCode};
 use domain::ArticleIndexDocument;
-use infra::LocalArtifactReader;
-use std::sync::Arc;
+use infra::DynArtifactReader;
 
 pub async fn list_articles(
-    artifact_reader: Arc<LocalArtifactReader>,
+    artifact_reader: DynArtifactReader,
 ) -> Result<Json<ArticleIndexDocument>, StatusCode> {
     let document = artifact_reader
         .read_article_index()
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(document))

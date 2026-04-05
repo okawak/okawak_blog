@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use infra::LocalArtifactReader;
+use infra::ArtifactReader;
 
 pub struct AppState {
-    pub artifact_reader: Arc<LocalArtifactReader>,
+    pub artifact_reader: Arc<dyn ArtifactReader>,
 }

@@ -8,9 +8,14 @@ license.workspace = true
 
 [dependencies]
 domain = { path = "../../domain" }
+async-trait.workspace = true
+aws-config = { workspace = true, default-features = false }
+aws-sdk-s3 = { workspace = true, default-features = false, features = ["rustls", "rt-tokio"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["fs"] }
 
 [dev-dependencies]
 tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -34,14 +34,10 @@ tower.workspace = true
 tower-http = { workspace = true, features = ["cors", "trace", "fs"] }
 serde.workspace = true
 serde_json.workspace = true
-aws-config = { workspace = true, default-features = false }
-aws-sdk-s3 = { workspace = true, default-features = false, features = ["rustls", "rt-tokio"] }
-aws-smithy-runtime-api.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
-config.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 async-trait.workspace = true
 leptos = { workspace = true, features = ["ssr"] }

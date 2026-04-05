@@ -2,11 +2,31 @@ mod error;
 
 pub use error::{InfraError, Result};
 
+use async_trait::async_trait;
+use aws_config::BehaviorVersion;
+use aws_sdk_s3::Client;
 use domain::{ArticleIndexDocument, CategoryIndexDocument, SiteMetadataDocument, Slug};
 use std::{
-    fs,
+    env,
     path::{Path, PathBuf},
+    sync::Arc,
 };
+
+const DEFAULT_LOCAL_SITE_ROOT: &str = "crates/publish/publisher/dist/site";
+const ARTIFACT_SOURCE_ENV: &str = "OKAWAK_BLOG_ARTIFACT_SOURCE";
+const ARTIFACT_LOCAL_ROOT_ENV: &str = "OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT";
+const ARTIFACT_BUCKET_ENV: &str = "OKAWAK_BLOG_ARTIFACT_BUCKET";
+const ARTIFACT_PREFIX_ENV: &str = "OKAWAK_BLOG_ARTIFACT_PREFIX";
+
+pub type DynArtifactReader = Arc<dyn ArtifactReader>;
+
+#[async_trait]
+pub trait ArtifactReader: Send + Sync {
+    async fn read_article_index(&self) -> Result<ArticleIndexDocument>;
+    async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument>;
+    async fn read_site_metadata(&self) -> Result<SiteMetadataDocument>;
+    async fn read_article_html(&self, slug: &Slug) -> Result<String>;
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalArtifactReader {
@@ -24,43 +44,193 @@ impl LocalArtifactReader {
         &self.site_root
     }
 
-    pub fn read_article_index(&self) -> Result<ArticleIndexDocument> {
-        self.read_json(self.site_root.join("articles/index.json"))
+    fn artifact_path(&self, relative: &str) -> PathBuf {
+        self.site_root.join(relative)
     }
 
-    pub fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument> {
-        self.read_json(
-            self.site_root
-                .join("categories")
-                .join(format!("{category}.json")),
-        )
-    }
-
-    pub fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
-        self.read_json(self.site_root.join("metadata/site.json"))
-    }
-
-    pub fn read_article_html(&self, slug: &Slug) -> Result<String> {
-        Ok(fs::read_to_string(
-            self.site_root
-                .join("articles")
-                .join(format!("{}.html", slug.as_str())),
-        )?)
-    }
-
-    fn read_json<T>(&self, path: PathBuf) -> Result<T>
+    async fn read_json<T>(&self, relative: &str) -> Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
-        let content = fs::read_to_string(path)?;
+        let content = tokio::fs::read_to_string(self.artifact_path(relative)).await?;
         Ok(serde_json::from_str(&content)?)
+    }
+}
+
+#[async_trait]
+impl ArtifactReader for LocalArtifactReader {
+    async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
+        self.read_json("articles/index.json").await
+    }
+
+    async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument> {
+        self.read_json(&format!("categories/{category}.json")).await
+    }
+
+    async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
+        self.read_json("metadata/site.json").await
+    }
+
+    async fn read_article_html(&self, slug: &Slug) -> Result<String> {
+        Ok(tokio::fs::read_to_string(self.artifact_path(&format!(
+            "articles/{}.html",
+            slug.as_str()
+        )))
+        .await?)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct S3ArtifactLocation {
+    bucket: String,
+    prefix: Option<String>,
+}
+
+impl S3ArtifactLocation {
+    pub fn new(bucket: impl Into<String>, prefix: Option<impl Into<String>>) -> Result<Self> {
+        let bucket = bucket.into().trim().to_string();
+        if bucket.is_empty() {
+            return Err(InfraError::MissingConfig(ARTIFACT_BUCKET_ENV));
+        }
+
+        let prefix = prefix
+            .map(Into::into)
+            .map(|value| value.trim_matches('/').to_string())
+            .filter(|value| !value.is_empty());
+
+        Ok(Self { bucket, prefix })
+    }
+
+    pub fn bucket(&self) -> &str {
+        &self.bucket
+    }
+
+    pub fn key_for(&self, relative: &str) -> String {
+        let relative = relative.trim_start_matches('/');
+        match &self.prefix {
+            Some(prefix) => format!("{prefix}/{relative}"),
+            None => relative.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct S3ArtifactReader {
+    client: Client,
+    location: S3ArtifactLocation,
+}
+
+impl S3ArtifactReader {
+    pub fn new(client: Client, location: S3ArtifactLocation) -> Self {
+        Self { client, location }
+    }
+
+    pub fn location(&self) -> &S3ArtifactLocation {
+        &self.location
+    }
+
+    async fn read_text(&self, relative: &str) -> Result<String> {
+        let key = self.location.key_for(relative);
+        let response = self
+            .client
+            .get_object()
+            .bucket(self.location.bucket())
+            .key(&key)
+            .send()
+            .await
+            .map_err(|source| InfraError::s3_read(self.location.bucket(), key.clone(), source))?;
+        let bytes = response
+            .body
+            .collect()
+            .await
+            .map_err(|source| InfraError::s3_read(self.location.bucket(), key.clone(), source))?;
+
+        Ok(String::from_utf8(bytes.into_bytes().to_vec())?)
+    }
+
+    async fn read_json<T>(&self, relative: &str) -> Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let content = self.read_text(relative).await?;
+        Ok(serde_json::from_str(&content)?)
+    }
+}
+
+#[async_trait]
+impl ArtifactReader for S3ArtifactReader {
+    async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
+        self.read_json("articles/index.json").await
+    }
+
+    async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument> {
+        self.read_json(&format!("categories/{category}.json")).await
+    }
+
+    async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
+        self.read_json("metadata/site.json").await
+    }
+
+    async fn read_article_html(&self, slug: &Slug) -> Result<String> {
+        self.read_text(&format!("articles/{}.html", slug.as_str()))
+            .await
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArtifactSourceConfig {
+    Local { site_root: PathBuf },
+    S3 { location: S3ArtifactLocation },
+}
+
+impl ArtifactSourceConfig {
+    pub fn from_env() -> Result<Self> {
+        let source = env::var(ARTIFACT_SOURCE_ENV).unwrap_or_else(|_| "local".to_string());
+        match source.as_str() {
+            "local" => Ok(Self::Local {
+                site_root: PathBuf::from(
+                    env::var(ARTIFACT_LOCAL_ROOT_ENV)
+                        .unwrap_or_else(|_| DEFAULT_LOCAL_SITE_ROOT.to_string()),
+                ),
+            }),
+            "s3" => {
+                let bucket = env::var(ARTIFACT_BUCKET_ENV)
+                    .map_err(|_| InfraError::MissingConfig(ARTIFACT_BUCKET_ENV))?;
+                let prefix = env::var(ARTIFACT_PREFIX_ENV).ok();
+                Ok(Self::S3 {
+                    location: S3ArtifactLocation::new(bucket, prefix)?,
+                })
+            }
+            unsupported => Err(InfraError::UnsupportedSource(unsupported.to_string())),
+        }
+    }
+
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Local { .. } => "local",
+            Self::S3 { .. } => "s3",
+        }
+    }
+}
+
+pub async fn build_artifact_reader(config: ArtifactSourceConfig) -> Result<DynArtifactReader> {
+    match config {
+        ArtifactSourceConfig::Local { site_root } => {
+            Ok(Arc::new(LocalArtifactReader::new(site_root)))
+        }
+        ArtifactSourceConfig::S3 { location } => {
+            let shared_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+            let client = Client::new(&shared_config);
+            Ok(Arc::new(S3ArtifactReader::new(client, location)))
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{ArticleSummaryDocument, Slug};
+    use domain::{ArticleSummaryDocument, CategoryMetadataDocument};
+    use std::fs;
     use tempfile::TempDir;
 
     fn write_fixture_site(root: &Path) {
@@ -107,7 +277,7 @@ mod tests {
             root.join("metadata/site.json"),
             serde_json::to_string_pretty(&SiteMetadataDocument {
                 total_articles: 1,
-                categories: vec![domain::CategoryMetadataDocument {
+                categories: vec![CategoryMetadataDocument {
                     category: "tech".to_string(),
                     article_count: 1,
                 }],
@@ -118,43 +288,45 @@ mod tests {
         fs::write(root.join("articles/intro00000001.html"), "<h1>Intro</h1>").unwrap();
     }
 
-    #[test]
-    fn test_read_article_index() {
+    #[tokio::test]
+    async fn test_local_artifact_reader_reads_fixture_site() {
         let temp_dir = TempDir::new().unwrap();
         write_fixture_site(temp_dir.path());
         let reader = LocalArtifactReader::new(temp_dir.path());
 
-        let document = reader.read_article_index().unwrap();
+        let document = reader.read_article_index().await.unwrap();
+        let category = reader.read_category_index("tech").await.unwrap();
+        let metadata = reader.read_site_metadata().await.unwrap();
+        let html = reader
+            .read_article_html(&Slug::new("intro00000001".to_string()).unwrap())
+            .await
+            .unwrap();
 
         assert_eq!(document.articles.len(), 1);
         assert_eq!(document.articles[0].slug, "intro00000001");
-    }
-
-    #[test]
-    fn test_read_category_index() {
-        let temp_dir = TempDir::new().unwrap();
-        write_fixture_site(temp_dir.path());
-        let reader = LocalArtifactReader::new(temp_dir.path());
-
-        let document = reader.read_category_index("tech").unwrap();
-
-        assert_eq!(document.category, "tech");
-        assert_eq!(document.articles.len(), 1);
-    }
-
-    #[test]
-    fn test_read_site_metadata_and_article_html() {
-        let temp_dir = TempDir::new().unwrap();
-        write_fixture_site(temp_dir.path());
-        let reader = LocalArtifactReader::new(temp_dir.path());
-
-        let metadata = reader.read_site_metadata().unwrap();
-        let html = reader
-            .read_article_html(&Slug::new("intro00000001".to_string()).unwrap())
-            .unwrap();
-
+        assert_eq!(category.category, "tech");
         assert_eq!(metadata.total_articles, 1);
-        assert_eq!(metadata.categories[0].category, "tech");
         assert_eq!(html, "<h1>Intro</h1>");
+    }
+
+    #[test]
+    fn test_s3_artifact_location_builds_prefixed_keys() {
+        let location = S3ArtifactLocation::new("blog-bucket", Some("/site/")).unwrap();
+
+        assert_eq!(location.bucket(), "blog-bucket");
+        assert_eq!(location.key_for("articles/index.json"), "site/articles/index.json");
+        assert_eq!(
+            location.key_for("/metadata/site.json"),
+            "site/metadata/site.json"
+        );
+    }
+
+    #[test]
+    fn test_artifact_source_config_defaults_to_local_reader() {
+        let source = ArtifactSourceConfig::Local {
+            site_root: PathBuf::from(DEFAULT_LOCAL_SITE_ROOT),
+        };
+
+        assert_eq!(source.kind(), "local");
     }
 }

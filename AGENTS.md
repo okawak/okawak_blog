@@ -138,7 +138,8 @@ okawak_blog/
 ### `crates/site/infra`
 
 - Leptos サーバー側の infrastructure 専用として扱う
-- 現在は local artifact reader の first cut を置いている
+- 現在は `ArtifactReader` 境界の first cut として local / S3 artifact reader を置いている
+- local reader は dev / test 用、S3 reader は本番読取経路として扱う
 - 将来的な責務は S3 読み取り、キャッシュ、設定読込など reader 側の外部境界
 - Obsidian vault 読み取り、Front Matter parse、Markdown render、S3 upload はここへ置かない
 

@@ -1,11 +1,10 @@
 //! Blog Server Main - Leptos SSR統合サーバー
 
 use axum::{Router, routing::get};
-use infra::LocalArtifactReader;
+use infra::{ArtifactSourceConfig, build_artifact_reader};
 use leptos::prelude::*;
 use leptos_axum::{LeptosRoutes, file_and_error_handler, generate_route_list};
 use server::handlers::create_api_router;
-use std::{path::PathBuf, sync::Arc};
 use tower_http::services::ServeDir;
 use web::app::{App, shell};
 
@@ -19,12 +18,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let conf = get_configuration(Some("crates/site/server/Cargo.toml")).unwrap();
     let leptos_options = conf.leptos_options.clone();
     let addr = leptos_options.site_addr;
-    let artifact_reader = Arc::new(LocalArtifactReader::new(PathBuf::from(
-        "crates/publish/publisher/dist/site",
-    )));
+    let artifact_source = ArtifactSourceConfig::from_env()?;
+    let artifact_reader = build_artifact_reader(artifact_source.clone()).await?;
 
     println!("Starting Leptos blog server on http://{}", addr);
     println!("Leptos設定読み込み完了: {:?}", addr);
+    println!("Artifact source: {}", artifact_source.kind());
 
     // Leptosルート生成
     let routes = generate_route_list(App);
