@@ -31,8 +31,31 @@ pub async fn get_home_page_document() -> Result<HomePageDocument, ServerFnError>
 
 #[component]
 fn HomePageContent(document: HomePageDocument) -> impl IntoView {
-    let categories = document.categories.clone();
-    let articles = document.articles.clone();
+    let category_count = document.categories.len();
+    let category_items = document
+        .categories
+        .into_iter()
+        .map(|category| {
+            let href = format!("/categories/{}", category.category.as_str());
+            view! {
+                <li class=home_style::category_chip>
+                    <a class=home_style::category_link href=href>
+                        <span class=home_style::category_name>
+                            {category.category_display_name}
+                        </span>
+                    </a>
+                    <span class=home_style::category_count>
+                        {format!("{}本", category.article_count)}
+                    </span>
+                </li>
+            }
+        })
+        .collect_view();
+    let article_items = document
+        .articles
+        .into_iter()
+        .map(|article| view! { <ArticleCard article=article /> })
+        .collect_view();
 
     view! {
         <div class=home_style::content_grid>
@@ -41,40 +64,15 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
                     {"公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。"}
                 </p>
                 <p class=home_style::overview_stats>
-                    {format!("{}本の記事を {}カテゴリで公開中です。", document.total_articles, categories.len())}
+                    {format!("{}本の記事を {}カテゴリで公開中です。", document.total_articles, category_count)}
                 </p>
                 <ul class=home_style::category_list>
-                    <For
-                        each=move || categories.clone()
-                        key=|category| category.category.as_str().to_string()
-                        children=move |category| {
-                            let href =
-                                format!("/categories/{}", category.category.as_str());
-                            view! {
-                                <li class=home_style::category_chip>
-                                    <a class=home_style::category_link href=href>
-                                        <span class=home_style::category_name>
-                                            {category.category_display_name}
-                                        </span>
-                                    </a>
-                                    <span class=home_style::category_count>
-                                        {format!("{}本", category.article_count)}
-                                    </span>
-                                </li>
-                            }
-                        }
-                    />
+                    {category_items}
                 </ul>
             </section>
 
             <section class=home_style::article_list>
-                <For
-                    each=move || articles.clone()
-                    key=|article| article.slug.as_str().to_string()
-                    children=move |article| {
-                        view! { <ArticleCard article=article /> }
-                    }
-                />
+                {article_items}
             </section>
         </div>
     }

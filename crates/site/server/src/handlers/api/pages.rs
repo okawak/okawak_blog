@@ -2,10 +2,12 @@
 
 use axum::{Extension, Json, extract::Path, http::StatusCode};
 use domain::{
-    ArticlePageDocument, CategoryPageDocument, HomePageDocument, Slug, build_article_page_document,
-    build_category_page_document, build_home_page_document, find_article_summary,
+    ArticlePageDocument, Category, CategoryPageDocument, HomePageDocument, Slug,
+    build_article_page_document, build_category_page_document, build_home_page_document,
+    find_article_summary,
 };
 use infra::DynArtifactReader;
+use std::str::FromStr;
 
 pub async fn get_home_page(
     Extension(artifact_reader): Extension<DynArtifactReader>,
@@ -48,8 +50,9 @@ pub async fn get_category_page(
     Path(category): Path<String>,
     Extension(artifact_reader): Extension<DynArtifactReader>,
 ) -> Result<Json<CategoryPageDocument>, StatusCode> {
+    let category = Category::from_str(&category).map_err(|_| StatusCode::NOT_FOUND)?;
     let category_index = artifact_reader
-        .read_category_index(&category)
+        .read_category_index(category.as_str())
         .await
         .map_err(map_infra_error)?;
     let page = build_category_page_document(&category_index)
@@ -182,5 +185,19 @@ mod tests {
 
         assert_eq!(page.category_display_name, "技術");
         assert_eq!(page.articles.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_category_page_rejects_invalid_category() {
+        let temp_dir = TempDir::new().unwrap();
+        write_fixture_site(temp_dir.path());
+
+        let result = get_category_page(
+            Path("../secrets".to_string()),
+            Extension(Arc::new(LocalArtifactReader::new(temp_dir.path()))),
+        )
+        .await;
+
+        assert!(matches!(result, Err(StatusCode::NOT_FOUND)));
     }
 }
