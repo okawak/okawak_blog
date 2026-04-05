@@ -14,7 +14,8 @@ https://www.okawak.net
 ## このリポジトリが担うこと
 
 - 記事は Obsidian で執筆する
-- 記事ソースは別の Obsidian リポジトリで管理する
+- 記事ソースは private な Obsidian リポジトリで管理する
+- 記事ソースはこの public リポジトリへ直接 commit せず、git submodule として参照する
 - GitHub Actions またはローカル実行の publisher が公開成果物を生成する
 - 生成した HTML / index JSON / assets を S3 に配置する
 - Leptos SSR サーバーが S3 上の成果物を読んで配信する
@@ -115,12 +116,15 @@ publisher はこれらの成果物を生成し、SSR サーバーはそれらを
 
 ```text
 Obsidian repo
+  -> git submodule
   -> publisher
   -> HTML / index JSON / assets を生成
   -> AWS S3
   -> Leptos SSR server
   -> Browser
 ```
+
+publisher が読む `obsidian` の Markdown は、この public repo へ通常ファイルとして同梱しない。source of truth は private な別リポジトリであり、ローカル開発と GitHub Actions の両方で git submodule として取得する。
 
 ## 運用モデル
 

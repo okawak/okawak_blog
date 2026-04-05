@@ -15,7 +15,8 @@
 やりたいことは以下である。
 
 * 記事執筆は Obsidian で行う
-* 記事ソースは別の Obsidian リポジトリで管理する
+* 記事ソースは private な別の Obsidian リポジトリで管理する
+* 記事ソースは public な `okawak_blog` へ通常ファイルとして含めず、git submodule として参照する
 * Obsidian リポジトリに push した内容を GitHub Actions 経由で処理する
 * Rust 製のアプリケーションで公開用成果物を生成する
 * 成果物を S3 にアップロードする
@@ -51,6 +52,7 @@
 今回の主役は常駐 API サーバーではなく、以下のパイプラインである。
 
 1. Obsidian の Markdown を読む
+   * 入力は private な Obsidian repo の git submodule
 2. Front Matter を解釈・検証する
 3. 内部リンクや埋め込みを解決する
 4. Markdown を公開用 HTML に変換する
@@ -83,6 +85,8 @@ publisher 側の以下の処理は `crates/publish/` に置く。
 * 内部リンクや埋め込みの解決
 * asset 整形
 * S3 へのアップロード
+
+このとき Obsidian vault の source of truth は private repo 側にあり、`okawak_blog` には Markdown 本体を通常ファイルとして持ち込まない。public repo 側では git submodule で参照し、CI でも submodule update を行ってから publisher を動かす。
 
 一方で reader 側は `crates/site/` に寄せる。
 
