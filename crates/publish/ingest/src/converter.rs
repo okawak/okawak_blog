@@ -1,5 +1,5 @@
 use crate::error::Result;
-use pulldown_cmark::{Options, Parser, html};
+use pulldown_cmark::{Event, Options, Parser, html};
 use regex::Regex;
 use std::{collections::HashMap, sync::LazyLock};
 
@@ -7,7 +7,7 @@ use std::{collections::HashMap, sync::LazyLock};
 pub type FileMapping = HashMap<String, String>;
 
 fn generate_article_href(slug: &str) -> String {
-    format!("/articles/{slug}.html")
+    format!("/articles/{slug}")
 }
 
 /// Convert markdown content into HTML and apply KaTeX markers.
@@ -19,13 +19,20 @@ pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     options.insert(Options::ENABLE_TASKLISTS);
     options.insert(Options::ENABLE_SMART_PUNCTUATION);
 
-    let parser = Parser::new_ext(markdown_content, options);
+    let parser = Parser::new_ext(markdown_content, options).map(disable_raw_html);
     let mut html_output = String::with_capacity(markdown_content.len() * 2);
     html::push_html(&mut html_output, parser);
 
     let html_with_katex = process_katex_math(&html_output);
 
     Ok(html_with_katex)
+}
+
+fn disable_raw_html(event: Event<'_>) -> Event<'_> {
+    match event {
+        Event::Html(html) | Event::InlineHtml(html) => Event::Text(html),
+        other => other,
+    }
 }
 
 fn process_katex_math(html_content: &str) -> String {
@@ -97,20 +104,22 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
             };
 
             format!(
-                "<a href=\"{}\">{}</a>",
-                html_escape(&href),
-                html_escape(display_text)
+                "[{}]({})",
+                escape_markdown_link_text(display_text),
+                escape_markdown_link_destination(&href)
             )
         })
         .to_string()
 }
 
-fn html_escape(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#x27;")
+fn escape_markdown_link_text(text: &str) -> String {
+    text.replace('\\', "\\\\")
+        .replace('[', "\\[")
+        .replace(']', "\\]")
+}
+
+fn escape_markdown_link_destination(destination: &str) -> String {
+    destination.replace(')', "\\)")
 }
 
 pub fn generate_html_file(frontmatter_yaml: &str, html_body: &str) -> String {
@@ -160,21 +169,18 @@ mod tests {
             convert_obsidian_links("Check out [[Another Note]] for more info.", &file_mapping);
         assert_eq!(
             result,
-            "Check out <a href=\"/articles/abc123def.html\">Another Note</a> for more info."
+            "Check out [Another Note](/articles/abc123def) for more info."
         );
 
         let result =
             convert_obsidian_links("See [[filename|Custom Display Text]] here.", &file_mapping);
         assert_eq!(
             result,
-            "See <a href=\"/articles/xyz789abc.html\">Custom Display Text</a> here."
+            "See [Custom Display Text](/articles/xyz789abc) here."
         );
 
         let result = convert_obsidian_links("Link to [[nonexistent]] file.", &file_mapping);
-        assert_eq!(
-            result,
-            "Link to <a href=\"/nonexistent\">nonexistent</a> file."
-        );
+        assert_eq!(result, "Link to [nonexistent](/nonexistent) file.");
 
         let result =
             convert_obsidian_links("This is normal text with no special links.", &file_mapping);
@@ -220,8 +226,8 @@ This is a test with [[Another Article|link]] and **bold** text.
         let html = convert_markdown_to_html(&with_html_links).unwrap();
 
         assert!(html.contains("<h1>My Article</h1>"));
-        assert!(html.contains("<a href=\"/articles/def456.html\">link</a>"));
-        assert!(html.contains("<a href=\"/articles/ghi789.html\">Reference Note</a>"));
+        assert!(html.contains("<a href=\"/articles/def456\">link</a>"));
+        assert!(html.contains("<a href=\"/articles/ghi789\">Reference Note</a>"));
         assert!(html.contains("<strong>bold</strong>"));
         assert!(html.contains("<ul>"));
     }
@@ -245,21 +251,27 @@ This is a test with [[Another Article|link]] and **bold** text.
     }
 
     #[rstest]
-    fn test_html_escape_in_links() {
+    fn test_markdown_link_escaping() {
         let mut file_mapping = FileMapping::new();
         file_mapping.insert("File with <script>".to_string(), "abc123".to_string());
 
         let result = convert_obsidian_links("[[File with <script>|Display & test]]", &file_mapping);
-        assert_eq!(
-            result,
-            "<a href=\"/articles/abc123.html\">Display &amp; test</a>"
-        );
+        assert_eq!(result, "[Display & test](/articles/abc123)");
 
         let result =
             convert_obsidian_links("[[File \"quoted\"|Text with 'quotes']]", &file_mapping);
-        assert_eq!(
-            result,
-            "<a href=\"/File &quot;quoted&quot;\">Text with &#x27;quotes&#x27;</a>"
-        );
+        assert_eq!(result, "[Text with 'quotes'](/File \"quoted\")");
+    }
+
+    #[rstest]
+    fn test_markdown_to_html_escapes_raw_html() {
+        let markdown = "<script>alert('xss')</script>\n\nHello <span>world</span>";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(result.contains("&lt;script&gt;alert('xss')&lt;/script&gt;"));
+        assert!(result.contains("Hello &lt;span&gt;world&lt;/span&gt;"));
+        assert!(!result.contains("<script>"));
+        assert!(!result.contains("<span>world</span>"));
     }
 }
