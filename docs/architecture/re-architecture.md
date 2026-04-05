@@ -90,7 +90,7 @@ publisher 側の以下の処理は `crates/publish/` に置く。
 
 一方で reader 側は `crates/site/` に寄せる。
 
-* `crates/domain`: publisher と reader が共有する純粋な契約とルール
+* `crates/domain`: publisher と reader が共有する純粋な契約、artifact contract、site page contract、ルール
 * `crates/site/server`: S3 上の成果物を読むバックエンド
 * `crates/site/web`: Leptos SSR UI
 * `crates/site/infra`: reader 側の S3 読み取り、local dev / test reader、キャッシュ、設定読込などの infrastructure

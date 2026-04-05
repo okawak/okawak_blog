@@ -1,11 +1,11 @@
 //! API handlers backed by generated site artifacts.
 
-use axum::{Json, http::StatusCode};
+use axum::{Extension, Json, http::StatusCode};
 use domain::ArticleIndexDocument;
 use infra::DynArtifactReader;
 
 pub async fn list_articles(
-    artifact_reader: DynArtifactReader,
+    Extension(artifact_reader): Extension<DynArtifactReader>,
 ) -> Result<Json<ArticleIndexDocument>, StatusCode> {
     let document = artifact_reader
         .read_article_index()
@@ -45,9 +45,11 @@ mod tests {
         )
         .unwrap();
 
-        let Json(document) = list_articles(Arc::new(LocalArtifactReader::new(temp_dir.path())))
-            .await
-            .unwrap();
+        let Json(document) = list_articles(Extension(Arc::new(LocalArtifactReader::new(
+            temp_dir.path(),
+        ))))
+        .await
+        .unwrap();
 
         assert_eq!(document.articles.len(), 1);
         assert_eq!(document.articles[0].slug, "sample0000001");

@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 統合Axumアプリケーション作成
     let app = Router::new()
         // API routes
-        .nest("/api", create_api_router(artifact_reader))
+        .nest("/api", create_api_router(artifact_reader.clone()))
         .route("/api/health", get(health))
         // 静的ファイル配信
         .nest_service(
@@ -43,10 +43,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             axum::routing::get_service(ServeDir::new("target/site/assets")),
         )
         // Leptos SSRルート（最後に配置）
-        .leptos_routes(&leptos_options, routes, {
-            let opts = leptos_options.clone();
-            move || shell(opts.clone())
-        })
+        .leptos_routes_with_context(
+            &leptos_options,
+            routes,
+            {
+                let artifact_reader = artifact_reader.clone();
+                move || provide_context(artifact_reader.clone())
+            },
+            {
+                let opts = leptos_options.clone();
+                move || shell(opts.clone())
+            },
+        )
         // フォールバック
         .fallback(file_and_error_handler(shell))
         .with_state(leptos_options);

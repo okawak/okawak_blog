@@ -35,4 +35,8 @@ impl InfraError {
             source: Box::new(source),
         }
     }
+
+    pub fn is_not_found(&self) -> bool {
+        matches!(self, Self::Io(error) if error.kind() == std::io::ErrorKind::NotFound)
+    }
 }
