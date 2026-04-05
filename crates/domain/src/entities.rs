@@ -3,6 +3,7 @@
 //! ADT (Algebraic Data Types) を活用したドメインモデリング
 
 use crate::error::{DomainError, Result};
+use serde::{Deserialize, Deserializer, Serialize, de::Error as DeError};
 use std::{fmt, str::FromStr};
 
 // =============================================================================
@@ -10,7 +11,7 @@ use std::{fmt, str::FromStr};
 // =============================================================================
 
 /// 記事ID - 型安全性を確保
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct ArticleId(String);
 
 impl ArticleId {
@@ -63,8 +64,17 @@ impl FromStr for ArticleId {
     }
 }
 
+impl<'de> Deserialize<'de> for ArticleId {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_validated_string(deserializer)
+    }
+}
+
 /// スラッグ - URLセーフな識別子
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct Slug(String);
 
 impl Slug {
@@ -98,8 +108,25 @@ impl fmt::Display for Slug {
     }
 }
 
+impl FromStr for Slug {
+    type Err = DomainError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::new(s.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Slug {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_validated_string(deserializer)
+    }
+}
+
 /// 記事タイトル - ビジネスルールを型で表現
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Title(String);
 
 impl Title {
@@ -132,8 +159,25 @@ impl fmt::Display for Title {
     }
 }
 
+impl FromStr for Title {
+    type Err = DomainError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::new(s.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Title {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_validated_string(deserializer)
+    }
+}
+
 /// カテゴリ - 列挙型でドメインを制限
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum Category {
     Tech,
     Daily,
@@ -181,6 +225,24 @@ impl FromStr for Category {
             }),
         }
     }
+}
+
+impl<'de> Deserialize<'de> for Category {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_validated_string(deserializer)
+    }
+}
+
+fn deserialize_validated_string<'de, D, T>(deserializer: D) -> std::result::Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr<Err = DomainError>,
+{
+    let value = String::deserialize(deserializer)?;
+    T::from_str(&value).map_err(D::Error::custom)
 }
 
 // =============================================================================
@@ -312,9 +374,33 @@ impl From<&Article> for ArticleSummary {
 
 #[cfg(test)]
 mod tests {
+    use super::{Category, Slug, Title};
+
     #[test]
-    fn test_placeholder() {
-        // テスト実装は後で追加予定
-        // todo!("モデルテストの実装");
+    fn test_slug_deserializes_with_validation() {
+        let slug: Slug = serde_json::from_str(r#""intro00000001""#).unwrap();
+
+        assert_eq!(slug.as_str(), "intro00000001");
+    }
+
+    #[test]
+    fn test_slug_deserialization_rejects_invalid_value() {
+        let error = serde_json::from_str::<Slug>(r#""bad slug""#).unwrap_err();
+
+        assert!(error.to_string().contains("スラッグ"));
+    }
+
+    #[test]
+    fn test_title_deserializes_with_trimmed_value() {
+        let title: Title = serde_json::from_str(r#""  Intro  ""#).unwrap();
+
+        assert_eq!(title.as_str(), "Intro");
+    }
+
+    #[test]
+    fn test_category_deserializes_case_insensitively() {
+        let category: Category = serde_json::from_str(r#""TECH""#).unwrap();
+
+        assert_eq!(category, Category::Tech);
     }
 }

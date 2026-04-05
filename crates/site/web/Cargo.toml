@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 name = "web"
 
 [dependencies]
-# 内部依存を除去（web専用型を使用）
+domain = { path = "../../domain" }
 
 # Leptos
 leptos.workspace = true
@@ -33,6 +33,7 @@ serde-wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = ["Element"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+infra = { path = "../infra", optional = true }
 axum = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread"], optional = true }
 leptos_axum = { workspace = true, optional = true }
@@ -41,6 +42,7 @@ env_logger = { workspace = true, optional = true }
 [features]
 hydrate = ["leptos/hydrate", "dep:console_error_panic_hook", "dep:wasm-bindgen", "thaw/hydrate"]
 ssr = [
+  "dep:infra",
   "dep:axum",
   "dep:tokio",
   "dep:leptos_axum",

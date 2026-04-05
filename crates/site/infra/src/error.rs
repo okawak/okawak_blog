@@ -35,4 +35,58 @@ impl InfraError {
             source: Box::new(source),
         }
     }
+
+    pub fn is_not_found(&self) -> bool {
+        match self {
+            Self::Io(error) => error.kind() == std::io::ErrorKind::NotFound,
+            Self::S3Read { source, .. } => Self::error_is_not_found(source.as_ref()),
+            _ => false,
+        }
+    }
+
+    fn error_is_not_found(error: &(dyn std::error::Error + 'static)) -> bool {
+        if let Some(io_error) = error.downcast_ref::<std::io::Error>()
+            && io_error.kind() == std::io::ErrorKind::NotFound
+        {
+            return true;
+        }
+
+        let message = error.to_string();
+        if message.contains("NoSuchKey")
+            || message.contains("Not Found")
+            || message.contains("not found")
+            || message.contains("404")
+        {
+            return true;
+        }
+
+        error.source().is_some_and(Self::error_is_not_found)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::InfraError;
+
+    #[test]
+    fn test_s3_read_not_found_is_detected_from_source_chain() {
+        let error = InfraError::s3_read(
+            "bucket",
+            "missing.html",
+            std::io::Error::new(std::io::ErrorKind::NotFound, "missing object"),
+        );
+
+        assert!(error.is_not_found());
+    }
+
+    #[test]
+    fn test_s3_read_not_found_is_detected_from_message() {
+        let error = InfraError::s3_read(
+            "bucket",
+            "missing.html",
+            std::io::Error::other("NoSuchKey: missing"),
+        );
+
+        assert!(error.is_not_found());
+    }
 }

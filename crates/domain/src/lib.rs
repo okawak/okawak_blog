@@ -7,6 +7,7 @@
 pub mod artifact_document;
 pub mod entities;
 pub mod publishable;
+pub mod site_page;
 
 // ビジネスルール（純粋関数のみ）
 pub mod business_rules;
@@ -20,3 +21,4 @@ pub use business_rules::*;
 pub use entities::*;
 pub use error::{DomainError, Result};
 pub use publishable::*;
+pub use site_page::*;

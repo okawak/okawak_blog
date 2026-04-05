@@ -134,6 +134,7 @@ okawak_blog/
 - `async/await` 禁止
 - WASM 互換を意識する
 - publisher と reader で共有する公開成果物契約はここで扱う
+- artifact から組み立てる site page contract のような pure model もここで扱う
 
 ### `crates/site/infra`
 
