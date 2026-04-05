@@ -2696,17 +2696,14 @@ dependencies = [
  "domain",
  "env_logger",
  "futures",
- "ignore",
  "indoc",
  "log",
  "publisher_artifacts",
- "pulldown-cmark",
+ "publisher_obsidian",
  "regex",
  "reqwest",
  "rstest",
  "scraper",
- "serde",
- "serde_yaml",
  "sha2 0.11.0",
  "tempfile",
  "thiserror 2.0.18",
@@ -3132,6 +3129,22 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "publisher_obsidian"
+version = "0.1.0"
+dependencies = [
+ "ignore",
+ "indoc",
+ "log",
+ "pulldown-cmark",
+ "regex",
+ "rstest",
+ "serde",
+ "serde_yaml",
  "tempfile",
  "thiserror 2.0.18",
 ]

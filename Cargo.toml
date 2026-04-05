@@ -4,6 +4,7 @@ members = [
     "crates/server",
     "crates/web",
     "apps/publisher_artifacts",
+    "apps/publisher_obsidian",
     "apps/obsidian_uploader",
 ]
 resolver = "3"

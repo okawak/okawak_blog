@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 /// Scans the specified directory for Markdown files (.md) and returns their paths.
 pub fn scan_obsidian_files(publish_dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
     let mut md_files: Vec<PathBuf> = WalkBuilder::new(publish_dir.as_ref())
-        .hidden(true) // Exclude hidden files
-        .git_ignore(false) // do NOT respect .gitignore
-        .build() // single threaded walk (for multiple threads, use `build_parallel`)
+        .hidden(true)
+        .git_ignore(false)
+        .build()
         .filter_map(std::result::Result::ok)
         .filter_map(|entry| {
             let path = entry.path();
@@ -20,7 +20,6 @@ pub fn scan_obsidian_files(publish_dir: impl AsRef<Path>) -> Result<Vec<PathBuf>
         })
         .collect();
 
-    // for performance reasons, we use `sort_unstable` instead of `sort`
     md_files.sort_unstable();
     Ok(md_files)
 }
@@ -44,8 +43,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path();
 
-        // create Markdown file
-        for file_path in md_files.iter() {
+        for file_path in &md_files {
             let full_path = base_path.join(file_path);
             if let Some(parent) = full_path.parent() {
                 fs::create_dir_all(parent)?;
@@ -53,8 +51,7 @@ mod tests {
             fs::write(full_path, "# Test Content")?;
         }
 
-        // create other files
-        for file_path in other_files.iter() {
+        for file_path in &other_files {
             fs::write(base_path.join(file_path), "Other content")?;
         }
 
@@ -80,7 +77,7 @@ mod tests {
 
         let files = scan_obsidian_files(base_path)?;
 
-        assert_eq!(files.len(), 1); // should find one Markdown file
+        assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap().to_string_lossy(), filename);
 
         Ok(())

@@ -35,7 +35,8 @@ okawak_blog/
 │   └── web/
 ├── apps/
 │   ├── obsidian_uploader/
-│   └── publisher_artifacts/
+│   ├── publisher_artifacts/
+│   └── publisher_obsidian/
 ├── docs/
 ├── service/
 └── terraform/
@@ -148,6 +149,11 @@ okawak_blog/
 
 - publisher 側の artifact 組み立てとローカル書き出しを担う補助 crate
 - `obsidian_uploader` から切り出した publisher 専用ロジックの受け皿として扱う
+
+### `apps/publisher_obsidian`
+
+- Obsidian vault の走査、Front Matter 解析、Markdown 変換を担う補助 crate
+- `obsidian_uploader` から切り出した publisher 入力処理の受け皿として扱う
 
 ### `service`
 

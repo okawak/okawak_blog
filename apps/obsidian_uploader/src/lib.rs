@@ -1,20 +1,20 @@
 pub mod bookmark;
 pub mod config;
-pub mod converter;
 pub mod error;
-pub mod parser;
-pub mod scanner;
 pub mod slug;
 
 pub use config::Config;
 use domain::{ArticleBody, ArticleMeta, ArticleMetaInput, Category, Slug, Title};
 pub use error::{ObsidianError, Result};
-pub use parser::ObsidianFrontMatter;
 use publisher_artifacts::{
     SiteDirectories, build_site_artifacts, write_article_page, write_site_artifacts,
 };
+pub use publisher_obsidian::ObsidianFrontMatter;
+use publisher_obsidian::{
+    FileMapping, convert_markdown_to_html, convert_obsidian_links, extract_markdown_body,
+    parse_obsidian_file, scan_obsidian_files,
+};
 
-use converter::FileMapping;
 use futures::{StreamExt, TryStreamExt, stream};
 use log::{error, info, warn};
 use std::path::{Path, PathBuf};
@@ -38,7 +38,7 @@ pub async fn run_main(config: &Config) -> Result<()> {
     info!("Input directory: {}", config.obsidian_dir.display());
     info!("Output directory: {}", config.output_dir.display());
 
-    let markdown_files = scanner::scan_obsidian_files(&config.obsidian_dir)?;
+    let markdown_files = scan_obsidian_files(&config.obsidian_dir)?;
     info!("Found {} markdown files", markdown_files.len());
 
     let mut skipped_count = 0;
@@ -46,7 +46,7 @@ pub async fn run_main(config: &Config) -> Result<()> {
 
     let valid_files: Vec<ParsedFile> = markdown_files
         .into_iter()
-        .filter_map(|file_path| match parser::parse_obsidian_file(&file_path) {
+        .filter_map(|file_path| match parse_obsidian_file(&file_path) {
             Ok(Some((front_matter, content))) if front_matter.is_completed => {
                 match process_valid_file(&file_path, front_matter, content, config) {
                     Ok(parsed_file) => Some(parsed_file),
@@ -189,8 +189,8 @@ async fn process_parsed_file(
     file_mapping: &FileMapping,
 ) -> Result<RenderedArticle> {
     let markdown_body = extract_markdown_body(&parsed_file.content);
-    let markdown_with_links = converter::convert_obsidian_links(&markdown_body, file_mapping);
-    let html_body = converter::convert_markdown_to_html(&markdown_with_links)?;
+    let markdown_with_links = convert_obsidian_links(&markdown_body, file_mapping);
+    let html_body = convert_markdown_to_html(&markdown_with_links)?;
 
     // HTMLを生成後、シンプルなbookmarkをリッチブックマークに変換
     let html_with_rich_bookmarks = bookmark::convert_simple_bookmarks_to_rich(&html_body)
@@ -235,57 +235,12 @@ fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
     category.parse().map_err(Into::into)
 }
 
-fn extract_markdown_body(content: &str) -> String {
-    let content = content.trim_start();
-
-    if !content.starts_with("---") {
-        return content.to_string();
-    }
-
-    let lines: Vec<&str> = content.lines().collect();
-    let end_pos = lines.iter().skip(1).position(|&line| line.trim() == "---");
-
-    match end_pos {
-        Some(pos) => {
-            // フロントマター終了位置の次の行から残りを取得
-            let body_lines = &lines[pos + 2..];
-            body_lines.join("\n")
-        }
-        None => content.to_string(), // フロントマターが正しく終了していない場合は全体を返す
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use rstest::*;
     use std::path::PathBuf;
     use tempfile::TempDir;
-
-    #[rstest]
-    #[case::with_frontmatter(
-        "---\ntitle: Test\n---\n# Content\n\nBody text",
-        "# Content\n\nBody text"
-    )]
-    #[case::no_frontmatter("# Content\n\nBody text", "# Content\n\nBody text")]
-    #[case::malformed_frontmatter(
-        "---\ntitle: Test\n# Content\n\nBody text",
-        "---\ntitle: Test\n# Content\n\nBody text"
-    )]
-    #[case::empty_body("---\ntitle: Test\n---\n", "")]
-    #[case::whitespace_handling("   ---\ntitle: Test\n---\n\n# Content", "\n# Content")]
-    #[case::multiple_frontmatter_separators(
-        "---\ntitle: Test\n---\n# Section\n---\nMore content",
-        "# Section\n---\nMore content"
-    )]
-    #[case::frontmatter_with_complex_yaml(
-        "---\ntitle: \"Complex: Title\"\ntags: [\"tag1\", \"tag2\"]\n---\n## Heading",
-        "## Heading"
-    )]
-    fn test_extract_markdown_body(#[case] input: &str, #[case] expected: &str) {
-        let result = extract_markdown_body(input);
-        assert_eq!(result, expected);
-    }
 
     #[rstest]
     fn test_build_file_mapping_success() {
