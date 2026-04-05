@@ -11,8 +11,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             // fixed paths for Obsidian and output directories
-            obsidian_dir: PathBuf::from("apps/obsidian_uploader/obsidian/Publish"),
-            output_dir: PathBuf::from("apps/obsidian_uploader/dist"),
+            obsidian_dir: PathBuf::from("crates/publish/publisher/obsidian/Publish"),
+            output_dir: PathBuf::from("crates/publish/publisher/dist"),
         }
     }
 }

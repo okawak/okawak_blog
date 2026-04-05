@@ -1,8 +1,8 @@
-use crate::error::{ObsidianError, Result};
+use crate::error::{IngestError, Result};
 use serde::Deserialize;
 use std::{fs, path::Path};
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct ObsidianFrontMatter {
     pub title: String,
     #[serde(default)]
@@ -16,7 +16,7 @@ pub struct ObsidianFrontMatter {
     pub category: Option<String>,
 }
 
-/// parse Obsidian file with content, returns both frontmatter and full content
+/// Parse Obsidian file with content, returns both frontmatter and full content.
 pub fn parse_obsidian_file(
     path: impl AsRef<Path>,
 ) -> Result<Option<(ObsidianFrontMatter, String)>> {
@@ -27,14 +27,31 @@ pub fn parse_obsidian_file(
     }
 }
 
-/// parse front matter from a string content
+/// Parse front matter from a string content.
 pub fn parse_frontmatter(content: &str) -> Result<Option<ObsidianFrontMatter>> {
     extract_yaml_frontmatter(content)?
         .map(|yaml| serde_yaml::from_str::<ObsidianFrontMatter>(yaml).map_err(Into::into))
         .transpose()
 }
 
-/// extract YAML frontmatter from the content
+/// Remove YAML front matter and return the markdown body.
+pub fn extract_markdown_body(content: &str) -> String {
+    let content = content.trim_start();
+
+    if !content.starts_with("---") {
+        return content.to_string();
+    }
+
+    let lines: Vec<&str> = content.lines().collect();
+    let end_pos = lines.iter().skip(1).position(|&line| line.trim() == "---");
+
+    match end_pos {
+        Some(pos) => lines[pos + 2..].join("\n"),
+        None => content.to_string(),
+    }
+}
+
+/// Extract YAML frontmatter from the content.
 fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
     let Some(rest) = text.trim_start().strip_prefix("---\n") else {
         return Ok(None);
@@ -42,7 +59,7 @@ fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
 
     match rest.split_once("\n---\n") {
         Some((yaml, _)) => Ok(Some(yaml)),
-        None => Err(ObsidianError::Parse(
+        None => Err(IngestError::Parse(
             "unterminated front‑matter (closing `---` not found)".into(),
         )),
     }
@@ -270,5 +287,30 @@ mod tests {
         if !should_error {
             assert_eq!(result.unwrap().is_some(), should_have_frontmatter);
         }
+    }
+
+    #[rstest]
+    #[case::with_frontmatter(
+        "---\ntitle: Test\n---\n# Content\n\nBody text",
+        "# Content\n\nBody text"
+    )]
+    #[case::no_frontmatter("# Content\n\nBody text", "# Content\n\nBody text")]
+    #[case::malformed_frontmatter(
+        "---\ntitle: Test\n# Content\n\nBody text",
+        "---\ntitle: Test\n# Content\n\nBody text"
+    )]
+    #[case::empty_body("---\ntitle: Test\n---\n", "")]
+    #[case::whitespace_handling("   ---\ntitle: Test\n---\n\n# Content", "\n# Content")]
+    #[case::multiple_frontmatter_separators(
+        "---\ntitle: Test\n---\n# Section\n---\nMore content",
+        "# Section\n---\nMore content"
+    )]
+    #[case::frontmatter_with_complex_yaml(
+        "---\ntitle: \"Complex: Title\"\ntags: [\"tag1\", \"tag2\"]\n---\n## Heading",
+        "## Heading"
+    )]
+    fn test_extract_markdown_body(#[case] input: &str, #[case] expected: &str) {
+        let result = extract_markdown_body(input);
+        assert_eq!(result, expected);
     }
 }

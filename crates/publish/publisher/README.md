@@ -1,6 +1,6 @@
-# Obsidian Uploader
+# Publisher
 
-ObsidianのMarkdownファイルからHTMLファイルを生成します。
+Obsidian の Markdown ファイルから公開成果物を生成します。
 
 ## 概要
 
@@ -85,21 +85,21 @@ category: "tech"
 
 ```bash
 # デフォルト設定で実行
-cargo run
+cargo run -p publisher
 
 # 本番環境向けリリースビルド
-cargo run --release
+cargo run --release -p publisher
 ```
 
 ### ディレクトリ構成
 
-- 入力ディレクトリ: `./obsidian` (固定)
-- 出力ディレクトリ: `./dist` (固定)
+- 入力ディレクトリ: `./crates/publish/publisher/obsidian/Publish` (固定)
+- 出力ディレクトリ: `./crates/publish/publisher/dist` (固定)
 
 ## GitHub Actions連携
 
-AWS S3へのアップロードはGitHub Actionsを使用します。
-Obsidianファイルはプライベートリポジトリで管理されており、GitHub Appを使用してアクセスしています。
+AWS S3 への同期は GitHub Actions workflow が担当します。
+この crate の責務は、ローカルに `site/` 配下の公開成果物を生成するところまでです。
 
 ## アーキテクチャ
 
@@ -107,15 +107,16 @@ Obsidianファイルはプライベートリポジトリで管理されており
 
 ```
 src/
-├── lib.rs              # メインロジックとファイル処理
-├── config.rs           # 設定管理
-├── error.rs            # エラー型定義
-├── models.rs           # データ構造定義
-├── parser.rs           # フロントマター解析
-├── scanner.rs          # ファイルスキャン
-├── converter.rs        # Markdown→HTML変換
-├── bookmark.rs         # OGPメタデータ取得とリッチブックマーク生成
-└── slug.rs             # URL用スラッグ生成
+├── lib.rs       # publisher orchestration
+├── config.rs    # 設定管理
+├── error.rs     # エラー型定義
+├── bookmark.rs  # OGPメタデータ取得とリッチブックマーク生成
+└── slug.rs      # URL用スラッグ生成
+
+別 crate:
+
+- `crates/publish/ingest`: scan / parse / render
+- `crates/publish/artifacts`: artifact bundle / local writer
 ```
 
 ### 処理フロー

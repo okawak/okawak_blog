@@ -17,7 +17,7 @@ async fn health() -> &'static str {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Leptos設定取得
-    let conf = get_configuration(Some("crates/server/Cargo.toml")).unwrap();
+    let conf = get_configuration(Some("crates/site/server/Cargo.toml")).unwrap();
     let leptos_options = conf.leptos_options.clone();
     let addr = leptos_options.site_addr;
 

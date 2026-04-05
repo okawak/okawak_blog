@@ -1,9 +1,9 @@
 use thiserror::Error;
 
-pub type Result<T> = std::result::Result<T, PublisherArtifactsError>;
+pub type Result<T> = std::result::Result<T, ArtifactsError>;
 
 #[derive(Debug, Error)]
-pub enum PublisherArtifactsError {
+pub enum ArtifactsError {
     #[error("failed to access local artifact filesystem: {0}")]
     Io(#[from] std::io::Error),
 

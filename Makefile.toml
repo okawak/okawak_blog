@@ -99,7 +99,7 @@ description = "Run the Stylance locally"
 script_runner = "@shell"
 dependencies = ["pull", "clean-project"]
 script = '''
-stylance crates/web
+stylance crates/site/web
 '''
 
 [tasks.build-project]
@@ -129,7 +129,7 @@ description = "Format the code"
 script_runner = "@shell"
 script = '''
 cargo fmt --all
-leptosfmt ./crates/web/**/*.rs
+leptosfmt ./crates/site/web/**/*.rs
 '''
 
 [tasks.dev]
@@ -346,7 +346,8 @@ echo "  cargo make production-deploy - Full production deployment"
 echo ""
 echo "🏗️ Architecture:"
 echo "  domain: Pure domain logic (no I/O, sync only)"
-echo "  server: Unified backend (usecases, ports, infrastructure, handlers)"
-echo "  web: Leptos frontend (SSR + hydration)"
+echo "  publish/*: Publisher-side crates (pipeline, ingest, artifacts)"
+echo "  site/server: Unified backend"
+echo "  site/web: Leptos frontend (SSR + hydration)"
 echo ""
 '''

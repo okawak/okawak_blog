@@ -1,5 +1,5 @@
 use indoc::indoc;
-use obsidian_uploader::{Config, run_main, slug};
+use publisher::{Config, run_main, slug};
 use std::{fs, path::Path};
 use tempfile::TempDir;
 

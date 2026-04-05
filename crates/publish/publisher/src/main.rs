@@ -1,5 +1,5 @@
 use anyhow::Result;
-use obsidian_uploader::{Config, run_main};
+use publisher::{Config, run_main};
 
 #[tokio::main]
 async fn main() -> Result<()> {

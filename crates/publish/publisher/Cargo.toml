@@ -1,25 +1,19 @@
 [package]
-name = "obsidian_uploader"
+name = "publisher"
 version.workspace = true
 authors.workspace = true
 description.workspace = true
 edition.workspace = true
 
 [dependencies]
-domain = { path = "../../crates/domain" }
-publisher_artifacts = { path = "../publisher_artifacts" }
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
+domain = { path = "../../domain" }
+artifacts = { path = "../artifacts" }
+ingest = { path = "../ingest" }
+bookmark = { path = "../bookmark" }
 sha2 = "0.11"
-pulldown-cmark = "0.13"
 thiserror = "2"
 anyhow = "1"
-ignore = "0.4"
 tokio = { version = "1", features = ["full"] }
-regex = "1"
-reqwest = { version = "0.13", features = ["json"] }
-scraper = "0.26"
-url = "2"
 log = "0.4"
 env_logger = "0.11"
 futures = "0.3"

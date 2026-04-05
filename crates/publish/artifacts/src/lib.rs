@@ -1,7 +1,7 @@
 mod error;
 mod json;
 
-pub use error::{PublisherArtifactsError, Result};
+pub use error::{ArtifactsError, Result};
 
 use crate::json::{ArticleIndexJson, CategoryIndexJson, SiteMetadataJson};
 use domain::{

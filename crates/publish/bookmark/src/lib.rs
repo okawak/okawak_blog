@@ -1,4 +1,7 @@
-use crate::error::{ObsidianError, Result};
+mod error;
+
+pub use error::{BookmarkError, Result};
+
 use regex::Regex;
 use scraper::{Html, Selector};
 use std::sync::LazyLock;
@@ -36,27 +39,20 @@ pub async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
 /// HTTPクライアントを作成
 fn create_http_client() -> Result<reqwest::Client> {
     // 標準的なUser-Agent形式を使用（内部パッケージ詳細を公開しない）
-    let user_agent = "obsidian-uploader/1.0 (+https://github.com/okawak/okawak_blog)";
+    let user_agent = "publisher-bookmark/1.0 (+https://github.com/okawak/okawak_blog)";
 
     reqwest::Client::builder()
         .user_agent(user_agent)
         .timeout(std::time::Duration::from_secs(10))
         .build()
-        .map_err(|e| ObsidianError::Network(e.to_string()))
+        .map_err(Into::into)
 }
 
 /// HTMLコンテンツを取得
 async fn fetch_html_content(client: &reqwest::Client, url: &str) -> Result<String> {
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| ObsidianError::Network(e.to_string()))?;
+    let response = client.get(url).send().await?;
 
-    response
-        .text()
-        .await
-        .map_err(|e| ObsidianError::Network(e.to_string()))
+    response.text().await.map_err(Into::into)
 }
 
 /// HTMLドキュメントからタイトルを抽出
@@ -322,7 +318,7 @@ pub fn create_fallback_bookmark_data(url: &str, original_title: &str) -> Bookmar
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Result;
+    use crate::Result;
     use indoc::indoc;
     use regex::Regex;
     use rstest::*;

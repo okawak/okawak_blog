@@ -110,6 +110,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
 
 [[package]]
+name = "artifacts"
+version = "0.1.0"
+dependencies = [
+ "domain",
+ "rstest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "async-lock"
 version = "3.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -658,6 +670,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdd35008169921d80bc60d3d0ab416eecb028c4cd653352907921d95084790be"
 dependencies = [
  "hybrid-array",
+]
+
+[[package]]
+name = "bookmark"
+version = "0.1.0"
+dependencies = [
+ "indoc",
+ "log",
+ "regex",
+ "reqwest",
+ "rstest",
+ "scraper",
+ "thiserror 2.0.18",
+ "tokio",
+ "url",
 ]
 
 [[package]]
@@ -2098,6 +2125,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ingest"
+version = "0.1.0"
+dependencies = [
+ "ignore",
+ "indoc",
+ "log",
+ "pulldown-cmark",
+ "regex",
+ "rstest",
+ "serde",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "interpolator"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2689,32 +2732,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "obsidian_uploader"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "domain",
- "env_logger",
- "futures",
- "ignore",
- "indoc",
- "log",
- "publisher_artifacts",
- "pulldown-cmark",
- "regex",
- "reqwest",
- "rstest",
- "scraper",
- "serde",
- "serde_yaml",
- "sha2 0.11.0",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "oco_ref"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3125,15 +3142,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "publisher_artifacts"
+name = "publisher"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "artifacts",
+ "bookmark",
  "domain",
+ "env_logger",
+ "futures",
+ "indoc",
+ "ingest",
+ "log",
  "rstest",
- "serde",
- "serde_json",
+ "sha2 0.11.0",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]

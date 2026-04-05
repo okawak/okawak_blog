@@ -15,7 +15,7 @@ name = "server"
 
 [dependencies]
 # 内部依存
-domain = { path = "../domain" }
+domain = { path = "../../domain" }
 
 # ターゲット別依存関係
 
