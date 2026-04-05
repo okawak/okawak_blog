@@ -32,6 +32,7 @@
 okawak_blog/
 ├── crates/
 │   ├── domain/
+│   ├── application/
 │   ├── server/
 │   └── web/
 ├── apps/
@@ -49,13 +50,12 @@ okawak_blog/
 okawak_blog/
 ├── crates/
 │   ├── domain/
-│   ├── application/
 │   ├── infrastructure/
 │   ├── web/
-│   └── shared/
-├── apps/
-│   ├── publisher/
 │   └── server/
+├── apps/
+│   ├── obsidian_uploader/
+│   └── ...                # publisher 側の補助 crate 群
 ├── docs/
 │   ├── architecture/
 │   └── adr/
@@ -94,6 +94,13 @@ okawak_blog/
 - 外部境界は trait で薄く切る
 - 単一バイナリでの本番運用を優先する
 
+### publisher 側と reader 側の配置境界
+
+- Obsidian 読み取り、Front Matter 解析、Markdown 変換、成果物生成、S3 アップロードなど publisher 専用の実装は `apps/` に置く
+- `crates/infrastructure` は Leptos サーバーが公開成果物を読むための infrastructure に限定する
+- `crates/infrastructure` に publisher 側の vault reader、Markdown renderer、upload 実装を置かない
+- publisher と reader の両方で共有する純粋な契約やルールだけを `crates/domain` に置く
+
 ## 非目標
 
 明示されない限り、以下は作らない前提で考える。
@@ -114,11 +121,25 @@ okawak_blog/
 - I/O 禁止
 - `async/await` 禁止
 - WASM 互換を意識する
+- publisher と reader で共有する公開成果物契約はここで扱う
+
+### `crates/application`
+
+- 現状は移行途中の crate として存在する
+- publisher 寄りの補助ロジックが入っていても、長期的な主置き場として増やし続けない
+- 新しい publisher 専用ロジックは `apps/` 側へ置く方針で扱う
+
+### `crates/infrastructure`
+
+- 将来的に導入または拡張する場合も、Leptos サーバー側の infrastructure 専用として扱う
+- 想定する責務は S3 読み取り、キャッシュ、設定読込など reader 側の外部境界
+- Obsidian vault 読み取り、Front Matter parse、Markdown render、S3 upload はここへ置かない
 
 ### `crates/server`
 
 - 現在のサーバー実装
 - 将来的には SSR 公開用途に責務を絞る想定
+- S3 上の公開成果物を読む blog 側の中心として扱う
 
 ### `crates/web`
 
@@ -129,6 +150,7 @@ okawak_blog/
 
 - 現在もっとも `publisher` に近いアプリ
 - 今後の再設計では公開成果物生成の主役として育てる前提で扱う
+- parser / renderer / uploader など publisher 専用の補助 crate を切る場合も `apps/` 配下へ置く
 
 ### `service`
 
