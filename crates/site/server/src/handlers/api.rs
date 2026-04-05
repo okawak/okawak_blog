@@ -5,16 +5,15 @@ pub mod articles;
 pub use articles::*;
 
 use axum::{Router, routing::get};
+use leptos::prelude::LeptosOptions;
 use std::sync::Arc;
 
-use crate::infrastructure::{MemoryArticleRepository, S3Storage};
-
-pub struct AppState {
-    pub _repository: Arc<MemoryArticleRepository>,
-    pub _storage: Arc<S3Storage>,
-}
+use infra::LocalArtifactReader;
 
 /// API ルーターを作成
-pub fn create_api_router() -> Router {
-    Router::new().route("/articles", get(articles::list_articles))
+pub fn create_api_router(artifact_reader: Arc<LocalArtifactReader>) -> Router<LeptosOptions> {
+    Router::new().route(
+        "/articles",
+        get(move || articles::list_articles(artifact_reader.clone())),
+    )
 }

@@ -4,7 +4,7 @@
 
 このドキュメントは、`okawak_blog` リポジトリのリアーキテクチャ方針を整理し、実装担当の Codex / AI コーディングエージェントに渡すための設計メモである。
 
-現時点では publisher 側と reader 側の責務分離はまだ移行途中である。ただし publisher 専用の artifact 組み立てとローカル書き出しは `crates/publish/artifacts` へ、Obsidian vault 走査と Markdown 変換は `crates/publish/ingest` へ移し始めており、この方向で `crates/publish/` 側へ責務を寄せていく。そのため、既存コードへの過度な互換性維持よりも、今後の保守性・学習価値・実運用のしやすさを優先して再設計する。
+現時点では publisher 側と reader 側の責務分離はまだ移行途中である。ただし publisher 専用の artifact 組み立てとローカル書き出しは `crates/publish/artifacts` へ、Obsidian vault 走査と Markdown 変換は `crates/publish/ingest` へ移し始めており、reader 側にも `crates/site/infra` の first cut として local artifact reader を導入している。この方向で `crates/publish/` と `crates/site/` へ責務を寄せていく。そのため、既存コードへの過度な互換性維持よりも、今後の保守性・学習価値・実運用のしやすさを優先して再設計する。
 
 ---
 
@@ -258,6 +258,7 @@ Leptos サーバーが公開成果物を読むための infrastructure。
 
 ここに以下を置く。
 
+* local filesystem からの artifact 読み取り実装
 * S3 からの成果物読み取り実装
 * 読取キャッシュ
 * 設定読込

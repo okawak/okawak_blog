@@ -2,9 +2,8 @@
 
 use std::sync::Arc;
 
-use crate::infrastructure::{MemoryArticleRepository, S3Storage};
+use infra::LocalArtifactReader;
 
 pub struct AppState {
-    pub _repository: Arc<MemoryArticleRepository>,
-    pub _storage: Arc<S3Storage>,
+    pub artifact_reader: Arc<LocalArtifactReader>,
 }

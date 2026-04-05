@@ -10,7 +10,7 @@ pub mod blog_handlers;
 pub mod leptos_integration;
 
 // Re-exports
-pub use api::{AppState, create_api_router};
+pub use api::create_api_router;
 pub use blog_handlers::create_blog_router;
 pub use leptos_integration::*;
 pub use ssr::*;

@@ -1,12 +1,10 @@
 mod error;
-mod json;
 
 pub use error::{ArtifactsError, Result};
 
-use crate::json::{ArticleIndexJson, CategoryIndexJson, SiteMetadataJson};
 use domain::{
-    ArticleMeta, SiteMetadata, Slug, build_article_index, build_category_indexes,
-    build_site_metadata,
+    ArticleIndexDocument, ArticleMeta, CategoryIndexDocument, SiteMetadata, SiteMetadataDocument,
+    Slug, build_article_index, build_category_indexes, build_site_metadata,
 };
 use serde::Serialize;
 use std::{
@@ -78,7 +76,7 @@ pub fn write_site_artifacts(
 ) -> Result<()> {
     write_json_pretty(
         &site_directories.articles_dir.join("index.json"),
-        &ArticleIndexJson::from(site_artifacts.article_index.as_slice()),
+        &ArticleIndexDocument::from(site_artifacts.article_index.as_slice()),
     )?;
 
     for category_index in &site_artifacts.category_indexes {
@@ -86,13 +84,13 @@ pub fn write_site_artifacts(
             &site_directories
                 .categories_dir
                 .join(format!("{}.json", category_index.category.as_str())),
-            &CategoryIndexJson::from(category_index),
+            &CategoryIndexDocument::from(category_index),
         )?;
     }
 
     write_json_pretty(
         &site_directories.metadata_dir.join("site.json"),
-        &SiteMetadataJson::from(&site_artifacts.site_metadata),
+        &SiteMetadataDocument::from(&site_artifacts.site_metadata),
     )?;
 
     Ok(())

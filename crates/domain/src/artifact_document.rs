@@ -1,8 +1,10 @@
-use domain::{CategoryIndex, PublishedArticleSummary, SiteMetadata};
-use serde::Serialize;
+//! Shared artifact contract persisted by publisher and read by site/server.
 
-#[derive(Debug, Serialize, PartialEq)]
-pub struct ArticleSummaryJson {
+use crate::{CategoryIndex, PublishedArticleSummary, SiteMetadata};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ArticleSummaryDocument {
     pub slug: String,
     pub title: String,
     pub category: String,
@@ -15,7 +17,7 @@ pub struct ArticleSummaryJson {
     pub updated_at: String,
 }
 
-impl From<&PublishedArticleSummary> for ArticleSummaryJson {
+impl From<&PublishedArticleSummary> for ArticleSummaryDocument {
     fn from(summary: &PublishedArticleSummary) -> Self {
         Self {
             slug: summary.slug.as_str().to_string(),
@@ -30,58 +32,58 @@ impl From<&PublishedArticleSummary> for ArticleSummaryJson {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
-pub struct ArticleIndexJson {
-    pub articles: Vec<ArticleSummaryJson>,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ArticleIndexDocument {
+    pub articles: Vec<ArticleSummaryDocument>,
 }
 
-impl From<&[PublishedArticleSummary]> for ArticleIndexJson {
+impl From<&[PublishedArticleSummary]> for ArticleIndexDocument {
     fn from(articles: &[PublishedArticleSummary]) -> Self {
         Self {
-            articles: articles.iter().map(ArticleSummaryJson::from).collect(),
+            articles: articles.iter().map(ArticleSummaryDocument::from).collect(),
         }
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
-pub struct CategoryIndexJson {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CategoryIndexDocument {
     pub category: String,
-    pub articles: Vec<ArticleSummaryJson>,
+    pub articles: Vec<ArticleSummaryDocument>,
 }
 
-impl From<&CategoryIndex> for CategoryIndexJson {
+impl From<&CategoryIndex> for CategoryIndexDocument {
     fn from(index: &CategoryIndex) -> Self {
         Self {
             category: index.category.as_str().to_string(),
             articles: index
                 .articles
                 .iter()
-                .map(ArticleSummaryJson::from)
+                .map(ArticleSummaryDocument::from)
                 .collect(),
         }
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
-pub struct CategoryMetadataJson {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CategoryMetadataDocument {
     pub category: String,
     pub article_count: usize,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
-pub struct SiteMetadataJson {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SiteMetadataDocument {
     pub total_articles: usize,
-    pub categories: Vec<CategoryMetadataJson>,
+    pub categories: Vec<CategoryMetadataDocument>,
 }
 
-impl From<&SiteMetadata> for SiteMetadataJson {
+impl From<&SiteMetadata> for SiteMetadataDocument {
     fn from(metadata: &SiteMetadata) -> Self {
         Self {
             total_articles: metadata.total_articles,
             categories: metadata
                 .categories
                 .iter()
-                .map(|category| CategoryMetadataJson {
+                .map(|category| CategoryMetadataDocument {
                     category: category.category.as_str().to_string(),
                     article_count: category.article_count,
                 })
@@ -93,10 +95,10 @@ impl From<&SiteMetadata> for SiteMetadataJson {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{Category, Slug, Title};
+    use crate::{Category, Slug, Title};
 
     #[test]
-    fn test_article_summary_json_conversion() {
+    fn test_article_summary_document_conversion() {
         let summary = PublishedArticleSummary {
             slug: Slug::new("abc123def456".to_string()).unwrap(),
             title: Title::new("Test Output".to_string()).unwrap(),
@@ -108,7 +110,7 @@ mod tests {
             updated_at: "2025-01-02T00:00:00+09:00".to_string(),
         };
 
-        let json = serde_json::to_string(&ArticleSummaryJson::from(&summary)).unwrap();
+        let json = serde_json::to_string(&ArticleSummaryDocument::from(&summary)).unwrap();
 
         assert!(json.contains("\"title\":\"Test Output\""));
         assert!(json.contains("\"slug\":\"abc123def456\""));
@@ -116,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn test_article_summary_json_keeps_empty_tags_field() {
+    fn test_article_summary_document_keeps_empty_tags_field() {
         let summary = PublishedArticleSummary {
             slug: Slug::new("emptytags001".to_string()).unwrap(),
             title: Title::new("Empty Tags".to_string()).unwrap(),
@@ -128,7 +130,7 @@ mod tests {
             updated_at: "2025-01-02T00:00:00+09:00".to_string(),
         };
 
-        let json = serde_json::to_string(&ArticleSummaryJson::from(&summary)).unwrap();
+        let json = serde_json::to_string(&ArticleSummaryDocument::from(&summary)).unwrap();
 
         assert!(json.contains("\"tags\":[]"));
     }

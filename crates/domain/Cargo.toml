@@ -7,7 +7,9 @@ edition.workspace = true
 
 [dependencies]
 # Minimal dependencies for pure domain logic (std + error handling only)
+serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 
 [dev-dependencies]
 rstest = "0.26"
+serde_json = "1"

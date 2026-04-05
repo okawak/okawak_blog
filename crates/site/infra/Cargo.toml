@@ -1,0 +1,15 @@
+[package]
+name = "infra"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
+
+[dependencies]
+domain = { path = "../../domain" }
+serde = "1"
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"

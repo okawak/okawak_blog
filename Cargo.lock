@@ -1211,6 +1211,8 @@ name = "domain"
 version = "0.1.0"
 dependencies = [
  "rstest",
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -2122,6 +2124,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79cf5c93f93228cf8efb3ba362535fb11199ac548a09ce117c9b1adc3030d706"
 dependencies = [
  "rustversion",
+]
+
+[[package]]
+name = "infra"
+version = "0.1.0"
+dependencies = [
+ "domain",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3966,12 +3979,14 @@ dependencies = [
  "chrono",
  "config",
  "domain",
+ "infra",
  "leptos",
  "leptos_axum",
  "leptos_meta",
  "leptos_router",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tower",

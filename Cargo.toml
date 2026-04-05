@@ -5,6 +5,7 @@ members = [
     "crates/publish/ingest",
     "crates/publish/artifacts",
     "crates/publish/bookmark",
+    "crates/site/infra",
     "crates/site/server",
     "crates/site/web",
 ]

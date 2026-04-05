@@ -4,6 +4,7 @@
 //! Rustの型システムを活用したビジネスルールの実装。
 
 // ドメインエンティティとバリューオブジェクト
+pub mod artifact_document;
 pub mod entities;
 pub mod publishable;
 
@@ -14,6 +15,7 @@ pub mod business_rules;
 pub mod error;
 
 // 再エクスポート
+pub use artifact_document::*;
 pub use business_rules::*;
 pub use entities::*;
 pub use error::{DomainError, Result};
