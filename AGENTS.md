@@ -31,12 +31,14 @@
 okawak_blog/
 ├── crates/
 │   ├── domain/
-│   ├── server/
-│   └── web/
-├── apps/
-│   ├── obsidian_uploader/
-│   ├── publisher_artifacts/
-│   └── publisher_obsidian/
+│   ├── publish/
+│   │   ├── publisher/
+│   │   ├── artifacts/
+│   │   ├── bookmark/
+│   │   └── ingest/
+│   └── site/
+│       ├── server/
+│       └── web/
 ├── docs/
 ├── service/
 └── terraform/
@@ -50,12 +52,15 @@ okawak_blog/
 okawak_blog/
 ├── crates/
 │   ├── domain/
-│   ├── infrastructure/
-│   ├── web/
-│   └── server/
-├── apps/
-│   ├── obsidian_uploader/
-│   └── ...                # publisher 側の補助 crate 群
+│   ├── publish/
+│   │   ├── publisher/
+│   │   ├── ingest/
+│   │   ├── artifacts/
+│   │   └── bookmark/
+│   └── site/
+│       ├── infra/
+│       ├── web/
+│       └── server/
 ├── docs/
 │   └── architecture/
 └── ...
@@ -95,9 +100,9 @@ okawak_blog/
 
 ### publisher 側と reader 側の配置境界
 
-- Obsidian 読み取り、Front Matter 解析、Markdown 変換、成果物生成、S3 アップロードなど publisher 専用の実装は `apps/` に置く
-- `crates/infrastructure` は Leptos サーバーが公開成果物を読むための infrastructure に限定する
-- `crates/infrastructure` に publisher 側の vault reader、Markdown renderer、upload 実装を置かない
+- Obsidian 読み取り、Front Matter 解析、Markdown 変換、成果物生成など publisher 専用の実装は `crates/publish/` に置く
+- `crates/site/infra` は Leptos サーバーが公開成果物を読むための infrastructure に限定する
+- `crates/site/infra` に publisher 側の vault reader、Markdown renderer、upload 実装を置かない
 - publisher と reader の両方で共有する純粋な契約やルールだけを `crates/domain` に置く
 
 ## 非目標
@@ -122,38 +127,43 @@ okawak_blog/
 - WASM 互換を意識する
 - publisher と reader で共有する公開成果物契約はここで扱う
 
-### `crates/infrastructure`
+### `crates/site/infra`
 
 - 将来的に導入または拡張する場合も、Leptos サーバー側の infrastructure 専用として扱う
 - 想定する責務は S3 読み取り、キャッシュ、設定読込など reader 側の外部境界
 - Obsidian vault 読み取り、Front Matter parse、Markdown render、S3 upload はここへ置かない
 
-### `crates/server`
+### `crates/site/server`
 
 - 現在のサーバー実装
 - 将来的には SSR 公開用途に責務を絞る想定
 - S3 上の公開成果物を読む blog 側の中心として扱う
 
-### `crates/web`
+### `crates/site/web`
 
 - Leptos UI / SSR ルーティング層
 - 公開成果物を読む側として整理する
 
-### `apps/obsidian_uploader`
+### `crates/publish/publisher`
 
 - 現在もっとも `publisher` に近いアプリ
 - 今後の再設計では公開成果物生成の主役として育てる前提で扱う
-- parser / renderer / uploader など publisher 専用の補助 crate を切る場合も `apps/` 配下へ置く
+- ingest / artifacts / bookmark など publisher 専用の補助 crate を `crates/publish/` 配下へ置く
 
-### `apps/publisher_artifacts`
+### `crates/publish/artifacts`
 
 - publisher 側の artifact 組み立てとローカル書き出しを担う補助 crate
-- `obsidian_uploader` から切り出した publisher 専用ロジックの受け皿として扱う
+- `publisher` から切り出した publisher 専用ロジックの受け皿として扱う
 
-### `apps/publisher_obsidian`
+### `crates/publish/ingest`
 
 - Obsidian vault の走査、Front Matter 解析、Markdown 変換を担う補助 crate
-- `obsidian_uploader` から切り出した publisher 入力処理の受け皿として扱う
+- `publisher` から切り出した publisher 入力処理の受け皿として扱う
+
+### `crates/publish/bookmark`
+
+- 外部 HTTP を伴う bookmark enrichment を担う補助 crate
+- OGP 取得、bookmark 変換、将来的な retry や cache などをここへ寄せる
 
 ### `service`
 
