@@ -84,13 +84,20 @@ pub async fn run_main(config: &Config) -> Result<()> {
         .map(|parsed_file| render_publishable_article(parsed_file, &file_mapping))
         .buffer_unordered(CONCURRENT_LIMIT)
         .try_fold(Vec::new(), |mut article_metas, rendered_article| {
-            let site_directories = &site_directories;
+            let site_directories = site_directories.clone();
             async move {
-                let output_file_path = write_article_page(
-                    site_directories,
-                    &rendered_article.meta.slug,
-                    &rendered_article.html,
-                )?;
+                let (rendered_article, output_file_path) = tokio::task::spawn_blocking(move || {
+                    let output_file_path = write_article_page(
+                        &site_directories,
+                        &rendered_article.meta.slug,
+                        &rendered_article.html,
+                    )?;
+                    Ok::<_, publisher_artifacts::PublisherArtifactsError>((
+                        rendered_article,
+                        output_file_path,
+                    ))
+                })
+                .await??;
                 info!("...processed {}", output_file_path.display());
                 article_metas.push(rendered_article.meta);
                 Ok(article_metas)
@@ -98,7 +105,12 @@ pub async fn run_main(config: &Config) -> Result<()> {
         })
         .await?;
     let site_artifacts = build_site_artifacts(article_metas);
-    write_site_artifacts(&site_directories, &site_artifacts)?;
+    let site_directories_for_write = site_directories.clone();
+    let site_artifacts = tokio::task::spawn_blocking(move || {
+        write_site_artifacts(&site_directories_for_write, &site_artifacts)?;
+        Ok::<_, publisher_artifacts::PublisherArtifactsError>(site_artifacts)
+    })
+    .await??;
 
     let processed_count = site_artifacts.article_index.len();
     let duration = start_time.elapsed();

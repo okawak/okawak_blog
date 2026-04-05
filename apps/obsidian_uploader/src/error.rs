@@ -13,6 +13,9 @@ pub enum ObsidianError {
     #[error("Publisher artifact operation failed")]
     PublisherArtifacts(#[from] publisher_artifacts::PublisherArtifactsError),
 
+    #[error("Blocking task failed: {0}")]
+    Join(#[from] tokio::task::JoinError),
+
     #[error("Invalid file path: {0}")]
     Path(String),
 
