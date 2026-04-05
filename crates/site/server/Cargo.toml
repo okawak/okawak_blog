@@ -17,7 +17,6 @@ name = "server"
 [dependencies]
 # 内部依存
 domain = { path = "../../domain" }
-infra = { path = "../infra" }
 
 # ターゲット別依存関係
 
@@ -27,6 +26,7 @@ web = { path = "../web", features = ["hydrate"] }
 
 # Native用依存関係
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+infra = { path = "../infra" }
 web = { path = "../web", features = ["ssr"], optional = true }
 axum.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
