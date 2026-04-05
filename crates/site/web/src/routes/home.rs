@@ -78,6 +78,7 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
 
 #[component]
 fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
+    let slug = article.slug.as_str().to_string();
     let title = article.title.as_str().to_string();
     let category = article.category_display_name;
     let description = article
@@ -97,7 +98,11 @@ fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
                 </span>
             </div>
 
-            <h3 class=home_style::article_title>{title}</h3>
+            <h3 class=home_style::article_title>
+                <a class=home_style::article_link href=format!("/articles/{slug}")>
+                    {title}
+                </a>
+            </h3>
             <p class=home_style::article_description>{description}</p>
 
             <Show when=move || has_tags fallback=|| ()>

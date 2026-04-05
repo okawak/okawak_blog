@@ -1,11 +1,12 @@
 use crate::components::{footer::Footer, header::Header};
 use crate::routes::about::AboutPage;
+use crate::routes::article::ArticlePage;
 use crate::routes::home::HomePage;
 use crate::routes::not_found::NotFoundPage;
 use leptos::prelude::*;
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
-    StaticSegment,
+    ParamSegment, StaticSegment,
     components::{Route, Router, Routes},
 };
 use thaw::ssr::SSRMountStyleProvider;
@@ -101,6 +102,10 @@ pub fn App() -> impl IntoView {
                     }>
                         <Route path=StaticSegment("") view=HomePage />
                         <Route path=StaticSegment("about") view=AboutPage />
+                        <Route
+                            path=(StaticSegment("articles"), ParamSegment("slug"))
+                            view=ArticlePage
+                        />
                     </Routes>
                 </main>
             </Router>

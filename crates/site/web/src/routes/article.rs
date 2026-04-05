@@ -1,0 +1,118 @@
+use crate::routes::not_found::NotFoundPage;
+use domain::ArticlePageDocument;
+#[cfg(feature = "ssr")]
+use domain::{Slug, build_article_page_document, find_article_summary};
+#[cfg(feature = "ssr")]
+use infra::DynArtifactReader;
+use leptos::prelude::*;
+use leptos_router::{hooks::use_params_map, params::ParamsMap};
+use stylance::import_style;
+
+import_style!(article_style, "article.module.scss");
+
+#[server]
+pub async fn get_article_page_document(
+    slug: String,
+) -> Result<Option<ArticlePageDocument>, ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        let artifact_reader = use_context::<DynArtifactReader>()
+            .ok_or_else(|| ServerFnError::new("artifact reader context is missing"))?;
+        let slug = match Slug::new(slug) {
+            Ok(slug) => slug,
+            Err(_) => return Ok(None),
+        };
+        let article_index = artifact_reader.read_article_index().await?;
+        let Some(summary) = find_article_summary(&article_index, &slug) else {
+            return Ok(None);
+        };
+        let html = match artifact_reader.read_article_html(&slug).await {
+            Ok(html) => html,
+            Err(error) if error.is_not_found() => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+
+        Ok(Some(build_article_page_document(summary, &html)?))
+    }
+
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = slug;
+        Err(ServerFnError::new(
+            "get_article_page_document is only available during SSR",
+        ))
+    }
+}
+
+#[component]
+fn ArticlePageContent(document: ArticlePageDocument) -> impl IntoView {
+    let title = document.article.title.as_str().to_string();
+    let category = document.article.category_display_name;
+    let created_at = document.article.created_at;
+    let updated_at = document.article.updated_at;
+    let description = document.article.description;
+    let tags = document.article.tags;
+    let has_tags = !tags.is_empty();
+    let html = document.html;
+
+    view! {
+        <article class=article_style::article_page>
+            <header class=article_style::article_header>
+                <p class=article_style::article_category>{category}</p>
+                <h1 class=article_style::article_title>{title}</h1>
+                <p class=article_style::article_dates>
+                    {format!("公開 {} / 更新 {}", created_at, updated_at)}
+                </p>
+                {description.map(|description| {
+                    view! { <p class=article_style::article_summary>{description}</p> }
+                })}
+                <Show when=move || has_tags fallback=|| ()>
+                    <ul class=article_style::tag_list>
+                        {tags
+                            .iter()
+                            .map(|tag| view! { <li class=article_style::tag>{format!("#{tag}")}</li> })
+                            .collect_view()}
+                    </ul>
+                </Show>
+            </header>
+
+            <div class=article_style::article_body inner_html=html></div>
+        </article>
+    }
+}
+
+#[component]
+pub fn ArticlePage() -> impl IntoView {
+    let params = use_params_map();
+    let slug = move || params.with(|params: &ParamsMap| params.get("slug").unwrap_or_default());
+    let article_page = Resource::<Result<Option<ArticlePageDocument>, String>>::new(
+        slug,
+        move |slug| async move {
+            if slug.is_empty() {
+                return Ok(None);
+            }
+
+            get_article_page_document(slug)
+                .await
+                .map_err(|error| error.to_string())
+        },
+    );
+
+    view! {
+        <Suspense fallback=|| {
+            view! { <div class=article_style::loading>"記事を読み込み中..."</div> }
+        }>
+            {move || match article_page.get() {
+                Some(Ok(Some(document))) => view! { <ArticlePageContent document /> }.into_any(),
+                Some(Ok(None)) => view! { <NotFoundPage /> }.into_any(),
+                Some(Err(error)) => view! {
+                    <div class=article_style::error>
+                        {format!("記事の読み込みに失敗しました: {error}")}
+                    </div>
+                }
+                .into_any(),
+                None => view! { <div class=article_style::loading></div> }.into_any(),
+            }}
+        </Suspense>
+    }
+}

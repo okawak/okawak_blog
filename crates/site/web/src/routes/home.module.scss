@@ -170,6 +170,15 @@
             font-size: var(--font-size-xl);
         }
 
+        .article-link {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .article-link:hover {
+            color: var(--color-accent);
+        }
+
         .article-description {
             line-height: 1.8;
             color: var(--color-text-soft);
