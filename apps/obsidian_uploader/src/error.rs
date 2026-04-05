@@ -10,9 +10,6 @@ pub enum ObsidianError {
     #[error("Failed to parse YAML frontmatter")]
     Yaml(#[from] serde_yaml::Error),
 
-    #[error("Failed to serialize JSON output")]
-    Json(#[from] serde_json::Error),
-
     #[error("Publisher artifact operation failed")]
     PublisherArtifacts(#[from] publisher_artifacts::PublisherArtifactsError),
 

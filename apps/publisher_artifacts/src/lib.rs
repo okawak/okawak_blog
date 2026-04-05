@@ -8,8 +8,10 @@ use domain::{
     ArticleMeta, SiteMetadata, Slug, build_article_index, build_category_indexes,
     build_site_metadata,
 };
+use serde::Serialize;
 use std::{
-    fs,
+    fs::{self, File},
+    io::BufWriter,
     path::{Path, PathBuf},
 };
 
@@ -74,32 +76,32 @@ pub fn write_site_artifacts(
     site_directories: &SiteDirectories,
     site_artifacts: &SiteArtifacts,
 ) -> Result<()> {
-    let article_index = serde_json::to_string_pretty(&ArticleIndexJson::from(
-        site_artifacts.article_index.as_slice(),
-    ))?;
-    fs::write(
-        site_directories.articles_dir.join("index.json"),
-        article_index,
+    write_json_pretty(
+        &site_directories.articles_dir.join("index.json"),
+        &ArticleIndexJson::from(site_artifacts.article_index.as_slice()),
     )?;
 
     for category_index in &site_artifacts.category_indexes {
-        let category_index_json =
-            serde_json::to_string_pretty(&CategoryIndexJson::from(category_index))?;
-        fs::write(
-            site_directories
+        write_json_pretty(
+            &site_directories
                 .categories_dir
                 .join(format!("{}.json", category_index.category.as_str())),
-            category_index_json,
+            &CategoryIndexJson::from(category_index),
         )?;
     }
 
-    let site_metadata =
-        serde_json::to_string_pretty(&SiteMetadataJson::from(&site_artifacts.site_metadata))?;
-    fs::write(
-        site_directories.metadata_dir.join("site.json"),
-        site_metadata,
+    write_json_pretty(
+        &site_directories.metadata_dir.join("site.json"),
+        &SiteMetadataJson::from(&site_artifacts.site_metadata),
     )?;
 
+    Ok(())
+}
+
+fn write_json_pretty(path: &Path, value: &impl Serialize) -> Result<()> {
+    let file = File::create(path)?;
+    let writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, value)?;
     Ok(())
 }
 
