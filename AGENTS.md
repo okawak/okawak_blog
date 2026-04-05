@@ -31,11 +31,11 @@
 okawak_blog/
 ├── crates/
 │   ├── domain/
-│   ├── application/
 │   ├── server/
 │   └── web/
 ├── apps/
-│   └── obsidian_uploader/
+│   ├── obsidian_uploader/
+│   └── publisher_artifacts/
 ├── docs/
 ├── service/
 └── terraform/
@@ -121,12 +121,6 @@ okawak_blog/
 - WASM 互換を意識する
 - publisher と reader で共有する公開成果物契約はここで扱う
 
-### `crates/application`
-
-- 現状は移行途中の crate として存在する
-- publisher 寄りの補助ロジックが入っていても、長期的な主置き場として増やし続けない
-- 新しい publisher 専用ロジックは `apps/` 側へ置く方針で扱う
-
 ### `crates/infrastructure`
 
 - 将来的に導入または拡張する場合も、Leptos サーバー側の infrastructure 専用として扱う
@@ -149,6 +143,11 @@ okawak_blog/
 - 現在もっとも `publisher` に近いアプリ
 - 今後の再設計では公開成果物生成の主役として育てる前提で扱う
 - parser / renderer / uploader など publisher 専用の補助 crate を切る場合も `apps/` 配下へ置く
+
+### `apps/publisher_artifacts`
+
+- publisher 側の artifact 組み立てとローカル書き出しを担う補助 crate
+- `obsidian_uploader` から切り出した publisher 専用ロジックの受け皿として扱う
 
 ### `service`
 
