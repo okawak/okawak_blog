@@ -77,6 +77,13 @@ okawak_blog/
 - S3 に成果物を配置する
 - Leptos SSR サーバーがそれを読んで配信する
 
+### Obsidian ソースの扱い
+
+- 記事ソースの source of truth は private な別 Obsidian リポジトリ
+- `obsidian` の Markdown はこの public リポジトリへ通常ファイルとして commit しない
+- publisher は git submodule として取得した Obsidian repo を入力に使う
+- ローカル開発でも GitHub Actions でも submodule を初期化・更新してから publisher を実行する
+
 ### Markdown 変換はビルド時
 
 - Markdown をリクエスト時に毎回変換しない
@@ -143,6 +150,7 @@ okawak_blog/
 - 現在もっとも `publisher` に近いアプリ
 - 今後の再設計では公開成果物生成の主役として育てる前提で扱う
 - parser / renderer / uploader など publisher 専用の補助 crate を切る場合も `apps/` 配下へ置く
+- 入力となる Obsidian Markdown は private repo の git submodule から取得する
 
 ### `apps/publisher_artifacts`
 
