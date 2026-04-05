@@ -13,6 +13,9 @@ pub enum ObsidianError {
     #[error("Failed to serialize JSON output")]
     Json(#[from] serde_json::Error),
 
+    #[error("Publisher artifact operation failed")]
+    PublisherArtifacts(#[from] publisher_artifacts::PublisherArtifactsError),
+
     #[error("Invalid file path: {0}")]
     Path(String),
 
