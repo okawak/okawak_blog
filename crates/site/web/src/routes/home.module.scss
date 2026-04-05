@@ -126,6 +126,15 @@
             font-weight: 600;
         }
 
+        .category-link {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .category-link:hover {
+            color: var(--color-accent);
+        }
+
         .category-count {
             color: var(--color-text-soft);
             font-size: var(--font-size-sm);

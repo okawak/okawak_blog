@@ -1,6 +1,7 @@
 use crate::components::{footer::Footer, header::Header};
 use crate::routes::about::AboutPage;
 use crate::routes::article::ArticlePage;
+use crate::routes::category::CategoryPage;
 use crate::routes::home::HomePage;
 use crate::routes::not_found::NotFoundPage;
 use leptos::prelude::*;
@@ -105,6 +106,10 @@ pub fn App() -> impl IntoView {
                         <Route
                             path=(StaticSegment("articles"), ParamSegment("slug"))
                             view=ArticlePage
+                        />
+                        <Route
+                            path=(StaticSegment("categories"), ParamSegment("category"))
+                            view=CategoryPage
                         />
                     </Routes>
                 </main>

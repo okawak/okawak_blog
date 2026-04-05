@@ -48,11 +48,15 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
                         each=move || categories.clone()
                         key=|category| category.category.as_str().to_string()
                         children=move |category| {
+                            let href =
+                                format!("/categories/{}", category.category.as_str());
                             view! {
                                 <li class=home_style::category_chip>
-                                    <span class=home_style::category_name>
-                                        {category.category_display_name}
-                                    </span>
+                                    <a class=home_style::category_link href=href>
+                                        <span class=home_style::category_name>
+                                            {category.category_display_name}
+                                        </span>
+                                    </a>
                                     <span class=home_style::category_count>
                                         {format!("{}本", category.article_count)}
                                     </span>
