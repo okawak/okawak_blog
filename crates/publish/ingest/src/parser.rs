@@ -41,9 +41,7 @@ pub fn parse_obsidian_file(path: impl AsRef<Path>) -> Result<Option<ParsedObsidi
             }))
         }
         FrontmatterSplit::NoFrontmatter => Ok(None),
-        FrontmatterSplit::Unterminated => Err(IngestError::Parse(
-            "unterminated front‑matter (closing `---` not found)".into(),
-        )),
+        FrontmatterSplit::Unterminated => Err(unterminated_frontmatter_error()),
     }
 }
 
@@ -59,9 +57,7 @@ fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
     match split_frontmatter(text) {
         FrontmatterSplit::Complete { yaml, .. } => Ok(Some(yaml)),
         FrontmatterSplit::NoFrontmatter => Ok(None),
-        FrontmatterSplit::Unterminated => Err(IngestError::Parse(
-            "unterminated front‑matter (closing `---` not found)".into(),
-        )),
+        FrontmatterSplit::Unterminated => Err(unterminated_frontmatter_error()),
     }
 }
 
@@ -78,7 +74,25 @@ fn split_frontmatter(content: &str) -> FrontmatterSplit<'_> {
 }
 
 fn normalize_markdown_body(body: &str) -> String {
-    body.lines().collect::<Vec<_>>().join("\n")
+    let body = body.trim_end_matches(['\r', '\n']);
+
+    if !body.contains('\r') {
+        return body.to_string();
+    }
+
+    let mut normalized = String::with_capacity(body.len());
+    for (index, line) in body.lines().enumerate() {
+        if index > 0 {
+            normalized.push('\n');
+        }
+        normalized.push_str(line);
+    }
+
+    normalized
+}
+
+fn unterminated_frontmatter_error() -> IngestError {
+    IngestError::Parse("unterminated front‑matter (closing `---` not found)".into())
 }
 
 #[cfg(test)]
