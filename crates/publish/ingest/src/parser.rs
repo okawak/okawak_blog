@@ -63,46 +63,18 @@ fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
 
 fn split_frontmatter(content: &str) -> FrontmatterSplit<'_> {
     let trimmed = content.trim_start();
-    let Some(rest) = strip_opening_frontmatter_delimiter(trimmed) else {
+    let Some(rest) = trimmed.strip_prefix("---\n") else {
         return FrontmatterSplit::NoFrontmatter;
     };
 
-    split_closing_frontmatter_delimiter(rest)
-}
-
-fn strip_opening_frontmatter_delimiter(content: &str) -> Option<&str> {
-    content
-        .strip_prefix("---\n")
-        .or_else(|| content.strip_prefix("---\r\n"))
-}
-
-fn split_closing_frontmatter_delimiter(rest: &str) -> FrontmatterSplit<'_> {
-    let lf = rest.find("\n---\n").map(|index| (index, 5));
-    let crlf = rest.find("\r\n---\r\n").map(|index| (index, 7));
-
-    let Some((index, delimiter_len)) = (match (lf, crlf) {
-        (Some(lf), Some(crlf)) => Some(std::cmp::min_by_key(lf, crlf, |(index, _)| *index)),
-        (Some(lf), None) => Some(lf),
-        (None, Some(crlf)) => Some(crlf),
-        (None, None) => None,
-    }) else {
-        return FrontmatterSplit::Unterminated;
-    };
-
-    FrontmatterSplit::Complete {
-        yaml: &rest[..index],
-        body: &rest[index + delimiter_len..],
+    match rest.split_once("\n---\n") {
+        Some((yaml, body)) => FrontmatterSplit::Complete { yaml, body },
+        None => FrontmatterSplit::Unterminated,
     }
 }
 
 fn normalize_markdown_body(body: &str) -> String {
-    let body = body.trim_end_matches(['\r', '\n']);
-
-    if !body.contains("\r\n") {
-        return body.to_string();
-    }
-
-    body.replace("\r\n", "\n")
+    body.trim_end_matches(['\r', '\n']).to_string()
 }
 
 fn unterminated_frontmatter_error() -> IngestError {
@@ -363,10 +335,6 @@ mod tests {
             body: "## Heading"
         }
     )]
-    #[case::crlf_frontmatter(
-        "---\r\ntitle: Test\r\n---\r\n# Content\r\n\r\nBody text",
-        FrontmatterSplit::Complete { yaml: "title: Test", body: "# Content\r\n\r\nBody text" }
-    )]
     fn test_split_frontmatter(#[case] input: &str, #[case] expected: FrontmatterSplit<'_>) {
         let result = split_frontmatter(input);
         assert_eq!(result, expected);
@@ -379,10 +347,6 @@ mod tests {
     )]
     #[case::body_with_blank_line(
         "---\ntitle: Test\nis_completed: true\ncreated: \"2025-01-01T00:00:00+09:00\"\nupdated: \"2025-01-01T00:00:00+09:00\"\n---\n# Content\n\nBody text",
-        "# Content\n\nBody text"
-    )]
-    #[case::body_with_crlf_frontmatter_and_content(
-        "---\r\ntitle: Test\r\nis_completed: true\r\ncreated: \"2025-01-01T00:00:00+09:00\"\r\nupdated: \"2025-01-01T00:00:00+09:00\"\r\n---\r\n# Content\r\n\r\nBody text\r\n",
         "# Content\n\nBody text"
     )]
     fn test_parse_obsidian_file_normalizes_markdown_body(
