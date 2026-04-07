@@ -7,11 +7,11 @@ use bookmark::convert_simple_bookmarks_to_rich;
 pub use config::Config;
 use domain::{ArticleBody, ArticleMeta, ArticleMetaInput, Category, Slug, Title};
 pub use error::{ObsidianError, Result};
+pub use ingest::ObsidianFrontMatter;
 use ingest::{
     FileMapping, ParsedObsidianFile, convert_markdown_to_html, convert_obsidian_links,
     parse_obsidian_file, scan_obsidian_files,
 };
-pub use ingest::ObsidianFrontMatter;
 
 use futures::{StreamExt, TryStreamExt, stream};
 use log::{error, info, warn};
