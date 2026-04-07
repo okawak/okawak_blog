@@ -16,14 +16,32 @@ pub struct ObsidianFrontMatter {
     pub category: Option<String>,
 }
 
-/// Parse Obsidian file with content, returns both frontmatter and full content.
-pub fn parse_obsidian_file(
-    path: impl AsRef<Path>,
-) -> Result<Option<(ObsidianFrontMatter, String)>> {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ParsedObsidianFile {
+    pub front_matter: ObsidianFrontMatter,
+    pub markdown_body: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum FrontmatterSplit<'a> {
+    NoFrontmatter,
+    Complete { yaml: &'a str, body: &'a str },
+    Unterminated,
+}
+
+/// Parse Obsidian file and return the frontmatter plus markdown body.
+pub fn parse_obsidian_file(path: impl AsRef<Path>) -> Result<Option<ParsedObsidianFile>> {
     let content = fs::read_to_string(&path)?;
-    match parse_frontmatter(&content)? {
-        Some(front_matter) => Ok(Some((front_matter, content))),
-        None => Ok(None),
+    match split_frontmatter(&content) {
+        FrontmatterSplit::Complete { yaml, body } => {
+            let front_matter = serde_yaml::from_str::<ObsidianFrontMatter>(yaml)?;
+            Ok(Some(ParsedObsidianFile {
+                front_matter,
+                markdown_body: normalize_markdown_body(body),
+            }))
+        }
+        FrontmatterSplit::NoFrontmatter => Ok(None),
+        FrontmatterSplit::Unterminated => Err(unterminated_frontmatter_error()),
     }
 }
 
@@ -34,35 +52,33 @@ pub fn parse_frontmatter(content: &str) -> Result<Option<ObsidianFrontMatter>> {
         .transpose()
 }
 
-/// Remove YAML front matter and return the markdown body.
-pub fn extract_markdown_body(content: &str) -> String {
-    let content = content.trim_start();
-
-    if !content.starts_with("---") {
-        return content.to_string();
-    }
-
-    let lines: Vec<&str> = content.lines().collect();
-    let end_pos = lines.iter().skip(1).position(|&line| line.trim() == "---");
-
-    match end_pos {
-        Some(pos) => lines[pos + 2..].join("\n"),
-        None => content.to_string(),
+/// Extract YAML frontmatter from the content.
+fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
+    match split_frontmatter(text) {
+        FrontmatterSplit::Complete { yaml, .. } => Ok(Some(yaml)),
+        FrontmatterSplit::NoFrontmatter => Ok(None),
+        FrontmatterSplit::Unterminated => Err(unterminated_frontmatter_error()),
     }
 }
 
-/// Extract YAML frontmatter from the content.
-fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
-    let Some(rest) = text.trim_start().strip_prefix("---\n") else {
-        return Ok(None);
+fn split_frontmatter(content: &str) -> FrontmatterSplit<'_> {
+    let trimmed = content.trim_start();
+    let Some(rest) = trimmed.strip_prefix("---\n") else {
+        return FrontmatterSplit::NoFrontmatter;
     };
 
     match rest.split_once("\n---\n") {
-        Some((yaml, _)) => Ok(Some(yaml)),
-        None => Err(IngestError::Parse(
-            "unterminated front‑matter (closing `---` not found)".into(),
-        )),
+        Some((yaml, body)) => FrontmatterSplit::Complete { yaml, body },
+        None => FrontmatterSplit::Unterminated,
     }
+}
+
+fn normalize_markdown_body(body: &str) -> String {
+    body.trim_end_matches(['\r', '\n']).to_string()
+}
+
+fn unterminated_frontmatter_error() -> IngestError {
+    IngestError::Parse("unterminated front‑matter (closing `---` not found)".into())
 }
 
 #[cfg(test)]
@@ -212,9 +228,10 @@ mod tests {
         assert_eq!(result.is_some(), should_have_frontmatter);
 
         if should_have_frontmatter {
-            let (frontmatter, _) = result.unwrap();
-            assert_eq!(frontmatter.title, "File Test");
-            assert!(frontmatter.is_completed);
+            let parsed_file = result.unwrap();
+            assert_eq!(parsed_file.front_matter.title, "File Test");
+            assert!(parsed_file.front_matter.is_completed);
+            assert_eq!(parsed_file.markdown_body, "# Test Content");
         }
 
         Ok(())
@@ -292,25 +309,57 @@ mod tests {
     #[rstest]
     #[case::with_frontmatter(
         "---\ntitle: Test\n---\n# Content\n\nBody text",
-        "# Content\n\nBody text"
+        FrontmatterSplit::Complete { yaml: "title: Test", body: "# Content\n\nBody text" }
     )]
-    #[case::no_frontmatter("# Content\n\nBody text", "# Content\n\nBody text")]
+    #[case::no_frontmatter("# Content\n\nBody text", FrontmatterSplit::NoFrontmatter)]
     #[case::malformed_frontmatter(
         "---\ntitle: Test\n# Content\n\nBody text",
-        "---\ntitle: Test\n# Content\n\nBody text"
+        FrontmatterSplit::Unterminated
     )]
-    #[case::empty_body("---\ntitle: Test\n---\n", "")]
-    #[case::whitespace_handling("   ---\ntitle: Test\n---\n\n# Content", "\n# Content")]
+    #[case::empty_body(
+        "---\ntitle: Test\n---\n",
+        FrontmatterSplit::Complete { yaml: "title: Test", body: "" }
+    )]
+    #[case::whitespace_handling(
+        "   ---\ntitle: Test\n---\n\n# Content",
+        FrontmatterSplit::Complete { yaml: "title: Test", body: "\n# Content" }
+    )]
     #[case::multiple_frontmatter_separators(
         "---\ntitle: Test\n---\n# Section\n---\nMore content",
-        "# Section\n---\nMore content"
+        FrontmatterSplit::Complete { yaml: "title: Test", body: "# Section\n---\nMore content" }
     )]
     #[case::frontmatter_with_complex_yaml(
         "---\ntitle: \"Complex: Title\"\ntags: [\"tag1\", \"tag2\"]\n---\n## Heading",
-        "## Heading"
+        FrontmatterSplit::Complete {
+            yaml: "title: \"Complex: Title\"\ntags: [\"tag1\", \"tag2\"]",
+            body: "## Heading"
+        }
     )]
-    fn test_extract_markdown_body(#[case] input: &str, #[case] expected: &str) {
-        let result = extract_markdown_body(input);
+    fn test_split_frontmatter(#[case] input: &str, #[case] expected: FrontmatterSplit<'_>) {
+        let result = split_frontmatter(input);
         assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::body_with_trailing_newline(
+        "---\ntitle: Test\nis_completed: true\ncreated: \"2025-01-01T00:00:00+09:00\"\nupdated: \"2025-01-01T00:00:00+09:00\"\n---\n# Content\n",
+        "# Content"
+    )]
+    #[case::body_with_blank_line(
+        "---\ntitle: Test\nis_completed: true\ncreated: \"2025-01-01T00:00:00+09:00\"\nupdated: \"2025-01-01T00:00:00+09:00\"\n---\n# Content\n\nBody text",
+        "# Content\n\nBody text"
+    )]
+    fn test_parse_obsidian_file_normalizes_markdown_body(
+        #[case] content: &str,
+        #[case] expected_body: &str,
+    ) -> Result<()> {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("normalize.md");
+        fs::write(&file_path, content)?;
+
+        let parsed_file = parse_obsidian_file(&file_path)?.unwrap();
+
+        assert_eq!(parsed_file.markdown_body, expected_body);
+        Ok(())
     }
 }

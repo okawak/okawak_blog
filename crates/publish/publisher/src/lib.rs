@@ -9,7 +9,7 @@ use domain::{ArticleBody, ArticleMeta, ArticleMetaInput, Category, Slug, Title};
 pub use error::{ObsidianError, Result};
 pub use ingest::ObsidianFrontMatter;
 use ingest::{
-    FileMapping, convert_markdown_to_html, convert_obsidian_links, extract_markdown_body,
+    FileMapping, ParsedObsidianFile, convert_markdown_to_html, convert_obsidian_links,
     parse_obsidian_file, scan_obsidian_files,
 };
 
@@ -26,7 +26,7 @@ struct RenderedArticle {
 struct ParsedFile {
     file_path: PathBuf,
     slug: String,
-    content: String,
+    markdown_body: String,
     front_matter: ObsidianFrontMatter,
 }
 
@@ -45,8 +45,8 @@ pub async fn run_main(config: &Config) -> Result<()> {
     let valid_files: Vec<ParsedFile> = markdown_files
         .into_iter()
         .filter_map(|file_path| match parse_obsidian_file(&file_path) {
-            Ok(Some((front_matter, content))) if front_matter.is_completed => {
-                match process_valid_file(&file_path, front_matter, content, config) {
+            Ok(Some(parsed_file)) if parsed_file.front_matter.is_completed => {
+                match process_valid_file(&file_path, parsed_file, config) {
                     Ok(parsed_file) => Some(parsed_file),
                     Err(e) => {
                         error_count += 1;
@@ -135,18 +135,21 @@ pub async fn run_main(config: &Config) -> Result<()> {
 /// 有効なファイルを処理し、ParsedFileを生成
 fn process_valid_file(
     file_path: &Path,
-    front_matter: ObsidianFrontMatter,
-    content: String,
+    parsed_file: ParsedObsidianFile,
     config: &Config,
 ) -> Result<ParsedFile> {
     let relative_path = get_relative_path(file_path, &config.obsidian_dir)?;
-    let slug = slug::generate_slug(&front_matter.title, relative_path, &front_matter.created)?;
+    let slug = slug::generate_slug(
+        &parsed_file.front_matter.title,
+        relative_path,
+        &parsed_file.front_matter.created,
+    )?;
 
     Ok(ParsedFile {
         file_path: file_path.to_path_buf(),
         slug,
-        content,
-        front_matter,
+        markdown_body: parsed_file.markdown_body,
+        front_matter: parsed_file.front_matter,
     })
 }
 
@@ -183,8 +186,7 @@ async fn process_parsed_file(
     parsed_file: ParsedFile,
     file_mapping: &FileMapping,
 ) -> Result<RenderedArticle> {
-    let markdown_body = extract_markdown_body(&parsed_file.content);
-    let markdown_with_links = convert_obsidian_links(&markdown_body, file_mapping);
+    let markdown_with_links = convert_obsidian_links(&parsed_file.markdown_body, file_mapping);
     let html_body = convert_markdown_to_html(&markdown_with_links)?;
 
     // HTMLを生成後、シンプルなbookmarkをリッチブックマークに変換
@@ -260,7 +262,7 @@ mod tests {
         let parsed_file = ParsedFile {
             file_path,
             slug: "slug".to_string(),
-            content: "---\ntitle: Test Article\n---\n# Test Content".to_string(),
+            markdown_body: "# Test Content".to_string(),
             front_matter,
         };
         let valid_files = vec![parsed_file];
@@ -325,13 +327,13 @@ mod tests {
         let parsed_file1 = ParsedFile {
             file_path: file_path1,
             slug: "slug1".to_string(),
-            content: "---\ntitle: Test Article 1\n---\n# Test Content 1".to_string(),
+            markdown_body: "# Test Content 1".to_string(),
             front_matter: front_matter1,
         };
         let parsed_file2 = ParsedFile {
             file_path: file_path2,
             slug: "slug2".to_string(),
-            content: "---\ntitle: Test Article 2\n---\n# Test Content 2".to_string(),
+            markdown_body: "# Test Content 2".to_string(),
             front_matter: front_matter2,
         };
         let valid_files = vec![parsed_file1, parsed_file2];
@@ -368,7 +370,7 @@ mod tests {
         let parsed_file = ParsedFile {
             file_path,
             slug: "slug".to_string(),
-            content: "---\ntitle: URL Test\n---\n# URL Test Content".to_string(),
+            markdown_body: "# URL Test Content".to_string(),
             front_matter,
         };
         let valid_files = vec![parsed_file];
