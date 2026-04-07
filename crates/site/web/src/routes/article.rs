@@ -4,15 +4,19 @@ use axum::http::StatusCode;
 use domain::ArticlePageDocument;
 #[cfg(feature = "ssr")]
 use domain::{Slug, build_article_page_document, find_article_summary};
+use domain::{build_article_page_description, build_article_page_title};
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
 use leptos::prelude::*;
+use leptos_meta::{Meta, Title};
 #[cfg(feature = "ssr")]
 use leptos_axum::ResponseOptions;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
 use stylance::import_style;
 
 import_style!(article_style, "article.module.scss");
+
+const SITE_NAME: &str = "ぶくせんの探窟メモ";
 
 #[server]
 pub async fn get_article_page_document(
@@ -50,6 +54,8 @@ pub async fn get_article_page_document(
 
 #[component]
 fn ArticlePageContent(document: ArticlePageDocument) -> impl IntoView {
+    let page_title = build_article_page_title(&document, SITE_NAME);
+    let page_description = build_article_page_description(&document);
     let title = document.article.title.as_str().to_string();
     let category = document.article.category_display_name;
     let created_at = document.article.created_at;
@@ -60,6 +66,9 @@ fn ArticlePageContent(document: ArticlePageDocument) -> impl IntoView {
     let html = document.html;
 
     view! {
+        <Title text=page_title />
+        <Meta name="description" content=page_description />
+
         <article class=article_style::article_page>
             <header class=article_style::article_header>
                 <p class=article_style::article_category>{category}</p>

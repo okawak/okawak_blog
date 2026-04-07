@@ -67,6 +67,42 @@ pub struct CategoryPageDocument {
     pub articles: Vec<SiteArticleCard>,
 }
 
+pub fn build_home_page_title(site_name: &str) -> String {
+    site_name.to_string()
+}
+
+pub fn build_home_page_description(document: &HomePageDocument) -> String {
+    format!(
+        "{}件の記事を{}カテゴリで公開しています。",
+        document.total_articles,
+        document.categories.len()
+    )
+}
+
+pub fn build_article_page_title(document: &ArticlePageDocument, site_name: &str) -> String {
+    format!("{} | {}", document.article.title.as_str(), site_name)
+}
+
+pub fn build_article_page_description(document: &ArticlePageDocument) -> String {
+    document
+        .article
+        .description
+        .clone()
+        .unwrap_or_else(|| format!("{}カテゴリの記事です。", document.article.category_display_name))
+}
+
+pub fn build_category_page_title(document: &CategoryPageDocument, site_name: &str) -> String {
+    format!("{} | {}", document.category_display_name, site_name)
+}
+
+pub fn build_category_page_description(document: &CategoryPageDocument) -> String {
+    format!(
+        "{}カテゴリの記事一覧です。{}件の記事があります。",
+        document.category_display_name,
+        document.articles.len()
+    )
+}
+
 pub fn build_home_page_document(
     article_index: &ArticleIndexDocument,
     site_metadata: &SiteMetadataDocument,
@@ -228,5 +264,62 @@ mod tests {
         let article = find_article_summary(&index, &slug).unwrap();
 
         assert_eq!(article.title, "Intro");
+    }
+
+    #[test]
+    fn test_build_home_page_metadata() {
+        let document = HomePageDocument {
+            total_articles: 3,
+            categories: vec![
+                SiteCategorySummary {
+                    category: Category::Tech,
+                    category_display_name: "技術".to_string(),
+                    article_count: 2,
+                },
+                SiteCategorySummary {
+                    category: Category::Daily,
+                    category_display_name: "日常".to_string(),
+                    article_count: 1,
+                },
+            ],
+            articles: vec![SiteArticleCard::try_from(&sample_summary()).unwrap()],
+        };
+
+        assert_eq!(build_home_page_title("ぶくせんの探窟メモ"), "ぶくせんの探窟メモ");
+        assert_eq!(
+            build_home_page_description(&document),
+            "3件の記事を2カテゴリで公開しています。"
+        );
+    }
+
+    #[test]
+    fn test_build_article_page_metadata() {
+        let document =
+            build_article_page_document(&sample_summary(), "<article><h1>Intro</h1></article>")
+                .unwrap();
+
+        assert_eq!(
+            build_article_page_title(&document, "ぶくせんの探窟メモ"),
+            "Intro | ぶくせんの探窟メモ"
+        );
+        assert_eq!(build_article_page_description(&document), "summary");
+    }
+
+    #[test]
+    fn test_build_category_page_metadata() {
+        let document = build_category_page_document(&CategoryIndexDocument {
+            category: "tech".to_string(),
+            articles: vec![sample_summary()],
+        })
+        .unwrap();
+
+        assert_eq!(
+            build_category_page_title(&document, "ぶくせんの探窟メモ"),
+            "技術 | ぶくせんの探窟メモ"
+        );
+        assert_eq!(
+            build_category_page_description(&document),
+            "技術カテゴリの記事一覧です。1件の記事があります。"
+        );
     }
 }

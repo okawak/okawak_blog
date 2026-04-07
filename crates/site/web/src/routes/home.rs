@@ -1,13 +1,16 @@
 #[cfg(feature = "ssr")]
 use domain::build_home_page_document;
-use domain::{HomePageDocument, SiteArticleCard};
+use domain::{HomePageDocument, SiteArticleCard, build_home_page_description, build_home_page_title};
 use leptos::prelude::*;
+use leptos_meta::{Meta, Title};
 use stylance::import_style;
 
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
 
 import_style!(home_style, "home.module.scss");
+
+const SITE_NAME: &str = "ぶくせんの探窟メモ";
 
 #[server]
 pub async fn get_home_page_document() -> Result<HomePageDocument, ServerFnError> {
@@ -31,6 +34,8 @@ pub async fn get_home_page_document() -> Result<HomePageDocument, ServerFnError>
 
 #[component]
 fn HomePageContent(document: HomePageDocument) -> impl IntoView {
+    let page_title = build_home_page_title(SITE_NAME);
+    let page_description = build_home_page_description(&document);
     let category_count = document.categories.len();
     let category_items = document
         .categories
@@ -58,6 +63,9 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
         .collect_view();
 
     view! {
+        <Title text=page_title />
+        <Meta name="description" content=page_description />
+
         <div class=home_style::content_grid>
             <section class=home_style::overview_panel>
                 <p class=home_style::overview_copy>
