@@ -22,15 +22,27 @@ pub struct ParsedObsidianFile {
     pub markdown_body: String,
 }
 
+enum FrontmatterSplit<'a> {
+    NoFrontmatter(&'a str),
+    Complete { yaml: &'a str, body: &'a str },
+    Unterminated(&'a str),
+}
+
 /// Parse Obsidian file and return the frontmatter plus markdown body.
 pub fn parse_obsidian_file(path: impl AsRef<Path>) -> Result<Option<ParsedObsidianFile>> {
     let content = fs::read_to_string(&path)?;
-    match parse_frontmatter(&content)? {
-        Some(front_matter) => Ok(Some(ParsedObsidianFile {
-            front_matter,
-            markdown_body: extract_markdown_body(&content),
-        })),
-        None => Ok(None),
+    match split_frontmatter(&content) {
+        FrontmatterSplit::Complete { yaml, body } => {
+            let front_matter = serde_yaml::from_str::<ObsidianFrontMatter>(yaml)?;
+            Ok(Some(ParsedObsidianFile {
+                front_matter,
+                markdown_body: normalize_markdown_body(body),
+            }))
+        }
+        FrontmatterSplit::NoFrontmatter(_) => Ok(None),
+        FrontmatterSplit::Unterminated(_) => Err(IngestError::Parse(
+            "unterminated front‑matter (closing `---` not found)".into(),
+        )),
     }
 }
 
@@ -43,33 +55,39 @@ pub fn parse_frontmatter(content: &str) -> Result<Option<ObsidianFrontMatter>> {
 
 /// Remove YAML front matter and return the markdown body.
 pub fn extract_markdown_body(content: &str) -> String {
-    let content = content.trim_start();
-
-    if !content.starts_with("---") {
-        return content.to_string();
-    }
-
-    let lines: Vec<&str> = content.lines().collect();
-    let end_pos = lines.iter().skip(1).position(|&line| line.trim() == "---");
-
-    match end_pos {
-        Some(pos) => lines[pos + 2..].join("\n"),
-        None => content.to_string(),
+    match split_frontmatter(content) {
+        FrontmatterSplit::Complete { body, .. } => normalize_markdown_body(body),
+        FrontmatterSplit::NoFrontmatter(trimmed) | FrontmatterSplit::Unterminated(trimmed) => {
+            trimmed.to_string()
+        }
     }
 }
 
 /// Extract YAML frontmatter from the content.
 fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
-    let Some(rest) = text.trim_start().strip_prefix("---\n") else {
-        return Ok(None);
-    };
-
-    match rest.split_once("\n---\n") {
-        Some((yaml, _)) => Ok(Some(yaml)),
-        None => Err(IngestError::Parse(
+    match split_frontmatter(text) {
+        FrontmatterSplit::Complete { yaml, .. } => Ok(Some(yaml)),
+        FrontmatterSplit::NoFrontmatter(_) => Ok(None),
+        FrontmatterSplit::Unterminated(_) => Err(IngestError::Parse(
             "unterminated front‑matter (closing `---` not found)".into(),
         )),
     }
+}
+
+fn split_frontmatter(content: &str) -> FrontmatterSplit<'_> {
+    let trimmed = content.trim_start();
+    let Some(rest) = trimmed.strip_prefix("---\n") else {
+        return FrontmatterSplit::NoFrontmatter(trimmed);
+    };
+
+    match rest.split_once("\n---\n") {
+        Some((yaml, body)) => FrontmatterSplit::Complete { yaml, body },
+        None => FrontmatterSplit::Unterminated(trimmed),
+    }
+}
+
+fn normalize_markdown_body(body: &str) -> String {
+    body.lines().collect::<Vec<_>>().join("\n")
 }
 
 #[cfg(test)]
