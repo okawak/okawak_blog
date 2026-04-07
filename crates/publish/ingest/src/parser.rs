@@ -76,19 +76,11 @@ fn split_frontmatter(content: &str) -> FrontmatterSplit<'_> {
 fn normalize_markdown_body(body: &str) -> String {
     let body = body.trim_end_matches(['\r', '\n']);
 
-    if !body.contains('\r') {
+    if !body.contains("\r\n") {
         return body.to_string();
     }
 
-    let mut normalized = String::with_capacity(body.len());
-    for (index, line) in body.lines().enumerate() {
-        if index > 0 {
-            normalized.push('\n');
-        }
-        normalized.push_str(line);
-    }
-
-    normalized
+    body.replace("\r\n", "\n")
 }
 
 fn unterminated_frontmatter_error() -> IngestError {
