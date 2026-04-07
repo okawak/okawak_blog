@@ -42,10 +42,10 @@ mod tests {
             .with_state(LeptosOptions::builder().output_name("web").build())
     }
 
-    async fn request_json<T: serde::de::DeserializeOwned>(
-        router: Router,
-        uri: &str,
-    ) -> (StatusCode, T) {
+    async fn request_json<T>(router: Router, uri: &str) -> (StatusCode, T)
+    where
+        T: serde::de::DeserializeOwned,
+    {
         let response = router
             .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
             .await
