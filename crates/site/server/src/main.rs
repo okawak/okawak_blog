@@ -1,4 +1,4 @@
-//! Blog Server Main - Leptos SSR統合サーバー
+//! Main entry point for the integrated Leptos SSR server.
 
 use axum::{Router, routing::get};
 use infra::{ArtifactSourceConfig, build_artifact_reader};
@@ -14,7 +14,7 @@ async fn health() -> &'static str {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Leptos設定取得
+    // Load the Leptos configuration.
     let conf = get_configuration(Some("crates/site/server/Cargo.toml")).unwrap();
     let leptos_options = conf.leptos_options.clone();
     let addr = leptos_options.site_addr;
@@ -25,15 +25,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Leptos設定読み込み完了: {:?}", addr);
     println!("Artifact source: {}", artifact_source.kind());
 
-    // Leptosルート生成
+    // Generate Leptos routes.
     let routes = generate_route_list(App);
 
-    // 統合Axumアプリケーション作成
+    // Build the integrated Axum application.
     let app = Router::new()
         // API routes
         .nest("/api", create_api_router(artifact_reader.clone()))
         .route("/api/health", get(health))
-        // 静的ファイル配信
+        // Static file serving.
         .nest_service(
             "/pkg",
             axum::routing::get_service(ServeDir::new("target/site/pkg")),
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/assets",
             axum::routing::get_service(ServeDir::new("target/site/assets")),
         )
-        // Leptos SSRルート（最後に配置）
+        // Leptos SSR routes must be registered last.
         .leptos_routes_with_context(
             &leptos_options,
             routes,
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 move || shell(opts.clone())
             },
         )
-        // フォールバック
+        // Fallback handler.
         .fallback(file_and_error_handler(shell))
         .with_state(leptos_options);
 

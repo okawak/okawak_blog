@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-/// Pure domain errors - 純粋ドメインエラー（I/Oなし）
+/// Pure domain errors without I/O.
 pub type Result<T> = std::result::Result<T, DomainError>;
 
 #[derive(Error, Debug, Clone, PartialEq)]
@@ -28,12 +28,12 @@ pub enum DomainError {
 }
 
 impl DomainError {
-    /// ビジネスルール違反エラーのヘルパー
+    /// Helper for creating business-rule violation errors.
     pub fn business_rule<S: Into<String>>(rule: S) -> Self {
         Self::BusinessRuleViolation { rule: rule.into() }
     }
 
-    /// バリデーションエラーのヘルパー
+    /// Helper for creating validation errors.
     pub fn validation<S: Into<String>>(field: S) -> Self {
         Self::ValidationError {
             field: field.into(),

@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// フロントエンド用のエラータイプ
+/// Error type used by the frontend.
 #[derive(Debug, Clone, Error, Serialize, Deserialize)]
 pub enum FrontendError {
     #[error("ネットワークエラー: {message}")]
@@ -18,17 +18,17 @@ pub enum FrontendError {
     NavigationError { message: String },
 }
 
-// DomainError変換を除去（webクレートはdomain非依存）
+// No `DomainError` conversion is provided because `web` does not depend on `domain`.
 
 impl FrontendError {
-    /// ネットワークエラーを作成するヘルパーメソッド
+    /// Helper for constructing network errors.
     pub fn network_error<S: Into<String>>(message: S) -> Self {
         Self::NetworkError {
             message: message.into(),
         }
     }
 
-    /// データ読み込みエラーを作成するヘルパーメソッド
+    /// Helper for constructing data loading errors.
     pub fn load_error<S: Into<String>>(message: S) -> Self {
         Self::LoadError {
             message: message.into(),
@@ -36,10 +36,10 @@ impl FrontendError {
     }
 }
 
-/// エラーを表示するコンポーネント
+/// Component that renders an error message.
 #[component]
 pub fn ErrorTemplate(#[prop(into)] err: String) -> impl IntoView {
-    // エラーをログに記録
+    // Log the error before rendering it.
     log::error!("Error: {err}");
 
     view! {
@@ -53,7 +53,7 @@ pub fn ErrorTemplate(#[prop(into)] err: String) -> impl IntoView {
     }
 }
 
-/// エラーを直接表示するためのコンポーネント
+/// Component that renders a typed frontend error directly.
 #[component]
 pub fn DisplayError(error: FrontendError) -> impl IntoView {
     let err_string = error.to_string();

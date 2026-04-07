@@ -1,42 +1,42 @@
-//! Business Rules - 純粋なビジネスルール関数
+//! Pure business-rule functions.
 //!
-//! I/Oなし、依存なしの純粋関数でビジネスロジックを実装
+//! Business logic implemented as pure functions without I/O or external dependencies.
 
 use crate::{Article, ArticleSummary, Category, DomainError, Result, Slug, Title};
 use std::collections::HashMap;
 
 // =============================================================================
-// S3 Path Processing Rules - S3パス処理ルール（純粋関数）
+// Pure rules for processing S3 paths.
 // =============================================================================
 
-/// S3パスからSlugを抽出する純粋関数
+/// Extracts a slug from an S3 path.
 ///
-/// # 例
+/// # Examples
 /// - "tech/a1b2c3d4e5f6.html" -> "a1b2c3d4e5f6"
 /// - "blog/f6e5d4c3b2a1.html" -> "f6e5d4c3b2a1"
 pub fn extract_slug_from_s3_path(s3_path: &str) -> Result<Slug> {
-    // 空文字列チェック
+    // Reject empty paths.
     if s3_path.is_empty() {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
 
-    // 先頭のスラッシュは無効なパスとして扱う
+    // Treat leading slashes as invalid paths.
     if s3_path.starts_with('/') {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
 
-    // 二重スラッシュも無効なパスとして扱う
+    // Treat double slashes as invalid paths.
     if s3_path.contains("//") {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
 
-    // "category/slug.html" 形式から "slug.html" を抽出
+    // Extract "slug.html" from the "category/slug.html" shape.
     let file_name = s3_path
         .split('/')
         .next_back()
@@ -44,52 +44,52 @@ pub fn extract_slug_from_s3_path(s3_path: &str) -> Result<Slug> {
             path: s3_path.to_string(),
         })?;
 
-    // ".html" 拡張子を除去して slug を取得
+    // Remove the ".html" extension to obtain the slug.
     let slug_str = file_name
         .strip_suffix(".html")
         .ok_or_else(|| DomainError::InvalidPath {
             path: s3_path.to_string(),
         })?;
 
-    // 空のslugチェック
+    // Reject empty slugs.
     if slug_str.is_empty() {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
 
-    // Slugエンティティを作成
+    // Build the Slug value object.
     Slug::new(slug_str.to_string())
 }
 
-/// S3パスからCategoryを抽出する純粋関数
+/// Extracts a category from an S3 path.
 ///
-/// # 例
+/// # Examples
 /// - "tech/a1b2c3d4e5f6.html" -> Category::Tech
 /// - "daily/9876543210ab.html" -> Category::Daily
 pub fn extract_category_from_s3_path(s3_path: &str) -> Result<Category> {
-    // 空文字列チェック
+    // Reject empty paths.
     if s3_path.is_empty() {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
 
-    // 先頭のスラッシュは無効なパスとして扱う
+    // Treat leading slashes as invalid paths.
     if s3_path.starts_with('/') {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
 
-    // "category/file.html" 形式でない場合は無効（スラッシュが含まれている必要がある）
+    // Reject paths that do not match the "category/file.html" shape.
     if !s3_path.contains('/') {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
 
-    // パスから最初のセグメント（カテゴリ）を取得
+    // Take the first path segment as the category.
     let category_str = s3_path
         .split('/')
         .next()
@@ -97,24 +97,24 @@ pub fn extract_category_from_s3_path(s3_path: &str) -> Result<Category> {
             path: s3_path.to_string(),
         })?;
 
-    // カテゴリ名が空でないことを確認
+    // Reject empty category names.
     if category_str.is_empty() {
         return Err(DomainError::InvalidPath {
             path: s3_path.to_string(),
         });
     }
 
-    // 文字列をCategoryに変換（FromStrトレイト使用）
+    // Parse the string into Category via FromStr.
     category_str.parse().map_err(|_| DomainError::InvalidPath {
         path: s3_path.to_string(),
     })
 }
 
 // =============================================================================
-// Slug Generation Rules - スラッグ生成ルール
+// Rules for slug generation.
 // =============================================================================
 
-/// タイトルからスラッグを生成（純粋関数）
+/// Generates a slug from a title.
 pub fn generate_slug_from_title(title: &Title) -> Result<Slug> {
     let title_str = title.as_str();
     let slug_str = title_str
@@ -137,7 +137,7 @@ pub fn generate_slug_from_title(title: &Title) -> Result<Slug> {
     Slug::new(slug_str)
 }
 
-/// スラッグのユニーク性を確保（純粋関数）
+/// Ensures slug uniqueness.
 pub fn ensure_unique_slug(base_slug: &Slug, existing_slugs: &[String]) -> String {
     let base = base_slug.as_str();
 
@@ -152,7 +152,7 @@ pub fn ensure_unique_slug(base_slug: &Slug, existing_slugs: &[String]) -> String
         }
     }
 
-    // 最悪の場合のフォールバック（タイムスタンプベース）
+    // Timestamp-based fallback for the worst case.
     use std::time::{SystemTime, UNIX_EPOCH};
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -162,10 +162,10 @@ pub fn ensure_unique_slug(base_slug: &Slug, existing_slugs: &[String]) -> String
 }
 
 // =============================================================================
-// Article Statistics Rules - 記事統計ルール
+// Rules for article statistics.
 // =============================================================================
 
-/// 記事統計情報
+/// Aggregate article statistics.
 #[derive(Debug, Clone)]
 pub struct ArticleStats {
     pub total_articles: usize,
@@ -174,7 +174,7 @@ pub struct ArticleStats {
     pub popular_tags: Vec<(String, usize)>,
 }
 
-/// 記事一覧から統計を計算（純粋関数）
+/// Calculates statistics from a list of article summaries.
 pub fn calculate_article_stats(articles: &[ArticleSummary]) -> ArticleStats {
     let total_articles = articles.len();
     let published_articles = articles.iter().filter(|a| a.is_published).count();
@@ -194,7 +194,7 @@ pub fn calculate_article_stats(articles: &[ArticleSummary]) -> ArticleStats {
 
     let mut popular_tags: Vec<(String, usize)> = tag_counts.into_iter().collect();
     popular_tags.sort_by(|a, b| b.1.cmp(&a.1));
-    popular_tags.truncate(10); // トップ10タグのみ
+    popular_tags.truncate(10); // Keep only the top 10 tags.
 
     ArticleStats {
         total_articles,
@@ -205,10 +205,10 @@ pub fn calculate_article_stats(articles: &[ArticleSummary]) -> ArticleStats {
 }
 
 // =============================================================================
-// Content Processing Rules - コンテンツ処理ルール
+// Rules for content processing.
 // =============================================================================
 
-/// コンテンツからサマリーを生成（純粋関数）
+/// Generates a summary from content.
 pub fn generate_summary(content: &str, max_length: usize) -> String {
     let cleaned = strip_markdown(content);
 
@@ -216,7 +216,7 @@ pub fn generate_summary(content: &str, max_length: usize) -> String {
         return cleaned;
     }
 
-    // 適切な位置で切断（句読点を考慮）
+    // Truncate at a reasonable boundary with punctuation awareness.
     let truncated = &cleaned[..max_length];
     if let Some(last_period) = truncated.rfind('。') {
         format!("{}。", &truncated[..last_period])
@@ -227,7 +227,7 @@ pub fn generate_summary(content: &str, max_length: usize) -> String {
     }
 }
 
-/// Markdownから基本的な記号を除去（純粋関数）
+/// Removes basic Markdown markers.
 pub fn strip_markdown(content: &str) -> String {
     content
         .lines()
@@ -243,33 +243,33 @@ pub fn strip_markdown(content: &str) -> String {
         .join(" ")
 }
 
-/// 読了時間を推定（純粋関数、日本語対応）
+/// Estimates reading time for Japanese content.
 pub fn estimate_reading_time(content: &str) -> usize {
     let char_count = content.chars().count();
-    // 日本語: 1分間に約400-600文字読める（平均500文字で計算）
+    // Japanese readers typically read roughly 400-600 characters per minute.
     let minutes = (char_count as f64 / 500.0).ceil() as usize;
-    std::cmp::max(1, minutes) // 最低1分
+    std::cmp::max(1, minutes) // Always return at least one minute.
 }
 
 // =============================================================================
-// Validation Rules - バリデーションルール
+// Validation rules.
 // =============================================================================
 
-/// 記事の公開前バリデーション（純粋関数）
+/// Validates an article before publishing.
 pub fn validate_for_publishing(article: &Article) -> Result<()> {
-    // タイトルが空でないことを確認
+    // Require a non-empty title.
     if article.title.as_str().trim().is_empty() {
         return Err(DomainError::validation("タイトルが空です"));
     }
 
-    // コンテンツが最低限の長さを持つことを確認
+    // Require the content to meet a minimum length.
     if article.content.trim().len() < 10 {
         return Err(DomainError::validation(
             "コンテンツが短すぎます（最低10文字必要）",
         ));
     }
 
-    // スラッグが適切な形式であることを確認
+    // Require a non-empty slug.
     if article.slug.as_str().is_empty() {
         return Err(DomainError::validation("スラッグが空です"));
     }
@@ -277,17 +277,17 @@ pub fn validate_for_publishing(article: &Article) -> Result<()> {
     Ok(())
 }
 
-/// カテゴリ変更のバリデーション（純粋関数）
+/// Validates a category change.
 pub fn validate_category_change(from: Category, to: Category, _article: &Article) -> Result<()> {
-    // 同じカテゴリへの変更は不要
+    // Reject no-op category changes.
     if from == to {
         return Err(DomainError::validation(
             "同じカテゴリに変更することはできません",
         ));
     }
 
-    // 将来的にビジネスルールを追加可能
-    // 例: 特定のカテゴリからの変更制限など
+    // Additional business rules can be added here in the future.
+    // Example: restricting transitions from specific categories.
 
     Ok(())
 }
@@ -324,7 +324,7 @@ mod tests {
         assert_eq!(stripped, "タイトル リスト項目 別のリスト 通常のテキスト");
     }
 
-    // 新規追加: S3パス解析のテスト (TDD Red Phase)
+    // Added coverage for S3 path parsing during the TDD red phase.
     #[rstest]
     #[case("tech/a1b2c3d4e5f6.html", "a1b2c3d4e5f6")]
     #[case("blog/f6e5d4c3b2a1.html", "f6e5d4c3b2a1")]
@@ -341,9 +341,9 @@ mod tests {
     #[case("tech/")]
     #[case("tech/file.txt")]
     #[case("")]
-    #[case("tech/slug")] // .htmlなし
-    #[case("/tech/slug.html")] // 先頭スラッシュ
-    #[case("tech//slug.html")] // 二重スラッシュ
+    #[case("tech/slug")] // Missing .html extension.
+    #[case("/tech/slug.html")] // Leading slash.
+    #[case("tech//slug.html")] // Double slash.
     fn test_extract_slug_from_s3_path_failure(#[case] invalid_path: &str) {
         let result = extract_slug_from_s3_path(invalid_path);
         assert!(result.is_err(), "Expected error for path: {}", invalid_path);
@@ -366,8 +366,8 @@ mod tests {
     #[case("")]
     #[case("invalid/file.html")]
     #[case("unknown_category/slug.html")]
-    #[case("/tech/slug.html")] // 先頭スラッシュ
-    #[case("tech")] // ファイル名なし
+    #[case("/tech/slug.html")] // Leading slash.
+    #[case("tech")] // Missing file name.
     fn test_extract_category_from_s3_path_failure(#[case] invalid_path: &str) {
         let result = extract_category_from_s3_path(invalid_path);
         assert!(result.is_err(), "Expected error for path: {}", invalid_path);

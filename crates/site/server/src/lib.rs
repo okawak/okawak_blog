@@ -1,7 +1,7 @@
-//! Blog Server Library - WASM向けweb crate再エクスポート
+//! Blog server library with wasm-aware exports.
 //!
-//! WASMターゲットではweb crateを使用し、
-//! ネイティブターゲットではサーバー機能を提供
+//! The wasm target re-exports the `web` crate,
+//! while native targets expose server functionality.
 
 #[cfg(target_arch = "wasm32")]
 pub use web::*;

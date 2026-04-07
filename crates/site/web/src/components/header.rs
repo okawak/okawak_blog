@@ -6,7 +6,7 @@ use thaw::*;
 
 import_style!(header_style, "header.module.scss");
 
-/// サイトヘッダーコンポーネント
+/// Site header component.
 #[component]
 pub fn Header() -> impl IntoView {
     let location = use_location();
@@ -21,7 +21,7 @@ pub fn Header() -> impl IntoView {
                     <h1 class=header_style::logo>{"ぶくせんの探窟メモ"}</h1>
                 </a>
 
-                // ハンバーガーボタン（thaw-ui Buttonで置き換え）
+                // Hamburger toggle implemented with a thaw-ui button.
                 <Button
                     class=header_style::menu_toggle
                     on_click=move |_| set_menu_open.update(|v| *v = !*v)
@@ -65,7 +65,7 @@ pub fn Header() -> impl IntoView {
                         />
                     </ul>
 
-                    // ソーシャルリンクにthaw-ui Buttonを使用
+                    // Render the social link as a thaw-ui button.
                     <div class=header_style::social_links>
                         <Button
                             class=header_style::social_button

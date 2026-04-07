@@ -3,7 +3,7 @@ use stylance::import_style;
 
 import_style!(footer_style, "footer.module.scss");
 
-/// サイトフッターコンポーネント
+/// Site footer component.
 #[component]
 pub fn Footer() -> impl IntoView {
     view! {

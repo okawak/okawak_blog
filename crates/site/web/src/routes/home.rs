@@ -121,7 +121,7 @@ fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
     }
 }
 
-/// ホームページコンポーネント
+/// Home page component.
 #[component]
 pub fn HomePage() -> impl IntoView {
     let home_page = Resource::<Result<HomePageDocument, String>>::new(

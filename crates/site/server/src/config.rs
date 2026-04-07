@@ -1,4 +1,4 @@
-//! Configuration - アプリケーション設定管理（スタブ）
+//! Stub configuration module.
 
 #[derive(Debug, Clone)]
 pub struct Config {

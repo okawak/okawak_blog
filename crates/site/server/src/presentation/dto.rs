@@ -1,8 +1,8 @@
-//! Data Transfer Objects - API用のデータ転送オブジェクト
+//! Data transfer objects used by the API.
 
 use serde::{Deserialize, Serialize};
 
-/// 記事DTO - JSON API用
+/// Article DTO for the JSON API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArticleDto {
     pub id: String,
@@ -17,7 +17,7 @@ pub struct ArticleDto {
     pub is_published: bool,
 }
 
-/// 記事サマリーDTO - 一覧用
+/// Article summary DTO for list responses.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArticleSummaryDto {
     pub id: String,
@@ -30,17 +30,17 @@ pub struct ArticleSummaryDto {
     pub is_published: bool,
 }
 
-/// 記事作成リクエストDTO
+/// Request DTO for creating an article.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateArticleDto {
     pub title: String,
     pub content: String,
     pub category: String,
-    pub slug: Option<String>, // 未指定の場合はタイトルから生成
+    pub slug: Option<String>, // Generated from the title when omitted.
     pub tags: Option<Vec<String>>,
 }
 
-/// 記事更新リクエストDTO
+/// Request DTO for updating an article.
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpdateArticleDto {
     pub title: Option<String>,
@@ -50,7 +50,7 @@ pub struct UpdateArticleDto {
     pub tags: Option<Vec<String>>,
 }
 
-/// カテゴリーDTO
+/// Category DTO.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CategoryDto {
     pub id: String,
@@ -58,7 +58,7 @@ pub struct CategoryDto {
     pub display_name: String,
 }
 
-/// API統一レスポンス形式
+/// Unified API response shape.
 #[derive(Debug, Clone, Serialize)]
 pub struct ApiResponse<T> {
     pub success: bool,

@@ -1,4 +1,4 @@
-//! Presentation Layer - DTO変換とAPI型定義
+//! Presentation layer types and DTO conversion utilities.
 
 pub mod converters;
 pub mod dto;

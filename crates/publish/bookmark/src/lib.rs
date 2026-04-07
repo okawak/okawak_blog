@@ -6,12 +6,12 @@ use regex::Regex;
 use scraper::{Html, Selector};
 use std::sync::LazyLock;
 
-/// HTML生成時の初期容量（基本的なHTML構造分）
+/// Initial capacity for generated HTML.
 const HTML_INITIAL_CAPACITY: usize = 1024;
-/// HTML処理時の追加容量（メタデータ拡張分）
+/// Extra capacity reserved for metadata expansion.
 const HTML_EXTENSION_CAPACITY: usize = 2048;
 
-/// リッチブックマークのメタデータを保持する構造体
+/// Metadata used to render a rich bookmark card.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BookmarkData {
     pub url: String,
@@ -21,7 +21,7 @@ pub struct BookmarkData {
     pub favicon_url: Option<String>,
 }
 
-/// URLからOGPメタデータを取得する（10秒タイムアウト）
+/// Fetches OGP metadata from a URL with a 10-second timeout.
 pub async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
     let client = create_http_client()?;
     let html_content = fetch_html_content(&client, url).await?;
@@ -36,9 +36,9 @@ pub async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
     })
 }
 
-/// HTTPクライアントを作成
+/// Builds the HTTP client.
 fn create_http_client() -> Result<reqwest::Client> {
-    // 標準的なUser-Agent形式を使用（内部パッケージ詳細を公開しない）
+    // Use a standard User-Agent format without exposing internal package details.
     let user_agent = "publisher-bookmark/1.0 (+https://github.com/okawak/okawak_blog)";
 
     reqwest::Client::builder()
@@ -48,21 +48,21 @@ fn create_http_client() -> Result<reqwest::Client> {
         .map_err(Into::into)
 }
 
-/// HTMLコンテンツを取得
+/// Fetches HTML content.
 async fn fetch_html_content(client: &reqwest::Client, url: &str) -> Result<String> {
     let response = client.get(url).send().await?;
 
     response.text().await.map_err(Into::into)
 }
 
-/// HTMLドキュメントからタイトルを抽出
+/// Extracts a title from an HTML document.
 fn extract_title(document: &Html) -> Option<String> {
     extract_meta_content(document, "meta[property='og:title']")
         .or_else(|| extract_meta_content(document, "meta[name='twitter:title']"))
         .or_else(|| extract_title_tag(document))
 }
 
-/// メタタグのcontentを抽出
+/// Extracts the `content` attribute from a meta tag.
 fn extract_meta_content(document: &Html, selector: &str) -> Option<String> {
     let selector = Selector::parse(selector).ok()?;
     let content = document
@@ -79,7 +79,7 @@ fn extract_meta_content(document: &Html, selector: &str) -> Option<String> {
     }
 }
 
-/// titleタグのテキストを抽出
+/// Extracts the text content of the `title` tag.
 fn extract_title_tag(document: &Html) -> Option<String> {
     let selector = Selector::parse("title").ok()?;
     let title_text = document
@@ -96,14 +96,14 @@ fn extract_title_tag(document: &Html) -> Option<String> {
     }
 }
 
-/// HTMLドキュメントから説明を抽出
+/// Extracts a description from an HTML document.
 fn extract_description(document: &Html) -> Option<String> {
     extract_meta_content(document, "meta[property='og:description']")
         .or_else(|| extract_meta_content(document, "meta[name='twitter:description']"))
         .or_else(|| extract_meta_content(document, "meta[name='description']"))
 }
 
-/// HTMLドキュメントから画像URLを抽出
+/// Extracts an image URL from an HTML document.
 fn extract_image(document: &Html, base_url: &str) -> Option<String> {
     use url::Url;
 
@@ -112,7 +112,7 @@ fn extract_image(document: &Html, base_url: &str) -> Option<String> {
     extract_meta_content(document, "meta[property='og:image']")
         .or_else(|| extract_meta_content(document, "meta[name='twitter:image']"))
         .and_then(|content| {
-            // 絶対URLの場合はそのまま、相対URLの場合はbaseと結合
+            // Keep absolute URLs as-is and resolve relative URLs against the base URL.
             if content.starts_with("http://") || content.starts_with("https://") {
                 Some(content)
             } else {
@@ -121,7 +121,7 @@ fn extract_image(document: &Html, base_url: &str) -> Option<String> {
         })
 }
 
-/// HTMLドキュメントからファビコンURLを抽出
+/// Extracts a favicon URL from an HTML document.
 fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
     use url::Url;
 
@@ -135,7 +135,7 @@ fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
 
     for selector in &selectors {
         if let Some(href) = extract_link_href(document, selector) {
-            // 絶対URLの場合はそのまま、相対URLの場合はbaseと結合
+            // Keep absolute URLs as-is and resolve relative URLs against the base URL.
             let result_url = if href.starts_with("http://") || href.starts_with("https://") {
                 Some(href)
             } else {
@@ -148,11 +148,11 @@ fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
         }
     }
 
-    // 有効なベースURLならfavicon.icoは常に成功するため、unwrapで簡略化
+    // A valid base URL can always resolve `/favicon.ico`, so `unwrap` is acceptable here.
     Some(base.join("/favicon.ico").unwrap().to_string())
 }
 
-/// linkタグのhref属性を抽出
+/// Extracts the `href` attribute from a `link` tag.
 fn extract_link_href(document: &Html, selector: &str) -> Option<String> {
     let selector = Selector::parse(selector).ok()?;
     document
@@ -163,7 +163,7 @@ fn extract_link_href(document: &Html, selector: &str) -> Option<String> {
         .map(ToString::to_string)
 }
 
-/// リッチブックマークHTMLを生成する（bookmarkクラス使用）
+/// Generates rich bookmark HTML using the `bookmark` class.
 pub fn generate_rich_bookmark(data: &BookmarkData) -> String {
     let domain = extract_domain(&data.url);
 
@@ -179,7 +179,7 @@ pub fn generate_rich_bookmark(data: &BookmarkData) -> String {
     html
 }
 
-/// URLからドメイン名を抽出
+/// Extracts the domain from a URL.
 fn extract_domain(url: &str) -> String {
     use url::Url;
 
@@ -189,7 +189,7 @@ fn extract_domain(url: &str) -> String {
         .unwrap_or_else(|| url.to_string())
 }
 
-/// ブックマークリンク開始タグを書き込み
+/// Writes the opening bookmark link tag.
 fn write_bookmark_link(html: &mut String, url: &str) {
     html.push_str(&format!(
         "  <a href=\"{}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"bookmark-link\">\n",
@@ -197,7 +197,7 @@ fn write_bookmark_link(html: &mut String, url: &str) {
     ));
 }
 
-/// ブックマークコンテナを書き込み
+/// Writes the bookmark container.
 fn write_bookmark_container(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("    <div class=\"bookmark-container\">\n");
 
@@ -207,7 +207,7 @@ fn write_bookmark_container(html: &mut String, data: &BookmarkData, domain: &str
     html.push_str("    </div>\n");
 }
 
-/// ブックマーク情報セクションを書き込み
+/// Writes the bookmark information section.
 fn write_bookmark_info(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("      <div class=\"bookmark-info\">\n");
     html.push_str(&format!(
@@ -226,7 +226,7 @@ fn write_bookmark_info(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("      </div>\n");
 }
 
-/// ブックマークリンク情報を書き込み
+/// Writes the bookmark link metadata.
 fn write_bookmark_link_info(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("        <div class=\"bookmark-link-info\">\n");
 
@@ -244,7 +244,7 @@ fn write_bookmark_link_info(html: &mut String, data: &BookmarkData, domain: &str
     html.push_str("        </div>\n");
 }
 
-/// ブックマーク画像セクションを書き込み
+/// Writes the bookmark image section.
 fn write_bookmark_image(html: &mut String, data: &BookmarkData) {
     if let Some(image_url) = &data.image_url {
         html.push_str("      <div class=\"bookmark-image\">\n");
@@ -257,17 +257,17 @@ fn write_bookmark_image(html: &mut String, data: &BookmarkData) {
     }
 }
 
-/// HTMLエスケープ処理（基本的なXSS対策）
+/// Escapes HTML for basic XSS protection.
 fn html_escape(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;")
-    // バックティック、改行文字等の追加エスケープは現在の用途では不要
+    // Additional escaping for backticks and newlines is unnecessary for the current use case.
 }
 
-/// HTML内のシンプルなbookmark構造を検出してリッチブックマークに変換する（OGP取得）
+/// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
 pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
     static BOOKMARK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]*)</a>\s*</div>"#)
@@ -275,7 +275,7 @@ pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<Stri
     });
 
     let mut result = String::with_capacity(html_content.len() + HTML_EXTENSION_CAPACITY);
-    let mut last_end = 0; // 前回のマッチ終了位置
+    let mut last_end = 0; // End position of the previous match.
 
     for capture in BOOKMARK_REGEX.captures_iter(html_content) {
         let full_match = capture.get(0).unwrap();
@@ -300,7 +300,7 @@ pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<Stri
     Ok(result)
 }
 
-/// フォールバック用のブックマークデータを作成する関数
+/// Creates fallback bookmark data.
 pub fn create_fallback_bookmark_data(url: &str, original_title: &str) -> BookmarkData {
     BookmarkData {
         url: url.to_string(),
@@ -452,12 +452,12 @@ mod tests {
     )]
     #[tokio::test]
     async fn test_convert_simple_bookmarks_to_rich(#[case] input: &str, #[case] expected: &str) {
-        // モック関数として実装：実際のHTTPリクエストを行わずフォールバックデータを使用
+        // Mock implementation that avoids real HTTP requests and uses fallback data.
         let result = convert_simple_bookmarks_to_rich_mock(input).await.unwrap();
         assert_eq!(result, expected);
     }
 
-    /// テスト専用のモック変換関数
+    /// Test-only mock conversion helper.
     async fn convert_simple_bookmarks_to_rich_mock(html_content: &str) -> Result<String> {
         static BOOKMARK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]*)</a>\s*</div>"#)

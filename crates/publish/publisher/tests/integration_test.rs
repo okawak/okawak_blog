@@ -10,7 +10,7 @@ async fn test_run_main_with_empty_directory() {
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
 
-    // 空のObsidianディレクトリを作成
+    // Create an empty Obsidian directory.
     fs::create_dir_all(&obsidian_dir).unwrap();
 
     let config = Config {
@@ -18,11 +18,11 @@ async fn test_run_main_with_empty_directory() {
         output_dir: output_dir.clone(),
     };
 
-    // run_mainを実行
+    // Run `run_main`.
     let result = run_main(&config).await;
     assert!(result.is_ok());
 
-    // 出力ディレクトリが作成されていることを確認
+    // Verify that the output directory was created.
     assert!(output_dir.exists());
     assert!(output_dir.is_dir());
 }
@@ -33,7 +33,7 @@ async fn test_run_main_with_sample_file() {
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
 
-    // Obsidianディレクトリとサンプルファイルを作成
+    // Create the Obsidian directory and a sample file.
     fs::create_dir_all(&obsidian_dir).unwrap();
 
     let sample_content = indoc! {r#"
@@ -61,14 +61,14 @@ async fn test_run_main_with_sample_file() {
         output_dir: output_dir.clone(),
     };
 
-    // run_mainを実行
+    // Run `run_main`.
     let result = run_main(&config).await;
     assert!(result.is_ok());
 
     let site_root = output_dir.join("site");
     let articles_dir = site_root.join("articles");
 
-    // HTMLファイルが生成されていることを確認（slugベース）
+    // Verify that at least one slug-based HTML file was generated.
     let html_files: Vec<_> = fs::read_dir(&articles_dir)
         .unwrap()
         .filter_map(|entry| entry.ok())
@@ -80,7 +80,7 @@ async fn test_run_main_with_sample_file() {
         "At least one HTML file should be generated"
     );
 
-    // HTMLファイルの内容を確認
+    // Verify the generated HTML content.
     let html_file = &html_files[0];
     let html_content = fs::read_to_string(html_file.path()).unwrap();
     assert!(html_content.contains("Test Article"));
@@ -100,7 +100,7 @@ async fn test_run_main_with_incomplete_file() {
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
 
-    // Obsidianディレクトリとis_completed: falseのファイルを作成
+    // Create the Obsidian directory and a file with `is_completed: false`.
     fs::create_dir_all(&obsidian_dir).unwrap();
 
     let incomplete_content = indoc! {r#"
@@ -128,11 +128,11 @@ async fn test_run_main_with_incomplete_file() {
         output_dir: output_dir.clone(),
     };
 
-    // run_mainを実行
+    // Run `run_main`.
     let result = run_main(&config).await;
     assert!(result.is_ok());
 
-    // HTMLファイルが生成されていないことを確認（is_completed: falseのため）
+    // Verify that no HTML file is generated for incomplete content.
     let html_file = output_dir
         .join("site")
         .join("articles")
@@ -142,7 +142,7 @@ async fn test_run_main_with_incomplete_file() {
 
 #[test]
 fn test_config_validation() {
-    // 存在しないディレクトリでのConfig作成テスト
+    // Verify config behavior with a non-existent directory.
     let temp_dir = TempDir::new().unwrap();
     let non_existent_dir = temp_dir.path().join("non_existent");
 
@@ -151,7 +151,6 @@ fn test_config_validation() {
         output_dir: PathBuf::from("test_output"),
     };
 
-    // validateは直接呼べないので、Config::newで検証する代わりに
-    // 存在しないパスでの動作を確認
+    // `validate` is not called directly here, so assert the missing-path behavior instead.
     assert!(!config.obsidian_dir.exists());
 }

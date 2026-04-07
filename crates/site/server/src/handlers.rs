@@ -1,4 +1,4 @@
-//! Handlers - HTTP ハンドラーと Leptos 統合
+//! HTTP handlers and Leptos integration points.
 
 pub mod api;
 pub mod ssr;

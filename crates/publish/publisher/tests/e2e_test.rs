@@ -3,19 +3,19 @@ use publisher::{Config, run_main, slug};
 use std::{fs, path::Path};
 use tempfile::TempDir;
 
-/// エンドツーエンドテスト: 実際のObsidianファイル形式を模擬した包括的テスト
+/// End-to-end test that simulates a realistic Obsidian vault.
 #[tokio::test]
 async fn test_end_to_end_obsidian_processing() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
 
-    // リアルなObsidianディレクトリ構造を作成
+    // Create a realistic Obsidian directory structure.
     fs::create_dir_all(&obsidian_dir).unwrap();
     fs::create_dir_all(obsidian_dir.join("tech")).unwrap();
     fs::create_dir_all(obsidian_dir.join("blog")).unwrap();
 
-    // 技術記事のサンプル
+    // Sample technical article.
     let tech_article = indoc! {r#"
         ---
         title: "Rustでのパフォーマンス最適化"
@@ -73,7 +73,7 @@ async fn test_end_to_end_obsidian_processing() {
     let tech_file = obsidian_dir.join("tech").join("rust-performance.md");
     fs::write(&tech_file, tech_article).unwrap();
 
-    // 基本概念記事
+    // Foundational concepts article.
     let basic_concepts = indoc! {r#"
         ---
         title: "基本的なRust概念"
@@ -104,7 +104,7 @@ async fn test_end_to_end_obsidian_processing() {
             let s2 = s1; // s1はもう使えない
 
             println!("{}", s2); // OK
-            // println!("{}", s1); // コンパイルエラー
+            // println!("{}", s1); // Compile error
         }
         ```
 
@@ -114,7 +114,7 @@ async fn test_end_to_end_obsidian_processing() {
     let basic_file = obsidian_dir.join("basic-rust-concepts.md");
     fs::write(&basic_file, basic_concepts).unwrap();
 
-    // ブログ記事（未完成）
+    // Draft blog article.
     let blog_draft = indoc! {r#"
         ---
         title: "開発日記: ブログシステムを作ってみた"
@@ -135,7 +135,7 @@ async fn test_end_to_end_obsidian_processing() {
     let blog_file = obsidian_dir.join("blog").join("development-diary.md");
     fs::write(&blog_file, blog_draft).unwrap();
 
-    // メモリ管理のベストプラクティス記事
+    // Memory-management best-practices article.
     let memory_practices = indoc! {r#"
         ---
         title: "メモリ管理のベストプラクティス"
@@ -155,13 +155,13 @@ async fn test_end_to_end_obsidian_processing() {
         ## Vector の事前確保
 
         ```rust
-        // 悪い例
+        // Bad example
         let mut vec = Vec::new();
         for i in 0..1000 {
             vec.push(i);
         }
 
-        // 良い例
+        // Good example
         let mut vec = Vec::with_capacity(1000);
         for i in 0..1000 {
             vec.push(i);
@@ -194,14 +194,14 @@ async fn test_end_to_end_obsidian_processing() {
         output_dir: output_dir.clone(),
     };
 
-    // メイン処理を実行
+    // Run the main processing flow.
     let result = run_main(&config).await;
     assert!(result.is_ok(), "run_main should succeed");
 
-    // 出力ディレクトリの検証
+    // Validate the output directory.
     assert!(output_dir.exists(), "Output directory should exist");
 
-    // 生成されたHTMLファイルの検証（slugベース）
+    // Validate the generated slug-based HTML files.
     let tech_slug = slug::generate_slug(
         "Rustでのパフォーマンス最適化",
         Path::new("tech/rust-performance.md"),
@@ -227,7 +227,7 @@ async fn test_end_to_end_obsidian_processing() {
     let _basic_html = articles_dir.join(format!("{basic_slug}.html"));
     let _memory_html = articles_dir.join(format!("{memory_slug}.html"));
 
-    // 未完成記事用（is_completed: false なので生成されない）
+    // Draft article slug. No HTML should be generated because `is_completed` is false.
     let blog_slug = slug::generate_slug(
         "開発日記: ブログシステムを作ってみた",
         Path::new("blog/development-diary.md"),
@@ -236,7 +236,7 @@ async fn test_end_to_end_obsidian_processing() {
     .unwrap();
     let blog_html = articles_dir.join(format!("{blog_slug}.html"));
 
-    // 完成した記事のHTMLが生成されているか確認（ファイル数で判定）
+    // Check that completed articles produced HTML by counting files.
     let mut html_count = 0;
 
     if let Ok(entries) = fs::read_dir(&articles_dir) {
@@ -246,16 +246,16 @@ async fn test_end_to_end_obsidian_processing() {
             .count();
     }
 
-    // 期待する数：技術記事2つ + 基本記事1つ
+    // Expected files: two technical articles plus one foundational article.
     assert_eq!(html_count, 3, "Should generate 3 published articles");
 
-    // 未完成の記事は生成されないことを確認
+    // Ensure the draft article was not generated.
     assert!(
         !blog_html.exists(),
         "Draft blog HTML should not be generated"
     );
 
-    // HTMLファイルの内容検証（tech ディレクトリ内のファイルから特定のコンテンツを探す）
+    // Inspect generated HTML and look for specific content in the articles directory.
     let mut performance_file_found = false;
     let mut memory_file_found = false;
 
@@ -273,7 +273,7 @@ async fn test_end_to_end_obsidian_processing() {
             if let Ok(content) = fs::read_to_string(file.path()) {
                 println!("Checking file: {:?}", file.path());
 
-                // 安全な文字列スライス
+                // Safe string slice.
                 let preview_len = content
                     .char_indices()
                     .nth(100)
@@ -308,7 +308,7 @@ async fn test_end_to_end_obsidian_processing() {
         "Memory management article should be present in site/articles"
     );
 
-    // KaTeX数式の処理確認
+    // Verify KaTeX math rendering.
     let mut math_processing_verified = false;
 
     if let Ok(entries) = fs::read_dir(&articles_dir) {
@@ -341,7 +341,7 @@ async fn test_end_to_end_obsidian_processing() {
     assert!(site_metadata.contains("\"total_articles\": 3"));
 
     println!(
-        "✅ エンドツーエンドテスト完了: {} 個のHTMLファイル生成",
+        "✅ End-to-end test finished: generated {} HTML files",
         fs::read_dir(&articles_dir)
             .unwrap()
             .filter_map(|entry| entry.ok())
@@ -350,7 +350,7 @@ async fn test_end_to_end_obsidian_processing() {
     );
 }
 
-/// パフォーマンステスト: 大量ファイル処理のテスト
+/// Performance test for processing a large number of files.
 #[tokio::test]
 async fn test_large_volume_processing() {
     let temp_dir = TempDir::new().unwrap();
@@ -359,7 +359,7 @@ async fn test_large_volume_processing() {
 
     fs::create_dir_all(&obsidian_dir).unwrap();
 
-    // 100個のテストファイルを生成
+    // Generate 100 test files.
     for i in 0..100 {
         let content = format!(
             indoc! {r#"
@@ -416,14 +416,14 @@ async fn test_large_volume_processing() {
         output_dir: output_dir.clone(),
     };
 
-    // 処理時間の計測
+    // Measure processing time.
     let start = std::time::Instant::now();
     let result = run_main(&config).await;
     let duration = start.elapsed();
 
     assert!(result.is_ok(), "Large volume processing should succeed");
 
-    // 生成されたファイル数の確認
+    // Verify the number of generated files.
     let generated_count = fs::read_dir(output_dir.join("site").join("articles"))
         .unwrap()
         .filter_map(|entry| entry.ok())
@@ -432,16 +432,16 @@ async fn test_large_volume_processing() {
 
     assert_eq!(generated_count, 100, "Should generate 100 HTML files");
 
-    // パフォーマンス要件の確認（100ファイルを5秒以内で処理）
+    // Assert the performance target: 100 files within 5 seconds.
     assert!(
         duration.as_secs() < 5,
         "Should process 100 files in under 5 seconds, took {duration:?}"
     );
 
-    println!("✅ パフォーマンステスト完了: {generated_count}個のファイルを{duration:.2?}で処理");
+    println!("✅ Performance test finished: processed {generated_count} files in {duration:.2?}");
 }
 
-/// エラーハンドリングテスト: 部分的失敗時の継続処理
+/// Error-handling test for continuing after partial failures.
 #[tokio::test]
 async fn test_partial_failure_handling() {
     let temp_dir = TempDir::new().unwrap();
@@ -450,7 +450,7 @@ async fn test_partial_failure_handling() {
 
     fs::create_dir_all(&obsidian_dir).unwrap();
 
-    // 正常なファイル
+    // Valid file.
     let valid_file = indoc! {r#"
         ---
         title: "Valid Article"
@@ -468,7 +468,7 @@ async fn test_partial_failure_handling() {
         This article should be processed successfully.
     "#};
 
-    // YAMLフロントマターが壊れたファイル
+    // File with malformed YAML front matter.
     let invalid_yaml = indoc! {r#"
         ---
         title: "Invalid YAML"
@@ -486,7 +486,7 @@ async fn test_partial_failure_handling() {
         This article has broken frontmatter.
     "#};
 
-    // 未完成ファイル（スキップされるべき）
+    // Incomplete file that should be skipped.
     let incomplete_file = indoc! {r#"
         ---
         title: "Incomplete Article"
@@ -513,14 +513,14 @@ async fn test_partial_failure_handling() {
         output_dir: output_dir.clone(),
     };
 
-    // 部分的失敗があっても処理は継続されるべき
+    // Processing should continue even when some files fail.
     let result = run_main(&config).await;
     assert!(
         result.is_ok(),
         "Should continue processing despite partial failures"
     );
 
-    // 正常なファイルは処理されるべき（slugベース）
+    // The valid file should still be processed.
     let valid_slug = slug::generate_slug(
         "Valid Article",
         Path::new("valid.md"),
@@ -533,9 +533,9 @@ async fn test_partial_failure_handling() {
         .join(format!("{valid_slug}.html"));
     assert!(valid_html.exists(), "Valid file should be processed");
 
-    // 異常なファイルは処理されないべき（slugベース）
+    // The malformed file should not be processed.
     let invalid_slug = slug::generate_slug(
-        "Malformed Article", // invalid.mdのタイトル（仮）
+        "Malformed Article", // Placeholder title used for invalid.md.
         Path::new("invalid.md"),
         "2025-01-15T10:00:00+09:00",
     )
@@ -549,7 +549,7 @@ async fn test_partial_failure_handling() {
         "Invalid file should not be processed"
     );
 
-    // 未完成ファイルは処理されないべき
+    // The incomplete file should not be processed.
     let incomplete_html = output_dir
         .join("site")
         .join("articles")
@@ -559,5 +559,5 @@ async fn test_partial_failure_handling() {
         "Incomplete file should not be processed"
     );
 
-    println!("✅ エラーハンドリングテスト完了: 部分的失敗時も正常ファイルは処理継続");
+    println!("✅ Error-handling test finished: valid files still complete after partial failures");
 }

@@ -2,7 +2,7 @@ use crate::error::{ObsidianError, Result};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
-/// SHA-256ハッシュベースのslugを生成する
+/// Generates a SHA-256-based slug.
 pub fn generate_slug<P: AsRef<Path>>(
     title: &str,
     relative_path: P,
@@ -13,15 +13,15 @@ pub fn generate_slug<P: AsRef<Path>>(
         .to_str()
         .ok_or_else(|| ObsidianError::Path("Invalid path encoding".to_string()))?;
 
-    // ハッシュ生成元文字列
+    // Input string used to build the hash.
     let hash_input = format!("{title}/{relative_path_str}/{created}");
 
-    // SHA-256ハッシュ計算
+    // Compute the SHA-256 hash.
     let mut hasher = Sha256::new();
     hasher.update(hash_input.as_bytes());
     let hash_result = hasher.finalize();
 
-    // 先頭6バイト（12文字の16進文字列）を使用してslugを生成
+    // Use the first 6 bytes to build a 12-character hex slug.
     let slug = hash_result[..6]
         .iter()
         .fold(String::with_capacity(12), |mut acc, byte| {
@@ -32,7 +32,7 @@ pub fn generate_slug<P: AsRef<Path>>(
     Ok(slug)
 }
 
-/// slugの一意性を検証する（将来の拡張用）
+/// Validates slug uniqueness for future extensions.
 pub fn validate_slug_uniqueness(slug: &str, existing_slugs: &[String]) -> bool {
     !existing_slugs.contains(&slug.to_string())
 }
@@ -64,12 +64,12 @@ mod tests {
         let relative_path = PathBuf::from("test/path.md");
         let created = "2025-01-01T00:00:00+09:00";
 
-        // 同じ入力では同じslugが生成される
+        // The same input should always produce the same slug.
         let slug1 = generate_slug("Same Title", &relative_path, created)?;
         let slug2 = generate_slug("Same Title", &relative_path, created)?;
         assert_eq!(slug1, slug2);
 
-        // 異なる入力では異なるslugが生成される
+        // Different inputs should produce different slugs.
         let slug3 = generate_slug("Different Title", &relative_path, created)?;
         assert_ne!(slug1, slug3);
 
