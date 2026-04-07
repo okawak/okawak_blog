@@ -126,6 +126,36 @@ Obsidian repo
 
 publisher が読む `obsidian` の Markdown は、この public repo へ通常ファイルとして同梱しない。source of truth は private な別リポジトリであり、ローカル開発と GitHub Actions の両方で git submodule として取得する。
 
+## Obsidian Front Matter
+
+Publisher が記事として扱う Markdown には、YAML front matter が必要です。現在の parser は LF 区切りの front matter を前提にしており、`is_completed: true` の記事だけを公開対象として扱います。
+
+```yaml
+---
+title: "Rust Performance Notes"
+tags: ["rust", "performance"]
+summary: "Short summary shown in lists and metadata."
+is_completed: true
+priority: 1
+created: "2025-01-15T10:00:00+09:00"
+updated: "2025-01-16T09:30:00+09:00"
+category: "tech"
+---
+```
+
+各フィールドの役割は次の通りです。
+
+- `title`: 記事タイトル。必須です。
+- `tags`: タグ一覧。省略可能です。
+- `summary`: 一覧やメタ情報に使う短い説明。省略可能です。
+- `is_completed`: 公開対象かどうかを示すフラグ。`true` の記事だけを出力します。
+- `priority`: 並び順や強調表示に使う優先度。省略可能です。
+- `created`: 作成日時。必須です。
+- `updated`: 更新日時。必須です。
+- `category`: 記事カテゴリ。省略時はカテゴリなしとして扱います。
+
+本文は closing `---` の次の行から始まり、Obsidian link や bookmark 埋め込みを含められます。front matter がない Markdown は publisher からはスキップされます。
+
 ## 運用モデル
 
 - VPS 上で Rust 製サーバーバイナリを `systemd` service として起動する

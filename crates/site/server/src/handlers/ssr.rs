@@ -1,14 +1,14 @@
-//! SSR Handlers - Leptos Server-Side Rendering統合
+//! SSR handlers.
 
 use axum::Router;
 
-/// SSR ルーターを作成
+/// Builds the SSR router.
 pub fn create_ssr_router() -> Router {
-    // 将来実装: Leptos SSR統合
+    // Future implementation: full Leptos SSR integration.
     // Router::new()
     //     .leptos_routes(&leptos_options, web::app_routes, web::App)
     //     .fallback(web::file_and_error_handler)
 
-    // 一時的なプレースホルダー
+    // Temporary placeholder.
     Router::new()
 }

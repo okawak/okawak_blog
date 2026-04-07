@@ -5,14 +5,15 @@ use stylance::import_style;
 
 import_style!(sidebar_style, "sidebar.module.scss");
 
-/// 特定のカテゴリの記事全てを取得するサーバー関数（ダミー実装）
+/// Server function that fetches all articles for a category.
+/// This is still a placeholder implementation.
 #[server]
 pub async fn get_all_articles(_category: String) -> Result<Vec<ArticleSummary>, ServerFnError> {
-    // 一旦空のリストを返す
+    // Return an empty list for now.
     Ok(vec![])
 }
 
-/// 記事リストを生成する関数
+/// Renders the sidebar article list.
 fn render_sidebar(articles: Vec<ArticleSummary>) -> impl IntoView {
     let params = use_params_map();
     let slug = move || params.with(|p: &ParamsMap| p.get("slug").clone().unwrap_or_default());
@@ -42,7 +43,7 @@ fn render_sidebar(articles: Vec<ArticleSummary>) -> impl IntoView {
     }
 }
 
-/// サイドバーコンポーネント
+/// Sidebar component.
 #[component]
 pub fn Sidebar(category: &'static str, class: &'static str) -> impl IntoView {
     let article_summaries = Resource::<Result<Vec<ArticleSummary>, String>>::new(

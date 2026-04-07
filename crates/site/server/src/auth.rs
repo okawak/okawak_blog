@@ -1,4 +1,4 @@
-//! Authentication & Authorization - 認証・認可
+//! Authentication and authorization types.
 
 pub mod extractors;
 

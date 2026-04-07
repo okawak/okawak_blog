@@ -12,8 +12,8 @@ use leptos_router::{
 };
 use thaw::ssr::SSRMountStyleProvider;
 
-/// サーバーサイドレンダリングのためのシェル関数
-/// この関数はHTMLドキュメント全体を生成します
+/// Shell function used for server-side rendering.
+/// This function renders the full HTML document.
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
         <SSRMountStyleProvider>
@@ -22,13 +22,13 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <head>
                     <meta charset="utf-8" />
                     <meta name="viewport" content="width=device-width, initial-scale=1" />
-                    // fontawesomeのCDNを読み込む
+                    // Load Font Awesome from the CDN.
                     <link
                         rel="stylesheet"
                         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
                     />
 
-                    // KaTeXのCDNを読み込む
+                    // Load KaTeX from the CDN.
                     <link
                         rel="stylesheet"
                         href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
@@ -36,7 +36,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                         crossorigin="anonymous"
                     />
                     <script
-                        // 非同期読み込み
+                        // Load asynchronously.
                         defer
                         src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"
                         integrity="sha384-cMkvdD8LoxVzGF/RPUKAcvmm49FQ0oxwDF3BGKtDXcEc+T1b2N+teh/OJfpU0jr6"
@@ -59,7 +59,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     // })
                     // </script>
 
-                    // highlight.jsのCDNを読み込む
+                    // Load highlight.js from the CDN.
                     <link
                         rel="stylesheet"
                         href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/default.min.css"
@@ -80,7 +80,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
     }
 }
 
-/// メインのアプリケーションコンポーネント
+/// Root application component.
 #[component]
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.

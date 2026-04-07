@@ -22,7 +22,7 @@ struct RenderedArticle {
     html: String,
 }
 
-/// パース済みのファイル情報を保持する構造体
+/// Holds the parsed file data used by the publisher flow.
 struct ParsedFile {
     file_path: PathBuf,
     slug: String,
@@ -110,7 +110,7 @@ pub async fn run_main(config: &Config) -> Result<()> {
     let processed_count = site_artifacts.article_index.len();
     let duration = start_time.elapsed();
 
-    // 処理結果サマリーの出力
+    // Print the processing summary.
     info!("=== Processing Summary ===");
     info!("Successfully processed: {processed_count} files");
     info!("  Skipped: {skipped_count} files");
@@ -120,7 +120,7 @@ pub async fn run_main(config: &Config) -> Result<()> {
     info!("  Processing time: {duration:.2?}");
     info!("Output directory: {}", config.output_dir.display());
 
-    // 処理されたファイルの詳細
+    // Print details for the processed files.
     if !site_artifacts.article_index.is_empty() {
         info!("Processed files:");
         for article in &site_artifacts.article_index {
@@ -132,7 +132,7 @@ pub async fn run_main(config: &Config) -> Result<()> {
     Ok(())
 }
 
-/// 有効なファイルを処理し、ParsedFileを生成
+/// Processes a valid file and builds a `ParsedFile`.
 fn process_valid_file(
     file_path: &Path,
     parsed_file: ParsedObsidianFile,
@@ -153,13 +153,13 @@ fn process_valid_file(
     })
 }
 
-/// パスをURL用に正規化（OS固有セパレータをUnix形式に統一）
+/// Normalizes a path for use in URLs by converting OS-specific separators to `/`.
 fn normalize_path_for_url(path: &Path) -> String {
     let path_str = path.to_string_lossy();
     path_str.replace(std::path::MAIN_SEPARATOR, "/")
 }
 
-/// 相対パスを取得する共通処理
+/// Shared helper for extracting a relative path.
 fn get_relative_path<'a>(file_path: &'a Path, base_dir: &Path) -> Result<&'a Path> {
     file_path.strip_prefix(base_dir).map_err(|_| {
         ObsidianError::Path(format!(
@@ -189,7 +189,7 @@ async fn process_parsed_file(
     let markdown_with_links = convert_obsidian_links(&parsed_file.markdown_body, file_mapping);
     let html_body = convert_markdown_to_html(&markdown_with_links)?;
 
-    // HTMLを生成後、シンプルなbookmarkをリッチブックマークに変換
+    // Convert simple bookmark markup into rich bookmark cards after rendering HTML.
     let html_with_rich_bookmarks = convert_simple_bookmarks_to_rich(&html_body)
         .await
         .unwrap_or_else(|e| {
@@ -298,7 +298,7 @@ mod tests {
             output_dir: PathBuf::from("output"),
         };
 
-        // 同じファイル名だが異なるディレクトリのファイル
+        // Files with the same name in different directories.
         let file_path1 = temp_dir.path().join("dir1").join("test.md");
         let file_path2 = temp_dir.path().join("dir2").join("test.md");
 
@@ -341,7 +341,7 @@ mod tests {
 
         assert!(result.is_ok());
         let mapping = result.unwrap();
-        // 相対パス全体をキーとするため、衝突せずに2つのエントリが存在
+        // Using the full relative path as the key prevents collisions.
         assert_eq!(mapping.len(), 2);
         assert!(mapping.contains_key("dir1/test"));
         assert!(mapping.contains_key("dir2/test"));
@@ -380,8 +380,8 @@ mod tests {
         let mapping = result.unwrap();
         let slug = mapping.get("sub/dir/test").unwrap();
 
-        // URL正規化が適用されているかチェック（Unix形式のスラッシュ）
-        // slugが存在することを確認
+        // Verify URL normalization uses Unix-style separators.
+        // Ensure the slug is present.
         assert!(!slug.is_empty());
     }
 }

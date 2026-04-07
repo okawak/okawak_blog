@@ -1,11 +1,11 @@
-//! Type Converters - domain ↔ DTO変換
+//! Converters between domain models and DTOs.
 
 use domain::{Article, ArticleSummary, Category, Slug, Title};
 use std::str::FromStr;
 
 use super::dto::*;
 
-/// Domain Article → DTO変換
+/// Converts a domain `Article` into an `ArticleDto`.
 impl From<Article> for ArticleDto {
     fn from(article: Article) -> Self {
         Self {
@@ -23,7 +23,7 @@ impl From<Article> for ArticleDto {
     }
 }
 
-/// Domain ArticleSummary → DTO変換
+/// Converts a domain `ArticleSummary` into an `ArticleSummaryDto`.
 impl From<ArticleSummary> for ArticleSummaryDto {
     fn from(summary: ArticleSummary) -> Self {
         Self {
@@ -39,14 +39,14 @@ impl From<ArticleSummary> for ArticleSummaryDto {
     }
 }
 
-/// CreateArticleDto → Domain Article変換
+/// Converts `CreateArticleDto` into a domain `Article`.
 impl TryFrom<CreateArticleDto> for Article {
     type Error = domain::DomainError;
 
     fn try_from(dto: CreateArticleDto) -> domain::Result<Self> {
         let category = Category::from_str(&dto.category)?;
 
-        // スラッグが未指定の場合はタイトルから生成
+        // Generate a slug from the title when the request does not provide one.
         let slug = if let Some(slug_str) = dto.slug {
             Slug::new(slug_str)?
         } else {
@@ -58,7 +58,7 @@ impl TryFrom<CreateArticleDto> for Article {
     }
 }
 
-/// Category → DTO変換
+/// Converts `Category` into `CategoryDto`.
 impl From<Category> for CategoryDto {
     fn from(category: Category) -> Self {
         Self {
@@ -69,7 +69,7 @@ impl From<Category> for CategoryDto {
     }
 }
 
-/// DTO ↔ Domain変換のヘルパー関数
+/// Generic helpers for DTO ↔ domain conversions.
 pub fn domain_to_dto<T, D>(domain_item: T) -> D
 where
     D: From<T>,

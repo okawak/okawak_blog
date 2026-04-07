@@ -1,21 +1,21 @@
-//! Blog Domain - 純粋ドメインロジックとビジネスルール
+//! Blog domain types and business rules.
 //!
-//! I/Oなし、同期のみの純粋なドメインモデリング。
-//! Rustの型システムを活用したビジネスルールの実装。
+//! Pure synchronous domain modeling without I/O.
+//! Business rules are expressed through Rust's type system.
 
-// ドメインエンティティとバリューオブジェクト
+// Domain entities and value objects.
 pub mod artifact_document;
 pub mod entities;
 pub mod publishable;
 pub mod site_page;
 
-// ビジネスルール（純粋関数のみ）
+// Business rules implemented as pure functions.
 pub mod business_rules;
 
-// ドメインエラー型
+// Domain error types.
 pub mod error;
 
-// 再エクスポート
+// Re-exports.
 pub use artifact_document::*;
 pub use business_rules::*;
 pub use entities::*;

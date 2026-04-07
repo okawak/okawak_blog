@@ -1,19 +1,18 @@
-//! ブログUIのコンポーネントモジュール
+//! Shared blog UI components.
 //!
-//! このモジュールには、ブログの様々な部分で使用されるUIコンポーネントが含まれています。
-//! ヘッダー、フッター、サイドバーなどの共通要素はここで定義されています。
+//! Common UI elements such as the header, footer, and sidebar live here.
 
-// サブモジュールを公開
+// Public submodules.
 pub mod footer;
 pub mod header;
 pub mod sidebar;
 
-// 頻繁に使われるコンポーネントを再エクスポート
+// Re-export frequently used components.
 pub use footer::Footer;
 pub use header::Header;
 pub use sidebar::Sidebar;
 
-// コンポーネント間で共有される共通の型や定数
+// Shared types and constants used across components.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NavigationItem {
     pub title: String,
@@ -21,7 +20,7 @@ pub struct NavigationItem {
     pub is_active: bool,
 }
 
-/// メインナビゲーションリンク
+/// Main navigation items.
 pub fn get_main_nav_items(current_path: &str) -> Vec<NavigationItem> {
     vec![
         NavigationItem {
@@ -34,41 +33,14 @@ pub fn get_main_nav_items(current_path: &str) -> Vec<NavigationItem> {
             href: "/about".into(),
             is_active: current_path == "/about",
         },
-        //NavigationItem {
-        //    title: "技術".into(),
-        //    href: "/tech".into(),
-        //    is_active: current_path == "/tech" || current_path.starts_with("/tech/"),
-        //},
-        //NavigationItem {
-        //    title: "日常".into(),
-        //    href: "/daily".into(),
-        //    is_active: current_path == "/daily" || current_path.starts_with("/daily/"),
-        //},
-        //NavigationItem {
-        //    title: "統計学".into(),
-        //    href: "/statistics".into(),
-        //    is_active: current_path == "/statistics" || current_path.starts_with("/statistics/"),
-        //},
-        //NavigationItem {
-        //    title: "物理学".into(),
-        //    href: "/physics".into(),
-        //    is_active: current_path == "/physics" || current_path.starts_with("/physics/"),
-        //},
     ]
 }
 
-/// SNSリンク
+/// Social links.
 pub fn get_social_links() -> Vec<NavigationItem> {
-    vec![
-        NavigationItem {
-            title: "GitHub".into(),
-            href: "https://github.com/okawak".into(),
-            is_active: false,
-        },
-        //NavigationItem {
-        //    title: "Twitter".into(),
-        //    href: "https://twitter.com/okawak_".into(),
-        //    is_active: false,
-        //},
-    ]
+    vec![NavigationItem {
+        title: "GitHub".into(),
+        href: "https://github.com/okawak".into(),
+        is_active: false,
+    }]
 }

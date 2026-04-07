@@ -1,4 +1,4 @@
-//! Server module - アプリケーションサーバー設定（スタブ）
+//! Stub server module.
 
 use std::sync::Arc;
 

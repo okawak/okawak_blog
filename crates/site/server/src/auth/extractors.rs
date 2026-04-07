@@ -1,6 +1,6 @@
-//! Authentication Extractors - 認証用Extractors（スタブ）
+//! Stub authentication extractors.
 
-/// 認証済みユーザー情報
+/// Authenticated user information.
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub id: String,
@@ -8,6 +8,6 @@ pub struct AuthUser {
     pub roles: Vec<String>,
 }
 
-/// 管理者権限チェック用Extractor
+/// Extractor marker for administrator access.
 #[derive(Debug, Clone)]
 pub struct AdminUser(pub AuthUser);

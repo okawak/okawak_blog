@@ -1,22 +1,22 @@
-//! ドメインモデル - Rustの型システムでビジネスルールを表現
+//! Domain models expressed with Rust's type system.
 //!
-//! ADT (Algebraic Data Types) を活用したドメインモデリング
+//! Domain modeling built around algebraic data types.
 
 use crate::error::{DomainError, Result};
 use serde::{Deserialize, Deserializer, Serialize, de::Error as DeError};
 use std::{fmt, str::FromStr};
 
 // =============================================================================
-// Value Objects - 値オブジェクト（Rustの newtype pattern）
+// Value objects implemented with the Rust newtype pattern.
 // =============================================================================
 
-/// 記事ID - 型安全性を確保
+/// Type-safe article identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct ArticleId(String);
 
 impl ArticleId {
     pub fn new() -> Self {
-        // 簡易的なID生成（実装では外部でUUID生成）
+        // Simple ID generation for now. A production system would use UUIDs externally.
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         use std::time::{SystemTime, UNIX_EPOCH};
@@ -73,7 +73,7 @@ impl<'de> Deserialize<'de> for ArticleId {
     }
 }
 
-/// スラッグ - URLセーフな識別子
+/// URL-safe slug identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct Slug(String);
 
@@ -125,7 +125,7 @@ impl<'de> Deserialize<'de> for Slug {
     }
 }
 
-/// 記事タイトル - ビジネスルールを型で表現
+/// Article title with business-rule validation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Title(String);
 
@@ -176,7 +176,7 @@ impl<'de> Deserialize<'de> for Title {
     }
 }
 
-/// カテゴリ - 列挙型でドメインを制限
+/// Category constrained by an enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum Category {
     Tech,
@@ -246,10 +246,10 @@ where
 }
 
 // =============================================================================
-// Entities - エンティティ（ビジネスロジックを持つ構造体）
+// Entities that carry domain behavior.
 // =============================================================================
 
-/// 記事エンティティ - ビジネスロジックをメソッドで表現
+/// Article entity with domain behavior expressed as methods.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Article {
     pub id: ArticleId,
@@ -259,13 +259,13 @@ pub struct Article {
     pub content: String,
     pub summary: Option<String>,
     pub tags: Vec<String>,
-    pub published_at: String, // ISO8601文字列
-    pub updated_at: String,   // ISO8601文字列
+    pub published_at: String, // ISO8601 string
+    pub updated_at: String,   // ISO8601 string
     pub is_published: bool,
 }
 
 impl Article {
-    /// 新しい記事を作成（ファクトリーメソッド）
+    /// Creates a new article.
     pub fn create(
         title: String,
         content: String,
@@ -275,7 +275,7 @@ impl Article {
         let title = Title::new(title)?;
         let slug = Slug::new(slug)?;
 
-        // 現在時刻をISO8601文字列として生成
+        // Generate the current timestamp as an ISO8601 string.
         let now = Self::current_timestamp();
 
         Ok(Self {
@@ -292,7 +292,7 @@ impl Article {
         })
     }
 
-    /// 現在時刻をISO8601文字列として取得
+    /// Returns the current timestamp as an ISO8601 string.
     fn current_timestamp() -> String {
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -300,7 +300,7 @@ impl Article {
             .duration_since(UNIX_EPOCH)
             .expect("時刻が正常に取得できません");
 
-        // 簡易的なISO8601形式（実際のプロジェクトではより正確な実装を使用）
+        // Simple ISO8601 formatting. A production system would use a more exact implementation.
         format!(
             "2025-09-20T{:02}:{:02}:{:02}Z",
             duration.as_secs() % 86400 / 3600,
@@ -309,38 +309,38 @@ impl Article {
         )
     }
 
-    /// 記事を公開する（ビジネスルール）
+    /// Publishes the article.
     pub fn publish(&mut self) -> Result<()> {
         unimplemented!("publish method not yet implemented")
     }
 
-    /// 記事を更新する
+    /// Updates the article content.
     pub fn update_content(&mut self, _content: String) -> Result<()> {
         unimplemented!("update_content method not yet implemented")
     }
 
-    /// サマリーを設定
+    /// Sets the summary.
     pub fn set_summary(&mut self, _summary: String) {
         unimplemented!("set_summary method not yet implemented")
     }
 
-    /// タグを追加
+    /// Adds a tag.
     pub fn add_tag(&mut self, _tag: String) {
         unimplemented!("add_tag method not yet implemented")
     }
 
-    /// URLを生成
+    /// Builds the article URL.
     pub fn url(&self) -> String {
         unimplemented!("url method not yet implemented")
     }
 
-    /// 日本語形式の公開日
+    /// Returns the published date in Japanese display format.
     pub fn published_date_jp(&self) -> String {
         unimplemented!("published_date_jp method not yet implemented")
     }
 }
 
-/// 記事サマリー - 一覧表示用の軽量版
+/// Lightweight article summary for listing pages.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArticleSummary {
     pub id: ArticleId,
@@ -349,7 +349,7 @@ pub struct ArticleSummary {
     pub category: Category,
     pub summary: Option<String>,
     pub tags: Vec<String>,
-    pub published_at: String, // ISO8601文字列
+    pub published_at: String, // ISO8601 string
     pub is_published: bool,
 }
 
