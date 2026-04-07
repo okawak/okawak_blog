@@ -16,3 +16,5 @@ pub mod handlers;
 pub mod presentation;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod server;
+#[cfg(all(not(target_arch = "wasm32"), test))]
+pub mod test_support;
