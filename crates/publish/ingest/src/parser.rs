@@ -16,13 +16,20 @@ pub struct ObsidianFrontMatter {
     pub category: Option<String>,
 }
 
-/// Parse Obsidian file with content, returns both frontmatter and full content.
-pub fn parse_obsidian_file(
-    path: impl AsRef<Path>,
-) -> Result<Option<(ObsidianFrontMatter, String)>> {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ParsedObsidianFile {
+    pub front_matter: ObsidianFrontMatter,
+    pub markdown_body: String,
+}
+
+/// Parse Obsidian file and return the frontmatter plus markdown body.
+pub fn parse_obsidian_file(path: impl AsRef<Path>) -> Result<Option<ParsedObsidianFile>> {
     let content = fs::read_to_string(&path)?;
     match parse_frontmatter(&content)? {
-        Some(front_matter) => Ok(Some((front_matter, content))),
+        Some(front_matter) => Ok(Some(ParsedObsidianFile {
+            front_matter,
+            markdown_body: extract_markdown_body(&content),
+        })),
         None => Ok(None),
     }
 }
@@ -212,9 +219,10 @@ mod tests {
         assert_eq!(result.is_some(), should_have_frontmatter);
 
         if should_have_frontmatter {
-            let (frontmatter, _) = result.unwrap();
-            assert_eq!(frontmatter.title, "File Test");
-            assert!(frontmatter.is_completed);
+            let parsed_file = result.unwrap();
+            assert_eq!(parsed_file.front_matter.title, "File Test");
+            assert!(parsed_file.front_matter.is_completed);
+            assert_eq!(parsed_file.markdown_body, "# Test Content");
         }
 
         Ok(())

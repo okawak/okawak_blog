@@ -8,6 +8,7 @@ pub use converter::{
 };
 pub use error::{IngestError, Result};
 pub use parser::{
-    ObsidianFrontMatter, extract_markdown_body, parse_frontmatter, parse_obsidian_file,
+    ObsidianFrontMatter, ParsedObsidianFile, extract_markdown_body, parse_frontmatter,
+    parse_obsidian_file,
 };
 pub use scanner::scan_obsidian_files;
