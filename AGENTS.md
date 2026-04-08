@@ -219,31 +219,40 @@ okawak_blog/
 
 ## 実行コマンドの目安
 
+- タスクランナーは `mise` を使う
+- task 定義は repo root の `mise.toml`
+- `mise` 経由のローカル task では、`OKAWAK_BLOG_ARTIFACT_SOURCE=local` と `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site` を使って local artifact を読む
+- local publisher 実行前には `mise run sync-obsidian` 相当で private Obsidian submodule を初期化する
+- 本番 runtime は `service/okawak_blog.service` 側の env により `s3` reader を使う
+
 ### 開発
 
-- `cargo make dev`
-- `cargo make integrated-dev`
-- `cargo make watch`
-- `cargo make format`
+- `mise run check-deps`
+- `mise run sync-obsidian`
+- `mise run publish-local`
+- `mise run dev`
+- `mise run integrated-dev`
+- `mise run watch`
+- `mise run format`
 
 ### テスト・確認
 
-- `cargo make test`
-- `cargo make test-domain`
-- `cargo make test-server`
-- `cargo make test-web`
-- `cargo make clippy`
-- `cargo make check`
-- `cargo make check-domain`
-- `cargo make check-server`
+- `mise run test`
+- `mise run test-domain`
+- `mise run test-server`
+- `mise run test-web`
+- `mise run clippy`
+- `mise run check`
+- `mise run check-domain`
+- `mise run check-server`
 
 ### デプロイ・運用
 
-- `cargo make build-project`
-- `cargo make full-deploy`
-- `cargo make production-deploy`
-- `cargo make status`
-- `cargo make logs`
-- `cargo make logs-recent`
+- `mise run build-project`
+- `mise run full-deploy`
+- `mise run production-deploy`
+- `mise run status`
+- `mise run logs`
+- `mise run logs-recent`
 
 `sudo` を伴うタスクは、ローカル開発環境ではなく VPS 前提で扱う。

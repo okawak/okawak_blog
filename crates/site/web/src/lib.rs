@@ -73,6 +73,9 @@ mod tests {
             join_site_url("https://example.com", "categories/tech"),
             "https://example.com/categories/tech"
         );
-        assert_eq!(join_site_url("https://example.com/", "/"), "https://example.com");
+        assert_eq!(
+            join_site_url("https://example.com/", "/"),
+            "https://example.com"
+        );
     }
 }

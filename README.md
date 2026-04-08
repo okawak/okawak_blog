@@ -173,18 +173,56 @@ category: "tech"
 
 ## 開発コマンド
 
-現在のリポジトリで利用する主要コマンドは以下です。
+タスクランナーは `mise` を使います。タスク定義は [mise.toml](./mise.toml) にあり、一覧は `mise tasks ls` で確認できます。
+
+ローカル開発に必要なツールは以下です。
+
+- `mise`
+- `cargo-leptos`
+- `stylance-cli`
+- `leptosfmt`
 
 ```bash
-cargo make dev
-cargo make integrated-dev
-cargo make watch
-cargo make format
-cargo make test
-cargo make test-domain
-cargo make test-server
-cargo make test-web
-cargo make clippy
-cargo make check
-cargo make check-deps
+cargo install cargo-leptos
+cargo install stylance-cli
+cargo install leptosfmt
+```
+
+また、private Obsidian repo を入力として使うため、ローカル実行前に submodule を同期します。`mise run publish-local` は内部で `git submodule update --init --recursive` を実行しますが、先に明示的に同期したい場合は `mise run sync-obsidian` を使えます。
+
+ローカル開発用 task では、次の env を自動で設定します。
+
+- `OKAWAK_BLOG_ARTIFACT_SOURCE=local`
+- `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site`
+- `OKAWAK_BLOG_SITE_ORIGIN=http://127.0.0.1:8008`
+
+そのため、`mise run dev` や `mise run build-project` のようなローカル task は、S3 ではなく publisher が生成した local artifact を読む前提で動作します。artifact は `mise run publish-local` で再生成できます。
+
+主要コマンドは以下です。
+
+```bash
+mise run check-deps
+mise run sync-obsidian
+mise run publish-local
+mise run dev
+mise run integrated-dev
+mise run watch
+mise run format
+mise run test
+mise run test-domain
+mise run test-server
+mise run test-web
+mise run clippy
+mise run check
+mise run build-project
+```
+
+VPS 前提のデプロイ・運用タスクも `mise` に移しています。
+
+```bash
+mise run full-deploy
+mise run production-deploy
+mise run status
+mise run logs
+mise run logs-recent
 ```
