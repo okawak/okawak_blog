@@ -79,6 +79,10 @@ pub fn build_home_page_description(document: &HomePageDocument) -> String {
     )
 }
 
+pub fn build_home_page_canonical_path() -> &'static str {
+    "/"
+}
+
 pub fn build_article_page_title(document: &ArticlePageDocument, site_name: &str) -> String {
     format!("{} | {}", document.article.title.as_str(), site_name)
 }
@@ -98,6 +102,10 @@ pub fn build_article_page_description(document: &ArticlePageDocument) -> String 
         })
 }
 
+pub fn build_article_page_canonical_path(document: &ArticlePageDocument) -> String {
+    format!("/articles/{}", document.article.slug.as_str())
+}
+
 pub fn build_category_page_title(document: &CategoryPageDocument, site_name: &str) -> String {
     format!("{} | {}", document.category_display_name, site_name)
 }
@@ -108,6 +116,10 @@ pub fn build_category_page_description(document: &CategoryPageDocument) -> Strin
         document.category_display_name,
         document.articles.len()
     )
+}
+
+pub fn build_category_page_canonical_path(document: &CategoryPageDocument) -> String {
+    format!("/categories/{}", document.category.as_str())
 }
 
 pub fn build_home_page_document(
@@ -300,6 +312,7 @@ mod tests {
             build_home_page_description(&document),
             "3件の記事を2カテゴリで公開しています。"
         );
+        assert_eq!(build_home_page_canonical_path(), "/");
     }
 
     #[test]
@@ -313,6 +326,10 @@ mod tests {
             "Intro | ぶくせんの探窟メモ"
         );
         assert_eq!(build_article_page_description(&document), "summary");
+        assert_eq!(
+            build_article_page_canonical_path(&document),
+            "/articles/intro00000001"
+        );
     }
 
     #[test]
@@ -364,6 +381,10 @@ mod tests {
         assert_eq!(
             build_category_page_description(&document),
             "技術カテゴリの記事一覧です。1件の記事があります。"
+        );
+        assert_eq!(
+            build_category_page_canonical_path(&document),
+            "/categories/tech"
         );
     }
 }

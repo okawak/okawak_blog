@@ -1,12 +1,14 @@
-use crate::SITE_NAME;
 use crate::components::PageMetadata;
 use crate::routes::not_found::NotFoundPage;
+use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
 use domain::ArticlePageDocument;
 #[cfg(feature = "ssr")]
 use domain::{Slug, build_article_page_document, find_article_summary};
-use domain::{build_article_page_description, build_article_page_title};
+use domain::{
+    build_article_page_canonical_path, build_article_page_description, build_article_page_title,
+};
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
 use leptos::prelude::*;
@@ -55,6 +57,7 @@ pub async fn get_article_page_document(
 fn ArticlePageContent(document: ArticlePageDocument) -> impl IntoView {
     let page_title = build_article_page_title(&document, SITE_NAME);
     let page_description = build_article_page_description(&document);
+    let canonical_url = build_site_url(&build_article_page_canonical_path(&document));
     let title = document.article.title.as_str().to_string();
     let category = document.article.category_display_name;
     let created_at = document.article.created_at;
@@ -65,7 +68,12 @@ fn ArticlePageContent(document: ArticlePageDocument) -> impl IntoView {
     let html = document.html;
 
     view! {
-        <PageMetadata title=page_title description=page_description />
+        <PageMetadata
+            title=page_title
+            description=page_description
+            canonical_url
+            og_type="article"
+        />
 
         <article class=article_style::article_page>
             <header class=article_style::article_header>
