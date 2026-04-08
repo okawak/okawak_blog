@@ -5,11 +5,13 @@
 // Public submodules.
 pub mod footer;
 pub mod header;
+pub mod page_metadata;
 pub mod sidebar;
 
 // Re-export frequently used components.
 pub use footer::Footer;
 pub use header::Header;
+pub use page_metadata::PageMetadata;
 pub use sidebar::Sidebar;
 
 // Shared types and constants used across components.

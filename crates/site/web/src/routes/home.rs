@@ -1,7 +1,12 @@
+use crate::SITE_NAME;
+use crate::components::PageMetadata;
 #[cfg(feature = "ssr")]
 use domain::build_home_page_document;
-use domain::{HomePageDocument, SiteArticleCard};
+use domain::{
+    HomePageDocument, SiteArticleCard, build_home_page_description, build_home_page_title,
+};
 use leptos::prelude::*;
+use std::sync::Arc;
 use stylance::import_style;
 
 #[cfg(feature = "ssr")]
@@ -31,7 +36,8 @@ pub async fn get_home_page_document() -> Result<HomePageDocument, ServerFnError>
 
 #[component]
 fn HomePageContent(document: HomePageDocument) -> impl IntoView {
-    let category_count = document.categories.len();
+    let page_title = build_home_page_title(SITE_NAME);
+    let page_description: Arc<str> = build_home_page_description(&document).into();
     let category_items = document
         .categories
         .into_iter()
@@ -58,13 +64,15 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
         .collect_view();
 
     view! {
+        <PageMetadata title=page_title description=page_description.clone() />
+
         <div class=home_style::content_grid>
             <section class=home_style::overview_panel>
                 <p class=home_style::overview_copy>
                     {"公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。"}
                 </p>
                 <p class=home_style::overview_stats>
-                    {format!("{}本の記事を {}カテゴリで公開中です。", document.total_articles, category_count)}
+                    {page_description}
                 </p>
                 <ul class=home_style::category_list>
                     {category_items}
@@ -137,7 +145,7 @@ pub fn HomePage() -> impl IntoView {
         <div class=home_style::home_page>
             <section class=home_style::profile_section>
                 <p class=home_style::eyebrow>{"Artifact-Driven Blog"}</p>
-                <h1>{"ぶくせんの探窟メモ"}</h1>
+                <h1>{SITE_NAME}</h1>
                 <div class=home_style::profile_text>
                     <p>
                         {"気になったことをメモしておくブログです。Obsidian から生成した成果物をもとに、Leptos で公開ページを組み立てています。"}

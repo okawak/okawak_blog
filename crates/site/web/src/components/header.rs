@@ -1,3 +1,4 @@
+use crate::SITE_NAME;
 use crate::components::{NavigationItem, get_main_nav_items};
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
@@ -18,7 +19,7 @@ pub fn Header() -> impl IntoView {
         <header class=header_style::header class:open=move || menu_open.get()>
             <div class=header_style::container>
                 <a href="/">
-                    <h1 class=header_style::logo>{"ぶくせんの探窟メモ"}</h1>
+                    <h1 class=header_style::logo>{SITE_NAME}</h1>
                 </a>
 
                 // Hamburger toggle implemented with a thaw-ui button.

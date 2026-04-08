@@ -1,9 +1,12 @@
+use crate::SITE_NAME;
+use crate::components::PageMetadata;
 use crate::routes::not_found::NotFoundPage;
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
 use domain::CategoryPageDocument;
 #[cfg(feature = "ssr")]
 use domain::{Category, build_category_page_document};
+use domain::{build_category_page_description, build_category_page_title};
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
 use leptos::prelude::*;
@@ -12,6 +15,7 @@ use leptos_axum::ResponseOptions;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
 #[cfg(feature = "ssr")]
 use std::str::FromStr;
+use std::sync::Arc;
 use stylance::import_style;
 
 import_style!(category_style, "category.module.scss");
@@ -49,8 +53,9 @@ pub async fn get_category_page_document(
 
 #[component]
 fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
+    let page_title = build_category_page_title(&document, SITE_NAME);
+    let page_description: Arc<str> = build_category_page_description(&document).into();
     let title = document.category_display_name;
-    let description = format!("{} カテゴリの記事一覧です。", title);
     let article_items = document
         .articles
         .into_iter()
@@ -79,11 +84,13 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
         .collect_view();
 
     view! {
+        <PageMetadata title=page_title description=page_description.clone() />
+
         <div class=category_style::category_page>
             <header class=category_style::category_header>
                 <p class=category_style::eyebrow>{"Category"}</p>
                 <h1 class=category_style::category_title>{title}</h1>
-                <p class=category_style::category_description>{description}</p>
+                <p class=category_style::category_description>{page_description}</p>
             </header>
 
             <section class=category_style::article_list>
