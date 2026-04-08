@@ -31,7 +31,7 @@ mod tests {
     };
     use domain::{ArticlePageDocument, CategoryPageDocument, HomePageDocument};
     use infra::LocalArtifactReader;
-    use std::sync::Arc;
+    use std::{fs, sync::Arc};
     use tempfile::TempDir;
     use tower::util::ServiceExt;
 
@@ -128,6 +128,44 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/page/categories/unknown")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_api_router_returns_not_found_for_missing_article_html_artifact() {
+        let temp_dir = TempDir::new().unwrap();
+        write_fixture_site(temp_dir.path());
+        fs::remove_file(temp_dir.path().join("articles/sample0000001.html")).unwrap();
+
+        let response = create_test_router(temp_dir.path())
+            .oneshot(
+                Request::builder()
+                    .uri("/page/articles/sample0000001")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_api_router_returns_not_found_for_missing_category_artifact() {
+        let temp_dir = TempDir::new().unwrap();
+        write_fixture_site(temp_dir.path());
+        fs::remove_file(temp_dir.path().join("categories/tech.json")).unwrap();
+
+        let response = create_test_router(temp_dir.path())
+            .oneshot(
+                Request::builder()
+                    .uri("/page/categories/tech")
                     .body(Body::empty())
                     .unwrap(),
             )

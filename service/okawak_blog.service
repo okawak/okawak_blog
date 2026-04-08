@@ -16,7 +16,8 @@ TimeoutStopSec=30
 
 Environment=AWS_PROFILE=blog-s3
 Environment=AWS_REGION=ap-northeast-1
-Environment=AWS_BUCKET_NAME=okawak-blog-resources-bucket
+Environment=OKAWAK_BLOG_ARTIFACT_SOURCE=s3
+Environment=OKAWAK_BLOG_ARTIFACT_BUCKET=okawak-blog-resources-bucket
 Environment=OKAWAK_BLOG_SITE_ORIGIN=https://www.okawak.net
 
 StateDirectory=okawak_blog
