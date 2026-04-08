@@ -1,16 +1,17 @@
+use crate::SITE_NAME;
+use crate::components::PageMetadata;
 #[cfg(feature = "ssr")]
 use domain::build_home_page_document;
-use domain::{HomePageDocument, SiteArticleCard, build_home_page_description, build_home_page_title};
+use domain::{
+    HomePageDocument, SiteArticleCard, build_home_page_description, build_home_page_title,
+};
 use leptos::prelude::*;
-use leptos_meta::{Meta, Title};
 use stylance::import_style;
 
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
 
 import_style!(home_style, "home.module.scss");
-
-const SITE_NAME: &str = "ぶくせんの探窟メモ";
 
 #[server]
 pub async fn get_home_page_document() -> Result<HomePageDocument, ServerFnError> {
@@ -63,8 +64,7 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
         .collect_view();
 
     view! {
-        <Title text=page_title />
-        <Meta name="description" content=page_description />
+        <PageMetadata title=page_title description=page_description />
 
         <div class=home_style::content_grid>
             <section class=home_style::overview_panel>

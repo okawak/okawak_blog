@@ -84,11 +84,12 @@ pub fn build_article_page_title(document: &ArticlePageDocument, site_name: &str)
 }
 
 pub fn build_article_page_description(document: &ArticlePageDocument) -> String {
-    document
-        .article
-        .description
-        .clone()
-        .unwrap_or_else(|| format!("{}カテゴリの記事です。", document.article.category_display_name))
+    document.article.description.clone().unwrap_or_else(|| {
+        format!(
+            "{}カテゴリの記事です。",
+            document.article.category_display_name
+        )
+    })
 }
 
 pub fn build_category_page_title(document: &CategoryPageDocument, site_name: &str) -> String {
@@ -285,7 +286,10 @@ mod tests {
             articles: vec![SiteArticleCard::try_from(&sample_summary()).unwrap()],
         };
 
-        assert_eq!(build_home_page_title("ぶくせんの探窟メモ"), "ぶくせんの探窟メモ");
+        assert_eq!(
+            build_home_page_title("ぶくせんの探窟メモ"),
+            "ぶくせんの探窟メモ"
+        );
         assert_eq!(
             build_home_page_description(&document),
             "3件の記事を2カテゴリで公開しています。"

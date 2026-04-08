@@ -6,6 +6,8 @@ pub mod error;
 pub mod routes;
 pub mod types; // Web-specific type definitions.
 
+pub const SITE_NAME: &str = "ぶくせんの探窟メモ";
+
 // Re-export functions and types used on the server side.
 pub use app::{App, shell};
 pub use error::FrontendError;

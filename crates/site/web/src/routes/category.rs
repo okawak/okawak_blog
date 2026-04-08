@@ -1,3 +1,5 @@
+use crate::SITE_NAME;
+use crate::components::PageMetadata;
 use crate::routes::not_found::NotFoundPage;
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
@@ -8,7 +10,6 @@ use domain::{build_category_page_description, build_category_page_title};
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
 use leptos::prelude::*;
-use leptos_meta::{Meta, Title};
 #[cfg(feature = "ssr")]
 use leptos_axum::ResponseOptions;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
@@ -17,8 +18,6 @@ use std::str::FromStr;
 use stylance::import_style;
 
 import_style!(category_style, "category.module.scss");
-
-const SITE_NAME: &str = "ぶくせんの探窟メモ";
 
 #[server]
 pub async fn get_category_page_document(
@@ -84,8 +83,7 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
         .collect_view();
 
     view! {
-        <Title text=page_title />
-        <Meta name="description" content=page_description.clone() />
+        <PageMetadata title=page_title description=page_description.clone() />
 
         <div class=category_style::category_page>
             <header class=category_style::category_header>

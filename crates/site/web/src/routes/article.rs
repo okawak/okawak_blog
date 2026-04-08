@@ -1,3 +1,5 @@
+use crate::SITE_NAME;
+use crate::components::PageMetadata;
 use crate::routes::not_found::NotFoundPage;
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
@@ -8,15 +10,12 @@ use domain::{build_article_page_description, build_article_page_title};
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
 use leptos::prelude::*;
-use leptos_meta::{Meta, Title};
 #[cfg(feature = "ssr")]
 use leptos_axum::ResponseOptions;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
 use stylance::import_style;
 
 import_style!(article_style, "article.module.scss");
-
-const SITE_NAME: &str = "ぶくせんの探窟メモ";
 
 #[server]
 pub async fn get_article_page_document(
@@ -66,8 +65,7 @@ fn ArticlePageContent(document: ArticlePageDocument) -> impl IntoView {
     let html = document.html;
 
     view! {
-        <Title text=page_title />
-        <Meta name="description" content=page_description />
+        <PageMetadata title=page_title description=page_description />
 
         <article class=article_style::article_page>
             <header class=article_style::article_header>
