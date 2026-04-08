@@ -30,7 +30,7 @@ reactive_stores.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 serde-wasm-bindgen.workspace = true
-web-sys = { workspace = true, features = ["Element"] }
+web-sys = { workspace = true, features = ["Element", "Location", "Window"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 infra = { path = "../infra", optional = true }
