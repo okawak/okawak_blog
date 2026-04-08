@@ -13,6 +13,7 @@ use leptos::prelude::*;
 #[cfg(feature = "ssr")]
 use leptos_axum::ResponseOptions;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
+use std::sync::Arc;
 #[cfg(feature = "ssr")]
 use std::str::FromStr;
 use stylance::import_style;
@@ -53,7 +54,7 @@ pub async fn get_category_page_document(
 #[component]
 fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
     let page_title = build_category_page_title(&document, SITE_NAME);
-    let page_description = build_category_page_description(&document);
+    let page_description: Arc<str> = build_category_page_description(&document).into();
     let title = document.category_display_name;
     let article_items = document
         .articles
