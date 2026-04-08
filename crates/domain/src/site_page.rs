@@ -326,7 +326,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(build_article_page_description(&document), "技術カテゴリの記事です。");
+        assert_eq!(
+            build_article_page_description(&document),
+            "技術カテゴリの記事です。"
+        );
     }
 
     #[test]
@@ -340,7 +343,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(build_article_page_description(&document), "技術カテゴリの記事です。");
+        assert_eq!(
+            build_article_page_description(&document),
+            "技術カテゴリの記事です。"
+        );
     }
 
     #[test]
