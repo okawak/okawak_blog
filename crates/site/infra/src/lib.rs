@@ -183,18 +183,22 @@ pub enum ArtifactSourceConfig {
 
 impl ArtifactSourceConfig {
     pub fn from_env() -> Result<Self> {
-        let source = env::var(ARTIFACT_SOURCE_ENV).unwrap_or_else(|_| "local".to_string());
+        Self::from_env_with(|key| env::var(key).ok())
+    }
+
+    fn from_env_with(mut read_var: impl FnMut(&str) -> Option<String>) -> Result<Self> {
+        let source = read_var(ARTIFACT_SOURCE_ENV).unwrap_or_else(|| "local".to_string());
         match source.as_str() {
             "local" => Ok(Self::Local {
                 site_root: PathBuf::from(
-                    env::var(ARTIFACT_LOCAL_ROOT_ENV)
-                        .unwrap_or_else(|_| DEFAULT_LOCAL_SITE_ROOT.to_string()),
+                    read_var(ARTIFACT_LOCAL_ROOT_ENV)
+                        .unwrap_or_else(|| DEFAULT_LOCAL_SITE_ROOT.to_string()),
                 ),
             }),
             "s3" => {
-                let bucket = env::var(ARTIFACT_BUCKET_ENV)
-                    .map_err(|_| InfraError::MissingConfig(ARTIFACT_BUCKET_ENV))?;
-                let prefix = env::var(ARTIFACT_PREFIX_ENV).ok();
+                let bucket = read_var(ARTIFACT_BUCKET_ENV)
+                    .ok_or(InfraError::MissingConfig(ARTIFACT_BUCKET_ENV))?;
+                let prefix = read_var(ARTIFACT_PREFIX_ENV);
                 Ok(Self::S3 {
                     location: S3ArtifactLocation::new(bucket, prefix)?,
                 })
@@ -329,5 +333,78 @@ mod tests {
         };
 
         assert_eq!(source.kind(), "local");
+    }
+
+    #[test]
+    fn test_artifact_source_config_from_env_defaults_to_local_site_root() {
+        let source = ArtifactSourceConfig::from_env_with(|_| None).unwrap();
+
+        assert_eq!(
+            source,
+            ArtifactSourceConfig::Local {
+                site_root: PathBuf::from(DEFAULT_LOCAL_SITE_ROOT),
+            }
+        );
+    }
+
+    #[test]
+    fn test_artifact_source_config_from_env_uses_local_override() {
+        let source = ArtifactSourceConfig::from_env_with(|key| match key {
+            ARTIFACT_SOURCE_ENV => Some("local".to_string()),
+            ARTIFACT_LOCAL_ROOT_ENV => Some("/tmp/site".to_string()),
+            _ => None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            source,
+            ArtifactSourceConfig::Local {
+                site_root: PathBuf::from("/tmp/site"),
+            }
+        );
+    }
+
+    #[test]
+    fn test_artifact_source_config_from_env_builds_s3_location() {
+        let source = ArtifactSourceConfig::from_env_with(|key| match key {
+            ARTIFACT_SOURCE_ENV => Some("s3".to_string()),
+            ARTIFACT_BUCKET_ENV => Some("blog-bucket".to_string()),
+            ARTIFACT_PREFIX_ENV => Some("/public/site/".to_string()),
+            _ => None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            source,
+            ArtifactSourceConfig::S3 {
+                location: S3ArtifactLocation::new("blog-bucket", Some("/public/site/")).unwrap(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_artifact_source_config_from_env_requires_s3_bucket() {
+        let result = ArtifactSourceConfig::from_env_with(|key| match key {
+            ARTIFACT_SOURCE_ENV => Some("s3".to_string()),
+            _ => None,
+        });
+
+        assert!(matches!(
+            result,
+            Err(InfraError::MissingConfig(ARTIFACT_BUCKET_ENV))
+        ));
+    }
+
+    #[test]
+    fn test_artifact_source_config_from_env_rejects_unsupported_source() {
+        let result = ArtifactSourceConfig::from_env_with(|key| match key {
+            ARTIFACT_SOURCE_ENV => Some("filesystem".to_string()),
+            _ => None,
+        });
+
+        assert!(matches!(
+            result,
+            Err(InfraError::UnsupportedSource(source)) if source == "filesystem"
+        ));
     }
 }
