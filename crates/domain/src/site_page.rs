@@ -84,12 +84,18 @@ pub fn build_article_page_title(document: &ArticlePageDocument, site_name: &str)
 }
 
 pub fn build_article_page_description(document: &ArticlePageDocument) -> String {
-    document.article.description.clone().unwrap_or_else(|| {
-        format!(
-            "{}カテゴリの記事です。",
-            document.article.category_display_name
-        )
-    })
+    document
+        .article
+        .description
+        .as_deref()
+        .filter(|description| !description.trim().is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            format!(
+                "{}カテゴリの記事です。",
+                document.article.category_display_name
+            )
+        })
 }
 
 pub fn build_category_page_title(document: &CategoryPageDocument, site_name: &str) -> String {
@@ -307,6 +313,34 @@ mod tests {
             "Intro | ぶくせんの探窟メモ"
         );
         assert_eq!(build_article_page_description(&document), "summary");
+    }
+
+    #[test]
+    fn test_build_article_page_description_falls_back_when_missing() {
+        let document = build_article_page_document(
+            &ArticleSummaryDocument {
+                description: None,
+                ..sample_summary()
+            },
+            "<article><h1>Intro</h1></article>",
+        )
+        .unwrap();
+
+        assert_eq!(build_article_page_description(&document), "技術カテゴリの記事です。");
+    }
+
+    #[test]
+    fn test_build_article_page_description_falls_back_when_blank() {
+        let document = build_article_page_document(
+            &ArticleSummaryDocument {
+                description: Some("   ".to_string()),
+                ..sample_summary()
+            },
+            "<article><h1>Intro</h1></article>",
+        )
+        .unwrap();
+
+        assert_eq!(build_article_page_description(&document), "技術カテゴリの記事です。");
     }
 
     #[test]

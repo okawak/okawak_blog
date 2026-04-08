@@ -1,3 +1,4 @@
+use crate::SITE_NAME;
 use crate::components::{footer::Footer, header::Header};
 use crate::routes::about::AboutPage;
 use crate::routes::article::ArticlePage;
@@ -92,7 +93,7 @@ pub fn App() -> impl IntoView {
         <Stylesheet id="leptos" href="/pkg/web.css" />
 
         // sets the document title
-        <Title text="ぶくせんの探窟メモ" />
+        <Title text=SITE_NAME />
 
         <div class="app-container">
             <Router>

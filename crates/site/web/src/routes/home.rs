@@ -145,7 +145,7 @@ pub fn HomePage() -> impl IntoView {
         <div class=home_style::home_page>
             <section class=home_style::profile_section>
                 <p class=home_style::eyebrow>{"Artifact-Driven Blog"}</p>
-                <h1>{"ぶくせんの探窟メモ"}</h1>
+                <h1>{SITE_NAME}</h1>
                 <div class=home_style::profile_text>
                     <p>
                         {"気になったことをメモしておくブログです。Obsidian から生成した成果物をもとに、Leptos で公開ページを組み立てています。"}
