@@ -13,9 +13,9 @@ use leptos::prelude::*;
 #[cfg(feature = "ssr")]
 use leptos_axum::ResponseOptions;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
-use std::sync::Arc;
 #[cfg(feature = "ssr")]
 use std::str::FromStr;
+use std::sync::Arc;
 use stylance::import_style;
 
 import_style!(category_style, "category.module.scss");
