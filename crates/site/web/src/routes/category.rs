@@ -1,12 +1,14 @@
-use crate::SITE_NAME;
 use crate::components::PageMetadata;
 use crate::routes::not_found::NotFoundPage;
+use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
 use domain::CategoryPageDocument;
 #[cfg(feature = "ssr")]
 use domain::{Category, build_category_page_document};
-use domain::{build_category_page_description, build_category_page_title};
+use domain::{
+    build_category_page_canonical_path, build_category_page_description, build_category_page_title,
+};
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
 use leptos::prelude::*;
@@ -55,6 +57,7 @@ pub async fn get_category_page_document(
 fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
     let page_title = build_category_page_title(&document, SITE_NAME);
     let page_description: Arc<str> = build_category_page_description(&document).into();
+    let canonical_url = build_site_url(&build_category_page_canonical_path(&document));
     let title = document.category_display_name;
     let article_items = document
         .articles
@@ -84,7 +87,11 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
         .collect_view();
 
     view! {
-        <PageMetadata title=page_title description=page_description.clone() />
+        <PageMetadata
+            title=page_title
+            description=page_description.clone()
+            canonical_url
+        />
 
         <div class=category_style::category_page>
             <header class=category_style::category_header>

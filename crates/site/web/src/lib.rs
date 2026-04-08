@@ -7,10 +7,15 @@ pub mod routes;
 pub mod types; // Web-specific type definitions.
 
 pub const SITE_NAME: &str = "ぶくせんの探窟メモ";
+pub const SITE_ORIGIN: &str = "https://www.okawak.net";
 
 // Re-export functions and types used on the server side.
 pub use app::{App, shell};
 pub use error::FrontendError;
+
+pub fn build_site_url(path: &str) -> String {
+    format!("{SITE_ORIGIN}{path}")
+}
 
 // Client-side hydration entry point.
 #[cfg(feature = "hydrate")]
