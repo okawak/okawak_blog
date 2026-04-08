@@ -74,7 +74,7 @@ mod tests {
     use super::*;
     use crate::test_support::write_fixture_site;
     use infra::LocalArtifactReader;
-    use std::sync::Arc;
+    use std::{fs, sync::Arc};
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -132,6 +132,36 @@ mod tests {
 
         let result = get_category_page(
             Path("../secrets".to_string()),
+            Extension(Arc::new(LocalArtifactReader::new(temp_dir.path()))),
+        )
+        .await;
+
+        assert!(matches!(result, Err(StatusCode::NOT_FOUND)));
+    }
+
+    #[tokio::test]
+    async fn test_get_article_page_returns_not_found_when_html_artifact_is_missing() {
+        let temp_dir = TempDir::new().unwrap();
+        write_fixture_site(temp_dir.path());
+        fs::remove_file(temp_dir.path().join("articles/sample0000001.html")).unwrap();
+
+        let result = get_article_page(
+            Path("sample0000001".to_string()),
+            Extension(Arc::new(LocalArtifactReader::new(temp_dir.path()))),
+        )
+        .await;
+
+        assert!(matches!(result, Err(StatusCode::NOT_FOUND)));
+    }
+
+    #[tokio::test]
+    async fn test_get_category_page_returns_not_found_when_category_artifact_is_missing() {
+        let temp_dir = TempDir::new().unwrap();
+        write_fixture_site(temp_dir.path());
+        fs::remove_file(temp_dir.path().join("categories/tech.json")).unwrap();
+
+        let result = get_category_page(
+            Path("tech".to_string()),
             Extension(Arc::new(LocalArtifactReader::new(temp_dir.path()))),
         )
         .await;
