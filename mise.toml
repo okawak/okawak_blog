@@ -1,0 +1,233 @@
+[env]
+PROJECT_NAME = "okawak_blog"
+SERVICE_NAME = "okawak_blog"
+SERVICE_FILE = "service/okawak_blog.service"
+NGINX_CONFIG = "service/blog_nginx.conf"
+BIN_DIR = "./bin"
+TARGET_BIN = "./target/release/server"
+
+[tasks.check-deps]
+description = "Check if required tools are installed"
+run = '''
+set -e
+echo "Checking dependencies..."
+mise --version
+cargo leptos --version
+if ! stylance --version; then
+  echo "stylance is required by the current web build tasks. See Issue #39 for the styling toolchain direction."
+  exit 1
+fi
+leptosfmt --version
+'''
+
+[tasks.sync-obsidian]
+description = "Initialize and update the private Obsidian submodule"
+run = "git submodule update --init --recursive"
+
+[tasks.publish-local]
+description = "Generate local site artifacts from the Obsidian submodule"
+depends = ["sync-obsidian"]
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
+run = "cargo run -p publisher"
+
+[tasks.format]
+description = "Format Rust and Leptos source files"
+run = '''
+cargo fmt --all
+find crates/site/web -name '*.rs' -exec leptosfmt {} +
+'''
+
+[tasks.dev]
+description = "Run the local Leptos development server with local artifacts"
+depends = ["format", "publish-local"]
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
+run = "cargo leptos serve"
+
+[tasks.integrated-dev]
+description = "Build the server binary and run the local Leptos development server"
+depends = ["check-deps", "format", "publish-local", "build-server"]
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
+run = "cargo leptos serve"
+
+[tasks.watch]
+description = "Watch the project and rebuild with local artifacts"
+depends = ["format", "publish-local"]
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
+run = "cargo leptos watch"
+
+[tasks.clean-project]
+description = "Clean the Cargo build artifacts"
+run = "cargo clean"
+
+[tasks.stylance]
+description = "Run Stylance for the web crate"
+run = "stylance crates/site/web"
+
+[tasks.build-local]
+description = "Build the integrated Leptos project with local artifacts"
+depends = ["check-deps", "publish-local", "stylance"]
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
+run = "cargo leptos build --release"
+
+[tasks.build-project]
+description = "Build the integrated Leptos project for deployment"
+depends = ["check-deps", "stylance"]
+run = "cargo leptos build --release"
+
+[tasks.build-server]
+description = "Build the server binary only"
+depends = ["check-deps"]
+run = "cargo build --release -p server"
+
+[tasks.pull]
+description = "Pull the latest changes from origin/main"
+run = "git pull --ff-only origin main"
+
+[tasks.pull-with-submodules]
+description = "Pull the latest changes from origin/main and update submodules"
+depends = ["pull"]
+run = "git submodule update --init --recursive"
+
+[tasks.stop]
+description = "Stop the systemd service"
+run = "sudo systemctl stop $SERVICE_NAME"
+
+[tasks.service]
+description = "Install the systemd unit file"
+depends = ["stop"]
+run = '''
+sudo cp -f "$SERVICE_FILE" "/etc/systemd/system/$SERVICE_NAME.service"
+'''
+
+[tasks.bin]
+description = "Copy the built server binary into ./bin"
+depends = ["build-project"]
+run = '''
+sudo mkdir -p "$BIN_DIR"
+sudo cp "$TARGET_BIN" "$BIN_DIR/$SERVICE_NAME"
+sudo chown -R root:root "$BIN_DIR"
+'''
+
+[tasks.deploy]
+description = "Reload systemd and start the service"
+depends = ["service", "bin"]
+run = '''
+sudo systemctl daemon-reload
+sudo systemctl start "$SERVICE_NAME"
+'''
+
+[tasks.nginx-stop]
+description = "Stop nginx"
+run = "sudo systemctl stop nginx"
+
+[tasks.nginx-config]
+description = "Install the nginx config"
+run = '''
+sudo cp -f "$NGINX_CONFIG" "/etc/nginx/conf.d/$PROJECT_NAME.conf"
+'''
+
+[tasks.nginx-start]
+description = "Start nginx"
+run = "sudo systemctl start nginx"
+
+[tasks.nginx-reload]
+description = "Reload nginx configuration"
+depends = ["nginx-config"]
+run = "sudo systemctl reload nginx"
+
+[tasks.status]
+description = "Check the systemd service status"
+run = "sudo systemctl status $SERVICE_NAME"
+
+[tasks.logs]
+description = "Tail the systemd service logs"
+run = "sudo journalctl -u $SERVICE_NAME -f"
+
+[tasks.logs-recent]
+description = "Show recent systemd service logs"
+run = "sudo journalctl -u $SERVICE_NAME --lines=50"
+
+[tasks.restart]
+description = "Restart the systemd service"
+run = "sudo systemctl restart $SERVICE_NAME"
+
+[tasks.full-deploy]
+description = "Run the full deploy flow"
+depends = ["check-deps", "pull", "build-project", "bin", "deploy"]
+run = "echo 'full-deploy completed'"
+
+[tasks.production-deploy]
+description = "Deploy and reload nginx"
+depends = ["full-deploy", "nginx-reload"]
+run = "echo 'production-deploy completed'"
+
+[tasks.quick-deploy]
+description = "Rebuild and deploy quickly"
+depends = ["build-project", "bin", "deploy"]
+run = "echo 'quick-deploy completed'"
+
+[tasks.dev-flow]
+description = "Run the development workflow"
+depends = ["dev"]
+run = "echo 'dev-flow completed'"
+
+[tasks.ci-flow]
+description = "Run the CI-oriented local flow"
+depends = ["check-deps", "format", "build-project"]
+run = "echo 'ci-flow completed'"
+
+[tasks.test]
+description = "Run tests for all workspace crates"
+run = "cargo test --workspace"
+
+[tasks.test-domain]
+description = "Run domain layer tests"
+run = "cargo test -p domain"
+
+[tasks.test-server]
+description = "Run server tests"
+run = "cargo test -p server"
+
+[tasks.test-web]
+description = "Run web tests"
+run = "cargo test -p web"
+
+[tasks.test-release]
+description = "Run tests in release mode"
+run = "cargo test --workspace --release"
+
+[tasks.clippy]
+description = "Run clippy with warnings denied"
+run = "cargo clippy --workspace -- -D warnings"
+
+[tasks.check]
+description = "Run cargo check for the workspace"
+run = "cargo check --workspace"
+
+[tasks.check-domain]
+description = "Run cargo check for the domain crate"
+run = "cargo check -p domain"
+
+[tasks.check-server]
+description = "Run cargo check for the server crate"
+run = "cargo check -p server"
+
+[tasks.bloat]
+description = "Analyze release binary size"
+run = "cargo bloat --release --crates"
+
+[tasks.help]
+description = "Show the available local tasks"
+run = '''
+echo "Use 'mise tasks ls' to view all tasks."
+echo ""
+echo "Common commands:"
+echo "  mise run publish-local"
+echo "  mise run dev"
+echo "  mise run watch"
+echo "  mise run build-local"
+echo "  mise run build-project"
+echo "  mise run test"
+echo "  mise run clippy"
+echo "  mise run check"
+'''
