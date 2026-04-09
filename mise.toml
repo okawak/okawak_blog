@@ -12,7 +12,7 @@ run = '''
 echo "Checking dependencies..."
 mise --version
 cargo leptos --version || echo "cargo-leptos is required: cargo install cargo-leptos"
-stylance --version || echo "stylance-cli is required: cargo install stylance-cli"
+stylance --version || echo "stylance is not available; see Issue #39 for the styling toolchain direction"
 leptosfmt --version || echo "leptosfmt is required: cargo install leptosfmt"
 '''
 

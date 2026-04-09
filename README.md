@@ -179,14 +179,14 @@ category: "tech"
 
 - `mise`
 - `cargo-leptos`
-- `stylance-cli`
 - `leptosfmt`
 
 ```bash
 cargo install cargo-leptos
-cargo install stylance-cli
 cargo install leptosfmt
 ```
+
+スタイリング用のツールチェーンは別途検討中です。方針は Issue `#39` で整理し、確定後にセットアップ手順へ反映します。
 
 また、private Obsidian repo を入力として使うため、ローカル実行前に submodule を同期します。`mise run publish-local` は内部で `git submodule update --init --recursive` を実行しますが、先に明示的に同期したい場合は `mise run sync-obsidian` を使えます。
 
