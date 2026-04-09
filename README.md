@@ -187,8 +187,10 @@ cargo install leptosfmt
 ```
 
 スタイリング用のツールチェーンは別途検討中です。方針は Issue `#39` で整理し、確定後にセットアップ手順へ反映します。
+ただし、現時点の web build task は既存の `stylance` コマンドを前提にしています。
 
 また、private Obsidian repo を入力として使うため、ローカル実行前に submodule を同期します。`mise run publish-local` は内部で `git submodule update --init --recursive` を実行しますが、先に明示的に同期したい場合は `mise run sync-obsidian` を使えます。
+`mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
 
 ローカル開発用 task では、次の env を自動で設定します。
 
@@ -196,13 +198,14 @@ cargo install leptosfmt
 - `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site`
 - `OKAWAK_BLOG_SITE_ORIGIN=http://127.0.0.1:8008`
 
-そのため、`mise run dev` や `mise run build-project` のようなローカル task は、S3 ではなく publisher が生成した local artifact を読む前提で動作します。artifact は `mise run publish-local` で再生成できます。
+そのため、`mise run dev` や `mise run build-local` のようなローカル task は、S3 ではなく publisher が生成した local artifact を読む前提で動作します。artifact は `mise run publish-local` で再生成できます。`mise run build-project` は deploy 用の build で、local artifact や private submodule には依存しません。
 
 主要コマンドは以下です。
 
 ```bash
 mise run check-deps
 mise run sync-obsidian
+mise run pull-with-submodules
 mise run publish-local
 mise run dev
 mise run integrated-dev
@@ -214,12 +217,14 @@ mise run test-server
 mise run test-web
 mise run clippy
 mise run check
-mise run build-project
+mise run build-local
 ```
 
 VPS 前提のデプロイ・運用タスクも `mise` に移しています。
 
 ```bash
+mise run pull
+mise run build-project
 mise run full-deploy
 mise run production-deploy
 mise run status

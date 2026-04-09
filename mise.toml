@@ -9,11 +9,15 @@ TARGET_BIN = "./target/release/server"
 [tasks.check-deps]
 description = "Check if required tools are installed"
 run = '''
+set -e
 echo "Checking dependencies..."
 mise --version
-cargo leptos --version || echo "cargo-leptos is required: cargo install cargo-leptos"
-stylance --version || echo "stylance is not available; see Issue #39 for the styling toolchain direction"
-leptosfmt --version || echo "leptosfmt is required: cargo install leptosfmt"
+cargo leptos --version
+if ! stylance --version; then
+  echo "stylance is required by the current web build tasks. See Issue #39 for the styling toolchain direction."
+  exit 1
+fi
+leptosfmt --version
 '''
 
 [tasks.sync-obsidian]
@@ -22,7 +26,7 @@ run = "git submodule update --init --recursive"
 
 [tasks.publish-local]
 description = "Generate local site artifacts from the Obsidian submodule"
-depends = ["check-deps", "sync-obsidian"]
+depends = ["sync-obsidian"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
 run = "cargo run -p publisher"
 
@@ -40,8 +44,8 @@ env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT =
 run = "cargo leptos serve"
 
 [tasks.integrated-dev]
-description = "Run integrated local development with local artifacts"
-depends = ["format", "publish-local"]
+description = "Build the server binary and run the local Leptos development server"
+depends = ["check-deps", "format", "publish-local", "build-server"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
 run = "cargo leptos serve"
 
@@ -59,10 +63,15 @@ run = "cargo clean"
 description = "Run Stylance for the web crate"
 run = "stylance crates/site/web"
 
-[tasks.build-project]
-description = "Build the integrated Leptos project"
+[tasks.build-local]
+description = "Build the integrated Leptos project with local artifacts"
 depends = ["check-deps", "publish-local", "stylance"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
+run = "cargo leptos build --release"
+
+[tasks.build-project]
+description = "Build the integrated Leptos project for deployment"
+depends = ["check-deps", "stylance"]
 run = "cargo leptos build --release"
 
 [tasks.build-server]
@@ -72,10 +81,12 @@ run = "cargo build --release -p server"
 
 [tasks.pull]
 description = "Pull the latest changes from origin/main"
-run = '''
-git pull --ff-only origin main
-git submodule update --init --recursive
-'''
+run = "git pull --ff-only origin main"
+
+[tasks.pull-with-submodules]
+description = "Pull the latest changes from origin/main and update submodules"
+depends = ["pull"]
+run = "git submodule update --init --recursive"
 
 [tasks.stop]
 description = "Stop the systemd service"
@@ -214,6 +225,7 @@ echo "Common commands:"
 echo "  mise run publish-local"
 echo "  mise run dev"
 echo "  mise run watch"
+echo "  mise run build-local"
 echo "  mise run build-project"
 echo "  mise run test"
 echo "  mise run clippy"

@@ -223,17 +223,20 @@ okawak_blog/
 - task 定義は repo root の `mise.toml`
 - `mise` 経由のローカル task では、`OKAWAK_BLOG_ARTIFACT_SOURCE=local` と `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site` を使って local artifact を読む
 - local publisher 実行前には `mise run sync-obsidian` 相当で private Obsidian submodule を初期化する
+- `mise run pull` は deploy 用に main の更新だけを行い、submodule 更新が必要なときだけ `mise run pull-with-submodules` を使う
 - 本番 runtime は `service/okawak_blog.service` 側の env により `s3` reader を使う
 
 ### 開発
 
 - `mise run check-deps`
 - `mise run sync-obsidian`
+- `mise run pull-with-submodules`
 - `mise run publish-local`
 - `mise run dev`
 - `mise run integrated-dev`
 - `mise run watch`
 - `mise run format`
+- `mise run build-local`
 
 ### テスト・確認
 
@@ -249,6 +252,7 @@ okawak_blog/
 ### デプロイ・運用
 
 - `mise run build-project`
+- `mise run pull`
 - `mise run full-deploy`
 - `mise run production-deploy`
 - `mise run status`
