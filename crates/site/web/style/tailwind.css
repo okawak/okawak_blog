@@ -1,0 +1,104 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --radius: 0.5rem;
+  --background: #0d0a08;
+  --foreground: #e1d9d1;
+  --card: #2b1f1a;
+  --card-foreground: #e1d9d1;
+  --popover: #2b1f1a;
+  --popover-foreground: #e1d9d1;
+  --primary: #c2a262;
+  --primary-foreground: #0d0a08;
+  --secondary: #3b2c25;
+  --secondary-foreground: #e1d9d1;
+  --muted: #2b1f1a;
+  --muted-foreground: #a89b90;
+  --accent: #3b2c25;
+  --accent-foreground: #e1d9d1;
+  --border: rgba(194, 162, 98, 0.3);
+  --input: rgba(194, 162, 98, 0.18);
+  --ring: #c2a262;
+  --destructive: #b85450;
+  --destructive-foreground: #fff8f5;
+  --warning: #d2a14a;
+  --warning-foreground: #0d0a08;
+  --success: #5f8b58;
+  --success-foreground: #f3efe8;
+}
+
+.dark {
+  --background: #0d0a08;
+  --foreground: #e1d9d1;
+  --card: #2b1f1a;
+  --card-foreground: #e1d9d1;
+  --popover: #2b1f1a;
+  --popover-foreground: #e1d9d1;
+  --primary: #c2a262;
+  --primary-foreground: #0d0a08;
+  --secondary: #3b2c25;
+  --secondary-foreground: #e1d9d1;
+  --muted: #2b1f1a;
+  --muted-foreground: #a89b90;
+  --accent: #3b2c25;
+  --accent-foreground: #e1d9d1;
+  --border: rgba(194, 162, 98, 0.3);
+  --input: rgba(194, 162, 98, 0.18);
+  --ring: #c2a262;
+  --destructive: #b85450;
+  --destructive-foreground: #fff8f5;
+  --warning: #d2a14a;
+  --warning-foreground: #0d0a08;
+  --success: #5f8b58;
+  --success-foreground: #f3efe8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --radius-sm: calc(var(--radius) - 0.25rem);
+  --radius-md: calc(var(--radius) - 0.125rem);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 0.25rem);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  dialog {
+    margin: auto;
+  }
+}

@@ -7,6 +7,7 @@ pub mod footer;
 pub mod header;
 pub mod page_metadata;
 pub mod sidebar;
+pub mod ui;
 
 // Re-export frequently used components.
 pub use footer::Footer;
