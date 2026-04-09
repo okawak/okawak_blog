@@ -12,12 +12,34 @@ run = '''
 set -e
 echo "Checking dependencies..."
 mise --version
+bun --version
 cargo leptos --version
 if ! stylance --version; then
   echo "stylance is required by the current web build tasks. See Issue #39 for the styling toolchain direction."
   exit 1
 fi
 leptosfmt --version
+'''
+
+[tasks.web-install]
+description = "Install web package.json dependencies with bun"
+run = '''
+cd crates/site/web
+bun install
+'''
+
+[tasks.web-update]
+description = "Update web package.json dependencies to the latest versions with bun"
+run = '''
+cd crates/site/web
+bun update --latest
+'''
+
+[tasks.web-outdated]
+description = "Show outdated web package.json dependencies with bun"
+run = '''
+cd crates/site/web
+bun outdated
 '''
 
 [tasks.sync-obsidian]
@@ -227,6 +249,8 @@ echo "  mise run dev"
 echo "  mise run watch"
 echo "  mise run build-local"
 echo "  mise run build-project"
+echo "  mise run web-install"
+echo "  mise run web-update"
 echo "  mise run test"
 echo "  mise run clippy"
 echo "  mise run check"

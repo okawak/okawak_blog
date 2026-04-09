@@ -178,6 +178,7 @@ category: "tech"
 ローカル開発に必要なツールは以下です。
 
 - `mise`
+- `bun`
 - `cargo-leptos`
 - `leptosfmt`
 
@@ -191,6 +192,7 @@ cargo install leptosfmt
 
 また、private Obsidian repo を入力として使うため、ローカル実行前に submodule を同期します。`mise run publish-local` は内部で `git submodule update --init --recursive` を実行しますが、先に明示的に同期したい場合は `mise run sync-obsidian` を使えます。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
+`crates/site/web/package.json` の依存更新は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` で行えます。
 
 ローカル開発用 task では、次の env を自動で設定します。
 
@@ -211,6 +213,9 @@ mise run dev
 mise run integrated-dev
 mise run watch
 mise run format
+mise run web-install
+mise run web-update
+mise run web-outdated
 mise run test
 mise run test-domain
 mise run test-server
