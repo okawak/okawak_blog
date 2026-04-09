@@ -13,10 +13,9 @@ $header-height: 90px;
 $padding-whole: 2rem;
 $sidebar-width: 13rem;
 
-// === CSS Custom Properties（thaw-ui統合とランタイムテーマ） ===
-// thaw-uiコンポーネント用のテーマ橋渡し
+// === CSS Custom Properties（共有テーマとランタイムトークン） ===
 :root {
-  // thaw-ui統合用の基本色（SCSS変数から導出）
+  // 基本色（SCSS変数から導出）
   --color-primary: #{$color-accent};
   --color-primary-hover: #{lighten($color-accent, 8%)};
   --color-surface: #{$color-bg-mid};
@@ -94,51 +93,6 @@ body {
   background: $color-bg-dark;
   color: $color-text;
   line-height: 1.6;
-}
-
-// === thaw-ui テーマ統合（CSS Custom Properties使用） ===
-// thaw-uiコンポーネントのカスタムスタイル
-.thaw-button {
-  --thaw-button-color-primary: var(--color-primary);
-  --thaw-button-color-primary-hover: var(--color-primary-hover);
-  --thaw-button-background-primary: var(--color-primary);
-  --thaw-button-background-primary-hover: var(--color-primary-hover);
-  --thaw-button-border-color: var(--color-primary);
-  --thaw-button-border-radius: var(--border-radius);
-  --thaw-button-font-family: var(--font-family-sans);
-  --thaw-button-transition: var(--transition-normal);
-  
-  font-family: var(--font-family-sans);
-  transition: var(--transition-normal);
-  border-radius: var(--border-radius);
-  
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow);
-  }
-}
-
-.thaw-space {
-  --thaw-space-gap: 0.75rem;
-}
-
-.thaw-card {
-  --thaw-card-background: var(--color-surface);
-  --thaw-card-border-color: var(--color-outline);
-  --thaw-card-border-radius: var(--border-radius-lg);
-  --thaw-card-box-shadow: var(--shadow);
-  
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline);
-  border-radius: var(--border-radius-lg);
-  box-shadow: var(--shadow);
-  transition: var(--transition-normal);
-  
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-lg);
-    border-color: var(--color-primary);
-  }
 }
 
 // === レスポンシブユーティリティ ===
