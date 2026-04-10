@@ -225,7 +225,7 @@ okawak_blog/
 - local artifact の更新が必要なときだけ `mise run publish-local` または `mise run sync-obsidian` を使う
 - `mise run pull` は deploy 用に main の更新だけを行い、submodule 更新が必要なときだけ `mise run pull-with-submodules` を使う
 - `crates/site/web/package.json` の依存操作は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` を使う
-- 同一ネットワークの別端末から確認する一時用途では `mise run dev-lan` を使う。task 側で host IP から `OKAWAK_BLOG_SITE_ORIGIN` を自動設定し、必要なときだけ `OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008` を前置して上書きする
+- 同一ネットワークの別端末から確認する一時用途では `mise run dev-lan` を使う。これは `0.0.0.0:8008` で待ち受けるだけで、absolute URL まで揃えたいときだけ `OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008` を前置する
 - 本番 runtime は `service/okawak_blog.service` 側の env により `s3` reader を使う
 
 ### 開発
