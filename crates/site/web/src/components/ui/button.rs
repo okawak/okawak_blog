@@ -18,7 +18,7 @@ variants! {
                 //
                 Warning: "bg-warning text-warning-foreground hover:bg-warning/90",
                 Success: "bg-success text-success-foreground hover:bg-success/90",
-                Bordered: "bg-transparent border border-zinc-200 text-muted-foreground",
+                Bordered: "bg-transparent border border-border text-muted-foreground",
             },
             size: {
                 Default: "h-9 px-4 py-2 has-[>svg]:px-3",

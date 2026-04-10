@@ -10,6 +10,8 @@ import_style!(header_style, "header.module.scss");
 /// Site header component.
 #[component]
 pub fn Header() -> impl IntoView {
+    const NAV_ID: &str = "site-header-nav";
+
     let location = use_location();
     let nav_items = Memo::new(move |_| get_main_nav_items(&location.pathname.get()));
 
@@ -26,6 +28,7 @@ pub fn Header() -> impl IntoView {
                     class=header_style::menu_toggle
                     size=ButtonSize::Icon
                     variant=ButtonVariant::Ghost
+                    attr:aria-controls=NAV_ID
                     attr:aria-expanded=move || if menu_open.get() { "true" } else { "false" }
                     attr:aria-label="Toggle navigation menu"
                     on:click=move |_| set_menu_open.update(|v| *v = !*v)
@@ -37,7 +40,7 @@ pub fn Header() -> impl IntoView {
                     </div>
                 </Button>
 
-                <nav class=move || {
+                <nav id=NAV_ID class=move || {
                     let state = if menu_open.get() {
                         header_style::open
                     } else {
