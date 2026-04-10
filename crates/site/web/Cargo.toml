@@ -103,6 +103,3 @@ hash_len = 7
 # [hash] will be replaced with the hash of css module file path.
 # defaults to "[name]-[hash]"
 # class_name_pattern = "my-project-[name]-[hash]"
-
-[package.metadata.leptos]
-tailwind-input-file = "style/tailwind.css"
