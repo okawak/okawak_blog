@@ -225,6 +225,7 @@ okawak_blog/
 - local publisher 実行前には `mise run sync-obsidian` 相当で private Obsidian submodule を初期化する
 - `mise run pull` は deploy 用に main の更新だけを行い、submodule 更新が必要なときだけ `mise run pull-with-submodules` を使う
 - `crates/site/web/package.json` の依存操作は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` を使う
+- 同一ネットワークの別端末から確認する一時用途では `mise run dev-lan` を使い、必要なら `OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008` を前置して absolute URL を合わせる
 - 本番 runtime は `service/okawak_blog.service` 側の env により `s3` reader を使う
 
 ### 開発
@@ -234,6 +235,7 @@ okawak_blog/
 - `mise run pull-with-submodules`
 - `mise run publish-local`
 - `mise run dev`
+- `mise run dev-lan`
 - `mise run integrated-dev`
 - `mise run watch`
 - `mise run format`

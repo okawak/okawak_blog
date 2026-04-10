@@ -65,6 +65,16 @@ depends = ["format", "publish-local"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
 run = "cargo leptos serve"
 
+[tasks.dev-lan]
+description = "Run the local Leptos development server on 0.0.0.0 for same-network testing"
+depends = ["format", "publish-local"]
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", LEPTOS_SITE_ADDR = "0.0.0.0:8008" }
+run = '''
+echo "Listening on 0.0.0.0:8008"
+echo "If you need correct absolute URLs from another device, set OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008 before running this task."
+cargo leptos serve
+'''
+
 [tasks.integrated-dev]
 description = "Build the server binary and run the local Leptos development server"
 depends = ["check-deps", "format", "publish-local", "build-server"]
@@ -246,6 +256,7 @@ echo ""
 echo "Common commands:"
 echo "  mise run publish-local"
 echo "  mise run dev"
+echo "  mise run dev-lan"
 echo "  mise run watch"
 echo "  mise run build-local"
 echo "  mise run build-project"
