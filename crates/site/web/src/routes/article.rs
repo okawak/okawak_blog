@@ -82,14 +82,17 @@ fn ArticlePageContent(document: ArticlePageDocument) -> impl IntoView {
                 <p class=article_style::article_dates>
                     {format!("公開 {} / 更新 {}", created_at, updated_at)}
                 </p>
-                {description.map(|description| {
-                    view! { <p class=article_style::article_summary>{description}</p> }
-                })}
+                {description
+                    .map(|description| {
+                        view! { <p class=article_style::article_summary>{description}</p> }
+                    })}
                 <Show when=move || has_tags fallback=|| ()>
                     <ul class=article_style::tag_list>
                         {tags
                             .iter()
-                            .map(|tag| view! { <li class=article_style::tag>{format!("#{tag}")}</li> })
+                            .map(|tag| {
+                                view! { <li class=article_style::tag>{format!("#{tag}")}</li> }
+                            })
                             .collect_view()}
                     </ul>
                 </Show>
@@ -129,12 +132,14 @@ pub fn ArticlePage() -> impl IntoView {
                     mark_not_found_response();
                     view! { <NotFoundPage /> }.into_any()
                 }
-                Some(Err(error)) => view! {
-                    <div class=article_style::error>
-                        {format!("記事の読み込みに失敗しました: {error}")}
-                    </div>
+                Some(Err(error)) => {
+                    view! {
+                        <div class=article_style::error>
+                            {format!("記事の読み込みに失敗しました: {error}")}
+                        </div>
+                    }
+                        .into_any()
                 }
-                .into_any(),
                 None => view! { <div class=article_style::loading></div> }.into_any(),
             }}
         </Suspense>

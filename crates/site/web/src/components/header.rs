@@ -40,14 +40,17 @@ pub fn Header() -> impl IntoView {
                     </div>
                 </Button>
 
-                <nav id=NAV_ID class=move || {
-                    let state = if menu_open.get() {
-                        header_style::open
-                    } else {
-                        header_style::closed
-                    };
-                    format!("{} {}", header_style::nav_container, state)
-                }>
+                <nav
+                    id=NAV_ID
+                    class=move || {
+                        let state = if menu_open.get() {
+                            header_style::open
+                        } else {
+                            header_style::closed
+                        };
+                        format!("{} {}", header_style::nav_container, state)
+                    }
+                >
                     <ul class=header_style::nav_list>
                         <For
                             each=move || nav_items.get()
