@@ -14,6 +14,7 @@ use infra::DynArtifactReader;
 use leptos::prelude::*;
 #[cfg(feature = "ssr")]
 use leptos_axum::ResponseOptions;
+use leptos_router::components::A;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
 #[cfg(feature = "ssr")]
 use std::str::FromStr;
@@ -73,9 +74,9 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
             view! {
                 <article class=category_style::article_card>
                     <h2 class=category_style::article_title>
-                        <a class=category_style::article_link href=href>
+                        <A href=move || href.clone() {..} class=category_style::article_link>
                             {title}
-                        </a>
+                        </A>
                     </h2>
                     <p class=category_style::article_description>{description}</p>
                     <p class=category_style::article_meta>{format!("更新 {}", updated_at)}</p>

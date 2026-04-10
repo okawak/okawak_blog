@@ -7,6 +7,7 @@ use domain::{
     build_home_page_title,
 };
 use leptos::prelude::*;
+use leptos_router::components::A;
 use std::sync::Arc;
 use stylance::import_style;
 
@@ -47,11 +48,11 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
             let href = format!("/categories/{}", category.category.as_str());
             view! {
                 <li class=home_style::category_chip>
-                    <a class=home_style::category_link href=href>
+                    <A href=move || href.clone() {..} class=home_style::category_link>
                         <span class=home_style::category_name>
                             {category.category_display_name}
                         </span>
-                    </a>
+                    </A>
                     <span class=home_style::category_count>
                         {format!("{}本", category.article_count)}
                     </span>
@@ -94,6 +95,7 @@ fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
     let has_tags = !tags.is_empty();
     let created_at = article.created_at;
     let updated_at = article.updated_at;
+    let article_href = format!("/articles/{slug}");
 
     view! {
         <article class=home_style::article_card>
@@ -105,9 +107,9 @@ fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
             </div>
 
             <h3 class=home_style::article_title>
-                <a class=home_style::article_link href=format!("/articles/{slug}")>
+                <A href=move || article_href.clone() {..} class=home_style::article_link>
                     {title}
-                </a>
+                </A>
             </h3>
             <p class=home_style::article_description>{description}</p>
 

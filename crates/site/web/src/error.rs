@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos_router::components::A;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -47,7 +48,7 @@ pub fn ErrorTemplate(#[prop(into)] err: String) -> impl IntoView {
             <div class="error-message">
                 <h1>エラーが発生しました</h1>
                 <p>{err}</p>
-                <a href="/">トップページに戻る</a>
+                <A href="/">トップページに戻る</A>
             </div>
         </div>
     }

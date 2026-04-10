@@ -1,5 +1,6 @@
 use crate::types::ArticleSummary;
 use leptos::prelude::*;
+use leptos_router::components::A;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
 use stylance::import_style;
 
@@ -33,7 +34,7 @@ fn render_sidebar(articles: Vec<ArticleSummary>) -> impl IntoView {
                         };
                         view! {
                             <li class=link_style>
-                                <a href=link>{article.title.to_string()}</a>
+                                <A href=link>{article.title.to_string()}</A>
                             </li>
                         }
                     })

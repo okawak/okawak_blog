@@ -2,6 +2,7 @@ use crate::SITE_NAME;
 use crate::components::ui::button::{Button, ButtonSize, ButtonVariant};
 use crate::components::{NavigationItem, get_main_nav_items};
 use leptos::prelude::*;
+use leptos_router::components::A;
 use leptos_router::hooks::use_location;
 use stylance::import_style;
 
@@ -20,9 +21,9 @@ pub fn Header() -> impl IntoView {
     view! {
         <header class=header_style::header class:open=move || menu_open.get()>
             <div class=header_style::container>
-                <a href="/">
+                <A href="/">
                     <h1 class=header_style::logo>{SITE_NAME}</h1>
-                </a>
+                </A>
 
                 <Button
                     class=header_style::menu_toggle
@@ -57,8 +58,9 @@ pub fn Header() -> impl IntoView {
                             key=|item: &NavigationItem| item.href.clone()
                             children=move |child| {
                                 let href = child.href.clone();
+                                let active_href = href.clone();
                                 let active_class = move || {
-                                    if location.pathname.get() == href {
+                                    if location.pathname.get() == active_href {
                                         header_style::nav_item_active
                                     } else {
                                         header_style::nav_item
@@ -66,9 +68,14 @@ pub fn Header() -> impl IntoView {
                                 };
                                 view! {
                                     <li class=active_class>
-                                        <a class=header_style::nav_link href=child.href>
+                                        <A
+                                            href=move || href.clone()
+                                            {..}
+                                            class=header_style::nav_link
+                                            on:click=move |_| set_menu_open.set(false)
+                                        >
                                             {child.title}
-                                        </a>
+                                        </A>
                                     </li>
                                 }
                             }
