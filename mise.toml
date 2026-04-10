@@ -63,7 +63,7 @@ find crates/site/web -name '*.rs' -exec leptosfmt {} +
 description = "Run the local Leptos development server with local artifacts"
 depends = ["check-deps", "format"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
-run = "cargo leptos serve"
+run = "cargo leptos serve -p server"
 
 [tasks.dev-lan]
 description = "Run the local Leptos development server on 0.0.0.0 for same-network testing"
@@ -97,20 +97,20 @@ fi
 
 echo "Listening on 0.0.0.0:8008"
 echo "Using OKAWAK_BLOG_SITE_ORIGIN=$OKAWAK_BLOG_SITE_ORIGIN"
-cargo leptos serve
+cargo leptos serve -p server
 '''
 
 [tasks.integrated-dev]
 description = "Build the server binary and run the local Leptos development server"
 depends = ["check-deps", "format", "build-server"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
-run = "cargo leptos serve"
+run = "cargo leptos serve -p server"
 
 [tasks.watch]
 description = "Watch the project and rebuild with local artifacts"
 depends = ["check-deps", "format"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
-run = "cargo leptos watch"
+run = "cargo leptos watch -p server"
 
 [tasks.clean-project]
 description = "Clean the Cargo build artifacts"
@@ -124,12 +124,12 @@ run = "stylance crates/site/web"
 description = "Build the integrated Leptos project with local artifacts"
 depends = ["check-deps", "publish-local", "stylance"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
-run = "cargo leptos build --release"
+run = "cargo leptos build -p server --release"
 
 [tasks.build-project]
 description = "Build the integrated Leptos project for deployment"
 depends = ["check-deps", "stylance"]
-run = "cargo leptos build --release"
+run = "cargo leptos build -p server --release"
 
 [tasks.build-server]
 description = "Build the server binary only"
