@@ -85,7 +85,7 @@ pub fn Header() -> impl IntoView {
                             attr:rel="noopener noreferrer"
                             attr:target="_blank"
                         >
-                            <i class="fab fa-github"></i>
+                            <i class="fab fa-github" aria-hidden="true"></i>
                         </Button>
                     </div>
                 </nav>
