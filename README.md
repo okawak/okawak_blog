@@ -202,7 +202,7 @@ cargo install leptosfmt
 
 そのため、`mise run dev` や `mise run build-local` のようなローカル task は、S3 ではなく publisher が生成した local artifact を読む前提で動作します。開発サーバー系 task は artifact を自動再生成しないので、記事内容を更新した後や初回セットアップ時は先に `mise run publish-local` を実行してください。`mise run build-project` は deploy 用の build で、local artifact や private submodule には依存しません。
 
-同じネットワーク上の別端末から動作確認したい場合は `mise run dev-lan` を使います。これは `LEPTOS_SITE_ADDR=0.0.0.0:8008` で待ち受けます。absolute URL もその端末向けに揃えたい場合は、次のように host IP を明示して実行します。
+同じネットワーク上の別端末から動作確認したい場合は `mise run dev-lan` を使います。これは `LEPTOS_SITE_ADDR=0.0.0.0:8008` で待ち受け、Linux/macOS 上で検出できた host IP から `OKAWAK_BLOG_SITE_ORIGIN` を自動設定します。自動検出を上書きしたい場合だけ、次のように host IP を明示して実行します。
 
 ```bash
 OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008 mise run dev-lan

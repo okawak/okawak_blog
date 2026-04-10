@@ -70,8 +70,33 @@ description = "Run the local Leptos development server on 0.0.0.0 for same-netwo
 depends = ["check-deps", "format"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", LEPTOS_SITE_ADDR = "0.0.0.0:8008" }
 run = '''
+if [ -z "${OKAWAK_BLOG_SITE_ORIGIN:-}" ]; then
+  HOST_IP=""
+
+  if command -v hostname >/dev/null 2>&1; then
+    HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+
+  if [ -z "$HOST_IP" ] && command -v ip >/dev/null 2>&1; then
+    HOST_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
+  fi
+
+  if [ -z "$HOST_IP" ] && command -v route >/dev/null 2>&1 && command -v ipconfig >/dev/null 2>&1; then
+    DEFAULT_IFACE="$(route -n get default 2>/dev/null | awk '/interface:/{print $2; exit}')"
+    if [ -n "$DEFAULT_IFACE" ]; then
+      HOST_IP="$(ipconfig getifaddr "$DEFAULT_IFACE" 2>/dev/null || true)"
+    fi
+  fi
+
+  if [ -z "$HOST_IP" ]; then
+    HOST_IP="127.0.0.1"
+  fi
+
+  export OKAWAK_BLOG_SITE_ORIGIN="http://$HOST_IP:8008"
+fi
+
 echo "Listening on 0.0.0.0:8008"
-echo "If you need correct absolute URLs from another device, set OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008 before running this task."
+echo "Using OKAWAK_BLOG_SITE_ORIGIN=$OKAWAK_BLOG_SITE_ORIGIN"
 cargo leptos serve
 '''
 
