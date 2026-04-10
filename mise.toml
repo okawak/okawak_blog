@@ -61,13 +61,13 @@ find crates/site/web -name '*.rs' -exec leptosfmt {} +
 
 [tasks.dev]
 description = "Run the local Leptos development server with local artifacts"
-depends = ["format", "publish-local"]
+depends = ["check-deps", "format"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
 run = "cargo leptos serve"
 
 [tasks.dev-lan]
 description = "Run the local Leptos development server on 0.0.0.0 for same-network testing"
-depends = ["format", "publish-local"]
+depends = ["check-deps", "format"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", LEPTOS_SITE_ADDR = "0.0.0.0:8008" }
 run = '''
 echo "Listening on 0.0.0.0:8008"
@@ -77,13 +77,13 @@ cargo leptos serve
 
 [tasks.integrated-dev]
 description = "Build the server binary and run the local Leptos development server"
-depends = ["check-deps", "format", "publish-local", "build-server"]
+depends = ["check-deps", "format", "build-server"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
 run = "cargo leptos serve"
 
 [tasks.watch]
 description = "Watch the project and rebuild with local artifacts"
-depends = ["format", "publish-local"]
+depends = ["check-deps", "format"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
 run = "cargo leptos watch"
 

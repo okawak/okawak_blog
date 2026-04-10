@@ -222,7 +222,7 @@ okawak_blog/
 - タスクランナーは `mise` を使う
 - task 定義は repo root の `mise.toml`
 - `mise` 経由のローカル task では、`OKAWAK_BLOG_ARTIFACT_SOURCE=local` と `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site` を使って local artifact を読む
-- local publisher 実行前には `mise run sync-obsidian` 相当で private Obsidian submodule を初期化する
+- local artifact の更新が必要なときだけ `mise run publish-local` または `mise run sync-obsidian` を使う
 - `mise run pull` は deploy 用に main の更新だけを行い、submodule 更新が必要なときだけ `mise run pull-with-submodules` を使う
 - `crates/site/web/package.json` の依存操作は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` を使う
 - 同一ネットワークの別端末から確認する一時用途では `mise run dev-lan` を使い、必要なら `OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008` を前置して absolute URL を合わせる
