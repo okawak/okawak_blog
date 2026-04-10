@@ -78,20 +78,14 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
                         </a>
                     </h2>
                     <p class=category_style::article_description>{description}</p>
-                    <p class=category_style::article_meta>
-                        {format!("更新 {}", updated_at)}
-                    </p>
+                    <p class=category_style::article_meta>{format!("更新 {}", updated_at)}</p>
                 </article>
             }
         })
         .collect_view();
 
     view! {
-        <PageMetadata
-            title=page_title
-            description=page_description.clone()
-            canonical_url
-        />
+        <PageMetadata title=page_title description=page_description.clone() canonical_url />
 
         <div class=category_style::category_page>
             <header class=category_style::category_header>
@@ -100,9 +94,7 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
                 <p class=category_style::category_description>{page_description}</p>
             </header>
 
-            <section class=category_style::article_list>
-                {article_items}
-            </section>
+            <section class=category_style::article_list>{article_items}</section>
         </div>
     }
 }
@@ -135,12 +127,14 @@ pub fn CategoryPage() -> impl IntoView {
                     mark_not_found_response();
                     view! { <NotFoundPage /> }.into_any()
                 }
-                Some(Err(error)) => view! {
-                    <div class=category_style::error>
-                        {format!("カテゴリの読み込みに失敗しました: {error}")}
-                    </div>
+                Some(Err(error)) => {
+                    view! {
+                        <div class=category_style::error>
+                            {format!("カテゴリの読み込みに失敗しました: {error}")}
+                        </div>
+                    }
+                        .into_any()
                 }
-                .into_any(),
                 None => view! { <div class=category_style::loading></div> }.into_any(),
             }}
         </Suspense>

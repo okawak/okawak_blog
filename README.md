@@ -178,6 +178,7 @@ category: "tech"
 ローカル開発に必要なツールは以下です。
 
 - `mise`
+- `bun`
 - `cargo-leptos`
 - `leptosfmt`
 
@@ -189,8 +190,9 @@ cargo install leptosfmt
 スタイリング用のツールチェーンは別途検討中です。方針は Issue `#39` で整理し、確定後にセットアップ手順へ反映します。
 ただし、現時点の web build task は既存の `stylance` コマンドを前提にしています。
 
-また、private Obsidian repo を入力として使うため、ローカル実行前に submodule を同期します。`mise run publish-local` は内部で `git submodule update --init --recursive` を実行しますが、先に明示的に同期したい場合は `mise run sync-obsidian` を使えます。
+また、private Obsidian repo を入力として使うため、local artifact を再生成したいときは `mise run publish-local` を実行します。`publish-local` は内部で `git submodule update --init --recursive` を実行しますが、先に明示的に同期したい場合は `mise run sync-obsidian` を使えます。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
+`crates/site/web/package.json` の依存のインストール/更新確認は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` で行えます。
 
 ローカル開発用 task では、次の env を自動で設定します。
 
@@ -198,7 +200,13 @@ cargo install leptosfmt
 - `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site`
 - `OKAWAK_BLOG_SITE_ORIGIN=http://127.0.0.1:8008`
 
-そのため、`mise run dev` や `mise run build-local` のようなローカル task は、S3 ではなく publisher が生成した local artifact を読む前提で動作します。artifact は `mise run publish-local` で再生成できます。`mise run build-project` は deploy 用の build で、local artifact や private submodule には依存しません。
+そのため、`mise run dev` や `mise run build-local` のようなローカル task は、S3 ではなく publisher が生成した local artifact を読む前提で動作します。開発サーバー系 task は artifact を自動再生成しないので、記事内容を更新した後や初回セットアップ時は先に `mise run publish-local` を実行してください。`mise run build-project` は deploy 用の build で、local artifact や private submodule には依存しません。
+
+同じネットワーク上の別端末から動作確認したい場合は `mise run dev-lan` を使います。これは `LEPTOS_SITE_ADDR=0.0.0.0:8008` で待ち受けるだけの task で、別端末からはホストの IP アドレスを直接指定してアクセスします。absolute URL までその IP に揃えたい場合だけ、次のように host IP を明示して実行します。
+
+```bash
+OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008 mise run dev-lan
+```
 
 主要コマンドは以下です。
 
@@ -208,9 +216,13 @@ mise run sync-obsidian
 mise run pull-with-submodules
 mise run publish-local
 mise run dev
+mise run dev-lan
 mise run integrated-dev
 mise run watch
 mise run format
+mise run web-install
+mise run web-update
+mise run web-outdated
 mise run test
 mise run test-domain
 mise run test-server

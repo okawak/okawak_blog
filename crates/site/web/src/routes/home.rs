@@ -66,28 +66,18 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
         .collect_view();
 
     view! {
-        <PageMetadata
-            title=page_title
-            description=page_description.clone()
-            canonical_url
-        />
+        <PageMetadata title=page_title description=page_description.clone() canonical_url />
 
         <div class=home_style::content_grid>
             <section class=home_style::overview_panel>
                 <p class=home_style::overview_copy>
                     {"公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。"}
                 </p>
-                <p class=home_style::overview_stats>
-                    {page_description}
-                </p>
-                <ul class=home_style::category_list>
-                    {category_items}
-                </ul>
+                <p class=home_style::overview_stats>{page_description}</p>
+                <ul class=home_style::category_list>{category_items}</ul>
             </section>
 
-            <section class=home_style::article_list>
-                {article_items}
-            </section>
+            <section class=home_style::article_list>{article_items}</section>
         </div>
     }
 }
@@ -171,15 +161,11 @@ pub fn HomePage() -> impl IntoView {
                     {move || match home_page.get() {
                         Some(Ok(document)) if document.articles.is_empty() => {
                             view! {
-                                <div class=home_style::no_articles>
-                                    "記事がありません"
-                                </div>
+                                <div class=home_style::no_articles>"記事がありません"</div>
                             }
                                 .into_any()
                         }
-                        Some(Ok(document)) => {
-                            view! { <HomePageContent document /> }.into_any()
-                        }
+                        Some(Ok(document)) => view! { <HomePageContent document /> }.into_any(),
                         Some(Err(error)) => {
                             view! {
                                 <div class=home_style::error>

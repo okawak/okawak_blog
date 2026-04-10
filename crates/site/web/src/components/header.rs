@@ -1,15 +1,17 @@
 use crate::SITE_NAME;
+use crate::components::ui::button::{Button, ButtonSize, ButtonVariant};
 use crate::components::{NavigationItem, get_main_nav_items};
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 use stylance::import_style;
-use thaw::*;
 
 import_style!(header_style, "header.module.scss");
 
 /// Site header component.
 #[component]
 pub fn Header() -> impl IntoView {
+    const NAV_ID: &str = "site-header-nav";
+
     let location = use_location();
     let nav_items = Memo::new(move |_| get_main_nav_items(&location.pathname.get()));
 
@@ -22,10 +24,14 @@ pub fn Header() -> impl IntoView {
                     <h1 class=header_style::logo>{SITE_NAME}</h1>
                 </a>
 
-                // Hamburger toggle implemented with a thaw-ui button.
                 <Button
                     class=header_style::menu_toggle
-                    on_click=move |_| set_menu_open.update(|v| *v = !*v)
+                    size=ButtonSize::Icon
+                    variant=ButtonVariant::Ghost
+                    attr:aria-controls=NAV_ID
+                    attr:aria-expanded=move || if menu_open.get() { "true" } else { "false" }
+                    attr:aria-label="Toggle navigation menu"
+                    on:click=move |_| set_menu_open.update(|v| *v = !*v)
                 >
                     <div class=header_style::hamburger_icon>
                         <span class=header_style::bar></span>
@@ -34,14 +40,17 @@ pub fn Header() -> impl IntoView {
                     </div>
                 </Button>
 
-                <nav class=move || {
-                    let state = if menu_open.get() {
-                        header_style::open
-                    } else {
-                        header_style::closed
-                    };
-                    format!("{} {}", header_style::nav_container, state)
-                }>
+                <nav
+                    id=NAV_ID
+                    class=move || {
+                        let state = if menu_open.get() {
+                            header_style::open
+                        } else {
+                            header_style::closed
+                        };
+                        format!("{} {}", header_style::nav_container, state)
+                    }
+                >
                     <ul class=header_style::nav_list>
                         <For
                             each=move || nav_items.get()
@@ -66,21 +75,17 @@ pub fn Header() -> impl IntoView {
                         />
                     </ul>
 
-                    // Render the social link as a thaw-ui button.
                     <div class=header_style::social_links>
                         <Button
+                            href="https://github.com/okawak"
                             class=header_style::social_button
-                            on_click=move |_| {
-                                if let Some(window) = leptos::web_sys::window() {
-                                    let _ = window
-                                        .open_with_url_and_target(
-                                            "https://github.com/okawak",
-                                            "_blank",
-                                        );
-                                }
-                            }
+                            size=ButtonSize::Icon
+                            variant=ButtonVariant::Ghost
+                            attr:aria-label="Open okawak GitHub profile"
+                            attr:rel="noopener noreferrer"
+                            attr:target="_blank"
                         >
-                            <i class="fab fa-github"></i>
+                            <i class="fab fa-github" aria-hidden="true"></i>
                         </Button>
                     </div>
                 </nav>
