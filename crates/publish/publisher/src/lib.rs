@@ -16,7 +16,7 @@ pub fn offline_bookmark_enricher() -> BookmarkEnricher {
 
 use artifacts::{SiteDirectories, build_site_artifacts, write_article_page, write_site_artifacts};
 pub use config::Config;
-use domain::{ArticleBody, ArticleMeta, ArticleMetaInput, Category, Slug, Title};
+use domain::{ArticleBody, ArticleMeta, ArticleMetaInput, Category, ContentKind, Slug, Title};
 pub use error::{ObsidianError, Result};
 use ingest::{
     FileMapping, ObsidianFrontMatter, ParsedObsidianFile, convert_markdown_to_html,
@@ -35,6 +35,7 @@ struct RenderedArticle {
 struct ParsedFile {
     slug: String,
     mapping_key: String,
+    section_path: Vec<String>,
     markdown_body: String,
     front_matter: ObsidianFrontMatter,
 }
@@ -61,7 +62,10 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
     let valid_files: Vec<ParsedFile> = markdown_files
         .into_iter()
         .filter_map(|file_path| match parse_obsidian_file(&file_path) {
-            Ok(Some(parsed_file)) if parsed_file.front_matter.is_completed => {
+            Ok(Some(parsed_file))
+                if parsed_file.front_matter.is_completed
+                    && parsed_file.front_matter.kind == ContentKind::Article =>
+            {
                 match process_valid_file(&file_path, parsed_file, config) {
                     Ok(parsed_file) => Some(parsed_file),
                     Err(e) => {
@@ -70,6 +74,15 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
                         None
                     }
                 }
+            }
+            Ok(Some(parsed_file)) if parsed_file.front_matter.is_completed => {
+                skipped_count += 1;
+                info!(
+                    "Skipped (kind not implemented yet): {} [{}]",
+                    file_path.display(),
+                    parsed_file.front_matter.kind
+                );
+                None
             }
             Ok(_) => {
                 skipped_count += 1;
@@ -165,10 +178,12 @@ fn process_valid_file(
         &parsed_file.front_matter.created,
     )?;
     let mapping_key = normalize_path_for_url(&relative_path.with_extension(""));
+    let section_path = derive_section_path(relative_path, parsed_file.front_matter.category.as_deref());
 
     Ok(ParsedFile {
         slug,
         mapping_key,
+        section_path,
         markdown_body: parsed_file.markdown_body,
         front_matter: parsed_file.front_matter,
     })
@@ -200,6 +215,26 @@ fn build_file_mapping(valid_files: &[ParsedFile]) -> FileMapping {
     mapping
 }
 
+fn derive_section_path(relative_path: &Path, category: Option<&str>) -> Vec<String> {
+    let mut path_components: Vec<String> = relative_path
+        .parent()
+        .map(|parent| {
+            parent
+                .iter()
+                .map(|component| component.to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if let (Some(category), Some(first_component)) = (category, path_components.first())
+        && first_component == category
+    {
+        path_components.remove(0);
+    }
+
+    path_components
+}
+
 async fn process_parsed_file(
     parsed_file: ParsedFile,
     file_mapping: &FileMapping,
@@ -220,6 +255,7 @@ async fn process_parsed_file(
         slug: Slug::new(parsed_file.slug)?,
         title: Title::new(parsed_file.front_matter.title)?,
         category,
+        section_path: parsed_file.section_path,
         description: parsed_file.front_matter.summary,
         tags: parsed_file.front_matter.tags.unwrap_or_default(),
         priority: parsed_file.front_matter.priority,
@@ -260,6 +296,7 @@ mod tests {
     fn test_build_file_mapping_success() {
         let front_matter = ObsidianFrontMatter {
             title: "Test Article".to_string(),
+            kind: ContentKind::Article,
             tags: Some(vec!["test".to_string()]),
             summary: Some("Test summary".to_string()),
             priority: Some(1),
@@ -267,11 +304,13 @@ mod tests {
             updated: "2025-01-02T00:00:00+09:00".to_string(),
             is_completed: true,
             category: Some("tech".to_string()),
+            page: None,
         };
 
         let parsed_file = ParsedFile {
             slug: "slug".to_string(),
             mapping_key: "test".to_string(),
+            section_path: vec![],
             markdown_body: "# Test Content".to_string(),
             front_matter,
         };
@@ -294,6 +333,7 @@ mod tests {
     fn test_build_file_mapping_path_collision() {
         let front_matter1 = ObsidianFrontMatter {
             title: "Test Article 1".to_string(),
+            kind: ContentKind::Article,
             tags: Some(vec!["test1".to_string()]),
             summary: Some("Test summary 1".to_string()),
             priority: Some(1),
@@ -301,10 +341,12 @@ mod tests {
             updated: "2025-01-02T00:00:00+09:00".to_string(),
             is_completed: true,
             category: Some("tech".to_string()),
+            page: None,
         };
 
         let front_matter2 = ObsidianFrontMatter {
             title: "Test Article 2".to_string(),
+            kind: ContentKind::Article,
             tags: Some(vec!["test2".to_string()]),
             summary: Some("Test summary 2".to_string()),
             priority: Some(2),
@@ -312,17 +354,20 @@ mod tests {
             updated: "2025-01-04T00:00:00+09:00".to_string(),
             is_completed: true,
             category: Some("blog".to_string()),
+            page: None,
         };
 
         let parsed_file1 = ParsedFile {
             slug: "slug1".to_string(),
             mapping_key: "dir1/test".to_string(),
+            section_path: vec!["dir1".to_string()],
             markdown_body: "# Test Content 1".to_string(),
             front_matter: front_matter1,
         };
         let parsed_file2 = ParsedFile {
             slug: "slug2".to_string(),
             mapping_key: "dir2/test".to_string(),
+            section_path: vec!["dir2".to_string()],
             markdown_body: "# Test Content 2".to_string(),
             front_matter: front_matter2,
         };
@@ -339,6 +384,7 @@ mod tests {
     fn test_build_file_mapping_url_normalization() {
         let front_matter = ObsidianFrontMatter {
             title: "URL Test".to_string(),
+            kind: ContentKind::Article,
             tags: None,
             summary: None,
             priority: None,
@@ -346,11 +392,13 @@ mod tests {
             updated: "2025-01-01T00:00:00+09:00".to_string(),
             is_completed: true,
             category: None,
+            page: None,
         };
 
         let parsed_file = ParsedFile {
             slug: "slug".to_string(),
             mapping_key: "sub/dir/test".to_string(),
+            section_path: vec!["sub".to_string(), "dir".to_string()],
             markdown_body: "# URL Test Content".to_string(),
             front_matter,
         };
@@ -359,5 +407,23 @@ mod tests {
 
         let slug = mapping.get("sub/dir/test").unwrap();
         assert!(!slug.is_empty());
+    }
+
+    #[test]
+    fn test_derive_section_path_drops_category_root() {
+        let section_path = derive_section_path(Path::new("tech/block1/hoge.md"), Some("tech"));
+
+        assert_eq!(section_path, vec!["block1".to_string()]);
+    }
+
+    #[test]
+    fn test_derive_section_path_keeps_nested_sections() {
+        let section_path =
+            derive_section_path(Path::new("tech/rust/async/hoge.md"), Some("tech"));
+
+        assert_eq!(
+            section_path,
+            vec!["rust".to_string(), "async".to_string()]
+        );
     }
 }

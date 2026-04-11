@@ -8,6 +8,7 @@ pub struct ArticleSummaryDocument {
     pub slug: String,
     pub title: String,
     pub category: String,
+    pub section_path: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub tags: Vec<String>,
@@ -23,6 +24,7 @@ impl From<&PublishedArticleSummary> for ArticleSummaryDocument {
             slug: summary.slug.as_str().to_string(),
             title: summary.title.as_str().to_string(),
             category: summary.category.as_str().to_string(),
+            section_path: summary.section_path.clone(),
             description: summary.description.clone(),
             tags: summary.tags.clone(),
             priority: summary.priority,
@@ -103,6 +105,7 @@ mod tests {
             slug: Slug::new("abc123def456".to_string()).unwrap(),
             title: Title::new("Test Output".to_string()).unwrap(),
             category: Category::Tech,
+            section_path: vec!["block".to_string()],
             description: Some("Test description".to_string()),
             tags: vec!["test".to_string()],
             priority: Some(1),
@@ -115,6 +118,7 @@ mod tests {
         assert!(json.contains("\"title\":\"Test Output\""));
         assert!(json.contains("\"slug\":\"abc123def456\""));
         assert!(json.contains("\"category\":\"tech\""));
+        assert!(json.contains("\"section_path\":[\"block\"]"));
     }
 
     #[test]
@@ -123,6 +127,7 @@ mod tests {
             slug: Slug::new("emptytags001".to_string()).unwrap(),
             title: Title::new("Empty Tags".to_string()).unwrap(),
             category: Category::Daily,
+            section_path: vec![],
             description: None,
             tags: vec![],
             priority: None,

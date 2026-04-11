@@ -120,6 +120,7 @@ mod tests {
             slug: Slug::new(slug.to_string()).unwrap(),
             title: Title::new(title.to_string()).unwrap(),
             category,
+            section_path: vec![],
             description: Some(format!("{title} summary")),
             tags: vec!["rust".to_string()],
             priority,

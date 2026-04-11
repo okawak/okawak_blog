@@ -236,6 +236,48 @@ impl<'de> Deserialize<'de> for Category {
     }
 }
 
+/// Content role declared in Obsidian frontmatter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ContentKind {
+    #[default]
+    Article,
+    Category,
+    Page,
+    Home,
+}
+
+impl ContentKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ContentKind::Article => "article",
+            ContentKind::Category => "category",
+            ContentKind::Page => "page",
+            ContentKind::Home => "home",
+        }
+    }
+}
+
+impl fmt::Display for ContentKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl FromStr for ContentKind {
+    type Err = DomainError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_lowercase().as_str() {
+            "article" => Ok(ContentKind::Article),
+            "category" => Ok(ContentKind::Category),
+            "page" => Ok(ContentKind::Page),
+            "home" => Ok(ContentKind::Home),
+            _ => Err(DomainError::validation("kind")),
+        }
+    }
+}
+
 fn deserialize_validated_string<'de, D, T>(deserializer: D) -> std::result::Result<T, D::Error>
 where
     D: Deserializer<'de>,
