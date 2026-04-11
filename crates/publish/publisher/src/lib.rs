@@ -18,17 +18,14 @@ use artifacts::{SiteDirectories, build_site_artifacts, write_article_page, write
 pub use config::Config;
 use domain::{ArticleBody, ArticleMeta, ArticleMetaInput, Category, Slug, Title};
 pub use error::{ObsidianError, Result};
-pub use ingest::ObsidianFrontMatter;
 use ingest::{
-    FileMapping, ParsedObsidianFile, convert_markdown_to_html, convert_obsidian_links,
-    parse_obsidian_file, scan_obsidian_files,
+    FileMapping, ObsidianFrontMatter, ParsedObsidianFile, convert_markdown_to_html,
+    convert_obsidian_links, parse_obsidian_file, scan_obsidian_files,
 };
 
-use futures::future::BoxFuture;
-use futures::{StreamExt, TryStreamExt, stream};
+use futures::{StreamExt, TryStreamExt, future::BoxFuture, stream};
 use log::{error, info, warn};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 struct RenderedArticle {
     meta: ArticleMeta,
@@ -36,8 +33,8 @@ struct RenderedArticle {
 }
 
 struct ParsedFile {
-    file_path: PathBuf,
     slug: String,
+    mapping_key: String,
     markdown_body: String,
     front_matter: ObsidianFrontMatter,
 }
@@ -93,7 +90,7 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
         warn!("Error files: {error_count}");
     }
 
-    let file_mapping = build_file_mapping(config, &valid_files)?;
+    let file_mapping = build_file_mapping(&valid_files);
     let site_directories = SiteDirectories::prepare(&config.output_dir)?;
 
     const CONCURRENT_LIMIT: usize = 4;
@@ -167,10 +164,11 @@ fn process_valid_file(
         relative_path,
         &parsed_file.front_matter.created,
     )?;
+    let mapping_key = normalize_path_for_url(&relative_path.with_extension(""));
 
     Ok(ParsedFile {
-        file_path: file_path.to_path_buf(),
         slug,
+        mapping_key,
         markdown_body: parsed_file.markdown_body,
         front_matter: parsed_file.front_matter,
     })
@@ -192,17 +190,14 @@ fn get_relative_path<'a>(file_path: &'a Path, base_dir: &Path) -> Result<&'a Pat
     })
 }
 
-fn build_file_mapping(config: &Config, valid_files: &[ParsedFile]) -> Result<FileMapping> {
+fn build_file_mapping(valid_files: &[ParsedFile]) -> FileMapping {
     let mut mapping = FileMapping::with_capacity(valid_files.len());
 
     for parsed_file in valid_files {
-        let relative_path = get_relative_path(&parsed_file.file_path, &config.obsidian_dir)?;
-        let relative_path_no_ext = relative_path.with_extension("");
-        let mapping_key = normalize_path_for_url(&relative_path_no_ext);
-        mapping.insert(mapping_key, parsed_file.slug.clone());
+        mapping.insert(parsed_file.mapping_key.clone(), parsed_file.slug.clone());
     }
 
-    Ok(mapping)
+    mapping
 }
 
 async fn process_parsed_file(
@@ -260,18 +255,9 @@ fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
 mod tests {
     use super::*;
     use rstest::*;
-    use std::path::PathBuf;
-    use tempfile::TempDir;
 
     #[rstest]
     fn test_build_file_mapping_success() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = Config {
-            obsidian_dir: temp_dir.path().to_path_buf(),
-            output_dir: PathBuf::from("output"),
-        };
-
-        let file_path = temp_dir.path().join("test.md");
         let front_matter = ObsidianFrontMatter {
             title: "Test Article".to_string(),
             tags: Some(vec!["test".to_string()]),
@@ -284,48 +270,28 @@ mod tests {
         };
 
         let parsed_file = ParsedFile {
-            file_path,
             slug: "slug".to_string(),
+            mapping_key: "test".to_string(),
             markdown_body: "# Test Content".to_string(),
             front_matter,
         };
         let valid_files = vec![parsed_file];
-        let result = build_file_mapping(&config, &valid_files);
+        let mapping = build_file_mapping(&valid_files);
 
-        assert!(result.is_ok());
-        let mapping = result.unwrap();
         assert_eq!(mapping.len(), 1);
-        assert!(mapping.contains_key("test")); // ファイル名がキーとなる
+        assert!(mapping.contains_key("test"));
     }
 
     #[rstest]
     fn test_build_file_mapping_empty() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = Config {
-            obsidian_dir: temp_dir.path().to_path_buf(),
-            output_dir: PathBuf::from("output"),
-        };
-
         let valid_files: Vec<ParsedFile> = vec![];
-        let result = build_file_mapping(&config, &valid_files);
+        let mapping = build_file_mapping(&valid_files);
 
-        assert!(result.is_ok());
-        let mapping = result.unwrap();
         assert_eq!(mapping.len(), 0);
     }
 
     #[rstest]
     fn test_build_file_mapping_path_collision() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = Config {
-            obsidian_dir: temp_dir.path().to_path_buf(),
-            output_dir: PathBuf::from("output"),
-        };
-
-        // Files with the same name in different directories.
-        let file_path1 = temp_dir.path().join("dir1").join("test.md");
-        let file_path2 = temp_dir.path().join("dir2").join("test.md");
-
         let front_matter1 = ObsidianFrontMatter {
             title: "Test Article 1".to_string(),
             tags: Some(vec!["test1".to_string()]),
@@ -349,22 +315,20 @@ mod tests {
         };
 
         let parsed_file1 = ParsedFile {
-            file_path: file_path1,
             slug: "slug1".to_string(),
+            mapping_key: "dir1/test".to_string(),
             markdown_body: "# Test Content 1".to_string(),
             front_matter: front_matter1,
         };
         let parsed_file2 = ParsedFile {
-            file_path: file_path2,
             slug: "slug2".to_string(),
+            mapping_key: "dir2/test".to_string(),
             markdown_body: "# Test Content 2".to_string(),
             front_matter: front_matter2,
         };
         let valid_files = vec![parsed_file1, parsed_file2];
-        let result = build_file_mapping(&config, &valid_files);
+        let mapping = build_file_mapping(&valid_files);
 
-        assert!(result.is_ok());
-        let mapping = result.unwrap();
         // Using the full relative path as the key prevents collisions.
         assert_eq!(mapping.len(), 2);
         assert!(mapping.contains_key("dir1/test"));
@@ -373,13 +337,6 @@ mod tests {
 
     #[rstest]
     fn test_build_file_mapping_url_normalization() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = Config {
-            obsidian_dir: temp_dir.path().to_path_buf(),
-            output_dir: PathBuf::from("output"),
-        };
-
-        let file_path = temp_dir.path().join("sub").join("dir").join("test.md");
         let front_matter = ObsidianFrontMatter {
             title: "URL Test".to_string(),
             tags: None,
@@ -392,20 +349,15 @@ mod tests {
         };
 
         let parsed_file = ParsedFile {
-            file_path,
             slug: "slug".to_string(),
+            mapping_key: "sub/dir/test".to_string(),
             markdown_body: "# URL Test Content".to_string(),
             front_matter,
         };
         let valid_files = vec![parsed_file];
-        let result = build_file_mapping(&config, &valid_files);
+        let mapping = build_file_mapping(&valid_files);
 
-        assert!(result.is_ok());
-        let mapping = result.unwrap();
         let slug = mapping.get("sub/dir/test").unwrap();
-
-        // Verify URL normalization uses Unix-style separators.
-        // Ensure the slug is present.
         assert!(!slug.is_empty());
     }
 }
