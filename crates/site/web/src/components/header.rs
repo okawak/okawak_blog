@@ -69,7 +69,7 @@ pub fn Header() -> impl IntoView {
                                 view! {
                                     <li class=active_class>
                                         <A
-                                            href=move || href.clone()
+                                            href={href}
                                             {..}
                                             class=header_style::nav_link
                                             on:click=move |_| set_menu_open.set(false)

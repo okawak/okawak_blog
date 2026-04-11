@@ -171,7 +171,8 @@
         }
 
         .article-card-link:focus-visible {
-            outline: none;
+            outline: 2px solid currentColor;
+            outline-offset: 4px;
         }
 
         .article-meta {

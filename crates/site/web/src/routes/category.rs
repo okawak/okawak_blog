@@ -74,7 +74,7 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
             view! {
                 <article class=category_style::article_card>
                     <h2 class=category_style::article_title>
-                        <A href=move || href.clone() {..} class=category_style::article_link>
+                        <A href={href} {..} class=category_style::article_link>
                             {title}
                         </A>
                     </h2>

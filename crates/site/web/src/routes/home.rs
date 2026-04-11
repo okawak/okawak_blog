@@ -48,7 +48,7 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
             let href = format!("/categories/{}", category.category.as_str());
             view! {
                 <li class=home_style::category_chip>
-                    <A href=move || href.clone() {..} class=home_style::category_link>
+                    <A href={href} {..} class=home_style::category_link>
                         <span class=home_style::category_name>
                             {category.category_display_name}
                         </span>
@@ -98,7 +98,7 @@ fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
     let article_href = format!("/articles/{slug}");
 
     view! {
-        <A href=move || article_href.clone() {..} class=home_style::article_card_link>
+        <A href={article_href} {..} class=home_style::article_card_link>
             <article class=home_style::article_card>
                 <div class=home_style::article_meta>
                     <span class=home_style::article_category>{category}</span>
