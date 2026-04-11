@@ -7,7 +7,10 @@ use crate::routes::home::HomePage;
 use crate::routes::not_found::NotFoundPage;
 use leptos::prelude::*;
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
-use leptos_router::{components::{Route, Router, Routes}, path};
+use leptos_router::{
+    components::{Route, Router, Routes},
+    path,
+};
 
 /// Shell function used for server-side rendering.
 /// This function renders the full HTML document.
