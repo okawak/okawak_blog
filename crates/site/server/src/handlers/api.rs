@@ -185,7 +185,7 @@ mod tests {
             request_json(create_test_router(temp_dir.path()), "/page/pages/about").await;
 
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(document.page, "about");
+        assert_eq!(document.page.as_str(), "about");
         assert_eq!(document.title, "About");
     }
 }

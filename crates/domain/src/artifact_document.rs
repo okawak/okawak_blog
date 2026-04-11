@@ -1,6 +1,6 @@
 //! Shared artifact contract persisted by publisher and read by site/server.
 
-use crate::{CategoryIndex, PublishedArticleSummary, SiteMetadata};
+use crate::{CategoryIndex, PageKey, PublishedArticleSummary, SiteMetadata};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -80,7 +80,7 @@ pub struct SiteMetadataDocument {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PageArtifactDocument {
-    pub page: String,
+    pub page: PageKey,
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -107,7 +107,7 @@ impl From<&SiteMetadata> for SiteMetadataDocument {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Category, Slug, Title};
+    use crate::{Category, PageKey, Slug, Title};
 
     #[test]
     fn test_article_summary_document_conversion() {
@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn test_page_artifact_document_serialization() {
         let document = PageArtifactDocument {
-            page: "about".to_string(),
+            page: PageKey::new("about".to_string()).unwrap(),
             title: "About".to_string(),
             description: Some("About this site".to_string()),
             html: "<h1>About</h1>".to_string(),

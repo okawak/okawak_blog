@@ -20,8 +20,8 @@ use artifacts::{
 };
 pub use config::Config;
 use domain::{
-    ArticleBody, ArticleMeta, ArticleMetaInput, Category, ContentKind, PageArtifactDocument, Slug,
-    Title,
+    ArticleBody, ArticleMeta, ArticleMetaInput, Category, ContentKind, PageArtifactDocument,
+    PageKey, Slug, Title,
 };
 pub use error::{ObsidianError, Result};
 use ingest::{
@@ -51,7 +51,7 @@ struct ParsedArticleFile {
 }
 
 struct ParsedPageFile {
-    page: String,
+    page: PageKey,
     markdown_body: String,
     front_matter: ObsidianFrontMatter,
 }
@@ -369,26 +369,12 @@ fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
     category.parse().map_err(Into::into)
 }
 
-fn parse_page_key(front_matter: &ObsidianFrontMatter) -> Result<String> {
+fn parse_page_key(front_matter: &ObsidianFrontMatter) -> Result<PageKey> {
     let page = front_matter
         .page
         .as_deref()
         .ok_or_else(|| ObsidianError::Parse("Completed pages require a page key".to_string()))?;
-    let page = page.trim();
-
-    if page.is_empty() {
-        return Err(ObsidianError::Parse(
-            "Completed pages require a non-empty page key".to_string(),
-        ));
-    }
-
-    if page.contains('/') {
-        return Err(ObsidianError::Parse(
-            "Page key must be a single path segment".to_string(),
-        ));
-    }
-
-    Ok(page.to_string())
+    PageKey::new(page.trim().to_string()).map_err(|error| ObsidianError::Parse(error.to_string()))
 }
 
 #[cfg(test)]
@@ -542,7 +528,7 @@ mod tests {
             page: Some("about".to_string()),
         };
 
-        assert_eq!(parse_page_key(&front_matter).unwrap(), "about");
+        assert_eq!(parse_page_key(&front_matter).unwrap().as_str(), "about");
     }
 
     #[test]
@@ -558,6 +544,27 @@ mod tests {
             is_completed: true,
             category: None,
             page: Some("about/team".to_string()),
+        };
+
+        assert!(matches!(
+            parse_page_key(&front_matter),
+            Err(ObsidianError::Parse(_))
+        ));
+    }
+
+    #[test]
+    fn test_parse_page_key_rejects_uppercase() {
+        let front_matter = ObsidianFrontMatter {
+            title: "About".to_string(),
+            kind: ContentKind::Page,
+            tags: None,
+            summary: None,
+            priority: None,
+            created: "2025-01-01T00:00:00+09:00".to_string(),
+            updated: "2025-01-01T00:00:00+09:00".to_string(),
+            is_completed: true,
+            category: None,
+            page: Some("About".to_string()),
         };
 
         assert!(matches!(

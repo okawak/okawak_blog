@@ -125,6 +125,59 @@ impl<'de> Deserialize<'de> for Slug {
     }
 }
 
+/// Single path-segment page key used for generated static pages.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+pub struct PageKey(String);
+
+impl PageKey {
+    pub fn new(value: String) -> Result<Self> {
+        if value.is_empty() {
+            return Err(DomainError::InvalidPath {
+                path: "ページキーは空にできません".to_string(),
+            });
+        }
+
+        if !value
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+        {
+            return Err(DomainError::InvalidPath {
+                path: "ページキーは英小文字、数字、ハイフン、アンダースコアのみ使用可能です"
+                    .to_string(),
+            });
+        }
+
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for PageKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for PageKey {
+    type Err = DomainError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::new(s.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for PageKey {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_validated_string(deserializer)
+    }
+}
+
 /// Article title with business-rule validation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Title(String);

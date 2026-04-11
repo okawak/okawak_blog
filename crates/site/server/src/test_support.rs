@@ -1,6 +1,6 @@
 use domain::{
     ArticleIndexDocument, ArticleSummaryDocument, CategoryIndexDocument, CategoryMetadataDocument,
-    PageArtifactDocument, SiteMetadataDocument,
+    PageArtifactDocument, PageKey, SiteMetadataDocument,
 };
 use std::{fs, path::Path};
 
@@ -67,7 +67,7 @@ pub(crate) fn write_fixture_site(root: &Path) {
     fs::write(
         root.join("pages/about.json"),
         serde_json::to_string_pretty(&PageArtifactDocument {
-            page: "about".to_string(),
+            page: PageKey::new("about".to_string()).unwrap(),
             title: "About".to_string(),
             description: Some("About this site".to_string()),
             html: "<article><h1>About</h1></article>".to_string(),

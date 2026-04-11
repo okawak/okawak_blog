@@ -2,7 +2,7 @@
 
 use axum::{Extension, Json, extract::Path, http::StatusCode};
 use domain::{
-    ArticlePageDocument, Category, CategoryPageDocument, HomePageDocument, Slug,
+    ArticlePageDocument, Category, CategoryPageDocument, HomePageDocument, PageKey, Slug,
     StaticPageDocument, build_article_page_document, build_category_page_document,
     build_home_page_document, build_static_page_document, find_article_summary,
 };
@@ -65,6 +65,7 @@ pub async fn get_static_page(
     Path(page): Path<String>,
     Extension(artifact_reader): Extension<DynArtifactReader>,
 ) -> Result<Json<StaticPageDocument>, StatusCode> {
+    let page = PageKey::new(page).map_err(|_| StatusCode::NOT_FOUND)?;
     let artifact = artifact_reader
         .read_page_document(&page)
         .await
@@ -195,7 +196,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(page.page, "about");
+        assert_eq!(page.page.as_str(), "about");
         assert_eq!(page.title, "About");
         assert!(page.html.contains("<h1>About</h1>"));
     }

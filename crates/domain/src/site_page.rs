@@ -2,7 +2,7 @@
 
 use crate::{
     ArticleIndexDocument, ArticleSummaryDocument, Category, CategoryIndexDocument, DomainError,
-    PageArtifactDocument, Result, SiteMetadataDocument, Slug, Title,
+    PageArtifactDocument, PageKey, Result, SiteMetadataDocument, Slug, Title,
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -71,7 +71,7 @@ pub struct CategoryPageDocument {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StaticPageDocument {
-    pub page: String,
+    pub page: PageKey,
     pub title: String,
     pub description: Option<String>,
     pub html: String,
@@ -146,7 +146,7 @@ pub fn build_static_page_description(document: &StaticPageDocument) -> String {
 }
 
 pub fn build_static_page_canonical_path(document: &StaticPageDocument) -> String {
-    format!("/{}", document.page)
+    format!("/{}", document.page.as_str())
 }
 
 pub fn build_home_page_document(
@@ -208,13 +208,8 @@ pub fn build_category_page_document(index: &CategoryIndexDocument) -> Result<Cat
 }
 
 pub fn build_static_page_document(artifact: &PageArtifactDocument) -> Result<StaticPageDocument> {
-    let page = artifact.page.trim();
     let title = artifact.title.trim();
     let html = artifact.html.trim();
-
-    if page.is_empty() {
-        return Err(DomainError::validation("page"));
-    }
 
     if title.is_empty() {
         return Err(DomainError::validation("title"));
@@ -225,7 +220,7 @@ pub fn build_static_page_document(artifact: &PageArtifactDocument) -> Result<Sta
     }
 
     Ok(StaticPageDocument {
-        page: page.to_string(),
+        page: artifact.page.clone(),
         title: title.to_string(),
         description: artifact.description.clone(),
         html: artifact.html.clone(),
@@ -329,7 +324,7 @@ mod tests {
     #[test]
     fn test_build_static_page_document() {
         let document = build_static_page_document(&PageArtifactDocument {
-            page: "about".to_string(),
+            page: PageKey::new("about".to_string()).unwrap(),
             title: "About".to_string(),
             description: Some("About this site".to_string()),
             html: "<article><h1>About</h1></article>".to_string(),
@@ -337,7 +332,7 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(document.page, "about");
+        assert_eq!(document.page.as_str(), "about");
         assert_eq!(document.title, "About");
         assert!(document.html.contains("<h1>About</h1>"));
     }
@@ -345,7 +340,7 @@ mod tests {
     #[test]
     fn test_build_static_page_document_rejects_blank_html() {
         let result = build_static_page_document(&PageArtifactDocument {
-            page: "about".to_string(),
+            page: PageKey::new("about".to_string()).unwrap(),
             title: "About".to_string(),
             description: None,
             html: "   ".to_string(),
@@ -473,7 +468,7 @@ mod tests {
     #[test]
     fn test_build_static_page_metadata() {
         let document = StaticPageDocument {
-            page: "about".to_string(),
+            page: PageKey::new("about".to_string()).unwrap(),
             title: "About".to_string(),
             description: Some("About this site".to_string()),
             html: "<article><h1>About</h1></article>".to_string(),

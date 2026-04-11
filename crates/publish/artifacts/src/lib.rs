@@ -120,7 +120,7 @@ fn write_json_pretty(path: &Path, value: &impl Serialize) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{ArticleMeta, ArticleMetaInput, Category, Title};
+    use domain::{ArticleMeta, ArticleMetaInput, Category, PageKey, Title};
     use tempfile::TempDir;
 
     fn build_article_meta(
@@ -217,7 +217,7 @@ mod tests {
         let output_path = write_page_document(
             &site_directories,
             &PageArtifactDocument {
-                page: "about".to_string(),
+                page: PageKey::new("about".to_string()).unwrap(),
                 title: "About".to_string(),
                 description: Some("About this site".to_string()),
                 html: "<article><h1>About</h1></article>".to_string(),
