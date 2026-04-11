@@ -8,6 +8,7 @@ pub struct ArticleSummaryDocument {
     pub slug: String,
     pub title: String,
     pub category: String,
+    #[serde(default)]
     pub section_path: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -148,6 +149,24 @@ mod tests {
         let json = serde_json::to_string(&ArticleSummaryDocument::from(&summary)).unwrap();
 
         assert!(json.contains("\"tags\":[]"));
+    }
+
+    #[test]
+    fn test_article_summary_document_deserialization_defaults_missing_section_path() {
+        let json = r#"{
+            "slug":"legacy0000001",
+            "title":"Legacy",
+            "category":"tech",
+            "description":"legacy",
+            "tags":[],
+            "priority":1,
+            "created_at":"2025-01-01T00:00:00+09:00",
+            "updated_at":"2025-01-01T00:00:00+09:00"
+        }"#;
+
+        let document: ArticleSummaryDocument = serde_json::from_str(json).unwrap();
+
+        assert_eq!(document.section_path, Vec::<String>::new());
     }
 
     #[test]

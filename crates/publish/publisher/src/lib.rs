@@ -31,7 +31,7 @@ use ingest::{
 
 use futures::{StreamExt, TryStreamExt, future::BoxFuture, stream};
 use log::{error, info, warn};
-use std::{path::Path, sync::Arc};
+use std::{collections::HashSet, path::Path, sync::Arc};
 
 struct RenderedArticle {
     meta: ArticleMeta,
@@ -124,6 +124,8 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
     if error_count > 0 {
         warn!("Error files: {error_count}");
     }
+
+    ensure_unique_page_keys(&valid_pages)?;
 
     let file_mapping = build_file_mapping(&valid_articles);
     let site_directories = SiteDirectories::prepare(&config.output_dir)?;
@@ -282,6 +284,21 @@ fn derive_section_path(relative_path: &Path, category: Option<&str>) -> Vec<Stri
     }
 
     path_components
+}
+
+fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<()> {
+    let mut seen = HashSet::with_capacity(valid_pages.len());
+
+    for parsed_page in valid_pages {
+        if !seen.insert(parsed_page.page.as_str()) {
+            return Err(ObsidianError::Parse(format!(
+                "Duplicate page key detected: {}",
+                parsed_page.page.as_str()
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 async fn process_parsed_file(
@@ -570,6 +587,49 @@ mod tests {
         assert!(matches!(
             parse_page_key(&front_matter),
             Err(ObsidianError::Parse(_))
+        ));
+    }
+
+    #[test]
+    fn test_ensure_unique_page_keys_rejects_duplicates() {
+        let parsed_pages = vec![
+            ParsedPageFile {
+                page: PageKey::new("about".to_string()).unwrap(),
+                markdown_body: "# About".to_string(),
+                front_matter: ObsidianFrontMatter {
+                    title: "About".to_string(),
+                    kind: ContentKind::Page,
+                    tags: None,
+                    summary: None,
+                    priority: None,
+                    created: "2025-01-01T00:00:00+09:00".to_string(),
+                    updated: "2025-01-01T00:00:00+09:00".to_string(),
+                    is_completed: true,
+                    category: None,
+                    page: Some("about".to_string()),
+                },
+            },
+            ParsedPageFile {
+                page: PageKey::new("about".to_string()).unwrap(),
+                markdown_body: "# About 2".to_string(),
+                front_matter: ObsidianFrontMatter {
+                    title: "About 2".to_string(),
+                    kind: ContentKind::Page,
+                    tags: None,
+                    summary: None,
+                    priority: None,
+                    created: "2025-01-01T00:00:00+09:00".to_string(),
+                    updated: "2025-01-01T00:00:00+09:00".to_string(),
+                    is_completed: true,
+                    category: None,
+                    page: Some("about".to_string()),
+                },
+            },
+        ];
+
+        assert!(matches!(
+            ensure_unique_page_keys(&parsed_pages),
+            Err(ObsidianError::Parse(message)) if message.contains("Duplicate page key")
         ));
     }
 }
