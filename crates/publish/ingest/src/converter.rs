@@ -3,6 +3,21 @@ use pulldown_cmark::{Event, Options, Parser, html};
 use regex::Regex;
 use std::{collections::HashMap, sync::LazyLock};
 
+/// Byte overhead added by a single `<span class="katex-inline">…</span>` wrapper
+/// over the original `$…$` delimiters.
+/// `<span class="katex-inline">` (27 bytes) + `</span>` (7 bytes) − `$` + `$` (2 bytes) = 32.
+const KATEX_INLINE_OVERHEAD: usize = 32;
+
+/// Byte overhead added by a single `<div class="katex-display">…</div>` wrapper
+/// over the original `$$…$$` delimiters.
+/// `<div class="katex-display">` (27 bytes) + `</div>` (6 bytes) − `$$` + `$$` (4 bytes) = 29.
+const KATEX_DISPLAY_OVERHEAD: usize = 29;
+
+/// Extra capacity budgeted per `apply_katex_math` call.
+/// Sized for up to 6 inline expressions and 2 display expressions without reallocation.
+/// 32 × 6 + 29 × 2 = 250 bytes. Documents with more expressions will simply reallocate.
+const KATEX_EXTRA_CAPACITY: usize = KATEX_INLINE_OVERHEAD * 6 + KATEX_DISPLAY_OVERHEAD * 2;
+
 /// Mapping from an Obsidian file path without extension to a published slug.
 pub type FileMapping = HashMap<String, String>;
 
@@ -76,7 +91,7 @@ fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> impl Iterator<I
 /// Replaces KaTeX delimiters in `html_content`, skipping `<code>` / `<pre>`
 /// blocks. `<pre` covers its nested `<code>` automatically.
 fn process_katex_math(html_content: &str) -> String {
-    let mut result = String::with_capacity(html_content.len() + 200);
+    let mut result = String::with_capacity(html_content.len() + KATEX_EXTRA_CAPACITY);
     let mut remaining = html_content;
 
     loop {
@@ -121,7 +136,7 @@ fn process_katex_math(html_content: &str) -> String {
 /// Replaces `$$...$$` and `$...$` with KaTeX class wrappers.
 /// Only call on fragments with no `<code>` / `<pre>`; use `process_katex_math` for full HTML.
 fn apply_katex_math(text: &str) -> String {
-    let mut result = String::with_capacity(text.len() + 200);
+    let mut result = String::with_capacity(text.len() + KATEX_EXTRA_CAPACITY);
     result.push_str(text);
 
     // Block math first to avoid matching the inner `$` of `$$`.
