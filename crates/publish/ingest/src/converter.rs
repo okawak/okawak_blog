@@ -18,6 +18,16 @@ const KATEX_DISPLAY_OVERHEAD: usize = 29;
 /// 32 × 6 + 29 × 2 = 250 bytes. Documents with more expressions will simply reallocate.
 const KATEX_EXTRA_CAPACITY: usize = KATEX_INLINE_OVERHEAD * 6 + KATEX_DISPLAY_OVERHEAD * 2;
 
+/// Strict allow-list regex for a `<div class="bookmark">` block.
+/// Only `<div class="bookmark"> <a href="URL">TITLE</a> </div>` passes through;
+/// any extra tags, extra attributes, or missing structure causes the block to be
+/// HTML-escaped instead. Used by `sanitize_html` to validate complete bookmark
+/// blocks before emitting them as raw HTML.
+static SAFE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\A\s*<div class="bookmark">\s*<a href="[^"]+">[^<]*</a>\s*</div>\s*\z"#)
+        .expect("Invalid safe bookmark regex")
+});
+
 /// Mapping from an Obsidian file path without extension to a published slug.
 pub type FileMapping = HashMap<String, String>;
 
@@ -36,56 +46,87 @@ pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
 
     let parser = Parser::new_ext(markdown_content, options);
     let mut html_output = String::with_capacity(markdown_content.len() * 2);
-    html::push_html(&mut html_output, sanitize_html(parser));
+    html::push_html(&mut html_output, sanitize_html(parser).into_iter());
 
     let html_with_katex = process_katex_math(&html_output);
 
     Ok(html_with_katex)
 }
 
-/// Escapes raw HTML events (XSS protection) while letting `<div class="bookmark">`
-/// blocks pass through as `Event::Html` for downstream enrichment.
-fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> impl Iterator<Item = Event<'a>> {
-    // Owned by the FnMut closure via `move`; `flat_map` reuses the same closure
-    // instance per event, so mutations persist across calls.
+/// Escapes raw HTML events (XSS protection) while letting strictly valid
+/// `<div class="bookmark">` blocks pass through as `Event::Html` for downstream
+/// enrichment.
+///
+/// Each potential bookmark block is accumulated in a buffer until the first
+/// `</div>` is found. The complete buffer is then validated against
+/// [`SAFE_BOOKMARK_RE`]. Only if it matches exactly the expected structure
+/// (`<div class="bookmark"><a href="URL">TITLE</a></div>`, with optional
+/// whitespace) is it emitted as raw HTML. Any deviation — extra tags, extra
+/// attributes, nested HTML, or an unclosed block — is emitted as `Event::Text`
+/// and therefore HTML-escaped by the renderer.
+fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> {
+    let mut result: Vec<Event<'a>> = Vec::new();
     let mut in_bookmark = false;
+    let mut bookmark_buffer = String::new();
 
-    parser.flat_map(move |event| {
-        let out: Vec<Event<'a>> = match event {
+    for event in parser {
+        match event {
             Event::Html(html) | Event::InlineHtml(html) => {
-                // pulldown-cmark emits indented HTML (up to 3 spaces) as inline events
-                // with leading whitespace stripped, so `starts_with` matches regardless
-                // of indentation. BOOKMARK_REGEX has no `^` anchor, so indented
-                // bookmarks are correctly converted by downstream processing.
-                if html.starts_with(r#"<div class="bookmark">"#) {
-                    in_bookmark = true;
-                }
+                if !in_bookmark && !html.trim_start().starts_with(r#"<div class="bookmark">"#) {
+                    // Not a bookmark opening – escape it.
+                    result.push(Event::Text(html));
+                } else {
+                    // Starting a new bookmark block or continuing to accumulate one.
+                    if !in_bookmark {
+                        in_bookmark = true;
+                    }
+                    bookmark_buffer.push_str(&html);
 
-                if in_bookmark {
-                    // Check AFTER setting the flag to handle single-line bookmarks.
-                    if let Some(close) = html.find("</div>") {
+                    // Check whether the accumulated buffer now contains the closing tag.
+                    if let Some(close) = bookmark_buffer.find("</div>") {
                         in_bookmark = false;
                         let safe_end = close + "</div>".len();
-                        if html[safe_end..].is_empty() {
-                            vec![Event::Html(html)]
+                        let bookmark_part = bookmark_buffer[..safe_end].to_string();
+                        let rest = bookmark_buffer[safe_end..].to_string();
+                        bookmark_buffer.clear();
+
+                        if SAFE_BOOKMARK_RE.is_match(&bookmark_part) {
+                            result.push(Event::Html(bookmark_part.into()));
                         } else {
-                            // Escape any trailing content after the closing tag.
-                            vec![
-                                Event::Html(html[..safe_end].to_string().into()),
-                                Event::Text(html[safe_end..].to_string().into()),
-                            ]
+                            // Structure does not match the strict allow-list – escape it.
+                            result.push(Event::Text(bookmark_part.into()));
                         }
-                    } else {
-                        vec![Event::Html(html)]
+
+                        if !rest.is_empty() {
+                            // Trailing content after </div> is always escaped.
+                            result.push(Event::Text(rest.into()));
+                        }
                     }
-                } else {
-                    vec![Event::Text(html)]
+                    // No closing tag yet – keep accumulating; emit nothing for now.
                 }
             }
-            other => vec![other],
-        };
-        out
-    })
+            other => {
+                // A non-HTML event arrived while inside an open bookmark block.
+                // Flush the partial buffer as escaped text and process the event normally.
+                if in_bookmark {
+                    in_bookmark = false;
+                    let buffer = std::mem::take(&mut bookmark_buffer);
+                    if !buffer.is_empty() {
+                        result.push(Event::Text(buffer.into()));
+                    }
+                }
+                result.push(other);
+            }
+        }
+    }
+
+    // An unclosed bookmark was never terminated by </div>.
+    // Emit the entire accumulated buffer as escaped text (fail-safe).
+    if !bookmark_buffer.is_empty() {
+        result.push(Event::Text(bookmark_buffer.into()));
+    }
+
+    result
 }
 
 /// Replaces KaTeX delimiters in `html_content`, skipping `<code>` / `<pre>`
@@ -489,6 +530,51 @@ This is a test with [[Another Article|link]] and **bold** text.
         assert!(
             result.contains("&lt;script&gt;"),
             "trailing script tag should appear as entities; got:\n{result}"
+        );
+    }
+
+    /// Bookmark blocks that contain unexpected HTML (e.g. a `<script>` tag as a
+    /// sibling of `<a>`, or extra event-handler attributes on `<a>`) must be
+    /// HTML-escaped. Only the strict `<div class="bookmark"><a href="…">…</a></div>`
+    /// structure may pass through as raw HTML.
+    #[rstest]
+    #[case::script_sibling(r#"<div class="bookmark"><script>alert('xss')</script></div>"#)]
+    #[case::extra_attribute_on_anchor(
+        r#"<div class="bookmark"><a href="https://example.com" onmouseover="alert(1)">Hover</a></div>"#
+    )]
+    #[case::nested_div_inside_bookmark(
+        "<div class=\"bookmark\"><div><a href=\"https://example.com\">Title</a></div></div>"
+    )]
+    fn test_bookmark_with_unexpected_html_is_escaped(#[case] markdown: &str) {
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            !result.contains(r#"<div class="bookmark">"#),
+            "unexpected bookmark content should cause the block to be escaped; got:\n{result}"
+        );
+        assert!(
+            result.contains("&lt;"),
+            "escaped block should contain HTML entities; got:\n{result}"
+        );
+    }
+
+    /// A bookmark block that is never closed with `</div>` must be HTML-escaped
+    /// in its entirety. The filter must not leave `in_bookmark = true` at
+    /// end-of-stream and silently discard the buffered content.
+    #[rstest]
+    fn test_unclosed_bookmark_is_escaped() {
+        // Deliberately omit the closing </div>.
+        let markdown = "<div class=\"bookmark\">\n  <a href=\"https://example.com\">Title</a>\n";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            !result.contains(r#"<div class="bookmark">"#),
+            "unclosed bookmark opening tag should be escaped; got:\n{result}"
+        );
+        assert!(
+            result.contains("&lt;div"),
+            "unclosed bookmark should appear as HTML entities; got:\n{result}"
         );
     }
 

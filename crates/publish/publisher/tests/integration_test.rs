@@ -156,7 +156,7 @@ fn test_config_validation() {
 }
 
 #[tokio::test]
-async fn test_run_main_with_bookmark_article() {
+async fn test_run_with_enricher_with_bookmark_article() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
