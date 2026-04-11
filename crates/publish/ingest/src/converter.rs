@@ -3,26 +3,16 @@ use pulldown_cmark::{Event, Options, Parser, html};
 use regex::Regex;
 use std::{collections::HashMap, sync::LazyLock};
 
-/// Byte overhead added by a single `<span class="katex-inline">…</span>` wrapper
-/// over the original `$…$` delimiters.
-/// `<span class="katex-inline">` (27 bytes) + `</span>` (7 bytes) − `$` + `$` (2 bytes) = 32.
+/// Net bytes added per `$…$` replacement: 34-byte wrapper minus 2-byte delimiters.
 const KATEX_INLINE_OVERHEAD: usize = 32;
 
-/// Byte overhead added by a single `<div class="katex-display">…</div>` wrapper
-/// over the original `$$…$$` delimiters.
-/// `<div class="katex-display">` (27 bytes) + `</div>` (6 bytes) − `$$` + `$$` (4 bytes) = 29.
+/// Net bytes added per `$$…$$` replacement: 33-byte wrapper minus 4-byte delimiters.
 const KATEX_DISPLAY_OVERHEAD: usize = 29;
 
-/// Extra capacity budgeted per `apply_katex_math` call.
-/// Sized for up to 6 inline expressions and 2 display expressions without reallocation.
-/// 32 × 6 + 29 × 2 = 250 bytes. Documents with more expressions will simply reallocate.
+/// Extra capacity per `apply_katex_math` call; sized for ~6 inline + 2 display expressions.
 const KATEX_EXTRA_CAPACITY: usize = KATEX_INLINE_OVERHEAD * 6 + KATEX_DISPLAY_OVERHEAD * 2;
 
-/// Strict allow-list regex for a `<div class="bookmark">` block.
-/// Only `<div class="bookmark"> <a href="URL">TITLE</a> </div>` passes through;
-/// any extra tags, extra attributes, or missing structure causes the block to be
-/// HTML-escaped instead. Used by `sanitize_html` to validate complete bookmark
-/// blocks before emitting them as raw HTML.
+/// Allow-list regex for bookmark blocks; anything beyond `<a href="URL">TITLE</a>` is escaped.
 static SAFE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"\A\s*<div class="bookmark">\s*<a href="[^"]+">[^<]*</a>\s*</div>\s*\z"#)
         .expect("Invalid safe bookmark regex")
@@ -35,7 +25,6 @@ fn generate_article_href(slug: &str) -> String {
     format!("/articles/{slug}")
 }
 
-/// Convert markdown content into HTML and apply KaTeX markers.
 pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -53,17 +42,8 @@ pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     Ok(html_with_katex)
 }
 
-/// Escapes raw HTML events (XSS protection) while letting strictly valid
-/// `<div class="bookmark">` blocks pass through as `Event::Html` for downstream
-/// enrichment.
-///
-/// Each potential bookmark block is accumulated in a buffer until the first
-/// `</div>` is found. The complete buffer is then validated against
-/// [`SAFE_BOOKMARK_RE`]. Only if it matches exactly the expected structure
-/// (`<div class="bookmark"><a href="URL">TITLE</a></div>`, with optional
-/// whitespace) is it emitted as raw HTML. Any deviation — extra tags, extra
-/// attributes, nested HTML, or an unclosed block — is emitted as `Event::Text`
-/// and therefore HTML-escaped by the renderer.
+/// Escapes all raw HTML events except valid `<div class="bookmark">` blocks.
+/// Accumulates each potential bookmark block and validates with SAFE_BOOKMARK_RE before passing through.
 fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> {
     let mut result: Vec<Event<'a>> = Vec::new();
     let mut in_bookmark = false;
@@ -73,16 +53,13 @@ fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> 
         match event {
             Event::Html(html) | Event::InlineHtml(html) => {
                 if !in_bookmark && !html.trim_start().starts_with(r#"<div class="bookmark">"#) {
-                    // Not a bookmark opening – escape it.
                     result.push(Event::Text(html));
                 } else {
-                    // Starting a new bookmark block or continuing to accumulate one.
                     if !in_bookmark {
                         in_bookmark = true;
                     }
                     bookmark_buffer.push_str(&html);
 
-                    // Check whether the accumulated buffer now contains the closing tag.
                     if let Some(close) = bookmark_buffer.find("</div>") {
                         in_bookmark = false;
                         let safe_end = close + "</div>".len();
@@ -93,21 +70,16 @@ fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> 
                         if SAFE_BOOKMARK_RE.is_match(&bookmark_part) {
                             result.push(Event::Html(bookmark_part.into()));
                         } else {
-                            // Structure does not match the strict allow-list – escape it.
                             result.push(Event::Text(bookmark_part.into()));
                         }
 
                         if !rest.is_empty() {
-                            // Trailing content after </div> is always escaped.
                             result.push(Event::Text(rest.into()));
                         }
                     }
-                    // No closing tag yet – keep accumulating; emit nothing for now.
                 }
             }
             other => {
-                // A non-HTML event arrived while inside an open bookmark block.
-                // Flush the partial buffer as escaped text and process the event normally.
                 if in_bookmark {
                     in_bookmark = false;
                     let buffer = std::mem::take(&mut bookmark_buffer);
@@ -120,8 +92,7 @@ fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> 
         }
     }
 
-    // An unclosed bookmark was never terminated by </div>.
-    // Emit the entire accumulated buffer as escaped text (fail-safe).
+    // Unclosed bookmark: flush buffer as escaped text.
     if !bookmark_buffer.is_empty() {
         result.push(Event::Text(bookmark_buffer.into()));
     }
@@ -129,14 +100,12 @@ fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> 
     result
 }
 
-/// Replaces KaTeX delimiters in `html_content`, skipping `<code>` / `<pre>`
-/// blocks. `<pre` covers its nested `<code>` automatically.
+/// Replaces `$…$` / `$$…$$` with KaTeX HTML wrappers, skipping `<code>` / `<pre>` blocks.
 fn process_katex_math(html_content: &str) -> String {
     let mut result = String::with_capacity(html_content.len() + KATEX_EXTRA_CAPACITY);
     let mut remaining = html_content;
 
     loop {
-        // Find the earlier of the next <code> or <pre> start.
         let code_start = [remaining.find("<pre"), remaining.find("<code")]
             .into_iter()
             .flatten()

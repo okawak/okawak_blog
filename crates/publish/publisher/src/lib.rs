@@ -2,15 +2,12 @@ pub mod config;
 pub mod error;
 pub mod slug;
 
-/// A bookmark enricher takes raw page HTML (owned) and returns the enriched HTML.
-///
-/// The default implementation fetches OGP metadata over HTTP.
-/// Use [`offline_bookmark_enricher`] in integration tests to avoid any network access.
+/// Async fn that takes page HTML and returns enriched HTML with rich bookmark cards.
+/// Use `offline_bookmark_enricher` in tests to avoid network access.
 pub type BookmarkEnricher =
     Arc<dyn Fn(String) -> BoxFuture<'static, bookmark::Result<String>> + Send + Sync>;
 
-/// Creates a [`BookmarkEnricher`] that converts bookmarks using fallback data only,
-/// without making any network requests. Intended for integration tests.
+/// Returns a `BookmarkEnricher` that uses fallback data only; no network requests.
 pub fn offline_bookmark_enricher() -> BookmarkEnricher {
     Arc::new(|html: String| {
         Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich_offline(&html).await })
@@ -38,7 +35,6 @@ struct RenderedArticle {
     html: String,
 }
 
-/// Holds the parsed file data used by the publisher flow.
 struct ParsedFile {
     file_path: PathBuf,
     slug: String,
