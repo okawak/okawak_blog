@@ -2,7 +2,7 @@
 
 use crate::{
     ArticleIndexDocument, ArticleSummaryDocument, Category, CategoryIndexDocument, DomainError,
-    Result, SiteMetadataDocument, Slug, Title,
+    PageArtifactDocument, Result, SiteMetadataDocument, Slug, Title,
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -69,6 +69,14 @@ pub struct CategoryPageDocument {
     pub articles: Vec<SiteArticleCard>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StaticPageDocument {
+    pub page: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub html: String,
+}
+
 pub fn build_home_page_title(site_name: &str) -> String {
     site_name.to_string()
 }
@@ -122,6 +130,23 @@ pub fn build_category_page_description(document: &CategoryPageDocument) -> Strin
 
 pub fn build_category_page_canonical_path(document: &CategoryPageDocument) -> String {
     format!("/categories/{}", document.category.as_str())
+}
+
+pub fn build_static_page_title(document: &StaticPageDocument, site_name: &str) -> String {
+    format!("{} | {}", document.title, site_name)
+}
+
+pub fn build_static_page_description(document: &StaticPageDocument) -> String {
+    document
+        .description
+        .as_deref()
+        .filter(|description| !description.trim().is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("{} ページです。", document.title))
+}
+
+pub fn build_static_page_canonical_path(document: &StaticPageDocument) -> String {
+    format!("/{}", document.page)
 }
 
 pub fn build_home_page_document(
@@ -179,6 +204,31 @@ pub fn build_category_page_document(index: &CategoryIndexDocument) -> Result<Cat
         category,
         category_display_name: category.display_name().to_string(),
         articles,
+    })
+}
+
+pub fn build_static_page_document(artifact: &PageArtifactDocument) -> Result<StaticPageDocument> {
+    let page = artifact.page.trim();
+    let title = artifact.title.trim();
+    let html = artifact.html.trim();
+
+    if page.is_empty() {
+        return Err(DomainError::validation("page"));
+    }
+
+    if title.is_empty() {
+        return Err(DomainError::validation("title"));
+    }
+
+    if html.is_empty() {
+        return Err(DomainError::validation("html"));
+    }
+
+    Ok(StaticPageDocument {
+        page: page.to_string(),
+        title: title.to_string(),
+        description: artifact.description.clone(),
+        html: artifact.html.clone(),
     })
 }
 
@@ -274,6 +324,35 @@ mod tests {
         assert_eq!(document.category, Category::Daily);
         assert_eq!(document.category_display_name, "日常");
         assert_eq!(document.articles.len(), 1);
+    }
+
+    #[test]
+    fn test_build_static_page_document() {
+        let document = build_static_page_document(&PageArtifactDocument {
+            page: "about".to_string(),
+            title: "About".to_string(),
+            description: Some("About this site".to_string()),
+            html: "<article><h1>About</h1></article>".to_string(),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+        })
+        .unwrap();
+
+        assert_eq!(document.page, "about");
+        assert_eq!(document.title, "About");
+        assert!(document.html.contains("<h1>About</h1>"));
+    }
+
+    #[test]
+    fn test_build_static_page_document_rejects_blank_html() {
+        let result = build_static_page_document(&PageArtifactDocument {
+            page: "about".to_string(),
+            title: "About".to_string(),
+            description: None,
+            html: "   ".to_string(),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+        });
+
+        assert_eq!(result, Err(DomainError::validation("html")));
     }
 
     #[test]
@@ -389,5 +468,22 @@ mod tests {
             build_category_page_canonical_path(&document),
             "/categories/tech"
         );
+    }
+
+    #[test]
+    fn test_build_static_page_metadata() {
+        let document = StaticPageDocument {
+            page: "about".to_string(),
+            title: "About".to_string(),
+            description: Some("About this site".to_string()),
+            html: "<article><h1>About</h1></article>".to_string(),
+        };
+
+        assert_eq!(
+            build_static_page_title(&document, "ぶくせんの探窟メモ"),
+            "About | ぶくせんの探窟メモ"
+        );
+        assert_eq!(build_static_page_description(&document), "About this site");
+        assert_eq!(build_static_page_canonical_path(&document), "/about");
     }
 }

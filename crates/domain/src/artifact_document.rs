@@ -78,6 +78,16 @@ pub struct SiteMetadataDocument {
     pub categories: Vec<CategoryMetadataDocument>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PageArtifactDocument {
+    pub page: String,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub html: String,
+    pub updated_at: String,
+}
+
 impl From<&SiteMetadata> for SiteMetadataDocument {
     fn from(metadata: &SiteMetadata) -> Self {
         Self {
@@ -138,5 +148,22 @@ mod tests {
         let json = serde_json::to_string(&ArticleSummaryDocument::from(&summary)).unwrap();
 
         assert!(json.contains("\"tags\":[]"));
+    }
+
+    #[test]
+    fn test_page_artifact_document_serialization() {
+        let document = PageArtifactDocument {
+            page: "about".to_string(),
+            title: "About".to_string(),
+            description: Some("About this site".to_string()),
+            html: "<h1>About</h1>".to_string(),
+            updated_at: "2025-01-02T00:00:00+09:00".to_string(),
+        };
+
+        let json = serde_json::to_string(&document).unwrap();
+
+        assert!(json.contains("\"page\":\"about\""));
+        assert!(json.contains("\"title\":\"About\""));
+        assert!(json.contains("\"html\":\"<h1>About</h1>\""));
     }
 }

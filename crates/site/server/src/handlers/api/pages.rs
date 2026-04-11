@@ -3,8 +3,8 @@
 use axum::{Extension, Json, extract::Path, http::StatusCode};
 use domain::{
     ArticlePageDocument, Category, CategoryPageDocument, HomePageDocument, Slug,
-    build_article_page_document, build_category_page_document, build_home_page_document,
-    find_article_summary,
+    StaticPageDocument, build_article_page_document, build_category_page_document,
+    build_home_page_document, build_static_page_document, find_article_summary,
 };
 use infra::DynArtifactReader;
 use std::str::FromStr;
@@ -59,6 +59,20 @@ pub async fn get_category_page(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(page))
+}
+
+pub async fn get_static_page(
+    Path(page): Path<String>,
+    Extension(artifact_reader): Extension<DynArtifactReader>,
+) -> Result<Json<StaticPageDocument>, StatusCode> {
+    let artifact = artifact_reader
+        .read_page_document(&page)
+        .await
+        .map_err(map_infra_error)?;
+    let document =
+        build_static_page_document(&artifact).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(document))
 }
 
 fn map_infra_error(error: infra::InfraError) -> StatusCode {
@@ -162,6 +176,38 @@ mod tests {
 
         let result = get_category_page(
             Path("tech".to_string()),
+            Extension(Arc::new(LocalArtifactReader::new(temp_dir.path()))),
+        )
+        .await;
+
+        assert!(matches!(result, Err(StatusCode::NOT_FOUND)));
+    }
+
+    #[tokio::test]
+    async fn test_get_static_page_reads_page_artifact() {
+        let temp_dir = TempDir::new().unwrap();
+        write_fixture_site(temp_dir.path());
+
+        let Json(page) = get_static_page(
+            Path("about".to_string()),
+            Extension(Arc::new(LocalArtifactReader::new(temp_dir.path()))),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(page.page, "about");
+        assert_eq!(page.title, "About");
+        assert!(page.html.contains("<h1>About</h1>"));
+    }
+
+    #[tokio::test]
+    async fn test_get_static_page_returns_not_found_when_page_artifact_is_missing() {
+        let temp_dir = TempDir::new().unwrap();
+        write_fixture_site(temp_dir.path());
+        fs::remove_file(temp_dir.path().join("pages/about.json")).unwrap();
+
+        let result = get_static_page(
+            Path("about".to_string()),
             Extension(Arc::new(LocalArtifactReader::new(temp_dir.path()))),
         )
         .await;

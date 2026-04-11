@@ -14,9 +14,15 @@ pub fn offline_bookmark_enricher() -> BookmarkEnricher {
     })
 }
 
-use artifacts::{SiteDirectories, build_site_artifacts, write_article_page, write_site_artifacts};
+use artifacts::{
+    SiteDirectories, build_site_artifacts, write_article_page, write_page_document,
+    write_site_artifacts,
+};
 pub use config::Config;
-use domain::{ArticleBody, ArticleMeta, ArticleMetaInput, Category, ContentKind, Slug, Title};
+use domain::{
+    ArticleBody, ArticleMeta, ArticleMetaInput, Category, ContentKind, PageArtifactDocument, Slug,
+    Title,
+};
 pub use error::{ObsidianError, Result};
 use ingest::{
     FileMapping, ObsidianFrontMatter, ParsedObsidianFile, convert_markdown_to_html,
@@ -32,10 +38,20 @@ struct RenderedArticle {
     html: String,
 }
 
-struct ParsedFile {
+struct RenderedPage {
+    document: PageArtifactDocument,
+}
+
+struct ParsedArticleFile {
     slug: String,
     mapping_key: String,
     section_path: Vec<String>,
+    markdown_body: String,
+    front_matter: ObsidianFrontMatter,
+}
+
+struct ParsedPageFile {
+    page: String,
     markdown_body: String,
     front_matter: ObsidianFrontMatter,
 }
@@ -59,55 +75,61 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
     let mut skipped_count = 0;
     let mut error_count = 0;
 
-    let valid_files: Vec<ParsedFile> = markdown_files
-        .into_iter()
-        .filter_map(|file_path| match parse_obsidian_file(&file_path) {
-            Ok(Some(parsed_file))
-                if parsed_file.front_matter.is_completed
-                    && parsed_file.front_matter.kind == ContentKind::Article =>
-            {
-                match process_valid_file(&file_path, parsed_file, config) {
-                    Ok(parsed_file) => Some(parsed_file),
-                    Err(e) => {
-                        error_count += 1;
-                        error!("Error processing {}: {}", file_path.display(), e);
-                        None
+    let mut valid_articles = Vec::new();
+    let mut valid_pages = Vec::new();
+    for file_path in markdown_files {
+        match parse_obsidian_file(&file_path) {
+            Ok(Some(parsed_file)) if parsed_file.front_matter.is_completed => {
+                match parsed_file.front_matter.kind {
+                    ContentKind::Article => {
+                        match process_valid_article_file(&file_path, parsed_file, config) {
+                            Ok(parsed_file) => valid_articles.push(parsed_file),
+                            Err(e) => {
+                                error_count += 1;
+                                error!("Error processing {}: {}", file_path.display(), e);
+                            }
+                        }
+                    }
+                    ContentKind::Page => match process_valid_page_file(parsed_file) {
+                        Ok(parsed_file) => valid_pages.push(parsed_file),
+                        Err(e) => {
+                            error_count += 1;
+                            error!("Error processing {}: {}", file_path.display(), e);
+                        }
+                    },
+                    kind => {
+                        skipped_count += 1;
+                        info!(
+                            "Skipped (kind not implemented yet): {} [{}]",
+                            file_path.display(),
+                            kind
+                        );
                     }
                 }
-            }
-            Ok(Some(parsed_file)) if parsed_file.front_matter.is_completed => {
-                skipped_count += 1;
-                info!(
-                    "Skipped (kind not implemented yet): {} [{}]",
-                    file_path.display(),
-                    parsed_file.front_matter.kind
-                );
-                None
             }
             Ok(_) => {
                 skipped_count += 1;
                 warn!("Skipped (not completed): {}", file_path.display());
-                None
             }
             Err(e) => {
                 error_count += 1;
                 error!("Error processing {}: {}", file_path.display(), e);
-                None
             }
-        })
-        .collect();
+        }
+    }
 
-    info!("Valid files: {}", valid_files.len());
+    info!("Valid article files: {}", valid_articles.len());
+    info!("Valid page files: {}", valid_pages.len());
     info!("Skipped files: {skipped_count}");
     if error_count > 0 {
         warn!("Error files: {error_count}");
     }
 
-    let file_mapping = build_file_mapping(&valid_files);
+    let file_mapping = build_file_mapping(&valid_articles);
     let site_directories = SiteDirectories::prepare(&config.output_dir)?;
 
     const CONCURRENT_LIMIT: usize = 4;
-    let article_metas: Vec<ArticleMeta> = stream::iter(valid_files)
+    let article_metas: Vec<ArticleMeta> = stream::iter(valid_articles)
         .map(|parsed_file| {
             let enrich = Arc::clone(&enrich);
             render_publishable_article(parsed_file, &file_mapping, enrich)
@@ -131,6 +153,24 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
             }
         })
         .await?;
+
+    let rendered_pages: Vec<RenderedPage> = stream::iter(valid_pages)
+        .map(|parsed_file| {
+            let enrich = Arc::clone(&enrich);
+            render_static_page(parsed_file, &file_mapping, enrich)
+        })
+        .buffer_unordered(CONCURRENT_LIMIT)
+        .try_collect()
+        .await?;
+
+    for rendered_page in rendered_pages {
+        let site_directories = site_directories.clone();
+        let output_file_path = tokio::task::spawn_blocking(move || {
+            write_page_document(&site_directories, &rendered_page.document)
+        })
+        .await??;
+        info!("...processed {}", output_file_path.display());
+    }
 
     let site_artifacts = build_site_artifacts(article_metas);
     let site_directories_for_write = site_directories.clone();
@@ -166,11 +206,11 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
 }
 
 /// Processes a valid file and builds a `ParsedFile`.
-fn process_valid_file(
+fn process_valid_article_file(
     file_path: &Path,
     parsed_file: ParsedObsidianFile,
     config: &Config,
-) -> Result<ParsedFile> {
+) -> Result<ParsedArticleFile> {
     let relative_path = get_relative_path(file_path, &config.obsidian_dir)?;
     let slug = slug::generate_slug(
         &parsed_file.front_matter.title,
@@ -178,12 +218,21 @@ fn process_valid_file(
         &parsed_file.front_matter.created,
     )?;
     let mapping_key = normalize_path_for_url(&relative_path.with_extension(""));
-    let section_path = derive_section_path(relative_path, parsed_file.front_matter.category.as_deref());
+    let section_path =
+        derive_section_path(relative_path, parsed_file.front_matter.category.as_deref());
 
-    Ok(ParsedFile {
+    Ok(ParsedArticleFile {
         slug,
         mapping_key,
         section_path,
+        markdown_body: parsed_file.markdown_body,
+        front_matter: parsed_file.front_matter,
+    })
+}
+
+fn process_valid_page_file(parsed_file: ParsedObsidianFile) -> Result<ParsedPageFile> {
+    Ok(ParsedPageFile {
+        page: parse_page_key(&parsed_file.front_matter)?,
         markdown_body: parsed_file.markdown_body,
         front_matter: parsed_file.front_matter,
     })
@@ -205,7 +254,7 @@ fn get_relative_path<'a>(file_path: &'a Path, base_dir: &Path) -> Result<&'a Pat
     })
 }
 
-fn build_file_mapping(valid_files: &[ParsedFile]) -> FileMapping {
+fn build_file_mapping(valid_files: &[ParsedArticleFile]) -> FileMapping {
     let mut mapping = FileMapping::with_capacity(valid_files.len());
 
     for parsed_file in valid_files {
@@ -236,7 +285,7 @@ fn derive_section_path(relative_path: &Path, category: Option<&str>) -> Vec<Stri
 }
 
 async fn process_parsed_file(
-    parsed_file: ParsedFile,
+    parsed_file: ParsedArticleFile,
     file_mapping: &FileMapping,
     enrich: &BookmarkEnricher,
 ) -> Result<RenderedArticle> {
@@ -271,11 +320,44 @@ async fn process_parsed_file(
 }
 
 async fn render_publishable_article(
-    parsed_file: ParsedFile,
+    parsed_file: ParsedArticleFile,
     file_mapping: &FileMapping,
     enrich: BookmarkEnricher,
 ) -> Result<RenderedArticle> {
     process_parsed_file(parsed_file, file_mapping, &enrich).await
+}
+
+async fn process_page_file(
+    parsed_file: ParsedPageFile,
+    file_mapping: &FileMapping,
+    enrich: &BookmarkEnricher,
+) -> Result<RenderedPage> {
+    let markdown_with_links = convert_obsidian_links(&parsed_file.markdown_body, file_mapping);
+    let html_body = convert_markdown_to_html(&markdown_with_links)?;
+
+    let fallback = html_body.clone();
+    let html_with_rich_bookmarks = enrich(html_body).await.unwrap_or_else(|e| {
+        warn!("Warning: Failed to convert simple bookmarks to rich bookmarks: {e}");
+        fallback
+    });
+
+    Ok(RenderedPage {
+        document: PageArtifactDocument {
+            page: parsed_file.page,
+            title: parsed_file.front_matter.title,
+            description: parsed_file.front_matter.summary,
+            html: html_with_rich_bookmarks,
+            updated_at: parsed_file.front_matter.updated,
+        },
+    })
+}
+
+async fn render_static_page(
+    parsed_file: ParsedPageFile,
+    file_mapping: &FileMapping,
+    enrich: BookmarkEnricher,
+) -> Result<RenderedPage> {
+    process_page_file(parsed_file, file_mapping, &enrich).await
 }
 
 fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
@@ -285,6 +367,28 @@ fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
         .ok_or_else(|| ObsidianError::Parse("Completed articles require a category".to_string()))?;
 
     category.parse().map_err(Into::into)
+}
+
+fn parse_page_key(front_matter: &ObsidianFrontMatter) -> Result<String> {
+    let page = front_matter
+        .page
+        .as_deref()
+        .ok_or_else(|| ObsidianError::Parse("Completed pages require a page key".to_string()))?;
+    let page = page.trim();
+
+    if page.is_empty() {
+        return Err(ObsidianError::Parse(
+            "Completed pages require a non-empty page key".to_string(),
+        ));
+    }
+
+    if page.contains('/') {
+        return Err(ObsidianError::Parse(
+            "Page key must be a single path segment".to_string(),
+        ));
+    }
+
+    Ok(page.to_string())
 }
 
 #[cfg(test)]
@@ -307,7 +411,7 @@ mod tests {
             page: None,
         };
 
-        let parsed_file = ParsedFile {
+        let parsed_file = ParsedArticleFile {
             slug: "slug".to_string(),
             mapping_key: "test".to_string(),
             section_path: vec![],
@@ -323,7 +427,7 @@ mod tests {
 
     #[rstest]
     fn test_build_file_mapping_empty() {
-        let valid_files: Vec<ParsedFile> = vec![];
+        let valid_files: Vec<ParsedArticleFile> = vec![];
         let mapping = build_file_mapping(&valid_files);
 
         assert_eq!(mapping.len(), 0);
@@ -357,14 +461,14 @@ mod tests {
             page: None,
         };
 
-        let parsed_file1 = ParsedFile {
+        let parsed_file1 = ParsedArticleFile {
             slug: "slug1".to_string(),
             mapping_key: "dir1/test".to_string(),
             section_path: vec!["dir1".to_string()],
             markdown_body: "# Test Content 1".to_string(),
             front_matter: front_matter1,
         };
-        let parsed_file2 = ParsedFile {
+        let parsed_file2 = ParsedArticleFile {
             slug: "slug2".to_string(),
             mapping_key: "dir2/test".to_string(),
             section_path: vec!["dir2".to_string()],
@@ -395,7 +499,7 @@ mod tests {
             page: None,
         };
 
-        let parsed_file = ParsedFile {
+        let parsed_file = ParsedArticleFile {
             slug: "slug".to_string(),
             mapping_key: "sub/dir/test".to_string(),
             section_path: vec!["sub".to_string(), "dir".to_string()],
@@ -418,12 +522,47 @@ mod tests {
 
     #[test]
     fn test_derive_section_path_keeps_nested_sections() {
-        let section_path =
-            derive_section_path(Path::new("tech/rust/async/hoge.md"), Some("tech"));
+        let section_path = derive_section_path(Path::new("tech/rust/async/hoge.md"), Some("tech"));
 
-        assert_eq!(
-            section_path,
-            vec!["rust".to_string(), "async".to_string()]
-        );
+        assert_eq!(section_path, vec!["rust".to_string(), "async".to_string()]);
+    }
+
+    #[test]
+    fn test_parse_page_key_success() {
+        let front_matter = ObsidianFrontMatter {
+            title: "About".to_string(),
+            kind: ContentKind::Page,
+            tags: None,
+            summary: Some("About this site".to_string()),
+            priority: None,
+            created: "2025-01-01T00:00:00+09:00".to_string(),
+            updated: "2025-01-01T00:00:00+09:00".to_string(),
+            is_completed: true,
+            category: None,
+            page: Some("about".to_string()),
+        };
+
+        assert_eq!(parse_page_key(&front_matter).unwrap(), "about");
+    }
+
+    #[test]
+    fn test_parse_page_key_rejects_nested_path() {
+        let front_matter = ObsidianFrontMatter {
+            title: "About".to_string(),
+            kind: ContentKind::Page,
+            tags: None,
+            summary: None,
+            priority: None,
+            created: "2025-01-01T00:00:00+09:00".to_string(),
+            updated: "2025-01-01T00:00:00+09:00".to_string(),
+            is_completed: true,
+            category: None,
+            page: Some("about/team".to_string()),
+        };
+
+        assert!(matches!(
+            parse_page_key(&front_matter),
+            Err(ObsidianError::Parse(_))
+        ));
     }
 }

@@ -3,8 +3,8 @@ mod error;
 pub use error::{ArtifactsError, Result};
 
 use domain::{
-    ArticleIndexDocument, ArticleMeta, CategoryIndexDocument, SiteMetadata, SiteMetadataDocument,
-    Slug, build_article_index, build_category_indexes, build_site_metadata,
+    ArticleIndexDocument, ArticleMeta, CategoryIndexDocument, PageArtifactDocument, SiteMetadata,
+    SiteMetadataDocument, Slug, build_article_index, build_category_indexes, build_site_metadata,
 };
 use serde::Serialize;
 use std::{
@@ -27,6 +27,7 @@ pub struct SiteDirectories {
     pub articles_dir: PathBuf,
     pub categories_dir: PathBuf,
     pub metadata_dir: PathBuf,
+    pub pages_dir: PathBuf,
 }
 
 impl SiteDirectories {
@@ -36,11 +37,13 @@ impl SiteDirectories {
             articles_dir: site_root.join("articles"),
             categories_dir: site_root.join("categories"),
             metadata_dir: site_root.join("metadata"),
+            pages_dir: site_root.join("pages"),
         };
 
         fs::create_dir_all(&site_directories.articles_dir)?;
         fs::create_dir_all(&site_directories.categories_dir)?;
         fs::create_dir_all(&site_directories.metadata_dir)?;
+        fs::create_dir_all(&site_directories.pages_dir)?;
 
         Ok(site_directories)
     }
@@ -67,6 +70,17 @@ pub fn write_article_page(
         .articles_dir
         .join(format!("{}.html", slug.as_str()));
     fs::write(&output_file_path, html)?;
+    Ok(output_file_path)
+}
+
+pub fn write_page_document(
+    site_directories: &SiteDirectories,
+    page_document: &PageArtifactDocument,
+) -> Result<PathBuf> {
+    let output_file_path = site_directories
+        .pages_dir
+        .join(format!("{}.json", page_document.page));
+    write_json_pretty(&output_file_path, page_document)?;
     Ok(output_file_path)
 }
 
@@ -189,5 +203,30 @@ mod tests {
             site_directories.metadata_dir.join("site.json").exists(),
             "metadata/site.json should exist"
         );
+        assert!(
+            site_directories.pages_dir.exists(),
+            "pages directory should exist"
+        );
+    }
+
+    #[test]
+    fn test_write_page_document() {
+        let temp_dir = TempDir::new().unwrap();
+        let site_directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+
+        let output_path = write_page_document(
+            &site_directories,
+            &PageArtifactDocument {
+                page: "about".to_string(),
+                title: "About".to_string(),
+                description: Some("About this site".to_string()),
+                html: "<article><h1>About</h1></article>".to_string(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(output_path, site_directories.pages_dir.join("about.json"));
+        assert!(output_path.exists());
     }
 }

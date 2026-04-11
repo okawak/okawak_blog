@@ -1,37 +1,111 @@
+use crate::components::PageMetadata;
+use crate::routes::not_found::NotFoundPage;
+use crate::{SITE_NAME, build_site_url};
+#[cfg(feature = "ssr")]
+use axum::http::StatusCode;
+use domain::StaticPageDocument;
+use domain::{
+    build_static_page_canonical_path, build_static_page_description, build_static_page_title,
+};
+#[cfg(feature = "ssr")]
+use infra::DynArtifactReader;
 use leptos::prelude::*;
+#[cfg(feature = "ssr")]
+use leptos_axum::ResponseOptions;
 use stylance::import_style;
 
 import_style!(about_style, "about.module.scss");
 
-/// About page component.
+#[server]
+pub async fn get_about_page_document() -> Result<Option<StaticPageDocument>, ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        let artifact_reader = use_context::<DynArtifactReader>()
+            .ok_or_else(|| ServerFnError::new("artifact reader context is missing"))?;
+        let artifact = match artifact_reader.read_page_document("about").await {
+            Ok(artifact) => artifact,
+            Err(error) if error.is_not_found() => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+
+        Ok(Some(domain::build_static_page_document(&artifact)?))
+    }
+
+    #[cfg(not(feature = "ssr"))]
+    {
+        Err(ServerFnError::new(
+            "get_about_page_document is only available during SSR",
+        ))
+    }
+}
+
 #[component]
-pub fn AboutPage() -> impl IntoView {
+fn AboutPageContent(document: StaticPageDocument) -> impl IntoView {
+    let page_title = build_static_page_title(&document, SITE_NAME);
+    let page_description = build_static_page_description(&document);
+    let canonical_url = build_site_url(&build_static_page_canonical_path(&document));
+    let title = document.title;
+    let html = document.html;
+
     view! {
+        <PageMetadata title=page_title description=page_description canonical_url />
+
         <div class=about_style::about_page>
             <section class=about_style::hero_section>
                 <div class=about_style::hero_content>
-                    <h1>{"About"}</h1>
-                    <p class=about_style::hero_description>
-                        {"このブログについて、技術スタック、開発者について紹介します。"}
-                    </p>
+                    <p class=about_style::eyebrow>{"Page"}</p>
+                    <h1>{title}</h1>
                 </div>
             </section>
 
             <section class=about_style::content_section>
-                <div class=about_style::card_grid>
-                    // About the blog
-                    <div class=about_style::content_card>
-                        <h2>{"ブログについて"}</h2>
-                        <p>
-                            {"気になったことをメモしておくブログです。技術的な発見、日常の学び、統計・物理学に関する考察などを記録しています。"}
-                        </p>
-                        <p>
-                            {"主に個人的な学習記録として使用していますが、同じような興味を持つ方に少しでも参考になれば幸いです。"}
-                        </p>
-                    </div>
-
-                </div>
+                <article class=about_style::content_card inner_html=html></article>
             </section>
         </div>
     }
 }
+
+#[component]
+pub fn AboutPage() -> impl IntoView {
+    let about_page = Resource::<Result<Option<StaticPageDocument>, String>>::new(
+        || (),
+        move |_| async move {
+            get_about_page_document()
+                .await
+                .map_err(|error| error.to_string())
+        },
+    );
+
+    view! {
+        <Suspense fallback=|| {
+            view! { <div class=about_style::loading>"ページを読み込み中..."</div> }
+        }>
+            {move || match about_page.get() {
+                Some(Ok(Some(document))) => view! { <AboutPageContent document /> }.into_any(),
+                Some(Ok(None)) => {
+                    mark_not_found_response();
+                    view! { <NotFoundPage /> }.into_any()
+                }
+                Some(Err(error)) => {
+                    view! {
+                        <div class=about_style::error>
+                            {format!("ページの読み込みに失敗しました: {error}")}
+                        </div>
+                    }
+                        .into_any()
+                }
+                None => view! { <div class=about_style::loading></div> }.into_any(),
+            }}
+        </Suspense>
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn mark_not_found_response() {
+    if let Some(response) = use_context::<ResponseOptions>() {
+        response.set_status(StatusCode::NOT_FOUND);
+    }
+}
+
+#[cfg(not(feature = "ssr"))]
+fn mark_not_found_response() {}
