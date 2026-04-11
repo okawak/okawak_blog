@@ -7,6 +7,7 @@ use domain::{
     build_home_page_title,
 };
 use leptos::prelude::*;
+use leptos_router::components::A;
 use std::sync::Arc;
 use stylance::import_style;
 
@@ -47,11 +48,11 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
             let href = format!("/categories/{}", category.category.as_str());
             view! {
                 <li class=home_style::category_chip>
-                    <a class=home_style::category_link href=href>
+                    <A href={href} {..} class=home_style::category_link>
                         <span class=home_style::category_name>
                             {category.category_display_name}
                         </span>
-                    </a>
+                    </A>
                     <span class=home_style::category_count>
                         {format!("{}本", category.article_count)}
                     </span>
@@ -94,34 +95,33 @@ fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
     let has_tags = !tags.is_empty();
     let created_at = article.created_at;
     let updated_at = article.updated_at;
+    let article_href = format!("/articles/{slug}");
 
     view! {
-        <article class=home_style::article_card>
-            <div class=home_style::article_meta>
-                <span class=home_style::article_category>{category}</span>
-                <span class=home_style::category_count>
-                    {format!("公開 {} / 更新 {}", created_at, updated_at)}
-                </span>
-            </div>
+        <A href={article_href} {..} class=home_style::article_card_link>
+            <article class=home_style::article_card>
+                <div class=home_style::article_meta>
+                    <span class=home_style::article_category>{category}</span>
+                    <span class=home_style::category_count>
+                        {format!("公開 {} / 更新 {}", created_at, updated_at)}
+                    </span>
+                </div>
 
-            <h3 class=home_style::article_title>
-                <a class=home_style::article_link href=format!("/articles/{slug}")>
-                    {title}
-                </a>
-            </h3>
-            <p class=home_style::article_description>{description}</p>
+                <h3 class=home_style::article_title>{title}</h3>
+                <p class=home_style::article_description>{description}</p>
 
-            <Show when=move || has_tags fallback=|| ()>
-                <ul class=home_style::tag_list>
-                    {tags
-                        .iter()
-                        .map(|tag| {
-                            view! { <li class=home_style::tag>{format!("#{tag}")}</li> }
-                        })
-                        .collect_view()}
-                </ul>
-            </Show>
-        </article>
+                <Show when=move || has_tags fallback=|| ()>
+                    <ul class=home_style::tag_list>
+                        {tags
+                            .iter()
+                            .map(|tag| {
+                                view! { <li class=home_style::tag>{format!("#{tag}")}</li> }
+                            })
+                            .collect_view()}
+                    </ul>
+                </Show>
+            </article>
+        </A>
     }
 }
 

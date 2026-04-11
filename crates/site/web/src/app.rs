@@ -8,8 +8,8 @@ use crate::routes::not_found::NotFoundPage;
 use leptos::prelude::*;
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
-    ParamSegment, StaticSegment,
-    components::{Route, Router, Routes},
+    components::{FlatRoutes, Route, Router},
+    path,
 };
 
 /// Shell function used for server-side rendering.
@@ -96,20 +96,14 @@ pub fn App() -> impl IntoView {
             <Router>
                 <Header />
                 <main class="content-container">
-                    <Routes fallback=|| {
+                    <FlatRoutes fallback=|| {
                         view! { <NotFoundPage /> }
                     }>
-                        <Route path=StaticSegment("") view=HomePage />
-                        <Route path=StaticSegment("about") view=AboutPage />
-                        <Route
-                            path=(StaticSegment("articles"), ParamSegment("slug"))
-                            view=ArticlePage
-                        />
-                        <Route
-                            path=(StaticSegment("categories"), ParamSegment("category"))
-                            view=CategoryPage
-                        />
-                    </Routes>
+                        <Route path=path!("") view=HomePage />
+                        <Route path=path!("about") view=AboutPage />
+                        <Route path=path!("articles/:slug") view=ArticlePage />
+                        <Route path=path!("categories/:category") view=CategoryPage />
+                    </FlatRoutes>
                 </main>
             </Router>
             <Footer />
