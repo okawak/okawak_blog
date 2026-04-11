@@ -31,27 +31,45 @@ pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
 /// Escapes raw HTML events (XSS protection) while letting `<div class="bookmark">`
 /// blocks pass through as `Event::Html` for downstream enrichment.
 fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> impl Iterator<Item = Event<'a>> {
-    // Owned by the FnMut closure via `move`; `map` reuses the same closure
+    // Owned by the FnMut closure via `move`; `flat_map` reuses the same closure
     // instance per event, so mutations persist across calls.
     let mut in_bookmark = false;
 
-    parser.map(move |event| match event {
-        Event::Html(html) | Event::InlineHtml(html) => {
-            if html.trim_start().starts_with(r#"<div class="bookmark">"#) {
-                in_bookmark = true;
-            }
-
-            if in_bookmark {
-                // Check AFTER setting the flag to handle single-line bookmarks.
-                if html.contains("</div>") {
-                    in_bookmark = false;
+    parser.flat_map(move |event| {
+        let out: Vec<Event<'a>> = match event {
+            Event::Html(html) | Event::InlineHtml(html) => {
+                // pulldown-cmark emits indented HTML (up to 3 spaces) as inline events
+                // with leading whitespace stripped, so `starts_with` matches regardless
+                // of indentation. BOOKMARK_REGEX has no `^` anchor, so indented
+                // bookmarks are correctly converted by downstream processing.
+                if html.starts_with(r#"<div class="bookmark">"#) {
+                    in_bookmark = true;
                 }
-                Event::Html(html)
-            } else {
-                Event::Text(html) // escape non-bookmark HTML
+
+                if in_bookmark {
+                    // Check AFTER setting the flag to handle single-line bookmarks.
+                    if let Some(close) = html.find("</div>") {
+                        in_bookmark = false;
+                        let safe_end = close + "</div>".len();
+                        if html[safe_end..].is_empty() {
+                            vec![Event::Html(html)]
+                        } else {
+                            // Escape any trailing content after the closing tag.
+                            vec![
+                                Event::Html(html[..safe_end].to_string().into()),
+                                Event::Text(html[safe_end..].to_string().into()),
+                            ]
+                        }
+                    } else {
+                        vec![Event::Html(html)]
+                    }
+                } else {
+                    vec![Event::Text(html)]
+                }
             }
-        }
-        other => other,
+            other => vec![other],
+        };
+        out
     })
 }
 
@@ -198,6 +216,7 @@ pub fn generate_html_file(frontmatter_yaml: &str, html_body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use indoc::indoc;
     use rstest::*;
 
     #[rstest]
@@ -433,6 +452,94 @@ This is a test with [[Another Article|link]] and **bold** text.
         assert!(
             result.contains("&lt;script&gt;"),
             "script tag should appear as entities; got:\n{result}"
+        );
+    }
+
+    /// Raw HTML on the same line after `</div>` must be escaped even though
+    /// the bookmark block itself passes through (P1 XSS fix).
+    #[rstest]
+    fn test_trailing_content_after_bookmark_close_is_escaped() {
+        let markdown = "<div class=\"bookmark\"><a href=\"https://example.com\">X</a></div><script>bad()</script>\n";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result.contains(r#"<div class="bookmark">"#),
+            "bookmark should pass through; got:\n{result}"
+        );
+        assert!(
+            !result.contains("<script>"),
+            "trailing script tag should be escaped; got:\n{result}"
+        );
+        assert!(
+            result.contains("&lt;script&gt;"),
+            "trailing script tag should appear as entities; got:\n{result}"
+        );
+    }
+
+    /// When the markdown contains multiple bookmark blocks, every block must
+    /// reach the output HTML unescaped so that the downstream bookmark enricher
+    /// can find and convert each one. The stateful `in_bookmark` filter inside
+    /// `sanitize_html` must reset correctly after each block closes.
+    ///
+    /// Three cases are exercised:
+    /// - two bookmarks separated only by a blank line
+    /// - two bookmarks with prose text between them
+    /// - three consecutive bookmarks (verifies the flag resets more than once)
+    #[rstest]
+    #[case::two_bookmarks_blank_line_between(
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://example.com">Example</a>
+            </div>
+
+            <div class="bookmark">
+              <a href="https://github.com">GitHub</a>
+            </div>
+        "#}
+    )]
+    #[case::two_bookmarks_prose_between(
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://example.com">Example</a>
+            </div>
+
+            Some prose text here.
+
+            <div class="bookmark">
+              <a href="https://github.com">GitHub</a>
+            </div>
+        "#}
+    )]
+    #[case::three_bookmarks_in_sequence(
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://example.com">Example</a>
+            </div>
+
+            <div class="bookmark">
+              <a href="https://github.com">GitHub</a>
+            </div>
+
+            <div class="bookmark">
+              <a href="https://rust-lang.org">Rust</a>
+            </div>
+        "#}
+    )]
+    fn test_multiple_bookmarks_all_pass_through_unescaped(#[case] markdown: &str) {
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        let input_count = markdown.matches(r#"<div class="bookmark">"#).count();
+        let output_count = result.matches(r#"<div class="bookmark">"#).count();
+
+        assert_eq!(
+            output_count, input_count,
+            "all {input_count} bookmark block(s) should pass through unescaped, \
+             but only {output_count} did; got:\n{result}"
+        );
+        assert!(
+            !result.contains("&lt;div"),
+            "no bookmark div should be HTML-escaped; got:\n{result}"
         );
     }
 
