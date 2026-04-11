@@ -29,7 +29,7 @@ bun install
 '''
 
 [tasks.web-update]
-description = "Update web package.json dependencies to the latest versions with bun"
+description = "Update web package.json dependencies within their declared version ranges with bun"
 run = '''
 cd crates/site/web
 bun update
@@ -44,7 +44,7 @@ bun outdated
 
 [tasks.sync-obsidian]
 description = "Initialize and update the private Obsidian submodule"
-run = "git submodule update --remote --merge --recursive"
+run = "git submodule update --init --remote --merge --recursive"
 
 [tasks.publish-local]
 description = "Generate local site artifacts from the Obsidian submodule"
