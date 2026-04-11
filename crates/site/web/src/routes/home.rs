@@ -98,32 +98,30 @@ fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
     let article_href = format!("/articles/{slug}");
 
     view! {
-        <article class=home_style::article_card>
-            <div class=home_style::article_meta>
-                <span class=home_style::article_category>{category}</span>
-                <span class=home_style::category_count>
-                    {format!("公開 {} / 更新 {}", created_at, updated_at)}
-                </span>
-            </div>
+        <A href=move || article_href.clone() {..} class=home_style::article_card_link>
+            <article class=home_style::article_card>
+                <div class=home_style::article_meta>
+                    <span class=home_style::article_category>{category}</span>
+                    <span class=home_style::category_count>
+                        {format!("公開 {} / 更新 {}", created_at, updated_at)}
+                    </span>
+                </div>
 
-            <h3 class=home_style::article_title>
-                <A href=move || article_href.clone() {..} class=home_style::article_link>
-                    {title}
-                </A>
-            </h3>
-            <p class=home_style::article_description>{description}</p>
+                <h3 class=home_style::article_title>{title}</h3>
+                <p class=home_style::article_description>{description}</p>
 
-            <Show when=move || has_tags fallback=|| ()>
-                <ul class=home_style::tag_list>
-                    {tags
-                        .iter()
-                        .map(|tag| {
-                            view! { <li class=home_style::tag>{format!("#{tag}")}</li> }
-                        })
-                        .collect_view()}
-                </ul>
-            </Show>
-        </article>
+                <Show when=move || has_tags fallback=|| ()>
+                    <ul class=home_style::tag_list>
+                        {tags
+                            .iter()
+                            .map(|tag| {
+                                view! { <li class=home_style::tag>{format!("#{tag}")}</li> }
+                            })
+                            .collect_view()}
+                    </ul>
+                </Show>
+            </article>
+        </A>
     }
 }
 
