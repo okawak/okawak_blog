@@ -32,11 +32,6 @@ pub fn generate_slug<P: AsRef<Path>>(
     Ok(slug)
 }
 
-/// Validates slug uniqueness for future extensions.
-pub fn validate_slug_uniqueness(slug: &str, existing_slugs: &[String]) -> bool {
-    !existing_slugs.contains(&slug.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,17 +69,6 @@ mod tests {
         assert_ne!(slug1, slug3);
 
         Ok(())
-    }
-
-    #[rstest]
-    #[case::existing_slug("abc123def456", false)]
-    #[case::new_slug("new123slug45", true)]
-    fn test_validate_slug_uniqueness(#[case] slug: &str, #[case] should_be_unique: bool) {
-        let existing_slugs = vec!["abc123def456".to_string(), "789xyz012tuv".to_string()];
-        assert_eq!(
-            validate_slug_uniqueness(slug, &existing_slugs),
-            should_be_unique
-        );
     }
 
     #[rstest]

@@ -45,22 +45,6 @@ pub fn parse_obsidian_file(path: impl AsRef<Path>) -> Result<Option<ParsedObsidi
     }
 }
 
-/// Parse front matter from a string content.
-pub fn parse_frontmatter(content: &str) -> Result<Option<ObsidianFrontMatter>> {
-    extract_yaml_frontmatter(content)?
-        .map(|yaml| serde_yaml::from_str::<ObsidianFrontMatter>(yaml).map_err(Into::into))
-        .transpose()
-}
-
-/// Extract YAML frontmatter from the content.
-fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
-    match split_frontmatter(text) {
-        FrontmatterSplit::Complete { yaml, .. } => Ok(Some(yaml)),
-        FrontmatterSplit::NoFrontmatter => Ok(None),
-        FrontmatterSplit::Unterminated => Err(unterminated_frontmatter_error()),
-    }
-}
-
 fn split_frontmatter(content: &str) -> FrontmatterSplit<'_> {
     let trimmed = content.trim_start();
     let Some(rest) = trimmed.strip_prefix("---\n") else {
@@ -87,6 +71,20 @@ mod tests {
     use indoc::indoc;
     use rstest::*;
     use tempfile::TempDir;
+
+    fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
+        match split_frontmatter(text) {
+            FrontmatterSplit::Complete { yaml, .. } => Ok(Some(yaml)),
+            FrontmatterSplit::NoFrontmatter => Ok(None),
+            FrontmatterSplit::Unterminated => Err(unterminated_frontmatter_error()),
+        }
+    }
+
+    fn parse_frontmatter(content: &str) -> Result<Option<ObsidianFrontMatter>> {
+        extract_yaml_frontmatter(content)?
+            .map(|yaml| serde_yaml::from_str::<ObsidianFrontMatter>(yaml).map_err(Into::into))
+            .transpose()
+    }
 
     #[rstest]
     #[case::full_frontmatter( indoc! {r#"

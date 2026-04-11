@@ -2,16 +2,15 @@ mod error;
 
 pub use error::{BookmarkError, Result};
 
+use std::future::Future;
+
 use regex::Regex;
 use scraper::{Html, Selector};
 use std::sync::LazyLock;
 
-/// Initial capacity for generated HTML.
 const HTML_INITIAL_CAPACITY: usize = 1024;
-/// Extra capacity reserved for metadata expansion.
 const HTML_EXTENSION_CAPACITY: usize = 2048;
 
-/// Metadata used to render a rich bookmark card.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BookmarkData {
     pub url: String,
@@ -36,7 +35,6 @@ pub async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
     })
 }
 
-/// Builds the HTTP client.
 fn create_http_client() -> Result<reqwest::Client> {
     // Use a standard User-Agent format without exposing internal package details.
     let user_agent = "publisher-bookmark/1.0 (+https://github.com/okawak/okawak_blog)";
@@ -48,14 +46,12 @@ fn create_http_client() -> Result<reqwest::Client> {
         .map_err(Into::into)
 }
 
-/// Fetches HTML content.
 async fn fetch_html_content(client: &reqwest::Client, url: &str) -> Result<String> {
     let response = client.get(url).send().await?;
 
     response.text().await.map_err(Into::into)
 }
 
-/// Extracts a title from an HTML document.
 fn extract_title(document: &Html) -> Option<String> {
     extract_meta_content(document, "meta[property='og:title']")
         .or_else(|| extract_meta_content(document, "meta[name='twitter:title']"))
@@ -79,7 +75,6 @@ fn extract_meta_content(document: &Html, selector: &str) -> Option<String> {
     }
 }
 
-/// Extracts the text content of the `title` tag.
 fn extract_title_tag(document: &Html) -> Option<String> {
     let selector = Selector::parse("title").ok()?;
     let title_text = document
@@ -96,14 +91,12 @@ fn extract_title_tag(document: &Html) -> Option<String> {
     }
 }
 
-/// Extracts a description from an HTML document.
 fn extract_description(document: &Html) -> Option<String> {
     extract_meta_content(document, "meta[property='og:description']")
         .or_else(|| extract_meta_content(document, "meta[name='twitter:description']"))
         .or_else(|| extract_meta_content(document, "meta[name='description']"))
 }
 
-/// Extracts an image URL from an HTML document.
 fn extract_image(document: &Html, base_url: &str) -> Option<String> {
     use url::Url;
 
@@ -121,7 +114,6 @@ fn extract_image(document: &Html, base_url: &str) -> Option<String> {
         })
 }
 
-/// Extracts a favicon URL from an HTML document.
 fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
     use url::Url;
 
@@ -152,7 +144,6 @@ fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
     Some(base.join("/favicon.ico").unwrap().to_string())
 }
 
-/// Extracts the `href` attribute from a `link` tag.
 fn extract_link_href(document: &Html, selector: &str) -> Option<String> {
     let selector = Selector::parse(selector).ok()?;
     document
@@ -179,7 +170,6 @@ pub fn generate_rich_bookmark(data: &BookmarkData) -> String {
     html
 }
 
-/// Extracts the domain from a URL.
 fn extract_domain(url: &str) -> String {
     use url::Url;
 
@@ -189,7 +179,6 @@ fn extract_domain(url: &str) -> String {
         .unwrap_or_else(|| url.to_string())
 }
 
-/// Writes the opening bookmark link tag.
 fn write_bookmark_link(html: &mut String, url: &str) {
     html.push_str(&format!(
         "  <a href=\"{}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"bookmark-link\">\n",
@@ -197,7 +186,6 @@ fn write_bookmark_link(html: &mut String, url: &str) {
     ));
 }
 
-/// Writes the bookmark container.
 fn write_bookmark_container(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("    <div class=\"bookmark-container\">\n");
 
@@ -207,7 +195,6 @@ fn write_bookmark_container(html: &mut String, data: &BookmarkData, domain: &str
     html.push_str("    </div>\n");
 }
 
-/// Writes the bookmark information section.
 fn write_bookmark_info(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("      <div class=\"bookmark-info\">\n");
     html.push_str(&format!(
@@ -226,7 +213,6 @@ fn write_bookmark_info(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("      </div>\n");
 }
 
-/// Writes the bookmark link metadata.
 fn write_bookmark_link_info(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("        <div class=\"bookmark-link-info\">\n");
 
@@ -244,7 +230,6 @@ fn write_bookmark_link_info(html: &mut String, data: &BookmarkData, domain: &str
     html.push_str("        </div>\n");
 }
 
-/// Writes the bookmark image section.
 fn write_bookmark_image(html: &mut String, data: &BookmarkData) {
     if let Some(image_url) = &data.image_url {
         html.push_str("      <div class=\"bookmark-image\">\n");
@@ -264,31 +249,30 @@ fn html_escape(text: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;")
-    // Additional escaping for backticks and newlines is unnecessary for the current use case.
 }
 
-/// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
-pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
+/// Core substitution loop; calls `fetch_data(url, title)` per match to obtain `BookmarkData`.
+async fn convert_bookmarks_with<F, Fut>(html_content: &str, fetch_data: F) -> Result<String>
+where
+    F: Fn(String, String) -> Fut,
+    Fut: Future<Output = BookmarkData>,
+{
     static BOOKMARK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]*)</a>\s*</div>"#)
             .expect("Invalid bookmark regex pattern")
     });
 
     let mut result = String::with_capacity(html_content.len() + HTML_EXTENSION_CAPACITY);
-    let mut last_end = 0; // End position of the previous match.
+    let mut last_end = 0;
 
     for capture in BOOKMARK_REGEX.captures_iter(html_content) {
         let full_match = capture.get(0).unwrap();
-        let url = &capture[1];
-        let original_title = &capture[2];
+        let url = capture[1].to_string();
+        let original_title = capture[2].to_string();
 
         result.push_str(&html_content[last_end..full_match.start()]);
 
-        let bookmark_data = fetch_ogp_metadata(url).await.unwrap_or_else(|e| {
-            log::warn!("Warning: Failed to fetch OGP metadata for '{url}': {e}");
-            create_fallback_bookmark_data(url, original_title)
-        });
-
+        let bookmark_data = fetch_data(url, original_title).await;
         let rich_bookmark_html = generate_rich_bookmark(&bookmark_data);
         result.push_str(&rich_bookmark_html);
 
@@ -300,7 +284,25 @@ pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<Stri
     Ok(result)
 }
 
-/// Creates fallback bookmark data.
+/// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
+pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
+    convert_bookmarks_with(html_content, |url, original_title| async move {
+        fetch_ogp_metadata(&url).await.unwrap_or_else(|e| {
+            log::warn!("Warning: Failed to fetch OGP metadata for '{url}': {e}");
+            create_fallback_bookmark_data(&url, &original_title)
+        })
+    })
+    .await
+}
+
+/// Like `convert_simple_bookmarks_to_rich` but uses fallback data only; no network requests.
+pub async fn convert_simple_bookmarks_to_rich_offline(html_content: &str) -> Result<String> {
+    convert_bookmarks_with(html_content, |url, original_title| async move {
+        create_fallback_bookmark_data(&url, &original_title)
+    })
+    .await
+}
+
 pub fn create_fallback_bookmark_data(url: &str, original_title: &str) -> BookmarkData {
     BookmarkData {
         url: url.to_string(),

@@ -3,6 +3,21 @@ use pulldown_cmark::{Event, Options, Parser, html};
 use regex::Regex;
 use std::{collections::HashMap, sync::LazyLock};
 
+/// Net bytes added per `$…$` replacement: 34-byte wrapper minus 2-byte delimiters.
+const KATEX_INLINE_OVERHEAD: usize = 32;
+
+/// Net bytes added per `$$…$$` replacement: 33-byte wrapper minus 4-byte delimiters.
+const KATEX_DISPLAY_OVERHEAD: usize = 29;
+
+/// Extra capacity per `apply_katex_math` call; sized for ~6 inline + 2 display expressions.
+const KATEX_EXTRA_CAPACITY: usize = KATEX_INLINE_OVERHEAD * 6 + KATEX_DISPLAY_OVERHEAD * 2;
+
+/// Allow-list regex for bookmark blocks; anything beyond `<a href="URL">TITLE</a>` is escaped.
+static SAFE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\A\s*<div class="bookmark">\s*<a href="[^"]+">[^<]*</a>\s*</div>\s*\z"#)
+        .expect("Invalid safe bookmark regex")
+});
+
 /// Mapping from an Obsidian file path without extension to a published slug.
 pub type FileMapping = HashMap<String, String>;
 
@@ -10,7 +25,6 @@ fn generate_article_href(slug: &str) -> String {
     format!("/articles/{slug}")
 }
 
-/// Convert markdown content into HTML and apply KaTeX markers.
 pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -19,29 +33,126 @@ pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     options.insert(Options::ENABLE_TASKLISTS);
     options.insert(Options::ENABLE_SMART_PUNCTUATION);
 
-    let parser = Parser::new_ext(markdown_content, options).map(disable_raw_html);
+    let parser = Parser::new_ext(markdown_content, options);
     let mut html_output = String::with_capacity(markdown_content.len() * 2);
-    html::push_html(&mut html_output, parser);
+    html::push_html(&mut html_output, sanitize_html(parser).into_iter());
 
     let html_with_katex = process_katex_math(&html_output);
 
     Ok(html_with_katex)
 }
 
-fn disable_raw_html(event: Event<'_>) -> Event<'_> {
-    match event {
-        Event::Html(html) | Event::InlineHtml(html) => Event::Text(html),
-        other => other,
+/// Escapes all raw HTML events except valid `<div class="bookmark">` blocks.
+/// Accumulates each potential bookmark block and validates with SAFE_BOOKMARK_RE before passing through.
+fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> {
+    let mut result: Vec<Event<'a>> = Vec::new();
+    let mut in_bookmark = false;
+    let mut bookmark_buffer = String::new();
+
+    for event in parser {
+        match event {
+            Event::Html(html) | Event::InlineHtml(html) => {
+                if !in_bookmark && !html.trim_start().starts_with(r#"<div class="bookmark">"#) {
+                    result.push(Event::Text(html));
+                } else {
+                    if !in_bookmark {
+                        in_bookmark = true;
+                    }
+                    bookmark_buffer.push_str(&html);
+
+                    if let Some(close) = bookmark_buffer.find("</div>") {
+                        in_bookmark = false;
+                        let safe_end = close + "</div>".len();
+                        let bookmark_part = bookmark_buffer[..safe_end].to_string();
+                        let rest = bookmark_buffer[safe_end..].to_string();
+                        bookmark_buffer.clear();
+
+                        if SAFE_BOOKMARK_RE.is_match(&bookmark_part) {
+                            result.push(Event::Html(bookmark_part.into()));
+                        } else {
+                            result.push(Event::Text(bookmark_part.into()));
+                        }
+
+                        if !rest.is_empty() {
+                            result.push(Event::Text(rest.into()));
+                        }
+                    }
+                }
+            }
+            other => {
+                if in_bookmark {
+                    in_bookmark = false;
+                    let buffer = std::mem::take(&mut bookmark_buffer);
+                    if !buffer.is_empty() {
+                        result.push(Event::Text(buffer.into()));
+                    }
+                }
+                result.push(other);
+            }
+        }
     }
+
+    // Unclosed bookmark: flush buffer as escaped text.
+    if !bookmark_buffer.is_empty() {
+        result.push(Event::Text(bookmark_buffer.into()));
+    }
+
+    result
 }
 
+/// Replaces `$…$` / `$$…$$` with KaTeX HTML wrappers, skipping `<code>` / `<pre>` blocks.
 fn process_katex_math(html_content: &str) -> String {
-    let mut result = String::with_capacity(html_content.len() + 200);
-    result.push_str(html_content);
+    let mut result = String::with_capacity(html_content.len() + KATEX_EXTRA_CAPACITY);
+    let mut remaining = html_content;
 
+    loop {
+        let code_start = [remaining.find("<pre"), remaining.find("<code")]
+            .into_iter()
+            .flatten()
+            .min();
+
+        match code_start {
+            None => {
+                result.push_str(&apply_katex_math(remaining));
+                break;
+            }
+            Some(start) => {
+                result.push_str(&apply_katex_math(&remaining[..start]));
+
+                let close_tag = if remaining[start..].starts_with("<pre") {
+                    "</pre>"
+                } else {
+                    "</code>"
+                };
+
+                match remaining[start..].find(close_tag) {
+                    Some(close_offset) => {
+                        let end = start + close_offset + close_tag.len();
+                        result.push_str(&remaining[start..end]); // verbatim
+                        remaining = &remaining[end..];
+                    }
+                    None => {
+                        result.push_str(&remaining[start..]); // verbatim
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    result
+}
+
+/// Replaces `$$...$$` and `$...$` with KaTeX class wrappers.
+/// Only call on fragments with no `<code>` / `<pre>`; use `process_katex_math` for full HTML.
+fn apply_katex_math(text: &str) -> String {
+    let mut result = String::with_capacity(text.len() + KATEX_EXTRA_CAPACITY);
+    result.push_str(text);
+
+    // Block math first to avoid matching the inner `$` of `$$`.
     while let Some(start) = result.find("$$") {
         if let Some(end) = result[start + 2..].find("$$") {
-            let math_content = &result[start + 2..start + 2 + end];
+            let math_content = result[start + 2..start + 2 + end].to_string();
             let replacement = format!(r#"<div class="katex-display">{math_content}</div>"#);
             result.replace_range(start..start + 2 + end + 2, &replacement);
         } else {
@@ -49,12 +160,13 @@ fn process_katex_math(html_content: &str) -> String {
         }
     }
 
+    // Inline math.
     let mut pos = 0;
     while let Some(start) = result[pos..].find('$') {
         let actual_start = pos + start;
         if let Some(end) = result[actual_start + 1..].find('$') {
             let actual_end = actual_start + 1 + end;
-            let math_content = &result[actual_start + 1..actual_end];
+            let math_content = result[actual_start + 1..actual_end].to_string();
             let replacement = format!(r#"<span class="katex-inline">{math_content}</span>"#);
             result.replace_range(actual_start..actual_end + 1, &replacement);
             pos = actual_start + replacement.len();
@@ -129,6 +241,7 @@ pub fn generate_html_file(frontmatter_yaml: &str, html_body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use indoc::indoc;
     use rstest::*;
 
     #[rstest]
@@ -273,5 +386,312 @@ This is a test with [[Another Article|link]] and **bold** text.
         assert!(result.contains("Hello &lt;span&gt;world&lt;/span&gt;"));
         assert!(!result.contains("<script>"));
         assert!(!result.contains("<span>world</span>"));
+    }
+
+    // -----------------------------------------------------------------
+    // bookmark sanitize_html tests
+    // -----------------------------------------------------------------
+
+    /// The full bookmark block (opening tag, inner content, closing tag)
+    /// must pass through `convert_markdown_to_html` without any HTML escaping
+    /// so that the downstream `convert_simple_bookmarks_to_rich` can find it.
+    #[rstest]
+    fn test_bookmark_html_passes_through_unescaped() {
+        // Multi-line bookmark – pulldown-cmark emits this as several
+        // `Event::Html` events (one per line), so the stateful filter must
+        // keep all of them unescaped.
+        let markdown = "<div class=\"bookmark\">\n  <a href=\"https://example.com\">Example Site</a>\n</div>\n";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result.contains("<div class=\"bookmark\">"),
+            "bookmark opening tag should not be escaped; got:\n{result}"
+        );
+        assert!(
+            result.contains(r#"<a href="https://example.com">"#),
+            "bookmark anchor tag should not be escaped; got:\n{result}"
+        );
+        assert!(
+            result.contains("</div>"),
+            "bookmark closing tag should not be escaped; got:\n{result}"
+        );
+        assert!(
+            !result.contains("&lt;div"),
+            "no HTML entities expected for bookmark block; got:\n{result}"
+        );
+    }
+
+    /// A single-line bookmark (`<div class="bookmark">…</div>` on one line)
+    /// must also pass through unescaped.
+    #[rstest]
+    fn test_single_line_bookmark_passes_through_unescaped() {
+        let markdown =
+            "<div class=\"bookmark\"><a href=\"https://example.com\">Example</a></div>\n";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result.contains("<div class=\"bookmark\">"),
+            "single-line bookmark should not be escaped; got:\n{result}"
+        );
+        assert!(
+            !result.contains("&lt;div"),
+            "no HTML entities expected; got:\n{result}"
+        );
+    }
+
+    /// Raw HTML that is NOT a bookmark must still be escaped (XSS protection).
+    #[rstest]
+    #[case::div_with_other_class("<div class=\"custom\"><span>hello</span></div>")]
+    #[case::script_tag("<script>alert('xss')</script>")]
+    #[case::inline_span("<span>inline</span>")]
+    fn test_non_bookmark_raw_html_is_still_escaped(#[case] markdown: &str) {
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result.contains("&lt;"),
+            "non-bookmark HTML should be escaped; got:\n{result}"
+        );
+        // No literal opening angle bracket from the raw HTML should survive.
+        // We cannot check for a specific tag because the test is parameterised,
+        // but the presence of `&lt;` proves escaping happened.
+    }
+
+    /// Content AFTER a correctly closed bookmark block must NOT be affected by
+    /// the bookmark filter (i.e. regular HTML after the block is still escaped).
+    #[rstest]
+    fn test_html_after_bookmark_is_escaped() {
+        let markdown = "<div class=\"bookmark\">\n  <a href=\"https://example.com\">X</a>\n</div>\n\n<script>bad()</script>\n";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result.contains("<div class=\"bookmark\">"),
+            "bookmark block should pass through; got:\n{result}"
+        );
+        assert!(
+            !result.contains("<script>"),
+            "script tag after bookmark should be escaped; got:\n{result}"
+        );
+        assert!(
+            result.contains("&lt;script&gt;"),
+            "script tag should appear as entities; got:\n{result}"
+        );
+    }
+
+    /// Raw HTML on the same line after `</div>` must be escaped even though
+    /// the bookmark block itself passes through (P1 XSS fix).
+    #[rstest]
+    fn test_trailing_content_after_bookmark_close_is_escaped() {
+        let markdown = "<div class=\"bookmark\"><a href=\"https://example.com\">X</a></div><script>bad()</script>\n";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result.contains(r#"<div class="bookmark">"#),
+            "bookmark should pass through; got:\n{result}"
+        );
+        assert!(
+            !result.contains("<script>"),
+            "trailing script tag should be escaped; got:\n{result}"
+        );
+        assert!(
+            result.contains("&lt;script&gt;"),
+            "trailing script tag should appear as entities; got:\n{result}"
+        );
+    }
+
+    /// Bookmark blocks that contain unexpected HTML (e.g. a `<script>` tag as a
+    /// sibling of `<a>`, or extra event-handler attributes on `<a>`) must be
+    /// HTML-escaped. Only the strict `<div class="bookmark"><a href="…">…</a></div>`
+    /// structure may pass through as raw HTML.
+    #[rstest]
+    #[case::script_sibling(r#"<div class="bookmark"><script>alert('xss')</script></div>"#)]
+    #[case::extra_attribute_on_anchor(
+        r#"<div class="bookmark"><a href="https://example.com" onmouseover="alert(1)">Hover</a></div>"#
+    )]
+    #[case::nested_div_inside_bookmark(
+        "<div class=\"bookmark\"><div><a href=\"https://example.com\">Title</a></div></div>"
+    )]
+    fn test_bookmark_with_unexpected_html_is_escaped(#[case] markdown: &str) {
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            !result.contains(r#"<div class="bookmark">"#),
+            "unexpected bookmark content should cause the block to be escaped; got:\n{result}"
+        );
+        assert!(
+            result.contains("&lt;"),
+            "escaped block should contain HTML entities; got:\n{result}"
+        );
+    }
+
+    /// A bookmark block that is never closed with `</div>` must be HTML-escaped
+    /// in its entirety. The filter must not leave `in_bookmark = true` at
+    /// end-of-stream and silently discard the buffered content.
+    #[rstest]
+    fn test_unclosed_bookmark_is_escaped() {
+        // Deliberately omit the closing </div>.
+        let markdown = "<div class=\"bookmark\">\n  <a href=\"https://example.com\">Title</a>\n";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            !result.contains(r#"<div class="bookmark">"#),
+            "unclosed bookmark opening tag should be escaped; got:\n{result}"
+        );
+        assert!(
+            result.contains("&lt;div"),
+            "unclosed bookmark should appear as HTML entities; got:\n{result}"
+        );
+    }
+
+    /// When the markdown contains multiple bookmark blocks, every block must
+    /// reach the output HTML unescaped so that the downstream bookmark enricher
+    /// can find and convert each one. The stateful `in_bookmark` filter inside
+    /// `sanitize_html` must reset correctly after each block closes.
+    ///
+    /// Three cases are exercised:
+    /// - two bookmarks separated only by a blank line
+    /// - two bookmarks with prose text between them
+    /// - three consecutive bookmarks (verifies the flag resets more than once)
+    #[rstest]
+    #[case::two_bookmarks_blank_line_between(
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://example.com">Example</a>
+            </div>
+
+            <div class="bookmark">
+              <a href="https://github.com">GitHub</a>
+            </div>
+        "#}
+    )]
+    #[case::two_bookmarks_prose_between(
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://example.com">Example</a>
+            </div>
+
+            Some prose text here.
+
+            <div class="bookmark">
+              <a href="https://github.com">GitHub</a>
+            </div>
+        "#}
+    )]
+    #[case::three_bookmarks_in_sequence(
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://example.com">Example</a>
+            </div>
+
+            <div class="bookmark">
+              <a href="https://github.com">GitHub</a>
+            </div>
+
+            <div class="bookmark">
+              <a href="https://rust-lang.org">Rust</a>
+            </div>
+        "#}
+    )]
+    fn test_multiple_bookmarks_all_pass_through_unescaped(#[case] markdown: &str) {
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        let input_count = markdown.matches(r#"<div class="bookmark">"#).count();
+        let output_count = result.matches(r#"<div class="bookmark">"#).count();
+
+        assert_eq!(
+            output_count, input_count,
+            "all {input_count} bookmark block(s) should pass through unescaped, \
+             but only {output_count} did; got:\n{result}"
+        );
+        assert!(
+            !result.contains("&lt;div"),
+            "no bookmark div should be HTML-escaped; got:\n{result}"
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // KaTeX + code block tests
+    // -----------------------------------------------------------------
+
+    /// Inline code (backtick) containing `$...$` must NOT be converted to a
+    /// KaTeX span – the dollar signs are part of the code, not math.
+    #[rstest]
+    fn test_katex_not_processed_in_inline_code() {
+        let markdown = "See `$x^2$` for the formula.";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result.contains("<code>$x^2$</code>"),
+            "inline code content should not be KaTeX-processed; got:\n{result}"
+        );
+        assert!(
+            !result.contains("katex-inline"),
+            "no KaTeX span expected inside inline code; got:\n{result}"
+        );
+    }
+
+    /// Fenced code blocks containing `$...$` or `$$...$$` must NOT produce
+    /// any KaTeX wrappers.
+    #[rstest]
+    fn test_katex_not_processed_in_fenced_code_block() {
+        let markdown = "```\n$x^2$ and $$block$$ formula\n```";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            !result.contains("katex-display"),
+            "fenced code block should not produce KaTeX display; got:\n{result}"
+        );
+        assert!(
+            !result.contains("katex-inline"),
+            "fenced code block should not produce KaTeX inline; got:\n{result}"
+        );
+        assert!(
+            result.contains("$x^2$"),
+            "dollar signs should remain verbatim in code block; got:\n{result}"
+        );
+    }
+
+    /// Math markers that appear OUTSIDE code elements must still be converted
+    /// even when code elements are present in the same document.
+    #[rstest]
+    fn test_katex_processed_in_text_adjacent_to_code() {
+        let markdown = "The formula $a+b$ is useful. Code: `$not_math$`.";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result.contains(r#"<span class="katex-inline">a+b</span>"#),
+            "math outside code should be converted to KaTeX span; got:\n{result}"
+        );
+        assert!(
+            result.contains("<code>$not_math$</code>"),
+            "dollar signs inside inline code should remain untouched; got:\n{result}"
+        );
+    }
+
+    /// Verify `process_katex_math` directly on raw HTML fragments that mix
+    /// math-bearing text with code elements.
+    #[rstest]
+    #[case::math_before_code(
+        "Inline <span>$a$</span> then <code>$b$</code>",
+        "Inline <span><span class=\"katex-inline\">a</span></span> then <code>$b$</code>"
+    )]
+    #[case::math_after_code(
+        "<code>$b$</code> then $a$",
+        "<code>$b$</code> then <span class=\"katex-inline\">a</span>"
+    )]
+    #[case::pre_block_skipped(
+        "$x$ <pre><code>$y$</code></pre> $z$",
+        "<span class=\"katex-inline\">x</span> <pre><code>$y$</code></pre> <span class=\"katex-inline\">z</span>"
+    )]
+    fn test_process_katex_math_skips_code_elements(#[case] input: &str, #[case] expected: &str) {
+        let result = super::process_katex_math(input);
+        assert_eq!(result, expected);
     }
 }
