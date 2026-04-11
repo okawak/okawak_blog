@@ -32,7 +32,7 @@ bun install
 description = "Update web package.json dependencies to the latest versions with bun"
 run = '''
 cd crates/site/web
-bun update --latest
+bun update
 '''
 
 [tasks.web-outdated]
@@ -44,11 +44,11 @@ bun outdated
 
 [tasks.sync-obsidian]
 description = "Initialize and update the private Obsidian submodule"
-run = "git submodule update --init --recursive"
+run = "git submodule update --remote --merge --recursive"
 
 [tasks.publish-local]
 description = "Generate local site artifacts from the Obsidian submodule"
-depends = ["sync-obsidian"]
+depends = ["sync-obsidian", "clean-dist"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
 run = "cargo run -p publisher"
 
@@ -85,6 +85,10 @@ description = "Watch the project and rebuild with local artifacts"
 depends = ["check-deps", "format"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
 run = "cargo leptos watch -p server"
+
+[tasks.clean-dist]
+description = "Remove generated dist artifacts"
+run = "rm -rf crates/publish/publisher/dist"
 
 [tasks.clean-project]
 description = "Clean the Cargo build artifacts"

@@ -154,3 +154,73 @@ fn test_config_validation() {
     // `validate` is not called directly here, so assert the missing-path behavior instead.
     assert!(!config.obsidian_dir.exists());
 }
+
+#[tokio::test]
+async fn test_run_main_with_bookmark_article() {
+    let temp_dir = TempDir::new().unwrap();
+    let obsidian_dir = temp_dir.path().join("obsidian");
+    let output_dir = temp_dir.path().join("dist");
+
+    fs::create_dir_all(&obsidian_dir).unwrap();
+
+    // Use a localhost URL that refuses connections immediately so the OGP fetch
+    // fails fast and the fallback rich-bookmark path is exercised without
+    // any real network access.
+    let sample_content = indoc! {r#"
+        ---
+        title: "Bookmark Article"
+        tags: ["test"]
+        summary: "Article containing a bookmark block"
+        priority: 1
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        is_completed: true
+        category: "tech"
+        ---
+
+        Here is a bookmark:
+
+        <div class="bookmark">
+          <a href="http://127.0.0.1:19999">Fallback Bookmark</a>
+        </div>
+    "#};
+
+    let sample_file = obsidian_dir.join("bookmark.md");
+    fs::write(&sample_file, sample_content).unwrap();
+
+    let config = Config {
+        obsidian_dir,
+        output_dir: output_dir.clone(),
+    };
+
+    let result = run_main(&config).await;
+    assert!(result.is_ok());
+
+    let articles_dir = output_dir.join("site").join("articles");
+    let html_files: Vec<_> = fs::read_dir(&articles_dir)
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "html"))
+        .collect();
+
+    assert!(!html_files.is_empty(), "HTML file should be generated");
+
+    let html_content = fs::read_to_string(html_files[0].path()).unwrap();
+
+    // The bookmark should NOT remain as escaped HTML.
+    assert!(
+        !html_content.contains("&lt;div class=&quot;bookmark&quot;&gt;"),
+        "bookmark HTML should not be escaped; got: {html_content}"
+    );
+
+    // The bookmark should have been converted to the rich card format
+    // (fallback data is used when the OGP fetch fails).
+    assert!(
+        html_content.contains(r#"class="bookmark-link""#),
+        "bookmark should be converted to rich format; got: {html_content}"
+    );
+    assert!(
+        html_content.contains(r#"class="bookmark-domain""#),
+        "bookmark should contain domain info; got: {html_content}"
+    );
+}
