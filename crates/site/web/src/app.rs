@@ -8,7 +8,7 @@ use crate::routes::not_found::NotFoundPage;
 use leptos::prelude::*;
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
-    components::{Route, Router, Routes},
+    components::{FlatRoutes, Route, Router},
     path,
 };
 
@@ -96,14 +96,14 @@ pub fn App() -> impl IntoView {
             <Router>
                 <Header />
                 <main class="content-container">
-                    <Routes fallback=|| {
+                    <FlatRoutes fallback=|| {
                         view! { <NotFoundPage /> }
                     }>
-                        <Route path=path!("/") view=HomePage />
-                        <Route path=path!("/about") view=AboutPage />
-                        <Route path=path!("/articles/:slug") view=ArticlePage />
-                        <Route path=path!("/categories/:category") view=CategoryPage />
-                    </Routes>
+                        <Route path=path!("") view=HomePage />
+                        <Route path=path!("about") view=AboutPage />
+                        <Route path=path!("articles/:slug") view=ArticlePage />
+                        <Route path=path!("categories/:category") view=CategoryPage />
+                    </FlatRoutes>
                 </main>
             </Router>
             <Footer />
