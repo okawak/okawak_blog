@@ -2,6 +2,8 @@ mod error;
 
 pub use error::{BookmarkError, Result};
 
+use std::future::Future;
+
 use regex::Regex;
 use scraper::{Html, Selector};
 use std::sync::LazyLock;
@@ -267,28 +269,31 @@ fn html_escape(text: &str) -> String {
     // Additional escaping for backticks and newlines is unnecessary for the current use case.
 }
 
-/// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
-pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
+/// Internal loop that drives bookmark substitution.
+///
+/// `fetch_data(url, original_title)` is called for each matched bookmark and must
+/// return a `BookmarkData` (already with fallback applied if necessary).
+async fn convert_bookmarks_with<F, Fut>(html_content: &str, fetch_data: F) -> Result<String>
+where
+    F: Fn(String, String) -> Fut,
+    Fut: Future<Output = BookmarkData>,
+{
     static BOOKMARK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]*)</a>\s*</div>"#)
             .expect("Invalid bookmark regex pattern")
     });
 
     let mut result = String::with_capacity(html_content.len() + HTML_EXTENSION_CAPACITY);
-    let mut last_end = 0; // End position of the previous match.
+    let mut last_end = 0;
 
     for capture in BOOKMARK_REGEX.captures_iter(html_content) {
         let full_match = capture.get(0).unwrap();
-        let url = &capture[1];
-        let original_title = &capture[2];
+        let url = capture[1].to_string();
+        let original_title = capture[2].to_string();
 
         result.push_str(&html_content[last_end..full_match.start()]);
 
-        let bookmark_data = fetch_ogp_metadata(url).await.unwrap_or_else(|e| {
-            log::warn!("Warning: Failed to fetch OGP metadata for '{url}': {e}");
-            create_fallback_bookmark_data(url, original_title)
-        });
-
+        let bookmark_data = fetch_data(url, original_title).await;
         let rich_bookmark_html = generate_rich_bookmark(&bookmark_data);
         result.push_str(&rich_bookmark_html);
 
@@ -298,6 +303,30 @@ pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<Stri
     result.push_str(&html_content[last_end..]);
 
     Ok(result)
+}
+
+/// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
+pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
+    convert_bookmarks_with(html_content, |url, original_title| async move {
+        fetch_ogp_metadata(&url).await.unwrap_or_else(|e| {
+            log::warn!("Warning: Failed to fetch OGP metadata for '{url}': {e}");
+            create_fallback_bookmark_data(&url, &original_title)
+        })
+    })
+    .await
+}
+
+/// Converts simple bookmark markup to rich cards using fallback data only,
+/// without making any network requests.
+///
+/// The URL and link text from the original markup are used directly as the
+/// card title; OGP metadata is never fetched. Intended for offline environments
+/// and integration tests where real HTTP access must be avoided.
+pub async fn convert_simple_bookmarks_to_rich_offline(html_content: &str) -> Result<String> {
+    convert_bookmarks_with(html_content, |url, original_title| async move {
+        create_fallback_bookmark_data(&url, &original_title)
+    })
+    .await
 }
 
 /// Creates fallback bookmark data.

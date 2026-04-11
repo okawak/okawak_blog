@@ -1,5 +1,5 @@
 use indoc::indoc;
-use publisher::{Config, run_main};
+use publisher::{Config, offline_bookmark_enricher, run_main, run_with_enricher};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -163,9 +163,8 @@ async fn test_run_main_with_bookmark_article() {
 
     fs::create_dir_all(&obsidian_dir).unwrap();
 
-    // Use a localhost URL that refuses connections immediately so the OGP fetch
-    // fails fast and the fallback rich-bookmark path is exercised without
-    // any real network access.
+    // Use an offline enricher that converts bookmarks with fallback data only,
+    // so no network request is made and the test never waits for a timeout.
     let sample_content = indoc! {r#"
         ---
         title: "Bookmark Article"
@@ -181,7 +180,7 @@ async fn test_run_main_with_bookmark_article() {
         Here is a bookmark:
 
         <div class="bookmark">
-          <a href="http://127.0.0.1:19999">Fallback Bookmark</a>
+          <a href="https://example.com">Fallback Bookmark</a>
         </div>
     "#};
 
@@ -193,7 +192,7 @@ async fn test_run_main_with_bookmark_article() {
         output_dir: output_dir.clone(),
     };
 
-    let result = run_main(&config).await;
+    let result = run_with_enricher(&config, offline_bookmark_enricher()).await;
     assert!(result.is_ok());
 
     let articles_dir = output_dir.join("site").join("articles");

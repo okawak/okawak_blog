@@ -2,8 +2,22 @@ pub mod config;
 pub mod error;
 pub mod slug;
 
+/// A bookmark enricher takes raw page HTML (owned) and returns the enriched HTML.
+///
+/// The default implementation fetches OGP metadata over HTTP.
+/// Use [`offline_bookmark_enricher`] in integration tests to avoid any network access.
+pub type BookmarkEnricher =
+    Arc<dyn Fn(String) -> BoxFuture<'static, bookmark::Result<String>> + Send + Sync>;
+
+/// Creates a [`BookmarkEnricher`] that converts bookmarks using fallback data only,
+/// without making any network requests. Intended for integration tests.
+pub fn offline_bookmark_enricher() -> BookmarkEnricher {
+    Arc::new(|html: String| {
+        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich_offline(&html).await })
+    })
+}
+
 use artifacts::{SiteDirectories, build_site_artifacts, write_article_page, write_site_artifacts};
-use bookmark::convert_simple_bookmarks_to_rich;
 pub use config::Config;
 use domain::{ArticleBody, ArticleMeta, ArticleMetaInput, Category, Slug, Title};
 pub use error::{ObsidianError, Result};
@@ -13,9 +27,11 @@ use ingest::{
     parse_obsidian_file, scan_obsidian_files,
 };
 
+use futures::future::BoxFuture;
 use futures::{StreamExt, TryStreamExt, stream};
 use log::{error, info, warn};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 struct RenderedArticle {
     meta: ArticleMeta,
@@ -31,6 +47,13 @@ struct ParsedFile {
 }
 
 pub async fn run_main(config: &Config) -> Result<()> {
+    let enrich: BookmarkEnricher = Arc::new(|html: String| {
+        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich(&html).await })
+    });
+    run_with_enricher(config, enrich).await
+}
+
+pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Result<()> {
     let start_time = std::time::Instant::now();
     info!("=== Publisher Started ===");
     info!("Input directory: {}", config.obsidian_dir.display());
@@ -79,7 +102,10 @@ pub async fn run_main(config: &Config) -> Result<()> {
 
     const CONCURRENT_LIMIT: usize = 4;
     let article_metas: Vec<ArticleMeta> = stream::iter(valid_files)
-        .map(|parsed_file| render_publishable_article(parsed_file, &file_mapping))
+        .map(|parsed_file| {
+            let enrich = Arc::clone(&enrich);
+            render_publishable_article(parsed_file, &file_mapping, enrich)
+        })
         .buffer_unordered(CONCURRENT_LIMIT)
         .try_fold(Vec::new(), |mut article_metas, rendered_article| {
             let site_directories = site_directories.clone();
@@ -99,6 +125,7 @@ pub async fn run_main(config: &Config) -> Result<()> {
             }
         })
         .await?;
+
     let site_artifacts = build_site_artifacts(article_metas);
     let site_directories_for_write = site_directories.clone();
     let site_artifacts = tokio::task::spawn_blocking(move || {
@@ -185,17 +212,17 @@ fn build_file_mapping(config: &Config, valid_files: &[ParsedFile]) -> Result<Fil
 async fn process_parsed_file(
     parsed_file: ParsedFile,
     file_mapping: &FileMapping,
+    enrich: &BookmarkEnricher,
 ) -> Result<RenderedArticle> {
     let markdown_with_links = convert_obsidian_links(&parsed_file.markdown_body, file_mapping);
     let html_body = convert_markdown_to_html(&markdown_with_links)?;
 
     // Convert simple bookmark markup into rich bookmark cards after rendering HTML.
-    let html_with_rich_bookmarks = convert_simple_bookmarks_to_rich(&html_body)
-        .await
-        .unwrap_or_else(|e| {
-            warn!("Warning: Failed to convert simple bookmarks to rich bookmarks: {e}");
-            html_body
-        });
+    let fallback = html_body.clone();
+    let html_with_rich_bookmarks = enrich(html_body).await.unwrap_or_else(|e| {
+        warn!("Warning: Failed to convert simple bookmarks to rich bookmarks: {e}");
+        fallback
+    });
 
     let category = parse_category(&parsed_file.front_matter)?;
     let meta = ArticleMeta::new(ArticleMetaInput {
@@ -219,8 +246,9 @@ async fn process_parsed_file(
 async fn render_publishable_article(
     parsed_file: ParsedFile,
     file_mapping: &FileMapping,
+    enrich: BookmarkEnricher,
 ) -> Result<RenderedArticle> {
-    process_parsed_file(parsed_file, file_mapping).await
+    process_parsed_file(parsed_file, file_mapping, &enrich).await
 }
 
 fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
