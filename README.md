@@ -18,7 +18,7 @@ https://www.okawak.net
 - 記事ソースは private な Obsidian リポジトリで管理する
 - 記事ソースはこの public リポジトリへ直接 commit せず、git submodule として参照する
 - GitHub Actions またはローカル実行の publisher が公開成果物を生成する
-- 生成した HTML / index JSON / assets を S3 に配置する
+- 生成した HTML / index JSON を S3 に配置する
 - Leptos SSR サーバーが S3 上の成果物を読んで配信する
 - VPS + `systemd` + `nginx` で単純に運用できる構成を保つ
 
@@ -121,7 +121,7 @@ publisher はこれらの成果物を生成し、SSR サーバーはそれらを
 Obsidian repo
   -> git submodule
   -> publisher
-  -> HTML / index JSON / assets を生成
+  -> HTML / index JSON を生成
   -> AWS S3
   -> Leptos SSR server
   -> Browser

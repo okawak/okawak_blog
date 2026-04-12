@@ -43,7 +43,7 @@ Publish/
   - `/tech`
 - `tech/rust/async.md`
   - `kind=article`
-  - `/tech/async`
+  - `/tech/<slug>`
   - `section_path=["rust"]`
 
 ## 1. 通常記事
