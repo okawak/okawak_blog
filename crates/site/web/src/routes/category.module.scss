@@ -44,6 +44,21 @@
     gap: 1rem;
 }
 
+.section-list {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.section-group {
+    display: grid;
+    gap: 1rem;
+}
+
+.section-heading {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
 .article-card {
     display: flex;
     flex-direction: column;
@@ -66,6 +81,25 @@
 .article-description {
     line-height: 1.8;
     color: var(--color-text-soft);
+}
+
+.landing-content {
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+.landing-content :global(*) {
+    max-width: 100%;
+}
+
+.landing-content :global(> :first-child) {
+    margin-top: 0;
+}
+
+.landing-content :global(> :last-child) {
+    margin-bottom: 0;
 }
 
 .loading,

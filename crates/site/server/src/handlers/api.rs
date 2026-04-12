@@ -117,6 +117,8 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(document.category_display_name, "技術");
+        assert_eq!(document.title, "Tech");
+        assert!(document.html.contains("Category landing"));
         assert_eq!(document.articles.len(), 1);
     }
 
@@ -161,7 +163,26 @@ mod tests {
     async fn test_api_router_returns_not_found_for_missing_category_artifact() {
         let temp_dir = TempDir::new().unwrap();
         write_fixture_site(temp_dir.path());
-        fs::remove_file(temp_dir.path().join("categories/tech.json")).unwrap();
+        fs::remove_file(temp_dir.path().join("categories/tech/index.json")).unwrap();
+
+        let response = create_test_router(temp_dir.path())
+            .oneshot(
+                Request::builder()
+                    .uri("/page/categories/tech")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_api_router_returns_not_found_for_missing_category_page_html() {
+        let temp_dir = TempDir::new().unwrap();
+        write_fixture_site(temp_dir.path());
+        fs::remove_file(temp_dir.path().join("categories/tech/page.html")).unwrap();
 
         let response = create_test_router(temp_dir.path())
             .oneshot(

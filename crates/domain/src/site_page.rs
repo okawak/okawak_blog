@@ -65,7 +65,11 @@ pub struct ArticlePageDocument {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CategoryPageDocument {
     pub category: Category,
+    pub title: String,
     pub category_display_name: String,
+    pub description: Option<String>,
+    pub html: String,
+    pub sections: Vec<CategorySectionGroup>,
     pub articles: Vec<SiteArticleCard>,
 }
 
@@ -75,6 +79,13 @@ pub struct StaticPageDocument {
     pub title: String,
     pub description: Option<String>,
     pub html: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CategorySectionGroup {
+    pub section_path: Vec<String>,
+    pub heading: String,
+    pub articles: Vec<SiteArticleCard>,
 }
 
 pub fn build_home_page_title(site_name: &str) -> String {
@@ -117,15 +128,22 @@ pub fn build_article_page_canonical_path(document: &ArticlePageDocument) -> Stri
 }
 
 pub fn build_category_page_title(document: &CategoryPageDocument, site_name: &str) -> String {
-    format!("{} | {}", document.category_display_name, site_name)
+    format!("{} | {}", document.title, site_name)
 }
 
 pub fn build_category_page_description(document: &CategoryPageDocument) -> String {
-    format!(
-        "{}カテゴリの記事一覧です。{}件の記事があります。",
-        document.category_display_name,
-        document.articles.len()
-    )
+    document
+        .description
+        .as_deref()
+        .filter(|description| !description.trim().is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            format!(
+                "{}カテゴリの記事一覧です。{}件の記事があります。",
+                document.category_display_name,
+                document.articles.len()
+            )
+        })
 }
 
 pub fn build_category_page_canonical_path(document: &CategoryPageDocument) -> String {
@@ -192,17 +210,36 @@ pub fn build_article_page_document(
     })
 }
 
-pub fn build_category_page_document(index: &CategoryIndexDocument) -> Result<CategoryPageDocument> {
+pub fn build_category_page_document(
+    index: &CategoryIndexDocument,
+    html: &str,
+) -> Result<CategoryPageDocument> {
     let category = Category::from_str(&index.category)?;
+    let html = html.trim();
+    if html.is_empty() {
+        return Err(DomainError::validation("html"));
+    }
+
     let articles = index
         .articles
         .iter()
         .map(SiteArticleCard::try_from)
         .collect::<Result<Vec<_>>>()?;
+    let title = index
+        .title
+        .as_deref()
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or(category.display_name())
+        .to_string();
+    let sections = build_category_section_groups(&articles);
 
     Ok(CategoryPageDocument {
         category,
+        title,
         category_display_name: category.display_name().to_string(),
+        description: index.description.clone(),
+        html: html.to_string(),
+        sections,
         articles,
     })
 }
@@ -235,6 +272,35 @@ pub fn find_article_summary<'a>(
         .articles
         .iter()
         .find(|article| article.slug == slug.as_str())
+}
+
+fn build_category_section_groups(articles: &[SiteArticleCard]) -> Vec<CategorySectionGroup> {
+    use std::collections::BTreeMap;
+
+    let mut grouped: BTreeMap<Vec<String>, Vec<SiteArticleCard>> = BTreeMap::new();
+    for article in articles {
+        grouped
+            .entry(article.section_path.clone())
+            .or_default()
+            .push(article.clone());
+    }
+
+    grouped
+        .into_iter()
+        .map(|(section_path, articles)| CategorySectionGroup {
+            heading: build_section_heading(&section_path),
+            section_path,
+            articles,
+        })
+        .collect()
+}
+
+fn build_section_heading(section_path: &[String]) -> String {
+    if section_path.is_empty() {
+        "全般".to_string()
+    } else {
+        section_path.join(" / ")
+    }
 }
 
 #[cfg(test)]
@@ -307,18 +373,29 @@ mod tests {
 
     #[test]
     fn test_build_category_page_document() {
-        let document = build_category_page_document(&CategoryIndexDocument {
-            category: "daily".to_string(),
-            articles: vec![ArticleSummaryDocument {
+        let document = build_category_page_document(
+            &CategoryIndexDocument {
                 category: "daily".to_string(),
-                ..sample_summary()
-            }],
-        })
+                title: Some("Daily Notes".to_string()),
+                description: Some("Daily landing".to_string()),
+                updated_at: Some("2025-01-01T00:00:00+09:00".to_string()),
+                articles: vec![ArticleSummaryDocument {
+                    category: "daily".to_string(),
+                    ..sample_summary()
+                }],
+            },
+            "<article><h1>Daily Notes</h1></article>",
+        )
         .unwrap();
 
         assert_eq!(document.category, Category::Daily);
+        assert_eq!(document.title, "Daily Notes");
         assert_eq!(document.category_display_name, "日常");
+        assert_eq!(document.description, Some("Daily landing".to_string()));
+        assert!(document.html.contains("Daily Notes"));
         assert_eq!(document.articles.len(), 1);
+        assert_eq!(document.sections.len(), 1);
+        assert_eq!(document.sections[0].heading, "block");
     }
 
     #[test]
@@ -445,24 +522,117 @@ mod tests {
 
     #[test]
     fn test_build_category_page_metadata() {
-        let document = build_category_page_document(&CategoryIndexDocument {
-            category: "tech".to_string(),
-            articles: vec![sample_summary()],
-        })
+        let document = build_category_page_document(
+            &CategoryIndexDocument {
+                category: "tech".to_string(),
+                title: Some("Rust".to_string()),
+                description: Some("Rust articles".to_string()),
+                updated_at: Some("2025-01-01T00:00:00+09:00".to_string()),
+                articles: vec![sample_summary()],
+            },
+            "<article><h1>Rust</h1></article>",
+        )
         .unwrap();
 
         assert_eq!(
             build_category_page_title(&document, "ぶくせんの探窟メモ"),
-            "技術 | ぶくせんの探窟メモ"
+            "Rust | ぶくせんの探窟メモ"
         );
-        assert_eq!(
-            build_category_page_description(&document),
-            "技術カテゴリの記事一覧です。1件の記事があります。"
-        );
+        assert_eq!(build_category_page_description(&document), "Rust articles");
         assert_eq!(
             build_category_page_canonical_path(&document),
             "/categories/tech"
         );
+    }
+
+    #[test]
+    fn test_build_category_page_description_falls_back_when_missing() {
+        let document = build_category_page_document(
+            &CategoryIndexDocument {
+                category: "tech".to_string(),
+                title: None,
+                description: None,
+                updated_at: None,
+                articles: vec![sample_summary()],
+            },
+            "<article><h1>Tech</h1></article>",
+        )
+        .unwrap();
+
+        assert_eq!(
+            build_category_page_description(&document),
+            "技術カテゴリの記事一覧です。1件の記事があります。"
+        );
+    }
+
+    #[test]
+    fn test_build_category_page_document_rejects_blank_html() {
+        let result = build_category_page_document(
+            &CategoryIndexDocument {
+                category: "tech".to_string(),
+                title: None,
+                description: None,
+                updated_at: None,
+                articles: vec![sample_summary()],
+            },
+            "  ",
+        );
+
+        assert_eq!(result, Err(DomainError::validation("html")));
+    }
+
+    #[test]
+    fn test_build_category_page_document_groups_articles_by_section_path() {
+        let document = build_category_page_document(
+            &CategoryIndexDocument {
+                category: "tech".to_string(),
+                title: Some("Tech".to_string()),
+                description: None,
+                updated_at: None,
+                articles: vec![
+                    ArticleSummaryDocument {
+                        slug: "alpha0000001".to_string(),
+                        title: "Alpha".to_string(),
+                        category: "tech".to_string(),
+                        section_path: vec!["rust".to_string()],
+                        description: None,
+                        tags: vec![],
+                        priority: None,
+                        created_at: "2025-01-01T00:00:00+09:00".to_string(),
+                        updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+                    },
+                    ArticleSummaryDocument {
+                        slug: "beta00000001".to_string(),
+                        title: "Beta".to_string(),
+                        category: "tech".to_string(),
+                        section_path: vec!["rust".to_string(), "async".to_string()],
+                        description: None,
+                        tags: vec![],
+                        priority: None,
+                        created_at: "2025-01-01T00:00:00+09:00".to_string(),
+                        updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+                    },
+                    ArticleSummaryDocument {
+                        slug: "gamma0000001".to_string(),
+                        title: "Gamma".to_string(),
+                        category: "tech".to_string(),
+                        section_path: vec![],
+                        description: None,
+                        tags: vec![],
+                        priority: None,
+                        created_at: "2025-01-01T00:00:00+09:00".to_string(),
+                        updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+                    },
+                ],
+            },
+            "<article><h1>Tech</h1></article>",
+        )
+        .unwrap();
+
+        assert_eq!(document.sections.len(), 3);
+        assert_eq!(document.sections[0].heading, "全般");
+        assert_eq!(document.sections[1].heading, "rust");
+        assert_eq!(document.sections[2].heading, "rust / async");
     }
 
     #[test]

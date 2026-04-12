@@ -51,6 +51,12 @@ impl From<&[PublishedArticleSummary]> for ArticleIndexDocument {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CategoryIndexDocument {
     pub category: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
     pub articles: Vec<ArticleSummaryDocument>,
 }
 
@@ -58,6 +64,9 @@ impl From<&CategoryIndex> for CategoryIndexDocument {
     fn from(index: &CategoryIndex) -> Self {
         Self {
             category: index.category.as_str().to_string(),
+            title: None,
+            description: None,
+            updated_at: None,
             articles: index
                 .articles
                 .iter()
@@ -184,5 +193,19 @@ mod tests {
         assert!(json.contains("\"page\":\"about\""));
         assert!(json.contains("\"title\":\"About\""));
         assert!(json.contains("\"html\":\"<h1>About</h1>\""));
+    }
+
+    #[test]
+    fn test_category_index_document_deserialization_defaults_missing_metadata() {
+        let json = r#"{
+            "category":"tech",
+            "articles":[]
+        }"#;
+
+        let document: CategoryIndexDocument = serde_json::from_str(json).unwrap();
+
+        assert_eq!(document.title, None);
+        assert_eq!(document.description, None);
+        assert_eq!(document.updated_at, None);
     }
 }

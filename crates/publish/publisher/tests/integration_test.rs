@@ -183,6 +183,78 @@ async fn test_run_main_with_static_page_file() {
     assert!(page_document.contains("This page is generated from markdown."));
 }
 
+#[tokio::test]
+async fn test_run_main_with_category_landing_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let obsidian_dir = temp_dir.path().join("obsidian");
+    let output_dir = temp_dir.path().join("dist");
+
+    fs::create_dir_all(obsidian_dir.join("tech")).unwrap();
+
+    let article_content = indoc! {r#"
+        ---
+        title: "Rust Intro"
+        summary: "Rust article"
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        is_completed: true
+        category: "tech"
+        ---
+
+        # Rust Intro
+
+        Article content.
+    "#};
+    let category_content = indoc! {r#"
+        ---
+        title: "Tech"
+        kind: category
+        category: tech
+        summary: "Technology landing"
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        is_completed: true
+        ---
+
+        # Tech
+
+        Welcome to the category landing page.
+    "#};
+
+    fs::write(obsidian_dir.join("tech/article.md"), article_content).unwrap();
+    fs::write(obsidian_dir.join("tech/index.md"), category_content).unwrap();
+
+    let config = Config {
+        obsidian_dir,
+        output_dir: output_dir.clone(),
+    };
+
+    let result = run_main(&config).await;
+    assert!(result.is_ok());
+
+    let category_index = fs::read_to_string(
+        output_dir
+            .join("site")
+            .join("categories")
+            .join("tech")
+            .join("index.json"),
+    )
+    .unwrap();
+    let category_page = fs::read_to_string(
+        output_dir
+            .join("site")
+            .join("categories")
+            .join("tech")
+            .join("page.html"),
+    )
+    .unwrap();
+
+    assert!(category_index.contains("\"category\": \"tech\""));
+    assert!(category_index.contains("\"title\": \"Tech\""));
+    assert!(category_index.contains("\"description\": \"Technology landing\""));
+    assert!(category_page.contains("Welcome to the category landing page."));
+}
+
 #[test]
 fn test_config_validation() {
     // Verify config behavior with a non-existent directory.

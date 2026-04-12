@@ -15,8 +15,8 @@ pub fn offline_bookmark_enricher() -> BookmarkEnricher {
 }
 
 use artifacts::{
-    SiteDirectories, build_site_artifacts, write_article_page, write_page_document,
-    write_site_artifacts,
+    CategoryLandingMetadata, SiteDirectories, build_site_artifacts, write_article_page,
+    write_category_page, write_page_document, write_site_artifacts,
 };
 pub use config::Config;
 use domain::{
@@ -42,6 +42,11 @@ struct RenderedPage {
     document: PageArtifactDocument,
 }
 
+struct RenderedCategoryLanding {
+    metadata: CategoryLandingMetadata,
+    html: String,
+}
+
 struct ParsedArticleFile {
     slug: String,
     mapping_key: String,
@@ -52,6 +57,12 @@ struct ParsedArticleFile {
 
 struct ParsedPageFile {
     page: PageKey,
+    markdown_body: String,
+    front_matter: ObsidianFrontMatter,
+}
+
+struct ParsedCategoryFile {
+    category: Category,
     markdown_body: String,
     front_matter: ObsidianFrontMatter,
 }
@@ -77,6 +88,7 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
 
     let mut valid_articles = Vec::new();
     let mut valid_pages = Vec::new();
+    let mut valid_categories = Vec::new();
     for file_path in markdown_files {
         match parse_obsidian_file(&file_path) {
             Ok(Some(parsed_file)) if parsed_file.front_matter.is_completed => {
@@ -92,6 +104,13 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
                     }
                     ContentKind::Page => match process_valid_page_file(parsed_file) {
                         Ok(parsed_file) => valid_pages.push(parsed_file),
+                        Err(e) => {
+                            error_count += 1;
+                            error!("Error processing {}: {}", file_path.display(), e);
+                        }
+                    },
+                    ContentKind::Category => match process_valid_category_file(parsed_file) {
+                        Ok(parsed_file) => valid_categories.push(parsed_file),
                         Err(e) => {
                             error_count += 1;
                             error!("Error processing {}: {}", file_path.display(), e);
@@ -120,12 +139,14 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
 
     info!("Valid article files: {}", valid_articles.len());
     info!("Valid page files: {}", valid_pages.len());
+    info!("Valid category files: {}", valid_categories.len());
     info!("Skipped files: {skipped_count}");
     if error_count > 0 {
         warn!("Error files: {error_count}");
     }
 
     ensure_unique_page_keys(&valid_pages)?;
+    ensure_unique_category_landings(&valid_categories)?;
 
     let file_mapping = build_file_mapping(&valid_articles);
     let site_directories = SiteDirectories::prepare(&config.output_dir)?;
@@ -165,6 +186,15 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
         .try_collect()
         .await?;
 
+    let rendered_categories: Vec<RenderedCategoryLanding> = stream::iter(valid_categories)
+        .map(|parsed_file| {
+            let enrich = Arc::clone(&enrich);
+            render_category_landing(parsed_file, &file_mapping, enrich)
+        })
+        .buffer_unordered(CONCURRENT_LIMIT)
+        .try_collect()
+        .await?;
+
     for rendered_page in rendered_pages {
         let site_directories = site_directories.clone();
         let output_file_path = tokio::task::spawn_blocking(move || {
@@ -174,7 +204,23 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
         info!("...processed {}", output_file_path.display());
     }
 
-    let site_artifacts = build_site_artifacts(article_metas);
+    let mut category_landings = Vec::with_capacity(rendered_categories.len());
+    for rendered_category in rendered_categories {
+        let site_directories = site_directories.clone();
+        let (metadata, output_file_path) = tokio::task::spawn_blocking(move || {
+            let output_file_path = write_category_page(
+                &site_directories,
+                rendered_category.metadata.category,
+                &rendered_category.html,
+            )?;
+            Ok::<_, artifacts::ArtifactsError>((rendered_category.metadata, output_file_path))
+        })
+        .await??;
+        info!("...processed {}", output_file_path.display());
+        category_landings.push(metadata);
+    }
+
+    let site_artifacts = build_site_artifacts(article_metas, category_landings);
     let site_directories_for_write = site_directories.clone();
     let site_artifacts = tokio::task::spawn_blocking(move || {
         write_site_artifacts(&site_directories_for_write, &site_artifacts)?;
@@ -240,6 +286,14 @@ fn process_valid_page_file(parsed_file: ParsedObsidianFile) -> Result<ParsedPage
     })
 }
 
+fn process_valid_category_file(parsed_file: ParsedObsidianFile) -> Result<ParsedCategoryFile> {
+    Ok(ParsedCategoryFile {
+        category: parse_category(&parsed_file.front_matter)?,
+        markdown_body: parsed_file.markdown_body,
+        front_matter: parsed_file.front_matter,
+    })
+}
+
 /// Normalizes a path for use in URLs by converting OS-specific separators to `/`.
 fn normalize_path_for_url(path: &Path) -> String {
     let path_str = path.to_string_lossy();
@@ -294,6 +348,21 @@ fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<()> {
             return Err(ObsidianError::Parse(format!(
                 "Duplicate page key detected: {}",
                 parsed_page.page.as_str()
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_unique_category_landings(valid_categories: &[ParsedCategoryFile]) -> Result<()> {
+    let mut seen = HashSet::with_capacity(valid_categories.len());
+
+    for parsed_category in valid_categories {
+        if !seen.insert(parsed_category.category.as_str()) {
+            return Err(ObsidianError::Parse(format!(
+                "Duplicate category landing detected: {}",
+                parsed_category.category.as_str()
             )));
         }
     }
@@ -377,6 +446,48 @@ async fn render_static_page(
     process_page_file(parsed_file, file_mapping, &enrich).await
 }
 
+async fn process_category_file(
+    parsed_file: ParsedCategoryFile,
+    file_mapping: &FileMapping,
+    enrich: &BookmarkEnricher,
+) -> Result<RenderedCategoryLanding> {
+    let markdown_with_links = convert_obsidian_links(&parsed_file.markdown_body, file_mapping);
+    let html_body = convert_markdown_to_html(&markdown_with_links)?;
+
+    let fallback = html_body.clone();
+    let html_with_rich_bookmarks = enrich(html_body).await.unwrap_or_else(|e| {
+        warn!("Warning: Failed to convert simple bookmarks to rich bookmarks: {e}");
+        fallback
+    });
+    let html = if html_with_rich_bookmarks.trim().is_empty() {
+        build_fallback_category_landing_html(
+            parsed_file.category,
+            &parsed_file.front_matter.title,
+            parsed_file.front_matter.summary.as_deref(),
+        )
+    } else {
+        html_with_rich_bookmarks
+    };
+
+    Ok(RenderedCategoryLanding {
+        metadata: CategoryLandingMetadata {
+            category: parsed_file.category,
+            title: parsed_file.front_matter.title,
+            description: parsed_file.front_matter.summary,
+            updated_at: parsed_file.front_matter.updated,
+        },
+        html,
+    })
+}
+
+async fn render_category_landing(
+    parsed_file: ParsedCategoryFile,
+    file_mapping: &FileMapping,
+    enrich: BookmarkEnricher,
+) -> Result<RenderedCategoryLanding> {
+    process_category_file(parsed_file, file_mapping, &enrich).await
+}
+
 fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
     let category = front_matter
         .category
@@ -392,6 +503,36 @@ fn parse_page_key(front_matter: &ObsidianFrontMatter) -> Result<PageKey> {
         .as_deref()
         .ok_or_else(|| ObsidianError::Parse("Completed pages require a page key".to_string()))?;
     PageKey::new(page.trim().to_string()).map_err(|error| ObsidianError::Parse(error.to_string()))
+}
+
+fn build_fallback_category_landing_html(
+    category: Category,
+    title: &str,
+    description: Option<&str>,
+) -> String {
+    let heading = if title.trim().is_empty() {
+        category.display_name()
+    } else {
+        title.trim()
+    };
+
+    let body = description
+        .filter(|description| !description.trim().is_empty())
+        .map(str::trim)
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("{}カテゴリの記事一覧です。", category.display_name()));
+    let heading = html_escape(heading);
+    let body = html_escape(&body);
+
+    format!("<article><h1>{heading}</h1><p>{body}</p></article>")
+}
+
+fn html_escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
 }
 
 #[cfg(test)]
@@ -514,6 +655,83 @@ mod tests {
 
         let slug = mapping.get("sub/dir/test").unwrap();
         assert!(!slug.is_empty());
+    }
+
+    #[test]
+    fn test_ensure_unique_category_landings_rejects_duplicates() {
+        let valid_categories = vec![
+            ParsedCategoryFile {
+                category: Category::Tech,
+                markdown_body: "# Tech".to_string(),
+                front_matter: ObsidianFrontMatter {
+                    title: "Tech".to_string(),
+                    kind: ContentKind::Category,
+                    tags: None,
+                    summary: None,
+                    is_completed: true,
+                    priority: None,
+                    created: "2025-01-01T00:00:00+09:00".to_string(),
+                    updated: "2025-01-01T00:00:00+09:00".to_string(),
+                    category: Some("tech".to_string()),
+                    page: None,
+                },
+            },
+            ParsedCategoryFile {
+                category: Category::Tech,
+                markdown_body: "# Tech again".to_string(),
+                front_matter: ObsidianFrontMatter {
+                    title: "Tech Again".to_string(),
+                    kind: ContentKind::Category,
+                    tags: None,
+                    summary: None,
+                    is_completed: true,
+                    priority: None,
+                    created: "2025-01-01T00:00:00+09:00".to_string(),
+                    updated: "2025-01-01T00:00:00+09:00".to_string(),
+                    category: Some("tech".to_string()),
+                    page: None,
+                },
+            },
+        ];
+
+        let result = ensure_unique_category_landings(&valid_categories);
+
+        assert!(
+            matches!(result, Err(ObsidianError::Parse(message)) if message.contains("Duplicate category landing"))
+        );
+    }
+
+    #[test]
+    fn test_build_fallback_category_landing_html_uses_title_and_summary() {
+        let html = build_fallback_category_landing_html(
+            Category::Tech,
+            "Tech",
+            Some("Technology landing"),
+        );
+
+        assert!(html.contains("<h1>Tech</h1>"));
+        assert!(html.contains("<p>Technology landing</p>"));
+    }
+
+    #[test]
+    fn test_build_fallback_category_landing_html_falls_back_to_category_display_name() {
+        let html = build_fallback_category_landing_html(Category::Physics, "   ", None);
+
+        assert!(html.contains("<h1>物理学</h1>"));
+        assert!(html.contains("物理学カテゴリの記事一覧です。"));
+    }
+
+    #[test]
+    fn test_build_fallback_category_landing_html_escapes_frontmatter_text() {
+        let html = build_fallback_category_landing_html(
+            Category::Tech,
+            "<script>alert(1)</script>",
+            Some("\"quoted\" & <tag>"),
+        );
+
+        assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(html.contains("&quot;quoted&quot; &amp; &lt;tag&gt;"));
+        assert!(!html.contains("<script>alert(1)</script>"));
     }
 
     #[test]
