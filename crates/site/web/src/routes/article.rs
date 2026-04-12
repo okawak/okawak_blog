@@ -5,7 +5,7 @@ use crate::{SITE_NAME, build_site_url};
 use axum::http::StatusCode;
 use domain::ArticlePageDocument;
 #[cfg(feature = "ssr")]
-use domain::{Slug, build_article_page_document, find_article_summary};
+use domain::{Category, Slug, build_article_page_document, find_article_summary};
 use domain::{
     build_article_page_canonical_path, build_article_page_description, build_article_page_title,
 };
@@ -15,27 +15,34 @@ use leptos::prelude::*;
 #[cfg(feature = "ssr")]
 use leptos_axum::ResponseOptions;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
+#[cfg(feature = "ssr")]
+use std::str::FromStr;
 use stylance::import_style;
 
 import_style!(article_style, "article.module.scss");
 
 #[server]
 pub async fn get_article_page_document(
+    category: String,
     slug: String,
 ) -> Result<Option<ArticlePageDocument>, ServerFnError> {
     #[cfg(feature = "ssr")]
     {
         let artifact_reader = use_context::<DynArtifactReader>()
             .ok_or_else(|| ServerFnError::new("artifact reader context is missing"))?;
+        let category = match Category::from_str(&category) {
+            Ok(category) => category,
+            Err(_) => return Ok(None),
+        };
         let slug = match Slug::new(normalize_article_slug_param(&slug).to_string()) {
             Ok(slug) => slug,
             Err(_) => return Ok(None),
         };
         let article_index = artifact_reader.read_article_index().await?;
-        let Some(summary) = find_article_summary(&article_index, &slug) else {
+        let Some(summary) = find_article_summary(&article_index, &category, &slug) else {
             return Ok(None);
         };
-        let html = match artifact_reader.read_article_html(&slug).await {
+        let html = match artifact_reader.read_article_html(&category, &slug).await {
             Ok(html) => html,
             Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error.into()),
@@ -46,6 +53,7 @@ pub async fn get_article_page_document(
 
     #[cfg(not(feature = "ssr"))]
     {
+        let _ = category;
         let _ = slug;
         Err(ServerFnError::new(
             "get_article_page_document is only available during SSR",
@@ -108,15 +116,22 @@ fn ArticlePageContent(document: ArticlePageDocument) -> impl IntoView {
 #[component]
 pub fn ArticlePage() -> impl IntoView {
     let params = use_params_map();
-    let slug = move || params.with(|params: &ParamsMap| params.get("slug").unwrap_or_default());
+    let article_params = move || {
+        params.with(|params: &ParamsMap| {
+            (
+                params.get("category").unwrap_or_default(),
+                params.get("slug").unwrap_or_default(),
+            )
+        })
+    };
     let article_page = Resource::<Result<Option<ArticlePageDocument>, String>>::new(
-        slug,
-        move |slug| async move {
-            if slug.is_empty() {
+        article_params,
+        move |(category, slug)| async move {
+            if category.is_empty() || slug.is_empty() {
                 return Ok(None);
             }
 
-            get_article_page_document(slug)
+            get_article_page_document(category, slug)
                 .await
                 .map_err(|error| error.to_string())
         },

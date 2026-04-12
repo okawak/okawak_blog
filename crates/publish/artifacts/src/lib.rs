@@ -107,12 +107,13 @@ pub fn build_site_artifacts(
 
 pub fn write_article_page(
     site_directories: &SiteDirectories,
+    category: Category,
     slug: &Slug,
     html: &str,
 ) -> Result<PathBuf> {
-    let output_file_path = site_directories
-        .articles_dir
-        .join(format!("{}.html", slug.as_str()));
+    let article_dir = site_directories.articles_dir.join(category.as_str());
+    fs::create_dir_all(&article_dir)?;
+    let output_file_path = article_dir.join(format!("{}.html", slug.as_str()));
     fs::write(&output_file_path, html)?;
     Ok(output_file_path)
 }
@@ -287,6 +288,7 @@ mod tests {
 
         let article_path = write_article_page(
             &site_directories,
+            Category::Tech,
             &article_meta.slug,
             "<h1>Artifact Test</h1>",
         )
@@ -296,6 +298,13 @@ mod tests {
         write_site_artifacts(&site_directories, &site_artifacts).unwrap();
 
         assert!(article_path.exists());
+        assert_eq!(
+            article_path,
+            site_directories
+                .articles_dir
+                .join("tech")
+                .join("artifact00001.html")
+        );
         assert!(category_page_path.exists());
         assert!(
             site_directories.articles_dir.join("index.json").exists(),

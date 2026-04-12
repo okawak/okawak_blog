@@ -27,17 +27,19 @@ pub async fn get_home_page(
 }
 
 pub async fn get_article_page(
-    Path(slug): Path<String>,
+    Path((category, slug)): Path<(String, String)>,
     Extension(artifact_reader): Extension<DynArtifactReader>,
 ) -> Result<Json<ArticlePageDocument>, StatusCode> {
+    let category = Category::from_str(&category).map_err(|_| StatusCode::NOT_FOUND)?;
     let slug = Slug::new(slug).map_err(|_| StatusCode::NOT_FOUND)?;
     let article_index = artifact_reader
         .read_article_index()
         .await
         .map_err(map_infra_error)?;
-    let summary = find_article_summary(&article_index, &slug).ok_or(StatusCode::NOT_FOUND)?;
+    let summary =
+        find_article_summary(&article_index, &category, &slug).ok_or(StatusCode::NOT_FOUND)?;
     let html = artifact_reader
-        .read_article_html(&slug)
+        .read_article_html(&category, &slug)
         .await
         .map_err(map_infra_error)?;
     let page = build_article_page_document(summary, &html)
@@ -118,7 +120,7 @@ mod tests {
         write_fixture_site(temp_dir.path());
 
         let Json(page) = get_article_page(
-            Path("sample0000001".to_string()),
+            Path(("tech".to_string(), "sample0000001".to_string())),
             Extension(Arc::new(LocalArtifactReader::new(temp_dir.path()))),
         )
         .await
@@ -165,10 +167,10 @@ mod tests {
     async fn test_get_article_page_returns_not_found_when_html_artifact_is_missing() {
         let temp_dir = TempDir::new().unwrap();
         write_fixture_site(temp_dir.path());
-        fs::remove_file(temp_dir.path().join("articles/sample0000001.html")).unwrap();
+        fs::remove_file(temp_dir.path().join("articles/tech/sample0000001.html")).unwrap();
 
         let result = get_article_page(
-            Path("sample0000001".to_string()),
+            Path(("tech".to_string(), "sample0000001".to_string())),
             Extension(Arc::new(LocalArtifactReader::new(temp_dir.path()))),
         )
         .await;

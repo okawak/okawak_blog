@@ -29,7 +29,7 @@ pub trait ArtifactReader: Send + Sync {
     async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument>;
     async fn read_category_html(&self, category: &Category) -> Result<String>;
     async fn read_site_metadata(&self) -> Result<SiteMetadataDocument>;
-    async fn read_article_html(&self, slug: &Slug) -> Result<String>;
+    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<String>;
     async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument>;
 }
 
@@ -84,10 +84,12 @@ impl ArtifactReader for LocalArtifactReader {
         self.read_json("metadata/site.json").await
     }
 
-    async fn read_article_html(&self, slug: &Slug) -> Result<String> {
-        Ok(tokio::fs::read_to_string(
-            self.artifact_path(&format!("articles/{}.html", slug.as_str())),
-        )
+    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<String> {
+        Ok(tokio::fs::read_to_string(self.artifact_path(&format!(
+            "articles/{}/{}.html",
+            category.as_str(),
+            slug.as_str()
+        )))
         .await?)
     }
 
@@ -193,9 +195,13 @@ impl ArtifactReader for S3ArtifactReader {
         self.read_json("metadata/site.json").await
     }
 
-    async fn read_article_html(&self, slug: &Slug) -> Result<String> {
-        self.read_text(&format!("articles/{}.html", slug.as_str()))
-            .await
+    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<String> {
+        self.read_text(&format!(
+            "articles/{}/{}.html",
+            category.as_str(),
+            slug.as_str()
+        ))
+        .await
     }
 
     async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
@@ -329,7 +335,12 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        fs::write(root.join("articles/intro00000001.html"), "<h1>Intro</h1>").unwrap();
+        fs::create_dir_all(root.join("articles/tech")).unwrap();
+        fs::write(
+            root.join("articles/tech/intro00000001.html"),
+            "<h1>Intro</h1>",
+        )
+        .unwrap();
         fs::write(
             root.join("pages/about.json"),
             serde_json::to_string_pretty(&PageArtifactDocument {
@@ -355,7 +366,10 @@ mod tests {
         let category_html = reader.read_category_html(&Category::Tech).await.unwrap();
         let metadata = reader.read_site_metadata().await.unwrap();
         let html = reader
-            .read_article_html(&Slug::new("intro00000001".to_string()).unwrap())
+            .read_article_html(
+                &Category::Tech,
+                &Slug::new("intro00000001".to_string()).unwrap(),
+            )
             .await
             .unwrap();
         let page = reader

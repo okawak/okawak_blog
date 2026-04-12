@@ -20,12 +20,8 @@ static SAFE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
 static HREF_ATTR_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"href="([^"]*)""#).expect("Invalid href regex"));
 
-/// Mapping from an Obsidian file path without extension to a published slug.
+/// Mapping from an Obsidian file path without extension to a published article href.
 pub type FileMapping = HashMap<String, String>;
-
-fn generate_article_href(slug: &str) -> String {
-    format!("/articles/{slug}")
-}
 
 pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     let mut options = Options::empty();
@@ -229,15 +225,15 @@ pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> Stri
                 (link_content.trim(), link_content.trim())
             };
 
-            let href = if let Some(slug) = file_mapping.get(link_target) {
-                generate_article_href(slug)
+            let href = if let Some(href) = file_mapping.get(link_target) {
+                href.clone()
             } else {
                 let mut found = false;
                 let mut result_href = format!("/{link_target}");
 
-                for (key, slug) in file_mapping {
+                for (key, href) in file_mapping {
                     if key.ends_with(&format!("/{link_target}")) || key == link_target {
-                        result_href = generate_article_href(slug);
+                        result_href = href.clone();
                         found = true;
                         break;
                     }
@@ -308,24 +304,24 @@ mod tests {
     #[rstest]
     fn test_obsidian_links_conversion() {
         let mut file_mapping = FileMapping::new();
-        file_mapping.insert("notes/another-note".to_string(), "abc123def".to_string());
-        file_mapping.insert("docs/filename".to_string(), "xyz789abc".to_string());
-        file_mapping.insert("Another Note".to_string(), "abc123def".to_string());
-        file_mapping.insert("filename".to_string(), "xyz789abc".to_string());
+        file_mapping.insert(
+            "notes/another-note".to_string(),
+            "/tech/abc123def".to_string(),
+        );
+        file_mapping.insert("docs/filename".to_string(), "/daily/xyz789abc".to_string());
+        file_mapping.insert("Another Note".to_string(), "/tech/abc123def".to_string());
+        file_mapping.insert("filename".to_string(), "/daily/xyz789abc".to_string());
 
         let result =
             convert_obsidian_links("Check out [[Another Note]] for more info.", &file_mapping);
         assert_eq!(
             result,
-            "Check out [Another Note](/articles/abc123def) for more info."
+            "Check out [Another Note](/tech/abc123def) for more info."
         );
 
         let result =
             convert_obsidian_links("See [[filename|Custom Display Text]] here.", &file_mapping);
-        assert_eq!(
-            result,
-            "See [Custom Display Text](/articles/xyz789abc) here."
-        );
+        assert_eq!(result, "See [Custom Display Text](/daily/xyz789abc) here.");
 
         let result = convert_obsidian_links("Link to [[nonexistent]] file.", &file_mapping);
         assert_eq!(result, "Link to [nonexistent](/nonexistent) file.");
@@ -367,15 +363,15 @@ This is a test with [[Another Article|link]] and **bold** text.
 - Regular item"#;
 
         let mut file_mapping = FileMapping::new();
-        file_mapping.insert("Another Article".to_string(), "def456".to_string());
-        file_mapping.insert("Reference Note".to_string(), "ghi789".to_string());
+        file_mapping.insert("Another Article".to_string(), "/tech/def456".to_string());
+        file_mapping.insert("Reference Note".to_string(), "/daily/ghi789".to_string());
 
         let with_html_links = convert_obsidian_links(markdown_with_obsidian_links, &file_mapping);
         let html = convert_markdown_to_html(&with_html_links).unwrap();
 
         assert!(html.contains("<h1>My Article</h1>"));
-        assert!(html.contains("<a href=\"/articles/def456\">link</a>"));
-        assert!(html.contains("<a href=\"/articles/ghi789\">Reference Note</a>"));
+        assert!(html.contains("<a href=\"/tech/def456\">link</a>"));
+        assert!(html.contains("<a href=\"/daily/ghi789\">Reference Note</a>"));
         assert!(html.contains("<strong>bold</strong>"));
         assert!(html.contains("<ul>"));
     }
@@ -401,10 +397,10 @@ This is a test with [[Another Article|link]] and **bold** text.
     #[rstest]
     fn test_markdown_link_escaping() {
         let mut file_mapping = FileMapping::new();
-        file_mapping.insert("File with <script>".to_string(), "abc123".to_string());
+        file_mapping.insert("File with <script>".to_string(), "/tech/abc123".to_string());
 
         let result = convert_obsidian_links("[[File with <script>|Display & test]]", &file_mapping);
-        assert_eq!(result, "[Display & test](/articles/abc123)");
+        assert_eq!(result, "[Display & test](/tech/abc123)");
 
         let result =
             convert_obsidian_links("[[File \"quoted\"|Text with 'quotes']]", &file_mapping);

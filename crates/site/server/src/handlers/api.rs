@@ -16,7 +16,10 @@ pub fn create_api_router(artifact_reader: DynArtifactReader) -> Router<LeptosOpt
     Router::new()
         .route("/articles", get(articles::list_articles))
         .route("/page/home", get(pages::get_home_page))
-        .route("/page/articles/{slug}", get(pages::get_article_page))
+        .route(
+            "/page/articles/{category}/{slug}",
+            get(pages::get_article_page),
+        )
         .route("/page/categories/{category}", get(pages::get_category_page))
         .route("/page/pages/{page}", get(pages::get_static_page))
         .layer(Extension(artifact_reader))
@@ -80,7 +83,7 @@ mod tests {
 
         let (status, document): (StatusCode, ArticlePageDocument) = request_json(
             create_test_router(temp_dir.path()),
-            "/page/articles/sample0000001",
+            "/page/articles/tech/sample0000001",
         )
         .await;
 
@@ -97,7 +100,7 @@ mod tests {
         let response = create_test_router(temp_dir.path())
             .oneshot(
                 Request::builder()
-                    .uri("/page/articles/missing000001")
+                    .uri("/page/articles/tech/missing000001")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -144,12 +147,12 @@ mod tests {
     async fn test_api_router_returns_not_found_for_missing_article_html_artifact() {
         let temp_dir = TempDir::new().unwrap();
         write_fixture_site(temp_dir.path());
-        fs::remove_file(temp_dir.path().join("articles/sample0000001.html")).unwrap();
+        fs::remove_file(temp_dir.path().join("articles/tech/sample0000001.html")).unwrap();
 
         let response = create_test_router(temp_dir.path())
             .oneshot(
                 Request::builder()
-                    .uri("/page/articles/sample0000001")
+                    .uri("/page/articles/tech/sample0000001")
                     .body(Body::empty())
                     .unwrap(),
             )

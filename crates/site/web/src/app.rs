@@ -101,8 +101,8 @@ pub fn App() -> impl IntoView {
                     }>
                         <Route path=path!("") view=HomePage />
                         <Route path=path!("about") view=AboutPage />
-                        <Route path=path!("articles/:slug") view=ArticlePage />
-                        <Route path=path!("categories/:category") view=CategoryPage />
+                        <Route path=path!(":category/:slug") view=ArticlePage />
+                        <Route path=path!(":category") view=CategoryPage />
                     </FlatRoutes>
                 </main>
             </Router>

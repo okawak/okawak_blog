@@ -7,7 +7,8 @@ use domain::CategoryPageDocument;
 #[cfg(feature = "ssr")]
 use domain::{Category, build_category_page_document};
 use domain::{
-    build_category_page_canonical_path, build_category_page_description, build_category_page_title,
+    build_article_path, build_category_page_canonical_path, build_category_page_description,
+    build_category_page_title,
 };
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
@@ -78,7 +79,7 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
                 .articles
                 .into_iter()
                 .map(|article| {
-                    let href = format!("/articles/{}", article.slug.as_str());
+                    let href = build_article_path(&article.category, &article.slug);
                     let title = article.title.as_str().to_string();
                     let description = article
                         .description

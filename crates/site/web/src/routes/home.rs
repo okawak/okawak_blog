@@ -3,8 +3,8 @@ use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
 use domain::build_home_page_document;
 use domain::{
-    HomePageDocument, SiteArticleCard, build_home_page_canonical_path, build_home_page_description,
-    build_home_page_title,
+    HomePageDocument, SiteArticleCard, build_article_path, build_category_path,
+    build_home_page_canonical_path, build_home_page_description, build_home_page_title,
 };
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -45,7 +45,7 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
         .categories
         .into_iter()
         .map(|category| {
-            let href = format!("/categories/{}", category.category.as_str());
+            let href = build_category_path(&category.category);
             view! {
                 <li class=home_style::category_chip>
                     <A href={href} {..} class=home_style::category_link>
@@ -85,7 +85,7 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
 
 #[component]
 fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
-    let slug = article.slug.as_str().to_string();
+    let article_href = build_article_path(&article.category, &article.slug);
     let title = article.title.as_str().to_string();
     let category = article.category_display_name;
     let description = article
@@ -95,7 +95,6 @@ fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
     let has_tags = !tags.is_empty();
     let created_at = article.created_at;
     let updated_at = article.updated_at;
-    let article_href = format!("/articles/{slug}");
 
     view! {
         <A href={article_href} {..} class=home_style::article_card_link>
