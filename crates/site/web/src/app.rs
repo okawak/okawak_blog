@@ -42,12 +42,6 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     integrity="sha384-cMkvdD8LoxVzGF/RPUKAcvmm49FQ0oxwDF3BGKtDXcEc+T1b2N+teh/OJfpU0jr6"
                     crossorigin="anonymous"
                 ></script>
-                <script
-                    defer
-                    src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/contrib/auto-render.min.js"
-                    integrity="sha384-hCXGrW6PitJEwbkoStFjeJxv+fSOOQKOPbJxSfM6G5sWZjAyWhXiTIIAmQqnlLlh"
-                    crossorigin="anonymous"
-                ></script>
                 <script>
                     {r#"
                     window.okawakRenderMath = function(root) {
