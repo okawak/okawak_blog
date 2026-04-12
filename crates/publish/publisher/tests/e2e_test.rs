@@ -1,27 +1,10 @@
+mod support;
+
 use indoc::indoc;
 use publisher::{Config, run_main, slug};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
+use support::collect_html_files;
 use tempfile::TempDir;
-
-fn collect_html_files(root: &Path) -> Vec<PathBuf> {
-    let mut html_files = Vec::new();
-
-    if let Ok(entries) = fs::read_dir(root) {
-        for entry in entries.filter_map(Result::ok) {
-            let path = entry.path();
-            if path.is_dir() {
-                html_files.extend(collect_html_files(&path));
-            } else if path.extension().is_some_and(|ext| ext == "html") {
-                html_files.push(path);
-            }
-        }
-    }
-
-    html_files
-}
 
 /// End-to-end test that simulates a realistic Obsidian vault.
 #[tokio::test]

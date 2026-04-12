@@ -1,25 +1,11 @@
+mod support;
+
 use indoc::indoc;
 use publisher::{Config, offline_bookmark_enricher, run_main, run_with_enricher};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use support::collect_html_files;
 use tempfile::TempDir;
-
-fn collect_html_files(root: &Path) -> Vec<PathBuf> {
-    let mut html_files = Vec::new();
-
-    if let Ok(entries) = fs::read_dir(root) {
-        for entry in entries.filter_map(Result::ok) {
-            let path = entry.path();
-            if path.is_dir() {
-                html_files.extend(collect_html_files(&path));
-            } else if path.extension().is_some_and(|ext| ext == "html") {
-                html_files.push(path);
-            }
-        }
-    }
-
-    html_files
-}
 
 #[tokio::test]
 async fn test_run_main_with_empty_directory() {
