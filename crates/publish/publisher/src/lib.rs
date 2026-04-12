@@ -110,6 +110,13 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
                             error!("Error processing {}: {}", file_path.display(), e);
                         }
                     },
+                    ContentKind::Home => match process_valid_home_file(parsed_file) {
+                        Ok(parsed_file) => valid_pages.push(parsed_file),
+                        Err(e) => {
+                            error_count += 1;
+                            error!("Error processing {}: {}", file_path.display(), e);
+                        }
+                    },
                     ContentKind::Category => match process_valid_category_file(parsed_file) {
                         Ok(parsed_file) => valid_categories.push(parsed_file),
                         Err(e) => {
@@ -117,14 +124,6 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
                             error!("Error processing {}: {}", file_path.display(), e);
                         }
                     },
-                    kind => {
-                        skipped_count += 1;
-                        info!(
-                            "Skipped (kind not implemented yet): {} [{}]",
-                            file_path.display(),
-                            kind
-                        );
-                    }
                 }
             }
             Ok(_) => {
@@ -285,6 +284,15 @@ fn process_valid_article_file(
 fn process_valid_page_file(parsed_file: ParsedObsidianFile) -> Result<ParsedPageFile> {
     Ok(ParsedPageFile {
         page: parse_page_key(&parsed_file.front_matter)?,
+        markdown_body: parsed_file.markdown_body,
+        front_matter: parsed_file.front_matter,
+    })
+}
+
+fn process_valid_home_file(parsed_file: ParsedObsidianFile) -> Result<ParsedPageFile> {
+    Ok(ParsedPageFile {
+        page: PageKey::new("home".to_string())
+            .map_err(|error| ObsidianError::Parse(error.to_string()))?,
         markdown_body: parsed_file.markdown_body,
         front_matter: parsed_file.front_matter,
     })

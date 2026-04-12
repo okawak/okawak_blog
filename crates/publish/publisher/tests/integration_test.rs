@@ -182,6 +182,48 @@ async fn test_run_main_with_static_page_file() {
 }
 
 #[tokio::test]
+async fn test_run_main_with_home_fragment_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let obsidian_dir = temp_dir.path().join("obsidian");
+    let output_dir = temp_dir.path().join("dist");
+
+    fs::create_dir_all(&obsidian_dir).unwrap();
+
+    let page_content = indoc! {r#"
+        ---
+        title: "Home"
+        kind: home
+        summary: "Home intro"
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        is_completed: true
+        ---
+
+        # Welcome
+
+        This fragment is generated from markdown.
+    "#};
+
+    let page_file = obsidian_dir.join("home.md");
+    fs::write(&page_file, page_content).unwrap();
+
+    let config = Config {
+        obsidian_dir,
+        output_dir: output_dir.clone(),
+    };
+
+    let result = run_main(&config).await;
+    assert!(result.is_ok());
+
+    let page_document =
+        fs::read_to_string(output_dir.join("site").join("pages").join("home.json")).unwrap();
+
+    assert!(page_document.contains("\"page\": \"home\""));
+    assert!(page_document.contains("\"title\": \"Home\""));
+    assert!(page_document.contains("This fragment is generated from markdown."));
+}
+
+#[tokio::test]
 async fn test_run_main_with_category_landing_file() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
