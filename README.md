@@ -9,6 +9,7 @@ https://www.okawak.net
 ## 関連文書
 
 - [docs/architecture/architecture.md](./docs/architecture/architecture.md): 現行アーキテクチャと artifact 契約
+- [docs/content/obsidian-template.md](./docs/content/obsidian-template.md): Obsidian Markdown のテンプレート
 - GitHub Issues / PRs: 実装計画、進捗、作業単位の管理
 
 ## このリポジトリが担うこと

@@ -221,6 +221,8 @@ Publish/
 
 `section_path` は category page 上の grouped navigation に使う。Phase 3 では URL には含めない。
 
+Obsidian 側で実際に書く frontmatter とディレクトリ構造のテンプレートは [docs/content/obsidian-template.md](../content/obsidian-template.md) を参照する。
+
 ## Artifact 契約
 
 publisher は次の構造で `site/` を生成する。
