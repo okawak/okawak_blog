@@ -3,15 +3,6 @@ use pulldown_cmark::{Event, Options, Parser, html};
 use regex::Regex;
 use std::{collections::HashMap, sync::LazyLock};
 
-/// Net bytes added per `$…$` replacement: 34-byte wrapper minus 2-byte delimiters.
-const KATEX_INLINE_OVERHEAD: usize = 32;
-
-/// Net bytes added per `$$…$$` replacement: 33-byte wrapper minus 4-byte delimiters.
-const KATEX_DISPLAY_OVERHEAD: usize = 29;
-
-/// Extra capacity per `apply_katex_math` call; sized for ~6 inline + 2 display expressions.
-const KATEX_EXTRA_CAPACITY: usize = KATEX_INLINE_OVERHEAD * 6 + KATEX_DISPLAY_OVERHEAD * 2;
-
 /// Allow-list regex for bookmark blocks; anything beyond `<a href="URL">TITLE</a>` is escaped.
 static SAFE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"\A\s*<div class="bookmark">\s*<a href="[^"]+">[^<]*</a>\s*</div>\s*\z"#)
@@ -24,6 +15,8 @@ static HREF_ATTR_RE: LazyLock<Regex> =
 pub type FileMapping = HashMap<String, String>;
 
 pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
+    let (markdown_content, katex_placeholders) = extract_katex_placeholders(markdown_content);
+
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_FOOTNOTES);
@@ -31,14 +24,212 @@ pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     options.insert(Options::ENABLE_TASKLISTS);
     options.insert(Options::ENABLE_SMART_PUNCTUATION);
 
-    let parser = Parser::new_ext(markdown_content, options);
+    let parser = Parser::new_ext(&markdown_content, options);
     let mut html_output = String::with_capacity(markdown_content.len() * 2);
     html::push_html(&mut html_output, sanitize_html(parser).into_iter());
     let html_output = sanitize_anchor_hrefs(&html_output);
+    let html_with_katex = replace_katex_placeholders(&html_output, &katex_placeholders);
+    let html_with_strong = repair_unparsed_strong_markers(&html_with_katex);
 
-    let html_with_katex = process_katex_math(&html_output);
+    Ok(html_with_strong)
+}
 
-    Ok(html_with_katex)
+#[derive(Clone, Copy)]
+enum KatexMode {
+    Inline,
+    Display,
+}
+
+struct KatexPlaceholder {
+    token: String,
+    content: String,
+    mode: KatexMode,
+}
+
+fn extract_katex_placeholders(markdown: &str) -> (String, Vec<KatexPlaceholder>) {
+    let mut placeholders = Vec::new();
+    let mut output = String::with_capacity(markdown.len());
+    let mut chars = markdown.chars().peekable();
+    let mut in_fenced_code = false;
+    let mut in_inline_code = false;
+
+    while let Some(ch) = chars.next() {
+        if ch == '`' {
+            let mut tick_count = 1;
+            while chars.peek() == Some(&'`') {
+                chars.next();
+                tick_count += 1;
+            }
+
+            if tick_count >= 3 {
+                in_fenced_code = !in_fenced_code;
+            } else if !in_fenced_code {
+                in_inline_code = !in_inline_code;
+            }
+
+            for _ in 0..tick_count {
+                output.push('`');
+            }
+            continue;
+        }
+
+        if in_fenced_code || in_inline_code {
+            output.push(ch);
+            continue;
+        }
+
+        if ch != '$' {
+            output.push(ch);
+            continue;
+        }
+
+        if chars.peek() == Some(&'$') {
+            chars.next();
+            if let Some(content) = take_until_delimiter(&mut chars, "$$") {
+                let token = format!("KATEXDISPLAYTOKEN{:08}END", placeholders.len());
+                placeholders.push(KatexPlaceholder {
+                    token: token.clone(),
+                    content,
+                    mode: KatexMode::Display,
+                });
+                output.push_str(&token);
+            } else {
+                output.push_str("$$");
+            }
+            continue;
+        }
+
+        if let Some(content) = take_until_delimiter(&mut chars, "$") {
+            let token = format!("KATEXINLINETOKEN{:08}END", placeholders.len());
+            placeholders.push(KatexPlaceholder {
+                token: token.clone(),
+                content,
+                mode: KatexMode::Inline,
+            });
+            output.push_str(&token);
+        } else {
+            output.push('$');
+        }
+    }
+
+    (output, placeholders)
+}
+
+fn take_until_delimiter(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    delimiter: &str,
+) -> Option<String> {
+    let mut content = String::new();
+
+    while let Some(ch) = chars.next() {
+        if delimiter == "$$" && ch == '$' && chars.peek() == Some(&'$') {
+            chars.next();
+            return Some(content);
+        }
+
+        if delimiter == "$" && ch == '$' {
+            return Some(content);
+        }
+
+        content.push(ch);
+    }
+
+    None
+}
+
+fn replace_katex_placeholders(html: &str, placeholders: &[KatexPlaceholder]) -> String {
+    let mut result = html.to_string();
+
+    for placeholder in placeholders {
+        let content = normalize_katex_content(&placeholder.content);
+        let replacement = match placeholder.mode {
+            KatexMode::Inline => format!(r#"<span class="katex-inline">{content}</span>"#),
+            KatexMode::Display => format!(r#"<span class="katex-display">{content}</span>"#),
+        };
+
+        result = result.replace(&placeholder.token, &replacement);
+    }
+
+    result
+}
+
+fn normalize_katex_content(content: &str) -> String {
+    content
+        .chars()
+        .filter(|ch| {
+            !matches!(
+                ch,
+                '\u{2009}'
+                    | '\u{200A}'
+                    | '\u{200B}'
+                    | '\u{200C}'
+                    | '\u{200D}'
+                    | '\u{2061}'
+                    | '\u{202F}'
+                    | '\u{2060}'
+                    | '\u{FEFF}'
+            )
+        })
+        .collect()
+}
+
+fn repair_unparsed_strong_markers(html: &str) -> String {
+    let mut result = String::with_capacity(html.len());
+    let mut remaining = html;
+
+    loop {
+        let code_start = [remaining.find("<pre"), remaining.find("<code")]
+            .into_iter()
+            .flatten()
+            .min();
+
+        match code_start {
+            None => {
+                result.push_str(&apply_unparsed_strong_markers(remaining));
+                break;
+            }
+            Some(start) => {
+                result.push_str(&apply_unparsed_strong_markers(&remaining[..start]));
+
+                let close_tag = if remaining[start..].starts_with("<pre") {
+                    "</pre>"
+                } else {
+                    "</code>"
+                };
+
+                match remaining[start..].find(close_tag) {
+                    Some(close_offset) => {
+                        let end = start + close_offset + close_tag.len();
+                        result.push_str(&remaining[start..end]);
+                        remaining = &remaining[end..];
+                    }
+                    None => {
+                        result.push_str(&remaining[start..]);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    result
+}
+
+fn apply_unparsed_strong_markers(html: &str) -> String {
+    let mut result = html.to_string();
+
+    while let Some(start) = result.find("**") {
+        if let Some(end) = result[start + 2..].find("**") {
+            let end = start + 2 + end;
+            let content = result[start + 2..end].to_string();
+            let replacement = format!("<strong>{content}</strong>");
+            result.replace_range(start..end + 2, &replacement);
+        } else {
+            break;
+        }
+    }
+
+    result
 }
 
 fn sanitize_anchor_hrefs(html: &str) -> String {
@@ -126,84 +317,6 @@ fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> 
     // Unclosed bookmark: flush buffer as escaped text.
     if !bookmark_buffer.is_empty() {
         result.push(Event::Text(bookmark_buffer.into()));
-    }
-
-    result
-}
-
-/// Replaces `$…$` / `$$…$$` with KaTeX HTML wrappers, skipping `<code>` / `<pre>` blocks.
-fn process_katex_math(html_content: &str) -> String {
-    let mut result = String::with_capacity(html_content.len() + KATEX_EXTRA_CAPACITY);
-    let mut remaining = html_content;
-
-    loop {
-        let code_start = [remaining.find("<pre"), remaining.find("<code")]
-            .into_iter()
-            .flatten()
-            .min();
-
-        match code_start {
-            None => {
-                result.push_str(&apply_katex_math(remaining));
-                break;
-            }
-            Some(start) => {
-                result.push_str(&apply_katex_math(&remaining[..start]));
-
-                let close_tag = if remaining[start..].starts_with("<pre") {
-                    "</pre>"
-                } else {
-                    "</code>"
-                };
-
-                match remaining[start..].find(close_tag) {
-                    Some(close_offset) => {
-                        let end = start + close_offset + close_tag.len();
-                        result.push_str(&remaining[start..end]); // verbatim
-                        remaining = &remaining[end..];
-                    }
-                    None => {
-                        result.push_str(&remaining[start..]); // verbatim
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    result
-}
-
-/// Replaces `$$...$$` and `$...$` with KaTeX class wrappers.
-/// Only call on fragments with no `<code>` / `<pre>`; use `process_katex_math` for full HTML.
-fn apply_katex_math(text: &str) -> String {
-    let mut result = String::with_capacity(text.len() + KATEX_EXTRA_CAPACITY);
-    result.push_str(text);
-
-    // Block math first to avoid matching the inner `$` of `$$`.
-    while let Some(start) = result.find("$$") {
-        if let Some(end) = result[start + 2..].find("$$") {
-            let math_content = result[start + 2..start + 2 + end].to_string();
-            let replacement = format!(r#"<div class="katex-display">{math_content}</div>"#);
-            result.replace_range(start..start + 2 + end + 2, &replacement);
-        } else {
-            break;
-        }
-    }
-
-    // Inline math.
-    let mut pos = 0;
-    while let Some(start) = result[pos..].find('$') {
-        let actual_start = pos + start;
-        if let Some(end) = result[actual_start + 1..].find('$') {
-            let actual_end = actual_start + 1 + end;
-            let math_content = result[actual_start + 1..actual_end].to_string();
-            let replacement = format!(r#"<span class="katex-inline">{math_content}</span>"#);
-            result.replace_range(actual_start..actual_end + 1, &replacement);
-            pos = actual_start + replacement.len();
-        } else {
-            break;
-        }
     }
 
     result
@@ -379,19 +492,49 @@ This is a test with [[Another Article|link]] and **bold** text.
     #[rstest]
     #[case::inline_math(
         "Here is some inline math: $x^2 + y^2 = z^2$ and more text.",
-        "Here is some inline math: <span class=\"katex-inline\">x^2 + y^2 = z^2</span> and more text."
+        "<p>Here is some inline math: <span class=\"katex-inline\">x^2 + y^2 = z^2</span> and more text.</p>\n"
     )]
     #[case::display_math(
         "Here is display math:\n$$\\int_0^1 x^2 dx = \\frac{1}{3}$$\nEnd of math.",
-        "Here is display math:\n<div class=\"katex-display\">\\int_0^1 x^2 dx = \\frac{1}{3}</div>\nEnd of math."
+        "<p>Here is display math:\n<span class=\"katex-display\">\\int_0^1 x^2 dx = \\frac{1}{3}</span>\nEnd of math.</p>\n"
     )]
     #[case::mixed_math(
         "Inline $a+b$ and display $$c+d$$ math.",
-        "Inline <span class=\"katex-inline\">a+b</span> and display <div class=\"katex-display\">c+d</div> math."
+        "<p>Inline <span class=\"katex-inline\">a+b</span> and display <span class=\"katex-display\">c+d</span> math.</p>\n"
     )]
     fn test_katex_math_processing(#[case] input: &str, #[case] expected: &str) {
-        let result = super::process_katex_math(input);
+        let result = convert_markdown_to_html(input).unwrap();
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_bold_text_around_math_is_preserved() {
+        let markdown = "この時に使う考え方が、**「サンプリング」**と**「モデル化」**です。\n\nその身長を**$x = (x_1, x_2)$**と書きます。";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result.contains("<strong>「サンプリング」<strong>と</strong>「モデル化」</strong>"),
+            "unexpected html:\n{result}"
+        );
+        assert!(
+            result.contains("<strong><span class=\"katex-inline\">x = (x_1, x_2)</span></strong>")
+        );
+        assert!(!result.contains("**"));
+    }
+
+    #[test]
+    fn test_katex_content_normalization_removes_invisible_unicode() {
+        let markdown = "inline $x\u{200B} + y\u{FEFF}$ and $$a\u{200C} + b\u{200D}$$";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(result.contains(r#"<span class="katex-inline">x + y</span>"#));
+        assert!(result.contains(r#"<span class="katex-display">a + b</span>"#));
+        assert!(!result.contains('\u{200B}'));
+        assert!(!result.contains('\u{200C}'));
+        assert!(!result.contains('\u{200D}'));
+        assert!(!result.contains('\u{FEFF}'));
     }
 
     #[rstest]
@@ -729,23 +872,22 @@ This is a test with [[Another Article|link]] and **bold** text.
         );
     }
 
-    /// Verify `process_katex_math` directly on raw HTML fragments that mix
-    /// math-bearing text with code elements.
     #[rstest]
-    #[case::math_before_code(
-        "Inline <span>$a$</span> then <code>$b$</code>",
-        "Inline <span><span class=\"katex-inline\">a</span></span> then <code>$b$</code>"
-    )]
-    #[case::math_after_code(
-        "<code>$b$</code> then $a$",
-        "<code>$b$</code> then <span class=\"katex-inline\">a</span>"
-    )]
-    #[case::pre_block_skipped(
-        "$x$ <pre><code>$y$</code></pre> $z$",
-        "<span class=\"katex-inline\">x</span> <pre><code>$y$</code></pre> <span class=\"katex-inline\">z</span>"
-    )]
-    fn test_process_katex_math_skips_code_elements(#[case] input: &str, #[case] expected: &str) {
-        let result = super::process_katex_math(input);
-        assert_eq!(result, expected);
+    #[case::inline_code("The formula $a+b$ is useful. Code: `$not_math$`.")]
+    #[case::fenced_code(indoc! {r#"
+        Before $a$.
+
+        ```rust
+        let literal = "$not_math$";
+        ```
+
+        After $b$.
+    "#})]
+    fn test_katex_placeholders_skip_code(#[case] markdown: &str) {
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(result.contains("katex-inline"));
+        assert!(result.contains("$not_math$"));
+        assert!(!result.contains("<span class=\"katex-inline\">not_math</span>"));
     }
 }

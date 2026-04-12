@@ -9,6 +9,7 @@ use leptos::prelude::*;
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
     components::{FlatRoutes, Route, Router},
+    hooks::use_location,
     path,
 };
 
@@ -47,16 +48,43 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     integrity="sha384-hCXGrW6PitJEwbkoStFjeJxv+fSOOQKOPbJxSfM6G5sWZjAyWhXiTIIAmQqnlLlh"
                     crossorigin="anonymous"
                 ></script>
-                // <script>
-                // document.addEventListener("DOMContentLoaded", function() {
-                // renderMathInElement(document.body, {
-                // delimiters: [
-                // {left: "$$", right: "$$", display: true},
-                // {left: "$", right: "$", display: false}
-                // ],
-                // });
-                // })
-                // </script>
+                <script>
+                    {r#"
+                    window.okawakRenderMath = function(root) {
+                    if (!window.katex) return;
+                    
+                    const scope = root || document.body;
+                     const normalizeExpression = (value) =>
+                       (value || '').replace(/[\u2009\u200A\u200B\u200C\u200D\u2061\u202F\u2060\uFEFF]/g, '');
+                    
+                    scope.querySelectorAll('.katex-inline').forEach((element) => {
+                      if (element.dataset.katexRendered === 'true') return;
+                    
+                      const expression = normalizeExpression(element.textContent);
+                      window.katex.render(expression, element, {
+                        displayMode: false,
+                        throwOnError: false,
+                      });
+                    element.dataset.katexRendered = 'true';
+                    });
+                    
+                    scope.querySelectorAll('.katex-display').forEach((element) => {
+                      if (element.dataset.katexRendered === 'true') return;
+                    
+                      const expression = normalizeExpression(element.textContent);
+                      window.katex.render(expression, element, {
+                        displayMode: true,
+                        throwOnError: false,
+                      });
+                    element.dataset.katexRendered = 'true';
+                    });
+                    };
+                    
+                    document.addEventListener('DOMContentLoaded', function() {
+                    window.okawakRenderMath();
+                    });
+                    "#}
+                </script>
 
                 // Load highlight.js from the CDN.
                 <link
@@ -94,6 +122,7 @@ pub fn App() -> impl IntoView {
 
         <div class="app-container">
             <Router>
+                <MathRenderer />
                 <Header />
                 <main class="content-container">
                     <FlatRoutes fallback=|| {
@@ -110,3 +139,29 @@ pub fn App() -> impl IntoView {
         </div>
     }
 }
+
+#[component]
+fn MathRenderer() -> impl IntoView {
+    let location = use_location();
+
+    Effect::new(move |_| {
+        let _ = location.pathname.get();
+        trigger_math_render();
+    });
+
+    view! { <></> }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn trigger_math_render() {
+    use js_sys::Function;
+
+    if let Some(window) = web_sys::window() {
+        let callback =
+            Function::new_no_args("window.okawakRenderMath && window.okawakRenderMath();");
+        let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(&callback, 0);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn trigger_math_render() {}

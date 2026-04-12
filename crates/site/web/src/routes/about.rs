@@ -3,7 +3,6 @@ use crate::routes::not_found::NotFoundPage;
 use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
-#[cfg(feature = "ssr")]
 use domain::PageKey;
 use domain::StaticPageDocument;
 use domain::{
@@ -45,15 +44,10 @@ pub async fn get_about_page_document() -> Result<Option<StaticPageDocument>, Ser
 
 #[component]
 fn AboutPageContent(document: StaticPageDocument) -> impl IntoView {
-    let page_title = build_static_page_title(&document, SITE_NAME);
-    let page_description = build_static_page_description(&document);
-    let canonical_url = build_site_url(&build_static_page_canonical_path(&document));
     let title = document.title;
     let html = document.html;
 
     view! {
-        <PageMetadata title=page_title description=page_description canonical_url />
-
         <div class=about_style::about_page>
             <section class=about_style::hero_section>
                 <div class=about_style::hero_content>
@@ -74,6 +68,15 @@ fn AboutPageContent(document: StaticPageDocument) -> impl IntoView {
 
 #[component]
 pub fn AboutPage() -> impl IntoView {
+    let fallback_document = StaticPageDocument {
+        page: PageKey::new("about".to_string()).expect("about is a valid page key"),
+        title: "About".to_string(),
+        description: Some("About ページです。".to_string()),
+        html: String::new(),
+    };
+    let page_title = build_static_page_title(&fallback_document, SITE_NAME);
+    let page_description = build_static_page_description(&fallback_document);
+    let canonical_url = build_site_url(&build_static_page_canonical_path(&fallback_document));
     let about_page = Resource::<Result<Option<StaticPageDocument>, String>>::new(
         || (),
         move |_| async move {
@@ -84,6 +87,8 @@ pub fn AboutPage() -> impl IntoView {
     );
 
     view! {
+        <PageMetadata title=page_title description=page_description canonical_url />
+
         <Suspense fallback=|| {
             view! { <div class=about_style::loading>"ページを読み込み中..."</div> }
         }>

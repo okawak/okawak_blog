@@ -6,10 +6,7 @@ use axum::http::StatusCode;
 use domain::CategoryPageDocument;
 #[cfg(feature = "ssr")]
 use domain::{Category, build_category_page_document};
-use domain::{
-    build_article_path, build_category_page_canonical_path, build_category_page_description,
-    build_category_page_title,
-};
+use domain::{build_article_path, build_category_page_description};
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
 use leptos::prelude::*;
@@ -62,9 +59,7 @@ pub async fn get_category_page_document(
 
 #[component]
 fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
-    let page_title = build_category_page_title(&document, SITE_NAME);
     let page_description: Arc<str> = build_category_page_description(&document).into();
-    let canonical_url = build_site_url(&build_category_page_canonical_path(&document));
     let CategoryPageDocument {
         title,
         html: landing_html,
@@ -94,7 +89,9 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
                                 </A>
                             </h3>
                             <p class=category_style::article_description>{description}</p>
-                            <p class=category_style::article_meta>{format!("更新 {}", updated_at)}</p>
+                            <p class=category_style::article_meta>
+                                {format!("更新 {}", updated_at)}
+                            </p>
                         </article>
                     }
                 })
@@ -110,8 +107,6 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
         .collect_view();
 
     view! {
-        <PageMetadata title=page_title description=page_description.clone() canonical_url />
-
         <div class=category_style::category_page>
             <header class=category_style::category_header>
                 <p class=category_style::eyebrow>{"Category"}</p>
@@ -132,6 +127,23 @@ pub fn CategoryPage() -> impl IntoView {
     let params = use_params_map();
     let category =
         move || params.with(|params: &ParamsMap| params.get("category").unwrap_or_default());
+    let category_param =
+        params.with_untracked(|params: &ParamsMap| params.get("category").unwrap_or_default());
+    let page_title = if category_param.is_empty() {
+        SITE_NAME.to_string()
+    } else {
+        format!("{category_param} | {SITE_NAME}")
+    };
+    let page_description: Arc<str> = if category_param.is_empty() {
+        "カテゴリページです。".into()
+    } else {
+        format!("{category_param} カテゴリの記事一覧です。").into()
+    };
+    let canonical_url = if category_param.is_empty() {
+        build_site_url("/")
+    } else {
+        build_site_url(&format!("/{category_param}"))
+    };
     let category_page = Resource::<Result<Option<CategoryPageDocument>, String>>::new(
         category,
         move |category| async move {
@@ -146,6 +158,8 @@ pub fn CategoryPage() -> impl IntoView {
     );
 
     view! {
+        <PageMetadata title=page_title description=page_description.clone() canonical_url />
+
         <Suspense fallback=|| {
             view! { <div class=category_style::loading>"カテゴリを読み込み中..."</div> }
         }>
