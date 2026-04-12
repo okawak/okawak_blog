@@ -297,7 +297,7 @@ fn build_category_section_groups(articles: &[SiteArticleCard]) -> Vec<CategorySe
 
 fn build_section_heading(section_path: &[String]) -> String {
     if section_path.is_empty() {
-        "General".to_string()
+        "全般".to_string()
     } else {
         section_path.join(" / ")
     }
@@ -630,7 +630,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(document.sections.len(), 3);
-        assert_eq!(document.sections[0].heading, "General");
+        assert_eq!(document.sections[0].heading, "全般");
         assert_eq!(document.sections[1].heading, "rust");
         assert_eq!(document.sections[2].heading, "rust / async");
     }

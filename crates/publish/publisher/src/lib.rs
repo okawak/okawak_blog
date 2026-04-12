@@ -459,6 +459,15 @@ async fn process_category_file(
         warn!("Warning: Failed to convert simple bookmarks to rich bookmarks: {e}");
         fallback
     });
+    let html = if html_with_rich_bookmarks.trim().is_empty() {
+        build_fallback_category_landing_html(
+            parsed_file.category,
+            &parsed_file.front_matter.title,
+            parsed_file.front_matter.summary.as_deref(),
+        )
+    } else {
+        html_with_rich_bookmarks
+    };
 
     Ok(RenderedCategoryLanding {
         metadata: CategoryLandingMetadata {
@@ -467,7 +476,7 @@ async fn process_category_file(
             description: parsed_file.front_matter.summary,
             updated_at: parsed_file.front_matter.updated,
         },
-        html: html_with_rich_bookmarks,
+        html,
     })
 }
 
@@ -494,6 +503,26 @@ fn parse_page_key(front_matter: &ObsidianFrontMatter) -> Result<PageKey> {
         .as_deref()
         .ok_or_else(|| ObsidianError::Parse("Completed pages require a page key".to_string()))?;
     PageKey::new(page.trim().to_string()).map_err(|error| ObsidianError::Parse(error.to_string()))
+}
+
+fn build_fallback_category_landing_html(
+    category: Category,
+    title: &str,
+    description: Option<&str>,
+) -> String {
+    let heading = if title.trim().is_empty() {
+        category.display_name()
+    } else {
+        title.trim()
+    };
+
+    let body = description
+        .filter(|description| !description.trim().is_empty())
+        .map(str::trim)
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("{}カテゴリの記事一覧です。", category.display_name()));
+
+    format!("<article><h1>{heading}</h1><p>{body}</p></article>")
 }
 
 #[cfg(test)]
@@ -660,6 +689,26 @@ mod tests {
         assert!(
             matches!(result, Err(ObsidianError::Parse(message)) if message.contains("Duplicate category landing"))
         );
+    }
+
+    #[test]
+    fn test_build_fallback_category_landing_html_uses_title_and_summary() {
+        let html = build_fallback_category_landing_html(
+            Category::Tech,
+            "Tech",
+            Some("Technology landing"),
+        );
+
+        assert!(html.contains("<h1>Tech</h1>"));
+        assert!(html.contains("<p>Technology landing</p>"));
+    }
+
+    #[test]
+    fn test_build_fallback_category_landing_html_falls_back_to_category_display_name() {
+        let html = build_fallback_category_landing_html(Category::Physics, "   ", None);
+
+        assert!(html.contains("<h1>物理学</h1>"));
+        assert!(html.contains("物理学カテゴリの記事一覧です。"));
     }
 
     #[test]
