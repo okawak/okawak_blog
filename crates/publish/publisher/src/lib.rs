@@ -521,8 +521,18 @@ fn build_fallback_category_landing_html(
         .map(str::trim)
         .map(str::to_owned)
         .unwrap_or_else(|| format!("{}カテゴリの記事一覧です。", category.display_name()));
+    let heading = html_escape(heading);
+    let body = html_escape(&body);
 
     format!("<article><h1>{heading}</h1><p>{body}</p></article>")
+}
+
+fn html_escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
 }
 
 #[cfg(test)]
@@ -709,6 +719,19 @@ mod tests {
 
         assert!(html.contains("<h1>物理学</h1>"));
         assert!(html.contains("物理学カテゴリの記事一覧です。"));
+    }
+
+    #[test]
+    fn test_build_fallback_category_landing_html_escapes_frontmatter_text() {
+        let html = build_fallback_category_landing_html(
+            Category::Tech,
+            "<script>alert(1)</script>",
+            Some("\"quoted\" & <tag>"),
+        );
+
+        assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(html.contains("&quot;quoted&quot; &amp; &lt;tag&gt;"));
+        assert!(!html.contains("<script>alert(1)</script>"));
     }
 
     #[test]

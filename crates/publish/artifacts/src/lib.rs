@@ -9,6 +9,7 @@ use domain::{
 };
 use serde::Serialize;
 use std::{
+    collections::HashMap,
     fs::{self, File},
     io::BufWriter,
     path::{Path, PathBuf},
@@ -147,16 +148,20 @@ pub fn write_site_artifacts(
         &site_directories.articles_dir.join("index.json"),
         &ArticleIndexDocument::from(site_artifacts.article_index.as_slice()),
     )?;
+    let category_landings_by_category: HashMap<_, _> = site_artifacts
+        .category_landings
+        .iter()
+        .map(|landing| (landing.category, landing))
+        .collect();
 
     for category_index in &site_artifacts.category_indexes {
         let category_dir = site_directories
             .categories_dir
             .join(category_index.category.as_str());
         fs::create_dir_all(&category_dir)?;
-        let landing = site_artifacts
-            .category_landings
-            .iter()
-            .find(|landing| landing.category == category_index.category);
+        let landing = category_landings_by_category
+            .get(&category_index.category)
+            .copied();
         write_json_pretty(
             &category_dir.join("index.json"),
             &CategoryIndexDocument {
