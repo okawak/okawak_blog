@@ -138,19 +138,39 @@ fn take_until_delimiter(
 }
 
 fn replace_katex_placeholders(html: &str, placeholders: &[KatexPlaceholder]) -> String {
-    let mut result = html.to_string();
-
-    for placeholder in placeholders {
-        let content = normalize_katex_content(&placeholder.content);
-        let replacement = match placeholder.mode {
-            KatexMode::Inline => format!(r#"<span class="katex-inline">{content}</span>"#),
-            KatexMode::Display => format!(r#"<span class="katex-display">{content}</span>"#),
-        };
-
-        result = result.replace(&placeholder.token, &replacement);
+    if placeholders.is_empty() {
+        return html.to_string();
     }
 
-    result
+    static KATEX_TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"KATEX(?:INLINE|DISPLAY)TOKEN\d{8}END").expect("Invalid KaTeX token regex")
+    });
+
+    let replacements = placeholders
+        .iter()
+        .map(|placeholder| {
+            let content = html_escape(&normalize_katex_content(&placeholder.content));
+            let replacement = match placeholder.mode {
+                KatexMode::Inline => format!(r#"<span class="katex-inline">{content}</span>"#),
+                KatexMode::Display => format!(r#"<span class="katex-display">{content}</span>"#),
+            };
+
+            (placeholder.token.as_str(), replacement)
+        })
+        .collect::<HashMap<_, _>>();
+
+    KATEX_TOKEN_RE
+        .replace_all(html, |caps: &regex::Captures<'_>| {
+            let token = caps
+                .get(0)
+                .expect("Regex match should always contain the full match")
+                .as_str();
+            replacements
+                .get(token)
+                .map(String::as_str)
+                .expect("Matched KaTeX placeholder should have a replacement")
+        })
+        .into_owned()
 }
 
 fn normalize_katex_content(content: &str) -> String {
@@ -171,6 +191,14 @@ fn normalize_katex_content(content: &str) -> String {
             )
         })
         .collect()
+}
+
+fn html_escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
 }
 
 fn repair_unparsed_strong_markers(html: &str) -> String {
@@ -212,24 +240,27 @@ fn repair_unparsed_strong_markers(html: &str) -> String {
         }
     }
 
-    result
+    repair_nested_adjacent_strong_tags(&result)
 }
 
 fn apply_unparsed_strong_markers(html: &str) -> String {
-    let mut result = html.to_string();
+    static STRONG_MARKER_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\*\*(.+?)\*\*").expect("Invalid strong marker regex"));
 
-    while let Some(start) = result.find("**") {
-        if let Some(end) = result[start + 2..].find("**") {
-            let end = start + 2 + end;
-            let content = result[start + 2..end].to_string();
-            let replacement = format!("<strong>{content}</strong>");
-            result.replace_range(start..end + 2, &replacement);
-        } else {
-            break;
-        }
-    }
+    STRONG_MARKER_RE
+        .replace_all(html, "<strong>$1</strong>")
+        .into_owned()
+}
 
-    result
+fn repair_nested_adjacent_strong_tags(html: &str) -> String {
+    static NESTED_STRONG_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"<strong>([^<]+)<strong>([^<]+)</strong>([^<]+)</strong>")
+            .expect("Invalid nested strong regex")
+    });
+
+    NESTED_STRONG_RE
+        .replace_all(html, "<strong>$1</strong>$2<strong>$3</strong>")
+        .into_owned()
 }
 
 fn sanitize_anchor_hrefs(html: &str) -> String {
@@ -514,7 +545,7 @@ This is a test with [[Another Article|link]] and **bold** text.
         let result = convert_markdown_to_html(markdown).unwrap();
 
         assert!(
-            result.contains("<strong>「サンプリング」<strong>と</strong>「モデル化」</strong>"),
+            result.contains("<strong>「サンプリング」</strong>と<strong>「モデル化」</strong>"),
             "unexpected html:\n{result}"
         );
         assert!(

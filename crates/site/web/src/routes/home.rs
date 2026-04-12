@@ -99,7 +99,8 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
                             </p>
                         }
                             .into_any()
-                    })} <p class=home_style::overview_stats>{page_description}</p>
+                    })}
+                <p class=home_style::overview_stats>{page_description}</p>
                 <ul class=home_style::category_list>{category_items}</ul>
             </section>
 

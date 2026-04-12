@@ -74,9 +74,6 @@ pub fn AboutPage() -> impl IntoView {
         description: Some("About ページです。".to_string()),
         html: String::new(),
     };
-    let page_title = build_static_page_title(&fallback_document, SITE_NAME);
-    let page_description = build_static_page_description(&fallback_document);
-    let canonical_url = build_site_url(&build_static_page_canonical_path(&fallback_document));
     let about_page = Resource::<Result<Option<StaticPageDocument>, String>>::new(
         || (),
         move |_| async move {
@@ -87,7 +84,17 @@ pub fn AboutPage() -> impl IntoView {
     );
 
     view! {
-        <PageMetadata title=page_title description=page_description canonical_url />
+        {move || {
+            let metadata_document = match about_page.get() {
+                Some(Ok(Some(document))) => document,
+                _ => fallback_document.clone(),
+            };
+            let page_title = build_static_page_title(&metadata_document, SITE_NAME);
+            let page_description = build_static_page_description(&metadata_document);
+            let canonical_url = build_site_url(&build_static_page_canonical_path(&metadata_document));
+
+            view! { <PageMetadata title=page_title description=page_description canonical_url /> }
+        }}
 
         <Suspense fallback=|| {
             view! { <div class=about_style::loading>"ページを読み込み中..."</div> }

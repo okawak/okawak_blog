@@ -6,6 +6,9 @@ use axum::http::StatusCode;
 use domain::ArticlePageDocument;
 #[cfg(feature = "ssr")]
 use domain::{Category, Slug, build_article_page_document, find_article_summary};
+use domain::{
+    build_article_page_canonical_path, build_article_page_description, build_article_page_title,
+};
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
 use leptos::prelude::*;
@@ -111,27 +114,6 @@ pub fn ArticlePage() -> impl IntoView {
             )
         })
     };
-    let (category_param, slug_param) = params.with_untracked(|params: &ParamsMap| {
-        (
-            params.get("category").unwrap_or_default(),
-            params.get("slug").unwrap_or_default(),
-        )
-    });
-    let page_title = if slug_param.is_empty() {
-        SITE_NAME.to_string()
-    } else {
-        format!("{slug_param} | {SITE_NAME}")
-    };
-    let page_description = if category_param.is_empty() {
-        "記事ページです。".to_string()
-    } else {
-        format!("{category_param} カテゴリの記事です。")
-    };
-    let canonical_url = if category_param.is_empty() || slug_param.is_empty() {
-        build_site_url("/")
-    } else {
-        build_site_url(&format!("/{category_param}/{slug_param}"))
-    };
     let article_page = Resource::<Result<Option<ArticlePageDocument>, String>>::new(
         article_params,
         move |(category, slug)| async move {
@@ -146,12 +128,51 @@ pub fn ArticlePage() -> impl IntoView {
     );
 
     view! {
-        <PageMetadata
-            title=page_title
-            description=page_description
-            canonical_url
-            og_type="article"
-        />
+        {move || {
+            let (page_title, page_description, canonical_url) = match article_page.get() {
+                Some(Ok(Some(document))) => (
+                    build_article_page_title(&document, SITE_NAME),
+                    build_article_page_description(&document),
+                    build_site_url(&build_article_page_canonical_path(&document)),
+                ),
+                _ => {
+                    let (category_param, slug_param) = params.with(|params: &ParamsMap| {
+                        (
+                            params.get("category").unwrap_or_default(),
+                            normalize_article_slug_param(&params.get("slug").unwrap_or_default())
+                                .to_string(),
+                        )
+                    });
+
+                    let page_title = if slug_param.is_empty() {
+                        SITE_NAME.to_string()
+                    } else {
+                        format!("{slug_param} | {SITE_NAME}")
+                    };
+                    let page_description = if category_param.is_empty() {
+                        "記事ページです。".to_string()
+                    } else {
+                        format!("{category_param} カテゴリの記事です。")
+                    };
+                    let canonical_url = if category_param.is_empty() || slug_param.is_empty() {
+                        build_site_url("/")
+                    } else {
+                        build_site_url(&format!("/{category_param}/{slug_param}"))
+                    };
+
+                    (page_title, page_description, canonical_url)
+                }
+            };
+
+            view! {
+                <PageMetadata
+                    title=page_title
+                    description=page_description
+                    canonical_url
+                    og_type="article"
+                />
+            }
+        }}
 
         <Suspense fallback=|| {
             view! { <div class=article_style::loading>"記事を読み込み中..."</div> }
@@ -186,7 +207,6 @@ fn mark_not_found_response() {
 #[cfg(not(feature = "ssr"))]
 fn mark_not_found_response() {}
 
-#[cfg(feature = "ssr")]
 fn normalize_article_slug_param(slug: &str) -> &str {
     slug.strip_suffix(".html").unwrap_or(slug)
 }
