@@ -26,8 +26,10 @@ pub async fn get_home_page_document() -> Result<HomePageDocument, ServerFnError>
             .ok_or_else(|| ServerFnError::new("artifact reader context is missing"))?;
         let article_index = artifact_reader.read_article_index().await?;
         let site_metadata = artifact_reader.read_site_metadata().await?;
+        let home_page_key = PageKey::new("home".to_string())
+            .map_err(|error| ServerFnError::new(format!("invalid home page key: {error}")))?;
         let home_fragment = match artifact_reader
-            .read_page_document(&PageKey::new("home".to_string()).expect("valid home page key"))
+            .read_page_document(&home_page_key)
             .await
         {
             Ok(fragment) => Some(fragment),

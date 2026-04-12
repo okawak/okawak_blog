@@ -20,8 +20,10 @@ pub async fn get_home_page(
         .read_site_metadata()
         .await
         .map_err(map_infra_error)?;
+    let home_page_key =
+        PageKey::new("home".to_string()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let home_fragment = match artifact_reader
-        .read_page_document(&PageKey::new("home".to_string()).expect("valid home page key"))
+        .read_page_document(&home_page_key)
         .await
     {
         Ok(fragment) => Some(fragment),
