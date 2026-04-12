@@ -34,6 +34,7 @@ mod tests {
                     slug: "sample0000001".to_string(),
                     title: "Sample".to_string(),
                     category: "tech".to_string(),
+                    section_path: vec!["block".to_string()],
                     description: Some("summary".to_string()),
                     tags: vec!["rust".to_string()],
                     priority: Some(1),

@@ -1,10 +1,13 @@
 use crate::error::{IngestError, Result};
+use domain::ContentKind;
 use serde::Deserialize;
 use std::{fs, path::Path};
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct ObsidianFrontMatter {
     pub title: String,
+    #[serde(default)]
+    pub kind: ContentKind,
     #[serde(default)]
     pub tags: Option<Vec<String>>,
     pub summary: Option<String>,
@@ -14,6 +17,8 @@ pub struct ObsidianFrontMatter {
     pub updated: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -123,6 +128,7 @@ mod tests {
         let frontmatter: ObsidianFrontMatter = serde_yaml::from_str(yaml).unwrap();
 
         assert_eq!(frontmatter.title, expected_title);
+        assert_eq!(frontmatter.kind, ContentKind::Article);
         assert_eq!(frontmatter.is_completed, expected_completed);
         assert_eq!(frontmatter.priority, expected_priority);
         assert_eq!(
@@ -228,6 +234,7 @@ mod tests {
         if should_have_frontmatter {
             let parsed_file = result.unwrap();
             assert_eq!(parsed_file.front_matter.title, "File Test");
+            assert_eq!(parsed_file.front_matter.kind, ContentKind::Article);
             assert!(parsed_file.front_matter.is_completed);
             assert_eq!(parsed_file.markdown_body, "# Test Content");
         }
@@ -302,6 +309,28 @@ mod tests {
         if !should_error {
             assert_eq!(result.unwrap().is_some(), should_have_frontmatter);
         }
+    }
+
+    #[rstest]
+    fn test_parse_explicit_kind() {
+        let content = indoc! {
+            r#"
+            ---
+            title: "About"
+            kind: page
+            page: about
+            is_completed: true
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
+            ---
+            About body
+            "#
+        };
+
+        let frontmatter = parse_frontmatter(content).unwrap().unwrap();
+
+        assert_eq!(frontmatter.kind, ContentKind::Page);
+        assert_eq!(frontmatter.page.as_deref(), Some("about"));
     }
 
     #[rstest]

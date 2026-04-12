@@ -1,6 +1,6 @@
 use domain::{
     ArticleIndexDocument, ArticleSummaryDocument, CategoryIndexDocument, CategoryMetadataDocument,
-    SiteMetadataDocument,
+    PageArtifactDocument, PageKey, SiteMetadataDocument,
 };
 use std::{fs, path::Path};
 
@@ -8,6 +8,7 @@ pub(crate) fn write_fixture_site(root: &Path) {
     fs::create_dir_all(root.join("articles")).unwrap();
     fs::create_dir_all(root.join("categories")).unwrap();
     fs::create_dir_all(root.join("metadata")).unwrap();
+    fs::create_dir_all(root.join("pages")).unwrap();
 
     fs::write(
         root.join("articles/index.json"),
@@ -16,6 +17,7 @@ pub(crate) fn write_fixture_site(root: &Path) {
                 slug: "sample0000001".to_string(),
                 title: "Sample".to_string(),
                 category: "tech".to_string(),
+                section_path: vec!["block".to_string()],
                 description: Some("summary".to_string()),
                 tags: vec!["rust".to_string()],
                 priority: Some(1),
@@ -34,6 +36,7 @@ pub(crate) fn write_fixture_site(root: &Path) {
                 slug: "sample0000001".to_string(),
                 title: "Sample".to_string(),
                 category: "tech".to_string(),
+                section_path: vec!["block".to_string()],
                 description: Some("summary".to_string()),
                 tags: vec!["rust".to_string()],
                 priority: Some(1),
@@ -59,6 +62,18 @@ pub(crate) fn write_fixture_site(root: &Path) {
     fs::write(
         root.join("articles/sample0000001.html"),
         "<article><h1>Sample</h1></article>",
+    )
+    .unwrap();
+    fs::write(
+        root.join("pages/about.json"),
+        serde_json::to_string_pretty(&PageArtifactDocument {
+            page: PageKey::new("about".to_string()).unwrap(),
+            title: "About".to_string(),
+            description: Some("About this site".to_string()),
+            html: "<article><h1>About</h1></article>".to_string(),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+        })
+        .unwrap(),
     )
     .unwrap();
 }

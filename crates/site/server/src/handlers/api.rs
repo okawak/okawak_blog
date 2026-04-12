@@ -18,6 +18,7 @@ pub fn create_api_router(artifact_reader: DynArtifactReader) -> Router<LeptosOpt
         .route("/page/home", get(pages::get_home_page))
         .route("/page/articles/{slug}", get(pages::get_article_page))
         .route("/page/categories/{category}", get(pages::get_category_page))
+        .route("/page/pages/{page}", get(pages::get_static_page))
         .layer(Extension(artifact_reader))
 }
 
@@ -29,7 +30,7 @@ mod tests {
         body::{Body, to_bytes},
         http::{Request, StatusCode},
     };
-    use domain::{ArticlePageDocument, CategoryPageDocument, HomePageDocument};
+    use domain::{ArticlePageDocument, CategoryPageDocument, HomePageDocument, StaticPageDocument};
     use infra::LocalArtifactReader;
     use std::{fs, sync::Arc};
     use tempfile::TempDir;
@@ -173,5 +174,18 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_api_router_serves_static_page_fixture() {
+        let temp_dir = TempDir::new().unwrap();
+        write_fixture_site(temp_dir.path());
+
+        let (status, document): (StatusCode, StaticPageDocument) =
+            request_json(create_test_router(temp_dir.path()), "/page/pages/about").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(document.page.as_str(), "about");
+        assert_eq!(document.title, "About");
     }
 }

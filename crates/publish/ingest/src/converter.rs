@@ -17,6 +17,8 @@ static SAFE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"\A\s*<div class="bookmark">\s*<a href="[^"]+">[^<]*</a>\s*</div>\s*\z"#)
         .expect("Invalid safe bookmark regex")
 });
+static HREF_ATTR_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"href="([^"]*)""#).expect("Invalid href regex"));
 
 /// Mapping from an Obsidian file path without extension to a published slug.
 pub type FileMapping = HashMap<String, String>;
@@ -36,10 +38,43 @@ pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     let parser = Parser::new_ext(markdown_content, options);
     let mut html_output = String::with_capacity(markdown_content.len() * 2);
     html::push_html(&mut html_output, sanitize_html(parser).into_iter());
+    let html_output = sanitize_anchor_hrefs(&html_output);
 
     let html_with_katex = process_katex_math(&html_output);
 
     Ok(html_with_katex)
+}
+
+fn sanitize_anchor_hrefs(html: &str) -> String {
+    HREF_ATTR_RE
+        .replace_all(html, |caps: &regex::Captures| {
+            let href = &caps[1];
+            let sanitized_href = if is_safe_href(href) { href } else { "#" };
+            format!("href=\"{sanitized_href}\"")
+        })
+        .to_string()
+}
+
+fn is_safe_href(href: &str) -> bool {
+    let href = href.trim();
+
+    if href.is_empty() {
+        return false;
+    }
+
+    if href.starts_with('#') {
+        return true;
+    }
+
+    if href.starts_with('/') {
+        return !href.starts_with("//");
+    }
+
+    if href.starts_with("http://") || href.starts_with("https://") || href.starts_with("mailto:") {
+        return true;
+    }
+
+    !href.contains(':') && !href.contains('\\') && !href.starts_with('.')
 }
 
 /// Escapes all raw HTML events except valid `<div class="bookmark">` blocks.
@@ -388,6 +423,19 @@ This is a test with [[Another Article|link]] and **bold** text.
         assert!(!result.contains("<span>world</span>"));
     }
 
+    #[test]
+    fn test_markdown_to_html_sanitizes_javascript_href() {
+        let markdown = "[click](javascript:alert('xss'))";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result.contains("href=\"#\""),
+            "unsafe href should be neutralized"
+        );
+        assert!(!result.contains("javascript:alert"));
+    }
+
     // -----------------------------------------------------------------
     // bookmark sanitize_html tests
     // -----------------------------------------------------------------
@@ -420,6 +468,16 @@ This is a test with [[Another Article|link]] and **bold** text.
             !result.contains("&lt;div"),
             "no HTML entities expected for bookmark block; got:\n{result}"
         );
+    }
+
+    #[test]
+    fn test_bookmark_html_sanitizes_unsafe_href_scheme() {
+        let markdown = "<div class=\"bookmark\">\n  <a href=\"javascript:alert('xss')\">Example Site</a>\n</div>\n";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(result.contains("<a href=\"#\">"));
+        assert!(!result.contains("javascript:alert"));
     }
 
     /// A single-line bookmark (`<div class="bookmark">…</div>` on one line)

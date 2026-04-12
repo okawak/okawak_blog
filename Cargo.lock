@@ -2044,6 +2044,7 @@ dependencies = [
 name = "ingest"
 version = "0.1.0"
 dependencies = [
+ "domain",
  "ignore",
  "indoc",
  "log",

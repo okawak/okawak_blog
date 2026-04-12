@@ -140,6 +140,49 @@ async fn test_run_main_with_incomplete_file() {
     assert!(!html_file.exists());
 }
 
+#[tokio::test]
+async fn test_run_main_with_static_page_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let obsidian_dir = temp_dir.path().join("obsidian");
+    let output_dir = temp_dir.path().join("dist");
+
+    fs::create_dir_all(&obsidian_dir).unwrap();
+
+    let page_content = indoc! {r#"
+        ---
+        title: "About"
+        kind: page
+        page: about
+        summary: "About this site"
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        is_completed: true
+        ---
+
+        # About
+
+        This page is generated from markdown.
+    "#};
+
+    let page_file = obsidian_dir.join("about.md");
+    fs::write(&page_file, page_content).unwrap();
+
+    let config = Config {
+        obsidian_dir,
+        output_dir: output_dir.clone(),
+    };
+
+    let result = run_main(&config).await;
+    assert!(result.is_ok());
+
+    let page_document =
+        fs::read_to_string(output_dir.join("site").join("pages").join("about.json")).unwrap();
+
+    assert!(page_document.contains("\"page\": \"about\""));
+    assert!(page_document.contains("\"title\": \"About\""));
+    assert!(page_document.contains("This page is generated from markdown."));
+}
+
 #[test]
 fn test_config_validation() {
     // Verify config behavior with a non-existent directory.

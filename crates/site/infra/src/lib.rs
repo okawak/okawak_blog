@@ -5,7 +5,10 @@ pub use error::{InfraError, Result};
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::Client;
-use domain::{ArticleIndexDocument, CategoryIndexDocument, SiteMetadataDocument, Slug};
+use domain::{
+    ArticleIndexDocument, CategoryIndexDocument, PageArtifactDocument, PageKey,
+    SiteMetadataDocument, Slug,
+};
 use std::{
     env,
     path::{Path, PathBuf},
@@ -26,6 +29,7 @@ pub trait ArtifactReader: Send + Sync {
     async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument>;
     async fn read_site_metadata(&self) -> Result<SiteMetadataDocument>;
     async fn read_article_html(&self, slug: &Slug) -> Result<String>;
+    async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +80,11 @@ impl ArtifactReader for LocalArtifactReader {
             self.artifact_path(&format!("articles/{}.html", slug.as_str())),
         )
         .await?)
+    }
+
+    async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
+        self.read_json(&format!("pages/{}.json", page.as_str()))
+            .await
     }
 }
 
@@ -173,6 +182,13 @@ impl ArtifactReader for S3ArtifactReader {
         self.read_text(&format!("articles/{}.html", slug.as_str()))
             .await
     }
+
+    async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
+        let text = self
+            .read_text(&format!("pages/{}.json", page.as_str()))
+            .await?;
+        Ok(serde_json::from_str(&text)?)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -239,6 +255,7 @@ mod tests {
         fs::create_dir_all(root.join("articles")).unwrap();
         fs::create_dir_all(root.join("categories")).unwrap();
         fs::create_dir_all(root.join("metadata")).unwrap();
+        fs::create_dir_all(root.join("pages")).unwrap();
 
         fs::write(
             root.join("articles/index.json"),
@@ -247,6 +264,7 @@ mod tests {
                     slug: "intro00000001".to_string(),
                     title: "Intro".to_string(),
                     category: "tech".to_string(),
+                    section_path: vec!["block".to_string()],
                     description: Some("intro".to_string()),
                     tags: vec!["rust".to_string()],
                     priority: Some(1),
@@ -265,6 +283,7 @@ mod tests {
                     slug: "intro00000001".to_string(),
                     title: "Intro".to_string(),
                     category: "tech".to_string(),
+                    section_path: vec!["block".to_string()],
                     description: Some("intro".to_string()),
                     tags: vec!["rust".to_string()],
                     priority: Some(1),
@@ -288,6 +307,18 @@ mod tests {
         )
         .unwrap();
         fs::write(root.join("articles/intro00000001.html"), "<h1>Intro</h1>").unwrap();
+        fs::write(
+            root.join("pages/about.json"),
+            serde_json::to_string_pretty(&PageArtifactDocument {
+                page: PageKey::new("about".to_string()).unwrap(),
+                title: "About".to_string(),
+                description: Some("About this site".to_string()),
+                html: "<article><h1>About</h1></article>".to_string(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
     }
 
     #[tokio::test]
@@ -303,12 +334,18 @@ mod tests {
             .read_article_html(&Slug::new("intro00000001".to_string()).unwrap())
             .await
             .unwrap();
+        let page = reader
+            .read_page_document(&PageKey::new("about".to_string()).unwrap())
+            .await
+            .unwrap();
 
         assert_eq!(document.articles.len(), 1);
         assert_eq!(document.articles[0].slug, "intro00000001");
         assert_eq!(category.category, "tech");
         assert_eq!(metadata.total_articles, 1);
         assert_eq!(html, "<h1>Intro</h1>");
+        assert_eq!(page.page.as_str(), "about");
+        assert_eq!(page.title, "About");
     }
 
     #[test]
