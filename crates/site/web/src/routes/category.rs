@@ -114,7 +114,7 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
         <div class=category_style::category_page>
             <header class=category_style::category_header>
                 <p class=category_style::eyebrow>{"Category"}</p>
-                <h1 class=category_style::category_title>{title}</h1>
+                <p class=category_style::category_title>{title}</p>
                 <p class=category_style::category_description>{page_description}</p>
             </header>
 
