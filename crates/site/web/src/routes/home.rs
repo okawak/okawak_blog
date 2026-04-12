@@ -28,10 +28,7 @@ pub async fn get_home_page_document() -> Result<HomePageDocument, ServerFnError>
         let site_metadata = artifact_reader.read_site_metadata().await?;
         let home_page_key = PageKey::new("home".to_string())
             .map_err(|error| ServerFnError::new(format!("invalid home page key: {error}")))?;
-        let home_fragment = match artifact_reader
-            .read_page_document(&home_page_key)
-            .await
-        {
+        let home_fragment = match artifact_reader.read_page_document(&home_page_key).await {
             Ok(fragment) => Some(fragment),
             Err(error) if error.is_not_found() => None,
             Err(error) => return Err(error.into()),

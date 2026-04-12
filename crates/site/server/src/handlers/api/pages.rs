@@ -22,10 +22,7 @@ pub async fn get_home_page(
         .map_err(map_infra_error)?;
     let home_page_key =
         PageKey::new("home".to_string()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let home_fragment = match artifact_reader
-        .read_page_document(&home_page_key)
-        .await
-    {
+    let home_fragment = match artifact_reader.read_page_document(&home_page_key).await {
         Ok(fragment) => Some(fragment),
         Err(error) if error.is_not_found() => None,
         Err(error) => return Err(map_infra_error(error)),
