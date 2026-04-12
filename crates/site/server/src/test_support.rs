@@ -5,7 +5,7 @@ use domain::{
 use std::{fs, path::Path};
 
 pub(crate) fn write_fixture_site(root: &Path) {
-    fs::create_dir_all(root.join("articles")).unwrap();
+    fs::create_dir_all(root.join("articles/tech")).unwrap();
     fs::create_dir_all(root.join("categories/tech")).unwrap();
     fs::create_dir_all(root.join("metadata")).unwrap();
     fs::create_dir_all(root.join("pages")).unwrap();
@@ -68,7 +68,7 @@ pub(crate) fn write_fixture_site(root: &Path) {
     )
     .unwrap();
     fs::write(
-        root.join("articles/sample0000001.html"),
+        root.join("articles/tech/sample0000001.html"),
         "<article><h1>Sample</h1></article>",
     )
     .unwrap();

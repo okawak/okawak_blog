@@ -48,6 +48,7 @@ struct RenderedCategoryLanding {
 }
 
 struct ParsedArticleFile {
+    category: Category,
     slug: String,
     mapping_key: String,
     section_path: Vec<String>,
@@ -164,6 +165,7 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
                 let (rendered_article, output_file_path) = tokio::task::spawn_blocking(move || {
                     let output_file_path = write_article_page(
                         &site_directories,
+                        rendered_article.meta.category,
                         &rendered_article.meta.slug,
                         &rendered_article.html,
                     )?;
@@ -265,11 +267,13 @@ fn process_valid_article_file(
         relative_path,
         &parsed_file.front_matter.created,
     )?;
+    let category = parse_category(&parsed_file.front_matter)?;
     let mapping_key = normalize_path_for_url(&relative_path.with_extension(""));
     let section_path =
         derive_section_path(relative_path, parsed_file.front_matter.category.as_deref());
 
     Ok(ParsedArticleFile {
+        category,
         slug,
         mapping_key,
         section_path,
@@ -314,7 +318,10 @@ fn build_file_mapping(valid_files: &[ParsedArticleFile]) -> FileMapping {
     let mut mapping = FileMapping::with_capacity(valid_files.len());
 
     for parsed_file in valid_files {
-        mapping.insert(parsed_file.mapping_key.clone(), parsed_file.slug.clone());
+        mapping.insert(
+            parsed_file.mapping_key.clone(),
+            format!("/{}/{}", parsed_file.category.as_str(), parsed_file.slug),
+        );
     }
 
     mapping
@@ -385,11 +392,10 @@ async fn process_parsed_file(
         fallback
     });
 
-    let category = parse_category(&parsed_file.front_matter)?;
     let meta = ArticleMeta::new(ArticleMetaInput {
         slug: Slug::new(parsed_file.slug)?,
         title: Title::new(parsed_file.front_matter.title)?,
-        category,
+        category: parsed_file.category,
         section_path: parsed_file.section_path,
         description: parsed_file.front_matter.summary,
         tags: parsed_file.front_matter.tags.unwrap_or_default(),
@@ -556,6 +562,7 @@ mod tests {
         };
 
         let parsed_file = ParsedArticleFile {
+            category: Category::Tech,
             slug: "slug".to_string(),
             mapping_key: "test".to_string(),
             section_path: vec![],
@@ -567,6 +574,7 @@ mod tests {
 
         assert_eq!(mapping.len(), 1);
         assert!(mapping.contains_key("test"));
+        assert_eq!(mapping.get("test").unwrap(), "/tech/slug");
     }
 
     #[rstest]
@@ -601,11 +609,12 @@ mod tests {
             created: "2025-01-03T00:00:00+09:00".to_string(),
             updated: "2025-01-04T00:00:00+09:00".to_string(),
             is_completed: true,
-            category: Some("blog".to_string()),
+            category: Some("daily".to_string()),
             page: None,
         };
 
         let parsed_file1 = ParsedArticleFile {
+            category: Category::Tech,
             slug: "slug1".to_string(),
             mapping_key: "dir1/test".to_string(),
             section_path: vec!["dir1".to_string()],
@@ -613,6 +622,7 @@ mod tests {
             front_matter: front_matter1,
         };
         let parsed_file2 = ParsedArticleFile {
+            category: Category::Daily,
             slug: "slug2".to_string(),
             mapping_key: "dir2/test".to_string(),
             section_path: vec!["dir2".to_string()],
@@ -639,11 +649,12 @@ mod tests {
             created: "2025-01-01T00:00:00+09:00".to_string(),
             updated: "2025-01-01T00:00:00+09:00".to_string(),
             is_completed: true,
-            category: None,
+            category: Some("tech".to_string()),
             page: None,
         };
 
         let parsed_file = ParsedArticleFile {
+            category: Category::Tech,
             slug: "slug".to_string(),
             mapping_key: "sub/dir/test".to_string(),
             section_path: vec!["sub".to_string(), "dir".to_string()],
@@ -653,8 +664,8 @@ mod tests {
         let valid_files = vec![parsed_file];
         let mapping = build_file_mapping(&valid_files);
 
-        let slug = mapping.get("sub/dir/test").unwrap();
-        assert!(!slug.is_empty());
+        let href = mapping.get("sub/dir/test").unwrap();
+        assert_eq!(href, "/tech/slug");
     }
 
     #[test]

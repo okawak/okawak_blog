@@ -104,6 +104,14 @@ pub fn build_home_page_canonical_path() -> &'static str {
     "/"
 }
 
+pub fn build_category_path(category: &Category) -> String {
+    format!("/{}", category.as_str())
+}
+
+pub fn build_article_path(category: &Category, slug: &Slug) -> String {
+    format!("{}/{}", build_category_path(category), slug.as_str())
+}
+
 pub fn build_article_page_title(document: &ArticlePageDocument, site_name: &str) -> String {
     format!("{} | {}", document.article.title.as_str(), site_name)
 }
@@ -124,7 +132,7 @@ pub fn build_article_page_description(document: &ArticlePageDocument) -> String 
 }
 
 pub fn build_article_page_canonical_path(document: &ArticlePageDocument) -> String {
-    format!("/articles/{}", document.article.slug.as_str())
+    build_article_path(&document.article.category, &document.article.slug)
 }
 
 pub fn build_category_page_title(document: &CategoryPageDocument, site_name: &str) -> String {
@@ -147,7 +155,7 @@ pub fn build_category_page_description(document: &CategoryPageDocument) -> Strin
 }
 
 pub fn build_category_page_canonical_path(document: &CategoryPageDocument) -> String {
-    format!("/categories/{}", document.category.as_str())
+    build_category_path(&document.category)
 }
 
 pub fn build_static_page_title(document: &StaticPageDocument, site_name: &str) -> String {
@@ -266,12 +274,13 @@ pub fn build_static_page_document(artifact: &PageArtifactDocument) -> Result<Sta
 
 pub fn find_article_summary<'a>(
     article_index: &'a ArticleIndexDocument,
+    category: &Category,
     slug: &Slug,
 ) -> Option<&'a ArticleSummaryDocument> {
     article_index
         .articles
         .iter()
-        .find(|article| article.slug == slug.as_str())
+        .find(|article| article.slug == slug.as_str() && article.category == category.as_str())
 }
 
 fn build_category_section_groups(articles: &[SiteArticleCard]) -> Vec<CategorySectionGroup> {
@@ -432,9 +441,10 @@ mod tests {
         let index = ArticleIndexDocument {
             articles: vec![sample_summary()],
         };
+        let category = Category::Tech;
         let slug = Slug::new("intro00000001".to_string()).unwrap();
 
-        let article = find_article_summary(&index, &slug).unwrap();
+        let article = find_article_summary(&index, &category, &slug).unwrap();
 
         assert_eq!(article.title, "Intro");
     }
@@ -482,7 +492,7 @@ mod tests {
         assert_eq!(build_article_page_description(&document), "summary");
         assert_eq!(
             build_article_page_canonical_path(&document),
-            "/articles/intro00000001"
+            "/tech/intro00000001"
         );
     }
 
@@ -539,10 +549,7 @@ mod tests {
             "Rust | ぶくせんの探窟メモ"
         );
         assert_eq!(build_category_page_description(&document), "Rust articles");
-        assert_eq!(
-            build_category_page_canonical_path(&document),
-            "/categories/tech"
-        );
+        assert_eq!(build_category_page_canonical_path(&document), "/tech");
     }
 
     #[test]

@@ -1,7 +1,10 @@
+mod support;
+
 use indoc::indoc;
 use publisher::{Config, offline_bookmark_enricher, run_main, run_with_enricher};
 use std::fs;
 use std::path::PathBuf;
+use support::collect_html_files;
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -68,12 +71,7 @@ async fn test_run_main_with_sample_file() {
     let site_root = output_dir.join("site");
     let articles_dir = site_root.join("articles");
 
-    // Verify that at least one slug-based HTML file was generated.
-    let html_files: Vec<_> = fs::read_dir(&articles_dir)
-        .unwrap()
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "html"))
-        .collect();
+    let html_files = collect_html_files(&articles_dir);
 
     assert!(
         !html_files.is_empty(),
@@ -81,8 +79,7 @@ async fn test_run_main_with_sample_file() {
     );
 
     // Verify the generated HTML content.
-    let html_file = &html_files[0];
-    let html_content = fs::read_to_string(html_file.path()).unwrap();
+    let html_content = fs::read_to_string(&html_files[0]).unwrap();
     assert!(html_content.contains("Test Article"));
     assert!(html_content.contains("This is a test article"));
 
@@ -136,6 +133,7 @@ async fn test_run_main_with_incomplete_file() {
     let html_file = output_dir
         .join("site")
         .join("articles")
+        .join("tech")
         .join("incomplete.html");
     assert!(!html_file.exists());
 }
@@ -311,15 +309,11 @@ async fn test_run_with_enricher_with_bookmark_article() {
     assert!(result.is_ok());
 
     let articles_dir = output_dir.join("site").join("articles");
-    let html_files: Vec<_> = fs::read_dir(&articles_dir)
-        .unwrap()
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "html"))
-        .collect();
+    let html_files = collect_html_files(&articles_dir);
 
     assert!(!html_files.is_empty(), "HTML file should be generated");
 
-    let html_content = fs::read_to_string(html_files[0].path()).unwrap();
+    let html_content = fs::read_to_string(&html_files[0]).unwrap();
 
     // The bookmark should NOT remain as escaped HTML.
     assert!(

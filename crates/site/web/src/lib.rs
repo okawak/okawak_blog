@@ -66,12 +66,12 @@ mod tests {
     #[test]
     fn test_join_site_url_normalizes_slashes() {
         assert_eq!(
-            join_site_url("https://example.com/", "/articles/intro"),
-            "https://example.com/articles/intro"
+            join_site_url("https://example.com/", "/tech/intro"),
+            "https://example.com/tech/intro"
         );
         assert_eq!(
-            join_site_url("https://example.com", "categories/tech"),
-            "https://example.com/categories/tech"
+            join_site_url("https://example.com", "tech"),
+            "https://example.com/tech"
         );
         assert_eq!(
             join_site_url("https://example.com/", "/"),

@@ -1,6 +1,9 @@
+mod support;
+
 use indoc::indoc;
 use publisher::{Config, run_main, slug};
 use std::{fs, path::Path};
+use support::collect_html_files;
 use tempfile::TempDir;
 
 /// End-to-end test that simulates a realistic Obsidian vault.
@@ -223,9 +226,11 @@ async fn test_end_to_end_obsidian_processing() {
 
     let site_root = output_dir.join("site");
     let articles_dir = site_root.join("articles");
-    let _tech_html = articles_dir.join(format!("{tech_slug}.html"));
-    let _basic_html = articles_dir.join(format!("{basic_slug}.html"));
-    let _memory_html = articles_dir.join(format!("{memory_slug}.html"));
+    let _tech_html = articles_dir.join("tech").join(format!("{tech_slug}.html"));
+    let _basic_html = articles_dir.join("tech").join(format!("{basic_slug}.html"));
+    let _memory_html = articles_dir
+        .join("tech")
+        .join(format!("{memory_slug}.html"));
 
     // Draft article slug. No HTML should be generated because `is_completed` is false.
     let blog_slug = slug::generate_slug(
@@ -234,17 +239,10 @@ async fn test_end_to_end_obsidian_processing() {
         "2025-01-20T20:00:00+09:00",
     )
     .unwrap();
-    let blog_html = articles_dir.join(format!("{blog_slug}.html"));
+    let blog_html = articles_dir.join("blog").join(format!("{blog_slug}.html"));
 
     // Check that completed articles produced HTML by counting files.
-    let mut html_count = 0;
-
-    if let Ok(entries) = fs::read_dir(&articles_dir) {
-        html_count = entries
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().is_some_and(|ext| ext == "html"))
-            .count();
-    }
+    let html_count = collect_html_files(&articles_dir).len();
 
     // Expected files: two technical articles plus one foundational article.
     assert_eq!(html_count, 3, "Should generate 3 published articles");
@@ -259,19 +257,13 @@ async fn test_end_to_end_obsidian_processing() {
     let mut performance_file_found = false;
     let mut memory_file_found = false;
 
-    if let Ok(entries) = fs::read_dir(&articles_dir) {
-        let files: Vec<_> = entries
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().is_some_and(|ext| ext == "html"))
-            .collect();
-        println!(
-            "Found HTML files in site/articles: {:?}",
-            files.iter().map(|f| f.path()).collect::<Vec<_>>()
-        );
+    let files = collect_html_files(&articles_dir);
+    if !files.is_empty() {
+        println!("Found HTML files in site/articles: {:?}", files);
 
         for file in files {
-            if let Ok(content) = fs::read_to_string(file.path()) {
-                println!("Checking file: {:?}", file.path());
+            if let Ok(content) = fs::read_to_string(&file) {
+                println!("Checking file: {:?}", file);
 
                 // Safe string slice.
                 let preview_len = content
@@ -311,15 +303,12 @@ async fn test_end_to_end_obsidian_processing() {
     // Verify KaTeX math rendering.
     let mut math_processing_verified = false;
 
-    if let Ok(entries) = fs::read_dir(&articles_dir) {
-        for entry in entries.filter_map(|e| e.ok()) {
-            if entry.path().extension().is_some_and(|ext| ext == "html")
-                && let Ok(content) = fs::read_to_string(entry.path())
-                && content.contains("<div class=\"katex-display\">")
-                && content.contains("<span class=\"katex-inline\">")
-            {
-                math_processing_verified = true;
-            }
+    for path in collect_html_files(&articles_dir) {
+        if let Ok(content) = fs::read_to_string(path)
+            && content.contains("<div class=\"katex-display\">")
+            && content.contains("<span class=\"katex-inline\">")
+        {
+            math_processing_verified = true;
         }
     }
 
@@ -342,11 +331,7 @@ async fn test_end_to_end_obsidian_processing() {
 
     println!(
         "✅ End-to-end test finished: generated {} HTML files",
-        fs::read_dir(&articles_dir)
-            .unwrap()
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "html"))
-            .count()
+        collect_html_files(&articles_dir).len()
     );
 }
 
@@ -424,11 +409,7 @@ async fn test_large_volume_processing() {
     assert!(result.is_ok(), "Large volume processing should succeed");
 
     // Verify the number of generated files.
-    let generated_count = fs::read_dir(output_dir.join("site").join("articles"))
-        .unwrap()
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "html"))
-        .count();
+    let generated_count = collect_html_files(&output_dir.join("site").join("articles")).len();
 
     assert_eq!(generated_count, 100, "Should generate 100 HTML files");
 
@@ -530,6 +511,7 @@ async fn test_partial_failure_handling() {
     let valid_html = output_dir
         .join("site")
         .join("articles")
+        .join("tech")
         .join(format!("{valid_slug}.html"));
     assert!(valid_html.exists(), "Valid file should be processed");
 
@@ -543,6 +525,7 @@ async fn test_partial_failure_handling() {
     let invalid_html = output_dir
         .join("site")
         .join("articles")
+        .join("tech")
         .join(format!("{invalid_slug}.html"));
     assert!(
         !invalid_html.exists(),
@@ -553,6 +536,7 @@ async fn test_partial_failure_handling() {
     let incomplete_html = output_dir
         .join("site")
         .join("articles")
+        .join("tech")
         .join("incomplete.html");
     assert!(
         !incomplete_html.exists(),
