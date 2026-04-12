@@ -135,6 +135,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_get_home_page_allows_missing_home_fragment() {
+        let temp_dir = TempDir::new().unwrap();
+        write_fixture_site(temp_dir.path());
+        fs::remove_file(temp_dir.path().join("pages/home.json")).unwrap();
+
+        let Json(page) = get_home_page(Extension(Arc::new(LocalArtifactReader::new(
+            temp_dir.path(),
+        ))))
+        .await
+        .unwrap();
+
+        assert_eq!(page.total_articles, 1);
+        assert!(page.fragment.is_none());
+    }
+
+    #[tokio::test]
     async fn test_get_article_page_reads_html_and_summary() {
         let temp_dir = TempDir::new().unwrap();
         write_fixture_site(temp_dir.path());
