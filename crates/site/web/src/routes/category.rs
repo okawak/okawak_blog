@@ -64,10 +64,13 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
     let page_title = build_category_page_title(&document, SITE_NAME);
     let page_description: Arc<str> = build_category_page_description(&document).into();
     let canonical_url = build_site_url(&build_category_page_canonical_path(&document));
-    let title = document.title.clone();
-    let landing_html = document.html.clone();
-    let section_items = document
-        .sections
+    let CategoryPageDocument {
+        title,
+        html: landing_html,
+        sections,
+        ..
+    } = document;
+    let section_items = sections
         .into_iter()
         .map(|section| {
             let section_heading = section.heading;
