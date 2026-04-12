@@ -1,7 +1,11 @@
 use crate::error::Result;
 use pulldown_cmark::{Event, Options, Parser, html};
 use regex::Regex;
-use std::{collections::HashMap, sync::LazyLock};
+use std::{
+    collections::{HashMap, hash_map::DefaultHasher},
+    hash::{Hash, Hasher},
+    sync::LazyLock,
+};
 
 /// Allow-list regex for bookmark blocks; anything beyond `<a href="URL">TITLE</a>` is escaped.
 static SAFE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -46,12 +50,19 @@ struct KatexPlaceholder {
     mode: KatexMode,
 }
 
+#[derive(Clone, Copy)]
+enum CodeState {
+    Outside,
+    Inline(usize),
+    Fenced(usize),
+}
+
 fn extract_katex_placeholders(markdown: &str) -> (String, Vec<KatexPlaceholder>) {
     let mut placeholders = Vec::new();
     let mut output = String::with_capacity(markdown.len());
     let mut chars = markdown.chars().peekable();
-    let mut in_fenced_code = false;
-    let mut in_inline_code = false;
+    let mut code_state = CodeState::Outside;
+    let mut line_prefix_is_whitespace = true;
 
     while let Some(ch) = chars.next() {
         if ch == '`' {
@@ -61,58 +72,93 @@ fn extract_katex_placeholders(markdown: &str) -> (String, Vec<KatexPlaceholder>)
                 tick_count += 1;
             }
 
-            if tick_count >= 3 {
-                in_fenced_code = !in_fenced_code;
-            } else if !in_fenced_code {
-                in_inline_code = !in_inline_code;
+            match code_state {
+                CodeState::Outside => {
+                    if tick_count >= 3 && line_prefix_is_whitespace {
+                        code_state = CodeState::Fenced(tick_count);
+                    } else {
+                        code_state = CodeState::Inline(tick_count);
+                    }
+                }
+                CodeState::Inline(delimiter_len) => {
+                    if tick_count == delimiter_len {
+                        code_state = CodeState::Outside;
+                    }
+                }
+                CodeState::Fenced(delimiter_len) => {
+                    if line_prefix_is_whitespace && tick_count >= delimiter_len {
+                        code_state = CodeState::Outside;
+                    }
+                }
             }
 
             for _ in 0..tick_count {
                 output.push('`');
             }
+            line_prefix_is_whitespace = false;
             continue;
         }
 
-        if in_fenced_code || in_inline_code {
+        if !matches!(code_state, CodeState::Outside) {
             output.push(ch);
+            line_prefix_is_whitespace =
+                ch == '\n' || (line_prefix_is_whitespace && ch.is_whitespace());
             continue;
         }
 
         if ch != '$' {
             output.push(ch);
+            line_prefix_is_whitespace =
+                ch == '\n' || (line_prefix_is_whitespace && ch.is_whitespace());
             continue;
         }
 
         if chars.peek() == Some(&'$') {
             chars.next();
             if let Some(content) = take_until_delimiter(&mut chars, "$$") {
-                let token = format!("KATEXDISPLAYTOKEN{:08}END", placeholders.len());
+                let token = build_katex_token(placeholders.len(), KatexMode::Display, &content);
                 placeholders.push(KatexPlaceholder {
                     token: token.clone(),
                     content,
                     mode: KatexMode::Display,
                 });
                 output.push_str(&token);
+                line_prefix_is_whitespace = false;
             } else {
                 output.push_str("$$");
+                line_prefix_is_whitespace = false;
             }
             continue;
         }
 
         if let Some(content) = take_until_delimiter(&mut chars, "$") {
-            let token = format!("KATEXINLINETOKEN{:08}END", placeholders.len());
+            let token = build_katex_token(placeholders.len(), KatexMode::Inline, &content);
             placeholders.push(KatexPlaceholder {
                 token: token.clone(),
                 content,
                 mode: KatexMode::Inline,
             });
             output.push_str(&token);
+            line_prefix_is_whitespace = false;
         } else {
             output.push('$');
+            line_prefix_is_whitespace = false;
         }
     }
 
     (output, placeholders)
+}
+
+fn build_katex_token(index: usize, mode: KatexMode, content: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    index.hash(&mut hasher);
+    match mode {
+        KatexMode::Inline => "inline".hash(&mut hasher),
+        KatexMode::Display => "display".hash(&mut hasher),
+    }
+    content.hash(&mut hasher);
+
+    format!("\u{E000}OKAWAKKATEX{:016x}\u{E001}", hasher.finish())
 }
 
 fn take_until_delimiter(
@@ -142,10 +188,6 @@ fn replace_katex_placeholders(html: &str, placeholders: &[KatexPlaceholder]) -> 
         return html.to_string();
     }
 
-    static KATEX_TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"KATEX(?:INLINE|DISPLAY)TOKEN\d{8}END").expect("Invalid KaTeX token regex")
-    });
-
     let replacements = placeholders
         .iter()
         .map(|placeholder| {
@@ -159,7 +201,14 @@ fn replace_katex_placeholders(html: &str, placeholders: &[KatexPlaceholder]) -> 
         })
         .collect::<HashMap<_, _>>();
 
-    KATEX_TOKEN_RE
+    let token_pattern = placeholders
+        .iter()
+        .map(|placeholder| regex::escape(&placeholder.token))
+        .collect::<Vec<_>>()
+        .join("|");
+    let token_re = Regex::new(&token_pattern).expect("Invalid KaTeX token regex");
+
+    token_re
         .replace_all(html, |caps: &regex::Captures<'_>| {
             let token = caps
                 .get(0)
@@ -167,8 +216,8 @@ fn replace_katex_placeholders(html: &str, placeholders: &[KatexPlaceholder]) -> 
                 .as_str();
             replacements
                 .get(token)
-                .map(String::as_str)
-                .expect("Matched KaTeX placeholder should have a replacement")
+                .cloned()
+                .unwrap_or_else(|| token.to_string())
         })
         .into_owned()
 }
@@ -244,10 +293,12 @@ fn repair_unparsed_strong_markers(html: &str) -> String {
 }
 
 fn apply_unparsed_strong_markers(html: &str) -> String {
-    static STRONG_MARKER_RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\*\*(.+?)\*\*").expect("Invalid strong marker regex"));
+    static STRONG_KATEX_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?s)\*\*((?:<span class="katex-(?:inline|display)">.*?</span>))\*\*"#)
+            .expect("Invalid KaTeX strong marker regex")
+    });
 
-    STRONG_MARKER_RE
+    STRONG_KATEX_RE
         .replace_all(html, "<strong>$1</strong>")
         .into_owned()
 }
@@ -257,9 +308,17 @@ fn repair_nested_adjacent_strong_tags(html: &str) -> String {
         Regex::new(r"<strong>([^<]+)<strong>([^<]+)</strong>([^<]+)</strong>")
             .expect("Invalid nested strong regex")
     });
+    static RAW_STRONG_SPLIT_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"\*\*([^*<]+)<strong>([^<]+)</strong>([^*<]+)\*\*")
+            .expect("Invalid raw strong split regex")
+    });
+
+    let html = RAW_STRONG_SPLIT_RE
+        .replace_all(html, "<strong>$1</strong>$2<strong>$3</strong>")
+        .into_owned();
 
     NESTED_STRONG_RE
-        .replace_all(html, "<strong>$1</strong>$2<strong>$3</strong>")
+        .replace_all(&html, "<strong>$1</strong>$2<strong>$3</strong>")
         .into_owned()
 }
 
@@ -555,6 +614,16 @@ This is a test with [[Another Article|link]] and **bold** text.
     }
 
     #[test]
+    fn test_escaped_strong_markers_are_not_repaired() {
+        let markdown = r#"これは \*\*literal\*\* です。"#;
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(result.contains("**literal**"));
+        assert!(!result.contains("<strong>literal</strong>"));
+    }
+
+    #[test]
     fn test_katex_content_normalization_removes_invisible_unicode() {
         let markdown = "inline $x\u{200B} + y\u{FEFF}$ and $$a\u{200C} + b\u{200D}$$";
 
@@ -566,6 +635,31 @@ This is a test with [[Another Article|link]] and **bold** text.
         assert!(!result.contains('\u{200C}'));
         assert!(!result.contains('\u{200D}'));
         assert!(!result.contains('\u{FEFF}'));
+    }
+
+    #[test]
+    fn test_katex_placeholders_skip_inline_code_with_longer_backtick_delimiter() {
+        let markdown = "``code with `$x$` inside`` and real math $y$";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(result.contains("<code>code with `$x$` inside</code>"));
+        assert!(result.contains(r#"<span class="katex-inline">y</span>"#));
+        assert!(!result.contains(r#"<span class="katex-inline">x</span>"#));
+    }
+
+    #[test]
+    fn test_katex_placeholders_skip_backticks_inside_fenced_code() {
+        let markdown = "```text\nliteral ``` and $x$\n```\noutside $y$";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result
+                .contains("<pre><code class=\"language-text\">literal ``` and $x$\n</code></pre>")
+        );
+        assert!(result.contains(r#"<span class="katex-inline">y</span>"#));
+        assert!(!result.contains(r#"<span class="katex-inline">x</span>"#));
     }
 
     #[rstest]

@@ -153,9 +153,6 @@ fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
 /// Home page component.
 #[component]
 pub fn HomePage() -> impl IntoView {
-    let page_title = build_home_page_title(SITE_NAME);
-    let page_description = "公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。";
-    let canonical_url = build_site_url(build_home_page_canonical_path());
     let home_page = Resource::<Result<HomePageDocument, String>>::new(
         || (),
         move |_| async move {
@@ -166,7 +163,23 @@ pub fn HomePage() -> impl IntoView {
     );
 
     view! {
-        <PageMetadata title=page_title description=page_description canonical_url />
+        {move || {
+            let (page_title, page_description, canonical_url) = match home_page.get() {
+                Some(Ok(document)) => (
+                    build_home_page_title(SITE_NAME),
+                    build_home_page_description(&document),
+                    build_site_url(build_home_page_canonical_path()),
+                ),
+                _ => (
+                    build_home_page_title(SITE_NAME),
+                    "公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。"
+                        .to_string(),
+                    build_site_url(build_home_page_canonical_path()),
+                ),
+            };
+
+            view! { <PageMetadata title=page_title description=page_description canonical_url /> }
+        }}
 
         <div class=home_style::home_page>
             <section class=home_style::profile_section>
