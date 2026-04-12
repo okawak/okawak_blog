@@ -19,6 +19,21 @@
 
 Markdown から HTML への変換はビルド時に完了させる。ランタイムは artifact の読取、ルーティング、メタ情報の付与に集中する。
 
+```mermaid
+flowchart LR
+    A[Private Obsidian Repo] --> B[git submodule]
+    B --> C[crates/publish/ingest]
+    C --> D[crates/publish/publisher]
+    D --> E[crates/publish/artifacts]
+    E --> F[site artifact directory]
+    F --> G[GitHub Actions upload]
+    G --> H[S3]
+    H --> I[crates/site/infra]
+    I --> J[crates/site/server]
+    J --> K[crates/site/web]
+    K --> L[Browser]
+```
+
 ## ワークスペース構成
 
 ```text
@@ -75,6 +90,34 @@ okawak_blog/
   - metadata / canonical / Open Graph 生成
 
 `terraform/` は読み取り専用とし、このリポジトリの通常作業では編集しない。
+
+```mermaid
+flowchart TB
+    subgraph Domain["crates/domain"]
+        D1[ContentKind]
+        D2[Artifact contract]
+        D3[Site page contract]
+    end
+
+    subgraph Publish["crates/publish/*"]
+        P1[ingest]
+        P2[bookmark]
+        P3[publisher]
+        P4[artifacts]
+    end
+
+    subgraph Site["crates/site/*"]
+        S1[infra]
+        S2[server]
+        S3[web]
+    end
+
+    Publish --> Domain
+    Site --> Domain
+    P3 --> P4
+    S2 --> S1
+    S3 --> S2
+```
 
 ## コンテンツモデル
 
@@ -221,6 +264,19 @@ artifact の意味は次の通り。
 
 `PageArtifactDocument` は HTML を JSON に包んで保持する。`about` と `home` は reader 側で同じページ artifact 契約を共有する。
 
+```mermaid
+flowchart TB
+    subgraph SiteArtifacts["site/"]
+        A1["articles/index.json"]
+        A2["articles/<category>/<slug>.html"]
+        C1["categories/<category>/index.json"]
+        C2["categories/<category>/page.html"]
+        P1["pages/about.json"]
+        P2["pages/home.json"]
+        M1["metadata/site.json"]
+    end
+```
+
 ## 公開 URL
 
 公開 URL は次の 4 系統。
@@ -235,6 +291,14 @@ artifact の意味は次の通り。
   - article detail
 
 `/articles/:slug` や `/categories/:category` は旧構造であり、現行の主要 route ではない。
+
+```mermaid
+flowchart LR
+    H["/"] --> H1[HomePageDocument]
+    A["/about"] --> A1[StaticPageDocument]
+    C["/:category"] --> C1[CategoryPageDocument]
+    R["/:category/:slug"] --> R1[ArticlePageDocument]
+```
 
 ## Site 表示モデル
 
