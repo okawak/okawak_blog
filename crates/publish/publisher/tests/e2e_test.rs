@@ -334,7 +334,7 @@ async fn test_end_to_end_obsidian_processing() {
     assert!(article_index.contains(&memory_slug));
 
     let tech_category_index =
-        fs::read_to_string(site_root.join("categories").join("tech.json")).unwrap();
+        fs::read_to_string(site_root.join("categories").join("tech").join("index.json")).unwrap();
     assert!(tech_category_index.contains("\"category\": \"tech\""));
 
     let site_metadata = fs::read_to_string(site_root.join("metadata").join("site.json")).unwrap();

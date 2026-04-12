@@ -6,7 +6,7 @@ use std::{fs, path::Path};
 
 pub(crate) fn write_fixture_site(root: &Path) {
     fs::create_dir_all(root.join("articles")).unwrap();
-    fs::create_dir_all(root.join("categories")).unwrap();
+    fs::create_dir_all(root.join("categories/tech")).unwrap();
     fs::create_dir_all(root.join("metadata")).unwrap();
     fs::create_dir_all(root.join("pages")).unwrap();
 
@@ -29,9 +29,12 @@ pub(crate) fn write_fixture_site(root: &Path) {
     )
     .unwrap();
     fs::write(
-        root.join("categories/tech.json"),
+        root.join("categories/tech/index.json"),
         serde_json::to_string_pretty(&CategoryIndexDocument {
             category: "tech".to_string(),
+            title: Some("Tech".to_string()),
+            description: Some("Tech landing".to_string()),
+            updated_at: Some("2025-01-01T00:00:00+09:00".to_string()),
             articles: vec![ArticleSummaryDocument {
                 slug: "sample0000001".to_string(),
                 title: "Sample".to_string(),
@@ -45,6 +48,11 @@ pub(crate) fn write_fixture_site(root: &Path) {
             }],
         })
         .unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        root.join("categories/tech/page.html"),
+        "<article><h1>Tech</h1><p>Category landing</p></article>",
     )
     .unwrap();
     fs::write(

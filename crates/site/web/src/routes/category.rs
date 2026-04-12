@@ -41,8 +41,13 @@ pub async fn get_category_page_document(
             Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error.into()),
         };
+        let html = match artifact_reader.read_category_html(&category).await {
+            Ok(html) => html,
+            Err(error) if error.is_not_found() => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
 
-        Ok(Some(build_category_page_document(&category_index)?))
+        Ok(Some(build_category_page_document(&category_index, &html)?))
     }
 
     #[cfg(not(feature = "ssr"))]
@@ -59,28 +64,43 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
     let page_title = build_category_page_title(&document, SITE_NAME);
     let page_description: Arc<str> = build_category_page_description(&document).into();
     let canonical_url = build_site_url(&build_category_page_canonical_path(&document));
-    let title = document.category_display_name;
-    let article_items = document
-        .articles
+    let title = document.title.clone();
+    let landing_html = document.html.clone();
+    let section_items = document
+        .sections
         .into_iter()
-        .map(|article| {
-            let href = format!("/articles/{}", article.slug.as_str());
-            let title = article.title.as_str().to_string();
-            let description = article
-                .description
-                .unwrap_or_else(|| "説明はまだありません。".to_string());
-            let updated_at = article.updated_at;
+        .map(|section| {
+            let section_heading = section.heading;
+            let article_items = section
+                .articles
+                .into_iter()
+                .map(|article| {
+                    let href = format!("/articles/{}", article.slug.as_str());
+                    let title = article.title.as_str().to_string();
+                    let description = article
+                        .description
+                        .unwrap_or_else(|| "説明はまだありません。".to_string());
+                    let updated_at = article.updated_at;
+
+                    view! {
+                        <article class=category_style::article_card>
+                            <h3 class=category_style::article_title>
+                                <A href={href} {..} class=category_style::article_link>
+                                    {title}
+                                </A>
+                            </h3>
+                            <p class=category_style::article_description>{description}</p>
+                            <p class=category_style::article_meta>{format!("更新 {}", updated_at)}</p>
+                        </article>
+                    }
+                })
+                .collect_view();
 
             view! {
-                <article class=category_style::article_card>
-                    <h2 class=category_style::article_title>
-                        <A href={href} {..} class=category_style::article_link>
-                            {title}
-                        </A>
-                    </h2>
-                    <p class=category_style::article_description>{description}</p>
-                    <p class=category_style::article_meta>{format!("更新 {}", updated_at)}</p>
-                </article>
+                <section class=category_style::section_group>
+                    <h2 class=category_style::section_heading>{section_heading}</h2>
+                    <div class=category_style::article_list>{article_items}</div>
+                </section>
             }
         })
         .collect_view();
@@ -95,7 +115,10 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
                 <p class=category_style::category_description>{page_description}</p>
             </header>
 
-            <section class=category_style::article_list>{article_items}</section>
+            // Publisher artifacts escape raw HTML and neutralize unsafe links before persistence.
+            <section class=category_style::landing_content inner_html=landing_html></section>
+
+            <div class=category_style::section_list>{section_items}</div>
         </div>
     }
 }

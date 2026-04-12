@@ -376,10 +376,12 @@ site/
 │   ├── <slug>.html
 │   └── index.json
 ├── categories/
-│   ├── tech.json
-│   ├── daily.json
-│   ├── statistics.json
-│   └── physics.json
+│   ├── <category>/
+│   │   ├── index.json
+│   │   └── page.html
+│   └── ...
+├── pages/
+│   └── <page>.json
 ├── tags/
 │   └── index.json
 ├── assets/

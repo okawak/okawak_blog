@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::Client;
 use domain::{
-    ArticleIndexDocument, CategoryIndexDocument, PageArtifactDocument, PageKey,
+    ArticleIndexDocument, Category, CategoryIndexDocument, PageArtifactDocument, PageKey,
     SiteMetadataDocument, Slug,
 };
 use std::{
@@ -27,6 +27,7 @@ pub type DynArtifactReader = Arc<dyn ArtifactReader>;
 pub trait ArtifactReader: Send + Sync {
     async fn read_article_index(&self) -> Result<ArticleIndexDocument>;
     async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument>;
+    async fn read_category_html(&self, category: &Category) -> Result<String>;
     async fn read_site_metadata(&self) -> Result<SiteMetadataDocument>;
     async fn read_article_html(&self, slug: &Slug) -> Result<String>;
     async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument>;
@@ -68,7 +69,15 @@ impl ArtifactReader for LocalArtifactReader {
     }
 
     async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument> {
-        self.read_json(&format!("categories/{category}.json")).await
+        self.read_json(&format!("categories/{category}/index.json"))
+            .await
+    }
+
+    async fn read_category_html(&self, category: &Category) -> Result<String> {
+        Ok(tokio::fs::read_to_string(
+            self.artifact_path(&format!("categories/{}/page.html", category.as_str())),
+        )
+        .await?)
     }
 
     async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
@@ -171,7 +180,13 @@ impl ArtifactReader for S3ArtifactReader {
     }
 
     async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument> {
-        self.read_json(&format!("categories/{category}.json")).await
+        self.read_json(&format!("categories/{category}/index.json"))
+            .await
+    }
+
+    async fn read_category_html(&self, category: &Category) -> Result<String> {
+        self.read_text(&format!("categories/{}/page.html", category.as_str()))
+            .await
     }
 
     async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
@@ -253,7 +268,7 @@ mod tests {
 
     fn write_fixture_site(root: &Path) {
         fs::create_dir_all(root.join("articles")).unwrap();
-        fs::create_dir_all(root.join("categories")).unwrap();
+        fs::create_dir_all(root.join("categories/tech")).unwrap();
         fs::create_dir_all(root.join("metadata")).unwrap();
         fs::create_dir_all(root.join("pages")).unwrap();
 
@@ -276,9 +291,12 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            root.join("categories/tech.json"),
+            root.join("categories/tech/index.json"),
             serde_json::to_string_pretty(&CategoryIndexDocument {
                 category: "tech".to_string(),
+                title: Some("Tech".to_string()),
+                description: Some("Tech landing".to_string()),
+                updated_at: Some("2025-01-01T00:00:00+09:00".to_string()),
                 articles: vec![ArticleSummaryDocument {
                     slug: "intro00000001".to_string(),
                     title: "Intro".to_string(),
@@ -292,6 +310,11 @@ mod tests {
                 }],
             })
             .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            root.join("categories/tech/page.html"),
+            "<article><h1>Tech</h1></article>",
         )
         .unwrap();
         fs::write(
@@ -329,6 +352,7 @@ mod tests {
 
         let document = reader.read_article_index().await.unwrap();
         let category = reader.read_category_index("tech").await.unwrap();
+        let category_html = reader.read_category_html(&Category::Tech).await.unwrap();
         let metadata = reader.read_site_metadata().await.unwrap();
         let html = reader
             .read_article_html(&Slug::new("intro00000001".to_string()).unwrap())
@@ -342,6 +366,8 @@ mod tests {
         assert_eq!(document.articles.len(), 1);
         assert_eq!(document.articles[0].slug, "intro00000001");
         assert_eq!(category.category, "tech");
+        assert_eq!(category.title.as_deref(), Some("Tech"));
+        assert_eq!(category_html, "<article><h1>Tech</h1></article>");
         assert_eq!(metadata.total_articles, 1);
         assert_eq!(html, "<h1>Intro</h1>");
         assert_eq!(page.page.as_str(), "about");

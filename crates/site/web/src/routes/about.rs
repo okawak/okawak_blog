@@ -3,7 +3,9 @@ use crate::routes::not_found::NotFoundPage;
 use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
-use domain::{PageKey, StaticPageDocument};
+#[cfg(feature = "ssr")]
+use domain::PageKey;
+use domain::StaticPageDocument;
 use domain::{
     build_static_page_canonical_path, build_static_page_description, build_static_page_title,
 };

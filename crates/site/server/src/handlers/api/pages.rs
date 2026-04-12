@@ -55,7 +55,11 @@ pub async fn get_category_page(
         .read_category_index(category.as_str())
         .await
         .map_err(map_infra_error)?;
-    let page = build_category_page_document(&category_index)
+    let html = artifact_reader
+        .read_category_html(&category)
+        .await
+        .map_err(map_infra_error)?;
+    let page = build_category_page_document(&category_index, &html)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(page))
@@ -137,7 +141,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(page.category_display_name, "技術");
+        assert_eq!(page.title, "Tech");
+        assert!(page.html.contains("Category landing"));
         assert_eq!(page.articles.len(), 1);
+        assert_eq!(page.sections.len(), 1);
     }
 
     #[tokio::test]
@@ -173,7 +180,22 @@ mod tests {
     async fn test_get_category_page_returns_not_found_when_category_artifact_is_missing() {
         let temp_dir = TempDir::new().unwrap();
         write_fixture_site(temp_dir.path());
-        fs::remove_file(temp_dir.path().join("categories/tech.json")).unwrap();
+        fs::remove_file(temp_dir.path().join("categories/tech/index.json")).unwrap();
+
+        let result = get_category_page(
+            Path("tech".to_string()),
+            Extension(Arc::new(LocalArtifactReader::new(temp_dir.path()))),
+        )
+        .await;
+
+        assert!(matches!(result, Err(StatusCode::NOT_FOUND)));
+    }
+
+    #[tokio::test]
+    async fn test_get_category_page_returns_not_found_when_category_page_html_is_missing() {
+        let temp_dir = TempDir::new().unwrap();
+        write_fixture_site(temp_dir.path());
+        fs::remove_file(temp_dir.path().join("categories/tech/page.html")).unwrap();
 
         let result = get_category_page(
             Path("tech".to_string()),
