@@ -20,7 +20,15 @@ pub async fn get_home_page(
         .read_site_metadata()
         .await
         .map_err(map_infra_error)?;
-    let page = build_home_page_document(&article_index, &site_metadata)
+    let home_fragment = match artifact_reader
+        .read_page_document(&PageKey::new("home".to_string()).expect("valid home page key"))
+        .await
+    {
+        Ok(fragment) => Some(fragment),
+        Err(error) if error.is_not_found() => None,
+        Err(error) => return Err(map_infra_error(error)),
+    };
+    let page = build_home_page_document(&article_index, &site_metadata, home_fragment.as_ref())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(page))
@@ -112,6 +120,19 @@ mod tests {
         assert_eq!(page.total_articles, 1);
         assert_eq!(page.articles.len(), 1);
         assert_eq!(page.categories[0].category_display_name, "技術");
+        assert_eq!(
+            page.fragment
+                .as_ref()
+                .map(|fragment| fragment.page.as_str()),
+            Some("home")
+        );
+        assert!(
+            page.fragment
+                .as_ref()
+                .unwrap()
+                .html
+                .contains("Welcome home")
+        );
     }
 
     #[tokio::test]

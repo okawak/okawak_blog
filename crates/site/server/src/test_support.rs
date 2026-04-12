@@ -84,4 +84,16 @@ pub(crate) fn write_fixture_site(root: &Path) {
         .unwrap(),
     )
     .unwrap();
+    fs::write(
+        root.join("pages/home.json"),
+        serde_json::to_string_pretty(&PageArtifactDocument {
+            page: PageKey::new("home".to_string()).unwrap(),
+            title: "Home".to_string(),
+            description: Some("Home fragment".to_string()),
+            html: "<p>Welcome home</p>".to_string(),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+        })
+        .unwrap(),
+    )
+    .unwrap();
 }

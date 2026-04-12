@@ -54,6 +54,7 @@ pub struct HomePageDocument {
     pub total_articles: usize,
     pub categories: Vec<SiteCategorySummary>,
     pub articles: Vec<SiteArticleCard>,
+    pub fragment: Option<StaticPageDocument>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,6 +179,7 @@ pub fn build_static_page_canonical_path(document: &StaticPageDocument) -> String
 pub fn build_home_page_document(
     article_index: &ArticleIndexDocument,
     site_metadata: &SiteMetadataDocument,
+    home_fragment: Option<&PageArtifactDocument>,
 ) -> Result<HomePageDocument> {
     let articles = article_index
         .articles
@@ -201,6 +203,7 @@ pub fn build_home_page_document(
         total_articles: site_metadata.total_articles,
         categories,
         articles,
+        fragment: home_fragment.map(build_static_page_document).transpose()?,
     })
 }
 
@@ -354,6 +357,7 @@ mod tests {
                     article_count: 1,
                 }],
             },
+            None,
         )
         .unwrap();
 
@@ -361,6 +365,41 @@ mod tests {
         assert_eq!(document.categories.len(), 1);
         assert_eq!(document.categories[0].category_display_name, "技術");
         assert_eq!(document.articles[0].title.as_str(), "Intro");
+        assert_eq!(document.fragment, None);
+    }
+
+    #[test]
+    fn test_build_home_page_document_with_fragment() {
+        let fragment = PageArtifactDocument {
+            page: PageKey::new("home".to_string()).unwrap(),
+            title: "Home".to_string(),
+            description: Some("Home fragment".to_string()),
+            html: "<p>Welcome</p>".to_string(),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+        };
+        let document = build_home_page_document(
+            &ArticleIndexDocument {
+                articles: vec![sample_summary()],
+            },
+            &SiteMetadataDocument {
+                total_articles: 1,
+                categories: vec![CategoryMetadataDocument {
+                    category: "tech".to_string(),
+                    article_count: 1,
+                }],
+            },
+            Some(&fragment),
+        )
+        .unwrap();
+
+        assert_eq!(
+            document
+                .fragment
+                .as_ref()
+                .map(|fragment| fragment.page.as_str()),
+            Some("home")
+        );
+        assert!(document.fragment.as_ref().unwrap().html.contains("Welcome"));
     }
 
     #[test]
@@ -466,6 +505,7 @@ mod tests {
                 },
             ],
             articles: vec![SiteArticleCard::try_from(&sample_summary()).unwrap()],
+            fragment: None,
         };
 
         assert_eq!(

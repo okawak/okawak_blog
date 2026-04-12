@@ -1,6 +1,8 @@
 use crate::components::PageMetadata;
 use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
+use domain::PageKey;
+#[cfg(feature = "ssr")]
 use domain::build_home_page_document;
 use domain::{
     HomePageDocument, SiteArticleCard, build_article_path, build_category_path,
@@ -24,8 +26,20 @@ pub async fn get_home_page_document() -> Result<HomePageDocument, ServerFnError>
             .ok_or_else(|| ServerFnError::new("artifact reader context is missing"))?;
         let article_index = artifact_reader.read_article_index().await?;
         let site_metadata = artifact_reader.read_site_metadata().await?;
+        let home_fragment = match artifact_reader
+            .read_page_document(&PageKey::new("home".to_string()).expect("valid home page key"))
+            .await
+        {
+            Ok(fragment) => Some(fragment),
+            Err(error) if error.is_not_found() => None,
+            Err(error) => return Err(error.into()),
+        };
 
-        Ok(build_home_page_document(&article_index, &site_metadata)?)
+        Ok(build_home_page_document(
+            &article_index,
+            &site_metadata,
+            home_fragment.as_ref(),
+        )?)
     }
 
     #[cfg(not(feature = "ssr"))]
@@ -41,6 +55,10 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
     let page_title = build_home_page_title(SITE_NAME);
     let page_description: Arc<str> = build_home_page_description(&document).into();
     let canonical_url = build_site_url(build_home_page_canonical_path());
+    let home_fragment_html = document
+        .fragment
+        .as_ref()
+        .map(|fragment| fragment.html.clone());
     let category_items = document
         .categories
         .into_iter()
@@ -71,9 +89,22 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
 
         <div class=home_style::content_grid>
             <section class=home_style::overview_panel>
-                <p class=home_style::overview_copy>
-                    {"公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。"}
-                </p>
+                {home_fragment_html
+                    .map(|html| {
+                        view! {
+                            // Publisher artifacts escape raw HTML and neutralize unsafe links before persistence.
+                            <div class=home_style::overview_copy inner_html=html></div>
+                        }
+                            .into_any()
+                    })
+                    .unwrap_or_else(|| {
+                        view! {
+                            <p class=home_style::overview_copy>
+                                {"公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。"}
+                            </p>
+                        }
+                            .into_any()
+                    })}
                 <p class=home_style::overview_stats>{page_description}</p>
                 <ul class=home_style::category_list>{category_items}</ul>
             </section>
