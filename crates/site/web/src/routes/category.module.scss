@@ -94,11 +94,11 @@
     max-width: 100%;
 }
 
-.landing-content :global(:first-child) {
+.landing-content :global(> :first-child) {
     margin-top: 0;
 }
 
-.landing-content :global(:last-child) {
+.landing-content :global(> :last-child) {
     margin-bottom: 0;
 }
 
