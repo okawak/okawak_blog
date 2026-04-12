@@ -51,7 +51,7 @@ impl From<&[PublishedArticleSummary]> for ArticleIndexDocument {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CategoryIndexDocument {
     pub category: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,

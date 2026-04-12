@@ -171,6 +171,13 @@ pub fn write_site_artifacts(
                     .collect(),
             },
         )?;
+
+        if landing.is_none() {
+            fs::write(
+                category_dir.join("page.html"),
+                build_fallback_category_page_html(category_index),
+            )?;
+        }
     }
 
     write_json_pretty(
@@ -186,6 +193,14 @@ fn write_json_pretty(path: &Path, value: &impl Serialize) -> Result<()> {
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, value)?;
     Ok(())
+}
+
+fn build_fallback_category_page_html(category_index: &domain::CategoryIndex) -> String {
+    format!(
+        "<article><h1>{}</h1><p>{}カテゴリの記事一覧です。</p></article>",
+        category_index.category.display_name(),
+        category_index.category.display_name(),
+    )
 }
 
 #[cfg(test)]
@@ -342,5 +357,32 @@ mod tests {
         assert_eq!(artifacts.category_indexes[0].category, Category::Physics);
         assert_eq!(artifacts.site_metadata.categories.len(), 1);
         assert_eq!(artifacts.site_metadata.categories[0].article_count, 0);
+    }
+
+    #[test]
+    fn test_write_site_artifacts_creates_fallback_category_page_when_landing_is_missing() {
+        let temp_dir = TempDir::new().unwrap();
+        let site_directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let article_meta = build_article_meta(
+            "Artifact Test",
+            "artifact00001",
+            Category::Tech,
+            Some(1),
+            "2025-01-01T00:00:00+09:00",
+        );
+        let site_artifacts = build_site_artifacts(vec![article_meta], vec![]);
+
+        write_site_artifacts(&site_directories, &site_artifacts).unwrap();
+
+        let fallback_html = fs::read_to_string(
+            site_directories
+                .categories_dir
+                .join("tech")
+                .join("page.html"),
+        )
+        .unwrap();
+
+        assert!(fallback_html.contains("<h1>技術</h1>"));
+        assert!(fallback_html.contains("技術カテゴリの記事一覧です。"));
     }
 }
