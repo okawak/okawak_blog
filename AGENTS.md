@@ -12,18 +12,18 @@
 
 ## 優先して参照する文書
 
-1. `docs/architecture/re-architecture.md`
+1. `docs/architecture/architecture.md`
 2. GitHub Issue / PR
 3. `README.md`
 
 ### 参照ルール
 
-- 再設計方針の一次情報は `docs/architecture/re-architecture.md`
+- 現行アーキテクチャの一次情報は `docs/architecture/architecture.md`
 - 個別作業の進め方と進捗は GitHub Issue / PR を優先する
 - 長期的に残す設計判断は `docs/architecture/` に集約する
 - `README.md` は最終的な目標像の概要説明であり、現行実装の一次情報としては扱わない
 
-## 現在の構成と目標構成を混同しない
+## 現行構成を一次情報として扱う
 
 ### 現在の workspace
 
@@ -45,33 +45,11 @@ okawak_blog/
 └── terraform/
 ```
 
-### 目標構成
-
-`docs/architecture/re-architecture.md` では、将来的に以下への再編を目指している。
-
-```text
-okawak_blog/
-├── crates/
-│   ├── domain/
-│   ├── publish/
-│   │   ├── publisher/
-│   │   ├── ingest/
-│   │   ├── artifacts/
-│   │   └── bookmark/
-│   └── site/
-│       ├── infra/
-│       ├── web/
-│       └── server/
-├── docs/
-│   └── architecture/
-└── ...
-```
-
 ### 文書化と実装の注意
 
 - 未作成の crate / app を、現在存在するものとして書かない
-- 「現在の構成」と「移行先の目標構成」を必ず分けて説明する
-- README や設計メモを書くときも、理想像を現状の事実として断定しない
+- README や設計メモを書くときは、現行実装と一致する内容を優先する
+- 実装計画は GitHub Issue / PR に寄せ、恒久文書には現行設計だけを残す
 
 ## アーキテクチャ原則
 
@@ -79,6 +57,7 @@ okawak_blog/
 
 - Obsidian の Markdown を読み取る
 - Front Matter を検証する
+- `kind` によって article / category / page / home を判定する
 - 内部リンクや埋め込みを解決する
 - HTML / index JSON を生成する
 - S3 に成果物を配置する
@@ -96,6 +75,7 @@ okawak_blog/
 - Markdown をリクエスト時に毎回変換しない
 - HTML 生成は publisher 側に寄せる
 - SSR サーバーは、成果物読取・ルーティング・メタ情報付与に集中する
+- `about` と `home` も page artifact 契約で読む
 
 ### Rust らしい責務分割
 
@@ -135,6 +115,7 @@ okawak_blog/
 - WASM 互換を意識する
 - publisher と reader で共有する公開成果物契約はここで扱う
 - artifact から組み立てる site page contract のような pure model もここで扱う
+- `ContentKind`、`PageKey`、`section_path` を含む content model もここで扱う
 
 ### `crates/site/infra`
 
@@ -147,20 +128,20 @@ okawak_blog/
 ### `crates/site/server`
 
 - 現在のサーバー実装
-- 将来的には SSR 公開用途に責務を絞る想定
 - S3 上の公開成果物を読む blog 側の中心として扱う
 
 ### `crates/site/web`
 
 - Leptos UI / SSR ルーティング層
 - 公開成果物を読む側として整理する
+- 現行 route は `/`、`/about`、`/:category`、`/:category/:slug`
 
 ### `crates/publish/publisher`
 
 - 現在もっとも `publisher` に近いアプリ
-- 今後の再設計では公開成果物生成の主役として育てる前提で扱う
 - ingest / artifacts / bookmark など publisher 専用の補助 crate を `crates/publish/` 配下へ置く
 - 入力となる Obsidian Markdown は private repo の git submodule から取得する
+- category 配下の path から `section_path` を導出する
 
 ### `crates/publish/artifacts`
 
@@ -205,7 +186,6 @@ okawak_blog/
 ### 文書更新
 
 - 責務分割や依存方向を変えたら README / AGENTS / `docs/architecture/` を更新する
-- 文書を更新する際は、現状説明と将来方針を分ける
 - 実在しない構成を、現行実装として書かない
 - 実装計画や進捗メモを repo 内 docs に増やし続けない
 
