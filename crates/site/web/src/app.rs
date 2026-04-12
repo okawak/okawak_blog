@@ -48,35 +48,32 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     if (!window.katex) return;
                     
                     const scope = root || document.body;
-                     const normalizeExpression = (value) =>
-                       (value || '').replace(/[\u2009\u200A\u200B\u200C\u200D\u2061\u202F\u2060\uFEFF]/g, '');
+                    const normalizeExpression = (value) =>
+                      (value || '').replace(/[\u2009\u200A\u200B\u200C\u200D\u2061\u202F\u2060\uFEFF]/g, '');
                     
                     scope.querySelectorAll('.katex-inline').forEach((element) => {
-                      if (element.dataset.katexRendered === 'true') return;
+                     if (element.dataset.katexRendered === 'true') return;
                     
-                      const expression = normalizeExpression(element.textContent);
-                      window.katex.render(expression, element, {
-                        displayMode: false,
-                        throwOnError: false,
-                      });
+                     const expression = normalizeExpression(element.textContent);
+                     window.katex.render(expression, element, {
+                       displayMode: false,
+                       throwOnError: false,
+                     });
                     element.dataset.katexRendered = 'true';
                     });
                     
                     scope.querySelectorAll('.katex-display').forEach((element) => {
-                      if (element.dataset.katexRendered === 'true') return;
+                     if (element.dataset.katexRendered === 'true') return;
                     
-                      const expression = normalizeExpression(element.textContent);
-                      window.katex.render(expression, element, {
-                        displayMode: true,
-                        throwOnError: false,
-                      });
+                     const expression = normalizeExpression(element.textContent);
+                     window.katex.render(expression, element, {
+                       displayMode: true,
+                       throwOnError: false,
+                     });
                     element.dataset.katexRendered = 'true';
                     });
                     };
                     
-                    document.addEventListener('DOMContentLoaded', function() {
-                    window.okawakRenderMath();
-                    });
                     "#}
                 </script>
 

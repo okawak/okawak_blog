@@ -144,25 +144,44 @@ pub fn CategoryPage() -> impl IntoView {
     );
 
     view! {
-        {move || {
-            let (page_title, page_description, canonical_url) = match category_page.get() {
-                Some(Ok(Some(document))) => (
-                    build_category_page_title(&document, SITE_NAME),
-                    build_category_page_description(&document),
-                    build_site_url(&build_category_page_canonical_path(&document)),
-                ),
-                _ => {
+        <Suspense fallback=move || {
+            let category_param =
+                params.with(|params: &ParamsMap| params.get("category").unwrap_or_default());
+            let page_title = if category_param.is_empty() {
+                SITE_NAME.to_string()
+            } else {
+                format!("{category_param} | {SITE_NAME}")
+            };
+            let page_description = if category_param.is_empty() {
+                "カテゴリページです。".to_string()
+            } else {
+                format!("{category_param} カテゴリの記事一覧です。")
+            };
+            let canonical_url = if category_param.is_empty() {
+                build_site_url("/")
+            } else {
+                build_site_url(&format!("/{category_param}"))
+            };
+
+            view! { <PageMetadata title=page_title description=page_description canonical_url /> }
+        }>
+            {move || match category_page.get() {
+                Some(Ok(Some(document))) => {
+                    let page_title = build_category_page_title(&document, SITE_NAME);
+                    let page_description = build_category_page_description(&document);
+                    let canonical_url = build_site_url(&build_category_page_canonical_path(&document));
+
+                    view! { <PageMetadata title=page_title description=page_description canonical_url /> }
+                        .into_any()
+                }
+                Some(Ok(None)) => {
                     let category_param =
                         params.with(|params: &ParamsMap| params.get("category").unwrap_or_default());
-                    let page_title = if category_param.is_empty() {
-                        SITE_NAME.to_string()
-                    } else {
-                        format!("{category_param} | {SITE_NAME}")
-                    };
+                    let page_title = format!("ページが見つかりませんでした | {SITE_NAME}");
                     let page_description = if category_param.is_empty() {
-                        "カテゴリページです。".to_string()
+                        "ページが見つかりませんでした。".to_string()
                     } else {
-                        format!("{category_param} カテゴリの記事一覧です。")
+                        format!("{category_param} カテゴリのページが見つかりませんでした。")
                     };
                     let canonical_url = if category_param.is_empty() {
                         build_site_url("/")
@@ -170,12 +189,12 @@ pub fn CategoryPage() -> impl IntoView {
                         build_site_url(&format!("/{category_param}"))
                     };
 
-                    (page_title, page_description, canonical_url)
+                    view! { <PageMetadata title=page_title description=page_description canonical_url /> }
+                        .into_any()
                 }
-            };
-
-            view! { <PageMetadata title=page_title description=page_description canonical_url /> }
-        }}
+                Some(Err(_)) | None => "".into_any(),
+            }}
+        </Suspense>
 
         <Suspense fallback=|| {
             view! { <div class=category_style::loading>"カテゴリを読み込み中..."</div> }

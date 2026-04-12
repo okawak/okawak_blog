@@ -57,14 +57,33 @@ enum CodeState {
     Fenced(usize),
 }
 
+#[derive(Clone, Copy)]
+enum LinkState {
+    Outside,
+    AfterClosingBracket,
+    Destination(usize),
+}
+
 fn extract_katex_placeholders(markdown: &str) -> (String, Vec<KatexPlaceholder>) {
     let mut placeholders = Vec::new();
     let mut output = String::with_capacity(markdown.len());
     let mut chars = markdown.chars().peekable();
     let mut code_state = CodeState::Outside;
+    let mut link_state = LinkState::Outside;
     let mut line_prefix_is_whitespace = true;
+    let mut in_html_tag = false;
 
     while let Some(ch) = chars.next() {
+        if in_html_tag {
+            output.push(ch);
+            if ch == '>' {
+                in_html_tag = false;
+            }
+            line_prefix_is_whitespace =
+                ch == '\n' || (line_prefix_is_whitespace && ch.is_whitespace());
+            continue;
+        }
+
         if ch == '`' {
             let mut tick_count = 1;
             while chars.peek() == Some(&'`') {
@@ -104,6 +123,45 @@ fn extract_katex_placeholders(markdown: &str) -> (String, Vec<KatexPlaceholder>)
             line_prefix_is_whitespace =
                 ch == '\n' || (line_prefix_is_whitespace && ch.is_whitespace());
             continue;
+        }
+
+        if ch == '<' {
+            in_html_tag = true;
+            output.push(ch);
+            line_prefix_is_whitespace = false;
+            continue;
+        }
+
+        match link_state {
+            LinkState::Outside => {
+                if ch == ']' {
+                    output.push(ch);
+                    link_state = LinkState::AfterClosingBracket;
+                    line_prefix_is_whitespace = false;
+                    continue;
+                }
+            }
+            LinkState::AfterClosingBracket => {
+                output.push(ch);
+                if ch == '(' {
+                    link_state = LinkState::Destination(1);
+                } else {
+                    link_state = LinkState::Outside;
+                }
+                line_prefix_is_whitespace = false;
+                continue;
+            }
+            LinkState::Destination(depth) => {
+                output.push(ch);
+                link_state = match ch {
+                    '(' => LinkState::Destination(depth + 1),
+                    ')' if depth == 1 => LinkState::Outside,
+                    ')' => LinkState::Destination(depth - 1),
+                    _ => LinkState::Destination(depth),
+                };
+                line_prefix_is_whitespace = false;
+                continue;
+            }
         }
 
         if ch != '$' {
@@ -698,6 +756,27 @@ This is a test with [[Another Article|link]] and **bold** text.
             "unsafe href should be neutralized"
         );
         assert!(!result.contains("javascript:alert"));
+    }
+
+    #[test]
+    fn test_katex_placeholders_do_not_rewrite_link_destinations() {
+        let markdown = "[example](https://example.com/search?q=$x$)";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(result.contains(r#"href="https://example.com/search?q=$x$""#));
+        assert!(!result.contains("katex-inline"));
+    }
+
+    #[test]
+    fn test_katex_placeholders_do_not_rewrite_raw_html_attributes() {
+        let markdown = r#"<img src="https://example.com/$x$.png" alt="img">"#;
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(result.contains("&lt;img"));
+        assert!(result.contains("$x$.png"));
+        assert!(!result.contains("katex-inline"));
     }
 
     // -----------------------------------------------------------------
