@@ -126,10 +126,16 @@ fn extract_katex_placeholders(markdown: &str) -> (String, Vec<KatexPlaceholder>)
         }
 
         if ch == '<' {
-            in_html_tag = true;
-            output.push(ch);
-            line_prefix_is_whitespace = false;
-            continue;
+            let starts_html_tag = matches!(
+                chars.peek(),
+                Some(next) if next.is_ascii_alphabetic() || matches!(next, '/' | '!' | '?')
+            );
+            if starts_html_tag {
+                in_html_tag = true;
+                output.push(ch);
+                line_prefix_is_whitespace = false;
+                continue;
+            }
         }
 
         match link_state {
@@ -168,6 +174,13 @@ fn extract_katex_placeholders(markdown: &str) -> (String, Vec<KatexPlaceholder>)
             output.push(ch);
             line_prefix_is_whitespace =
                 ch == '\n' || (line_prefix_is_whitespace && ch.is_whitespace());
+            continue;
+        }
+
+        let preceding_backslash_count = output.chars().rev().take_while(|c| *c == '\\').count();
+        if preceding_backslash_count % 2 == 1 {
+            output.push(ch);
+            line_prefix_is_whitespace = false;
             continue;
         }
 
@@ -776,6 +789,26 @@ This is a test with [[Another Article|link]] and **bold** text.
 
         assert!(result.contains("&lt;img"));
         assert!(result.contains("$x$.png"));
+        assert!(!result.contains("katex-inline"));
+    }
+
+    #[test]
+    fn test_katex_placeholders_do_not_treat_comparison_as_html_tag() {
+        let markdown = "x < y and $z$ > 0";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(result.contains(r#"<span class="katex-inline">z</span>"#));
+    }
+
+    #[test]
+    fn test_katex_placeholders_respect_escaped_dollar_signs() {
+        let markdown = r"\$100 and \$x\$";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(result.contains("$100"));
+        assert!(result.contains("$x$"));
         assert!(!result.contains("katex-inline"));
     }
 

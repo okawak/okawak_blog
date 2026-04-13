@@ -74,6 +74,7 @@ pub fn AboutPage() -> impl IntoView {
         description: Some("About ページです。".to_string()),
         html: String::new(),
     };
+    let fallback_document_for_metadata = fallback_document.clone();
     let about_page = Resource::<Result<Option<StaticPageDocument>, String>>::new(
         || (),
         move |_| async move {
@@ -85,9 +86,12 @@ pub fn AboutPage() -> impl IntoView {
 
     view! {
         <Suspense fallback=move || {
-            let page_title = build_static_page_title(&fallback_document, SITE_NAME);
-            let page_description = build_static_page_description(&fallback_document);
-            let canonical_url = build_site_url(&build_static_page_canonical_path(&fallback_document));
+            let page_title = build_static_page_title(&fallback_document_for_metadata, SITE_NAME);
+            let page_description =
+                build_static_page_description(&fallback_document_for_metadata);
+            let canonical_url = build_site_url(
+                &build_static_page_canonical_path(&fallback_document_for_metadata),
+            );
 
             view! { <PageMetadata title=page_title description=page_description canonical_url /> }
         }>
@@ -95,20 +99,54 @@ pub fn AboutPage() -> impl IntoView {
                 Some(Ok(Some(document))) => {
                     let page_title = build_static_page_title(&document, SITE_NAME);
                     let page_description = build_static_page_description(&document);
-                    let canonical_url = build_site_url(&build_static_page_canonical_path(&document));
+                    let canonical_url = build_site_url(
+                        &build_static_page_canonical_path(&document),
+                    );
 
-                    view! { <PageMetadata title=page_title description=page_description canonical_url /> }
+                    view! {
+                        <PageMetadata title=page_title description=page_description canonical_url />
+                    }
                         .into_any()
                 }
                 Some(Ok(None)) => {
-                    let page_title = format!("ページが見つかりませんでした | {SITE_NAME}");
-                    let page_description = "ページが見つかりませんでした。".to_string();
+                    let page_title = format!(
+                        "ページが見つかりませんでした | {SITE_NAME}",
+                    );
+                    let page_description = "ページが見つかりませんでした。"
+                        .to_string();
                     let canonical_url = build_site_url("/");
 
-                    view! { <PageMetadata title=page_title description=page_description canonical_url /> }
+                    view! {
+                        <PageMetadata title=page_title description=page_description canonical_url />
+                    }
                         .into_any()
                 }
-                Some(Err(_)) | None => "".into_any(),
+                Some(Err(_)) => {
+                    let page_title = format!("About の読み込みに失敗しました | {SITE_NAME}");
+                    let page_description =
+                        "About ページの読み込みに失敗しました。時間をおいて再度お試しください。"
+                            .to_string();
+                    let canonical_url = build_site_url(
+                        &build_static_page_canonical_path(&fallback_document),
+                    );
+
+                    view! {
+                        <PageMetadata title=page_title description=page_description canonical_url />
+                    }
+                        .into_any()
+                }
+                None => {
+                    let page_title = build_static_page_title(&fallback_document, SITE_NAME);
+                    let page_description = build_static_page_description(&fallback_document);
+                    let canonical_url = build_site_url(
+                        &build_static_page_canonical_path(&fallback_document),
+                    );
+
+                    view! {
+                        <PageMetadata title=page_title description=page_description canonical_url />
+                    }
+                        .into_any()
+                }
             }}
         </Suspense>
 

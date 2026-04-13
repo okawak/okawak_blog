@@ -99,8 +99,7 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
                             </p>
                         }
                             .into_any()
-                    })}
-                <p class=home_style::overview_stats>{page_description}</p>
+                    })} <p class=home_style::overview_stats>{page_description}</p>
                 <ul class=home_style::category_list>{category_items}</ul>
             </section>
 
@@ -183,15 +182,33 @@ pub fn HomePage() -> impl IntoView {
                     let canonical_url = build_site_url(build_home_page_canonical_path());
 
                     view! {
-                        <PageMetadata
-                            title=page_title
-                            description=page_description
-                            canonical_url
-                        />
+                        <PageMetadata title=page_title description=page_description canonical_url />
                     }
                         .into_any()
                 }
-                Some(Err(_)) | None => "".into_any(),
+                Some(Err(_)) => {
+                    let page_title = format!("読み込み失敗 | {}", build_home_page_title(SITE_NAME));
+                    let page_description =
+                        "ホームページの読み込みに失敗しました。時間をおいて再度お試しください。"
+                            .to_string();
+                    let canonical_url = build_site_url(build_home_page_canonical_path());
+
+                    view! {
+                        <PageMetadata title=page_title description=page_description canonical_url />
+                    }
+                        .into_any()
+                }
+                None => {
+                    let page_title = build_home_page_title(SITE_NAME);
+                    let page_description =
+                        "ホームページを読み込み中です。最新の記事を準備しています。".to_string();
+                    let canonical_url = build_site_url(build_home_page_canonical_path());
+
+                    view! {
+                        <PageMetadata title=page_title description=page_description canonical_url />
+                    }
+                        .into_any()
+                }
             }}
         </Suspense>
 

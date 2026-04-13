@@ -129,33 +129,11 @@ pub fn ArticlePage() -> impl IntoView {
 
     view! {
         <Suspense fallback=move || {
-            let (category_param, slug_param) = params.with(|params: &ParamsMap| {
-                (
-                    params.get("category").unwrap_or_default(),
-                    normalize_article_slug_param(&params.get("slug").unwrap_or_default()).to_string(),
-                )
-            });
-            let page_title = if slug_param.is_empty() {
-                SITE_NAME.to_string()
-            } else {
-                format!("{slug_param} | {SITE_NAME}")
-            };
-            let page_description = if category_param.is_empty() {
-                "記事ページです。".to_string()
-            } else {
-                format!("{category_param} カテゴリの記事です。")
-            };
-            let canonical_url = if category_param.is_empty() || slug_param.is_empty() {
-                build_site_url("/")
-            } else {
-                build_site_url(&format!("/{category_param}/{slug_param}"))
-            };
-
             view! {
                 <PageMetadata
-                    title=page_title
-                    description=page_description
-                    canonical_url
+                    title=SITE_NAME.to_string()
+                    description="記事ページです。"
+                    canonical_url=build_site_url("/")
                     og_type="article"
                 />
             }
@@ -164,7 +142,9 @@ pub fn ArticlePage() -> impl IntoView {
                 Some(Ok(Some(document))) => {
                     let page_title = build_article_page_title(&document, SITE_NAME);
                     let page_description = build_article_page_description(&document);
-                    let canonical_url = build_site_url(&build_article_page_canonical_path(&document));
+                    let canonical_url = build_site_url(
+                        &build_article_page_canonical_path(&document),
+                    );
 
                     view! {
                         <PageMetadata
@@ -177,19 +157,24 @@ pub fn ArticlePage() -> impl IntoView {
                         .into_any()
                 }
                 Some(Ok(None)) => {
-                    let (category_param, slug_param) = params.with(|params: &ParamsMap| {
-                        (
-                            params.get("category").unwrap_or_default(),
-                            normalize_article_slug_param(&params.get("slug").unwrap_or_default())
-                                .to_string(),
-                        )
-                    });
-                    let page_title = format!("ページが見つかりませんでした | {SITE_NAME}");
+                    let (category_param, slug_param) = params
+                        .with(|params: &ParamsMap| {
+                            (
+                                params.get("category").unwrap_or_default(),
+                                normalize_article_slug_param(
+                                        &params.get("slug").unwrap_or_default(),
+                                    )
+                                    .to_string(),
+                            )
+                        });
+                    let page_title = format!(
+                        "ページが見つかりませんでした | {SITE_NAME}",
+                    );
                     let page_description = if category_param.is_empty() || slug_param.is_empty() {
                         "記事が見つかりませんでした。".to_string()
                     } else {
                         format!(
-                            "{category_param} カテゴリの {slug_param} は見つかりませんでした。"
+                            "{category_param} カテゴリの {slug_param} は見つかりませんでした。",
                         )
                     };
                     let canonical_url = if category_param.is_empty() || slug_param.is_empty() {
@@ -198,10 +183,77 @@ pub fn ArticlePage() -> impl IntoView {
                         build_site_url(&format!("/{category_param}/{slug_param}"))
                     };
 
-                    view! { <PageMetadata title=page_title description=page_description canonical_url /> }
+                    view! {
+                        <PageMetadata title=page_title description=page_description canonical_url />
+                    }
                         .into_any()
                 }
-                Some(Err(_)) | None => "".into_any(),
+                Some(Err(_)) => {
+                    let (category_param, slug_param) = params.with(|params: &ParamsMap| {
+                        (
+                            params.get("category").unwrap_or_default(),
+                            normalize_article_slug_param(&params.get("slug").unwrap_or_default())
+                                .to_string(),
+                        )
+                    });
+                    let page_title = format!("記事の読み込みに失敗しました | {SITE_NAME}");
+                    let page_description = if category_param.is_empty() || slug_param.is_empty() {
+                        "記事の読み込みに失敗しました。".to_string()
+                    } else {
+                        format!(
+                            "{category_param} カテゴリの {slug_param} の読み込みに失敗しました。"
+                        )
+                    };
+                    let canonical_url = if category_param.is_empty() || slug_param.is_empty() {
+                        build_site_url("/")
+                    } else {
+                        build_site_url(&format!("/{category_param}/{slug_param}"))
+                    };
+
+                    view! {
+                        <PageMetadata
+                            title=page_title
+                            description=page_description
+                            canonical_url
+                            og_type="article"
+                        />
+                    }
+                        .into_any()
+                }
+                None => {
+                    let (category_param, slug_param) = params.with(|params: &ParamsMap| {
+                        (
+                            params.get("category").unwrap_or_default(),
+                            normalize_article_slug_param(&params.get("slug").unwrap_or_default())
+                                .to_string(),
+                        )
+                    });
+                    let page_title = if slug_param.is_empty() {
+                        SITE_NAME.to_string()
+                    } else {
+                        format!("{slug_param} | {SITE_NAME}")
+                    };
+                    let page_description = if category_param.is_empty() {
+                        "記事ページです。".to_string()
+                    } else {
+                        format!("{category_param} カテゴリの記事です。")
+                    };
+                    let canonical_url = if category_param.is_empty() || slug_param.is_empty() {
+                        build_site_url("/")
+                    } else {
+                        build_site_url(&format!("/{category_param}/{slug_param}"))
+                    };
+
+                    view! {
+                        <PageMetadata
+                            title=page_title
+                            description=page_description
+                            canonical_url
+                            og_type="article"
+                        />
+                    }
+                        .into_any()
+                }
             }}
         </Suspense>
 
