@@ -41,6 +41,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"
                     integrity="sha384-cMkvdD8LoxVzGF/RPUKAcvmm49FQ0oxwDF3BGKtDXcEc+T1b2N+teh/OJfpU0jr6"
                     crossorigin="anonymous"
+                    onload="window.okawakScheduleMathRender && window.okawakScheduleMathRender();"
                 ></script>
                 <script>
                     {r#"
@@ -49,15 +50,15 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     
                     const scope = root || document.body;
                     const normalizeExpression = (value) =>
-                     (value || '').replace(/[\u2009\u200A\u200B\u200C\u200D\u2061\u202F\u2060\uFEFF]/g, '');
+                    (value || '').replace(/[  ​‌‍⁡ ⁠﻿]/g, '');
                     
                     scope.querySelectorAll('.okawak-katex-inline').forEach((element) => {
                     if (element.dataset.katexRendered === 'true') return;
                     
                     const expression = normalizeExpression(element.textContent);
                     window.katex.render(expression, element, {
-                      displayMode: false,
-                      throwOnError: false,
+                    displayMode: false,
+                    throwOnError: false,
                     });
                     element.dataset.katexRendered = 'true';
                     });
@@ -67,13 +68,41 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     
                     const expression = normalizeExpression(element.textContent);
                     window.katex.render(expression, element, {
-                      displayMode: true,
-                      throwOnError: false,
+                    displayMode: true,
+                    throwOnError: false,
                     });
                     element.dataset.katexRendered = 'true';
                     });
                     };
                     
+                    window.okawakScheduleMathRender = function(root) {
+                    let remaining = 200;
+                    const attempt = function() {
+                    if (window.katex && window.okawakRenderMath) {
+                    window.okawakRenderMath(root);
+                    return;
+                    }
+                    
+                    if (remaining > 0) {
+                    remaining -= 1;
+                    window.setTimeout(attempt, 50);
+                    }
+                    };
+                    
+                    attempt();
+                    };
+                    
+                    document.addEventListener('DOMContentLoaded', function() {
+                    if (window.okawakScheduleMathRender) {
+                    window.okawakScheduleMathRender();
+                    }
+                    });
+                    
+                    window.addEventListener('load', function() {
+                    if (window.okawakScheduleMathRender) {
+                    window.okawakScheduleMathRender();
+                    }
+                    });
                     "#}
                 </script>
 
@@ -237,17 +266,17 @@ fn trigger_math_render() {
     use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
     fn call_render_math(window: &web_sys::Window) -> bool {
-        let has_katex = Reflect::get(window.as_ref(), &JsValue::from_str("katex"))
-            .map(|value| !value.is_undefined() && !value.is_null())
-            .unwrap_or(false);
-
-        if !has_katex {
-            return false;
-        }
-
-        let render_math = Reflect::get(window.as_ref(), &JsValue::from_str("okawakRenderMath"))
-            .ok()
-            .and_then(|value| value.dyn_into::<Function>().ok());
+        let render_math = Reflect::get(
+            window.as_ref(),
+            &JsValue::from_str("okawakScheduleMathRender"),
+        )
+        .ok()
+        .and_then(|value| value.dyn_into::<Function>().ok())
+        .or_else(|| {
+            Reflect::get(window.as_ref(), &JsValue::from_str("okawakRenderMath"))
+                .ok()
+                .and_then(|value| value.dyn_into::<Function>().ok())
+        });
 
         if let Some(render_math) = render_math {
             let _ = render_math.call0(window.as_ref());
