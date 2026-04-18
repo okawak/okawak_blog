@@ -145,11 +145,18 @@ pub fn CategoryPage() -> impl IntoView {
 
     view! {
         <Suspense fallback=move || {
+            let category_param = category();
+            let canonical_url = if category_param.is_empty() {
+                build_site_url("/")
+            } else {
+                build_site_url(&format!("/{category_param}"))
+            };
+
             view! {
                 <PageMetadata
                     title=SITE_NAME.to_string()
                     description="カテゴリページです。"
-                    canonical_url=build_site_url("/")
+                    canonical_url
                 />
             }
         }>
@@ -191,8 +198,8 @@ pub fn CategoryPage() -> impl IntoView {
                         .into_any()
                 }
                 Some(Err(_)) => {
-                    let category_param =
-                        params.with(|params: &ParamsMap| params.get("category").unwrap_or_default());
+                    let category_param = params
+                        .with(|params: &ParamsMap| params.get("category").unwrap_or_default());
                     let page_title = if category_param.is_empty() {
                         format!("カテゴリの読み込みに失敗しました | {SITE_NAME}")
                     } else {
@@ -201,7 +208,9 @@ pub fn CategoryPage() -> impl IntoView {
                     let page_description = if category_param.is_empty() {
                         "カテゴリの読み込みに失敗しました。".to_string()
                     } else {
-                        format!("{category_param} カテゴリの読み込みに失敗しました。")
+                        format!(
+                            "{category_param} カテゴリの読み込みに失敗しました。",
+                        )
                     };
                     let canonical_url = if category_param.is_empty() {
                         build_site_url("/")
@@ -215,8 +224,8 @@ pub fn CategoryPage() -> impl IntoView {
                         .into_any()
                 }
                 None => {
-                    let category_param =
-                        params.with(|params: &ParamsMap| params.get("category").unwrap_or_default());
+                    let category_param = params
+                        .with(|params: &ParamsMap| params.get("category").unwrap_or_default());
                     let page_title = if category_param.is_empty() {
                         SITE_NAME.to_string()
                     } else {

@@ -92,17 +92,6 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     attempt();
                     };
                     
-                    document.addEventListener('DOMContentLoaded', function() {
-                    if (window.okawakScheduleMathRender) {
-                    window.okawakScheduleMathRender();
-                    }
-                    });
-                    
-                    window.addEventListener('load', function() {
-                    if (window.okawakScheduleMathRender) {
-                    window.okawakScheduleMathRender();
-                    }
-                    });
                     "#}
                 </script>
 
