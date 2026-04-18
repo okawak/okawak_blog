@@ -30,8 +30,9 @@ tw_merge.workspace = true
 leptos_ui.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys.workspace = true
 serde-wasm-bindgen.workspace = true
-web-sys = { workspace = true, features = ["Element", "Location", "Window"] }
+web-sys = { workspace = true, features = ["Document", "DomTokenList", "Element", "HtmlElement", "Location", "MutationObserver", "MutationObserverInit", "MutationRecord", "Node", "NodeList", "Window"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 infra = { path = "../infra", optional = true }

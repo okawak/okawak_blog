@@ -62,9 +62,7 @@ pub async fn get_category_page_document(
 
 #[component]
 fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
-    let page_title = build_category_page_title(&document, SITE_NAME);
     let page_description: Arc<str> = build_category_page_description(&document).into();
-    let canonical_url = build_site_url(&build_category_page_canonical_path(&document));
     let CategoryPageDocument {
         title,
         html: landing_html,
@@ -94,7 +92,9 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
                                 </A>
                             </h3>
                             <p class=category_style::article_description>{description}</p>
-                            <p class=category_style::article_meta>{format!("更新 {}", updated_at)}</p>
+                            <p class=category_style::article_meta>
+                                {format!("更新 {}", updated_at)}
+                            </p>
                         </article>
                     }
                 })
@@ -110,8 +110,6 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
         .collect_view();
 
     view! {
-        <PageMetadata title=page_title description=page_description.clone() canonical_url />
-
         <div class=category_style::category_page>
             <header class=category_style::category_header>
                 <p class=category_style::eyebrow>{"Category"}</p>
@@ -146,6 +144,112 @@ pub fn CategoryPage() -> impl IntoView {
     );
 
     view! {
+        <Suspense fallback=move || {
+            let category_param = category();
+            let canonical_url = if category_param.is_empty() {
+                build_site_url("/")
+            } else {
+                build_site_url(&format!("/{category_param}"))
+            };
+
+            view! {
+                <PageMetadata
+                    title=SITE_NAME.to_string()
+                    description="カテゴリページです。"
+                    canonical_url
+                />
+            }
+        }>
+            {move || match category_page.get() {
+                Some(Ok(Some(document))) => {
+                    let page_title = build_category_page_title(&document, SITE_NAME);
+                    let page_description = build_category_page_description(&document);
+                    let canonical_url = build_site_url(
+                        &build_category_page_canonical_path(&document),
+                    );
+
+                    view! {
+                        <PageMetadata title=page_title description=page_description canonical_url />
+                    }
+                        .into_any()
+                }
+                Some(Ok(None)) => {
+                    let category_param = params
+                        .with(|params: &ParamsMap| params.get("category").unwrap_or_default());
+                    let page_title = format!(
+                        "ページが見つかりませんでした | {SITE_NAME}",
+                    );
+                    let page_description = if category_param.is_empty() {
+                        "ページが見つかりませんでした。".to_string()
+                    } else {
+                        format!(
+                            "{category_param} カテゴリのページが見つかりませんでした。",
+                        )
+                    };
+                    let canonical_url = if category_param.is_empty() {
+                        build_site_url("/")
+                    } else {
+                        build_site_url(&format!("/{category_param}"))
+                    };
+
+                    view! {
+                        <PageMetadata title=page_title description=page_description canonical_url />
+                    }
+                        .into_any()
+                }
+                Some(Err(_)) => {
+                    let category_param = params
+                        .with(|params: &ParamsMap| params.get("category").unwrap_or_default());
+                    let page_title = if category_param.is_empty() {
+                        format!("カテゴリの読み込みに失敗しました | {SITE_NAME}")
+                    } else {
+                        format!("{category_param} | {SITE_NAME}")
+                    };
+                    let page_description = if category_param.is_empty() {
+                        "カテゴリの読み込みに失敗しました。".to_string()
+                    } else {
+                        format!(
+                            "{category_param} カテゴリの読み込みに失敗しました。",
+                        )
+                    };
+                    let canonical_url = if category_param.is_empty() {
+                        build_site_url("/")
+                    } else {
+                        build_site_url(&format!("/{category_param}"))
+                    };
+
+                    view! {
+                        <PageMetadata title=page_title description=page_description canonical_url />
+                    }
+                        .into_any()
+                }
+                None => {
+                    let category_param = params
+                        .with(|params: &ParamsMap| params.get("category").unwrap_or_default());
+                    let page_title = if category_param.is_empty() {
+                        SITE_NAME.to_string()
+                    } else {
+                        format!("{category_param} | {SITE_NAME}")
+                    };
+                    let page_description = if category_param.is_empty() {
+                        "カテゴリページです。".to_string()
+                    } else {
+                        format!("{category_param} カテゴリの記事一覧です。")
+                    };
+                    let canonical_url = if category_param.is_empty() {
+                        build_site_url("/")
+                    } else {
+                        build_site_url(&format!("/{category_param}"))
+                    };
+
+                    view! {
+                        <PageMetadata title=page_title description=page_description canonical_url />
+                    }
+                        .into_any()
+                }
+            }}
+        </Suspense>
+
         <Suspense fallback=|| {
             view! { <div class=category_style::loading>"カテゴリを読み込み中..."</div> }
         }>

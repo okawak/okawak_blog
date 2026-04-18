@@ -4833,6 +4833,7 @@ dependencies = [
  "domain",
  "env_logger",
  "infra",
+ "js-sys",
  "leptos",
  "leptos_axum",
  "leptos_meta",
