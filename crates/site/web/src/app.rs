@@ -135,8 +135,18 @@ pub fn App() -> impl IntoView {
 fn MathRenderer() -> impl IntoView {
     let location = use_location();
 
+    #[cfg(target_arch = "wasm32")]
+    let render_scheduled = std::rc::Rc::new(std::cell::Cell::new(false));
+    #[cfg(target_arch = "wasm32")]
+    let render_scheduled_for_location = render_scheduled.clone();
+
     Effect::new(move |_| {
         let _ = location.pathname.get();
+
+        #[cfg(target_arch = "wasm32")]
+        schedule_math_render(&render_scheduled_for_location);
+
+        #[cfg(not(target_arch = "wasm32"))]
         trigger_math_render();
     });
 
@@ -164,13 +174,29 @@ fn MathRenderer() -> impl IntoView {
             let Some(document) = window.document() else {
                 return;
             };
-            let Some(body) = document.body() else {
+            let root = document
+                .query_selector("main.content-container")
+                .ok()
+                .flatten()
+                .map(Into::into)
+                .or_else(|| document.body().map(Into::into));
+            let Some(root) = root else {
                 return;
             };
+            let render_scheduled = render_scheduled.clone();
 
             let callback = Closure::wrap(Box::new(
-                move |_records: js_sys::Array, _observer: MutationObserver| {
-                    trigger_math_render();
+                move |records: js_sys::Array, _observer: MutationObserver| {
+                    let should_render = records.iter().any(|record| {
+                        record
+                            .dyn_into::<web_sys::MutationRecord>()
+                            .ok()
+                            .is_some_and(|record| mutation_record_contains_math(&record))
+                    });
+
+                    if should_render {
+                        schedule_math_render(&render_scheduled);
+                    }
                 },
             )
                 as Box<dyn FnMut(js_sys::Array, MutationObserver)>);
@@ -185,7 +211,7 @@ fn MathRenderer() -> impl IntoView {
             options.set_subtree(true);
 
             if observer_instance
-                .observe_with_options(&body, &options)
+                .observe_with_options(&root, &options)
                 .is_ok()
             {
                 observer.set_value(Some((observer_instance, callback)));
@@ -206,27 +232,118 @@ fn MathRenderer() -> impl IntoView {
 
 #[cfg(target_arch = "wasm32")]
 fn trigger_math_render() {
-    use js_sys::Function;
+    use js_sys::{Function, Reflect};
+    use std::{cell::RefCell, rc::Rc};
+    use wasm_bindgen::{JsCast, JsValue, closure::Closure};
+
+    fn call_render_math(window: &web_sys::Window) -> bool {
+        let has_katex = Reflect::get(window.as_ref(), &JsValue::from_str("katex"))
+            .map(|value| !value.is_undefined() && !value.is_null())
+            .unwrap_or(false);
+
+        if !has_katex {
+            return false;
+        }
+
+        let render_math = Reflect::get(window.as_ref(), &JsValue::from_str("okawakRenderMath"))
+            .ok()
+            .and_then(|value| value.dyn_into::<Function>().ok());
+
+        if let Some(render_math) = render_math {
+            let _ = render_math.call0(window.as_ref());
+            true
+        } else {
+            false
+        }
+    }
 
     if let Some(window) = web_sys::window() {
-        let callback = Function::new_no_args(
-            r#"
-            (function retryRenderMath(remaining) {
-                if (window.katex && window.okawakRenderMath) {
-                    window.okawakRenderMath();
-                    return;
-                }
+        if call_render_math(&window) {
+            return;
+        }
 
-                if (remaining > 0) {
-                    window.setTimeout(function () {
-                        retryRenderMath(remaining - 1);
-                    }, 50);
-                }
-            })(20);
-            "#,
-        );
-        let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(&callback, 0);
+        let remaining = Rc::new(RefCell::new(20_u32));
+        let retry = Rc::new(RefCell::new(None::<Closure<dyn FnMut()>>));
+        let retry_for_closure = Rc::clone(&retry);
+        let remaining_for_closure = Rc::clone(&remaining);
+        let window_for_closure = window.clone();
+
+        *retry.borrow_mut() = Some(Closure::wrap(Box::new(move || {
+            if call_render_math(&window_for_closure) {
+                let _ = retry_for_closure.borrow_mut().take();
+                return;
+            }
+
+            let mut remaining = remaining_for_closure.borrow_mut();
+            if *remaining == 0 {
+                let _ = retry_for_closure.borrow_mut().take();
+                return;
+            }
+
+            *remaining -= 1;
+
+            if let Some(callback) = retry_for_closure.borrow().as_ref() {
+                let _ = window_for_closure.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    callback.as_ref().unchecked_ref(),
+                    50,
+                );
+            }
+        }) as Box<dyn FnMut()>));
+
+        if let Some(callback) = retry.borrow().as_ref() {
+            let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                callback.as_ref().unchecked_ref(),
+                50,
+            );
+        }
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn schedule_math_render(render_scheduled: &std::rc::Rc<std::cell::Cell<bool>>) {
+    use wasm_bindgen::{JsCast, closure::Closure};
+
+    if render_scheduled.get() {
+        return;
+    }
+
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+
+    render_scheduled.set(true);
+    let render_scheduled = render_scheduled.clone();
+    let callback = Closure::once(move || {
+        render_scheduled.set(false);
+        trigger_math_render();
+    });
+
+    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+        callback.as_ref().unchecked_ref(),
+        0,
+    );
+    callback.forget();
+}
+
+#[cfg(target_arch = "wasm32")]
+fn mutation_record_contains_math(record: &web_sys::MutationRecord) -> bool {
+    let nodes = record.added_nodes();
+    (0..nodes.length()).any(|index| nodes.item(index).as_ref().is_some_and(node_contains_math))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn node_contains_math(node: &web_sys::Node) -> bool {
+    use wasm_bindgen::JsCast;
+
+    node.dyn_ref::<web_sys::Element>().is_some_and(|element| {
+        element.class_list().contains("okawak-katex-inline")
+            || element.class_list().contains("okawak-katex-display")
+            || element
+                .query_selector(".okawak-katex-inline, .okawak-katex-display")
+                .ok()
+                .flatten()
+                .is_some()
+    })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
