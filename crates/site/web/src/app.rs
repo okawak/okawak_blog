@@ -51,7 +51,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     const normalizeExpression = (value) =>
                      (value || '').replace(/[\u2009\u200A\u200B\u200C\u200D\u2061\u202F\u2060\uFEFF]/g, '');
                     
-                    scope.querySelectorAll('.katex-inline').forEach((element) => {
+                    scope.querySelectorAll('.okawak-katex-inline').forEach((element) => {
                     if (element.dataset.katexRendered === 'true') return;
                     
                     const expression = normalizeExpression(element.textContent);
@@ -62,7 +62,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     element.dataset.katexRendered = 'true';
                     });
                     
-                    scope.querySelectorAll('.katex-display').forEach((element) => {
+                    scope.querySelectorAll('.okawak-katex-display').forEach((element) => {
                     if (element.dataset.katexRendered === 'true') return;
                     
                     const expression = normalizeExpression(element.textContent);
@@ -139,6 +139,67 @@ fn MathRenderer() -> impl IntoView {
         let _ = location.pathname.get();
         trigger_math_render();
     });
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        use leptos::prelude::on_cleanup;
+        use wasm_bindgen::{JsCast, closure::Closure};
+        use web_sys::{MutationObserver, MutationObserverInit};
+
+        let observer = StoredValue::new_local(
+            None::<(
+                MutationObserver,
+                Closure<dyn FnMut(js_sys::Array, MutationObserver)>,
+            )>,
+        );
+
+        Effect::new(move |_| {
+            if observer.with_value(|value| value.is_some()) {
+                return;
+            }
+
+            let Some(window) = web_sys::window() else {
+                return;
+            };
+            let Some(document) = window.document() else {
+                return;
+            };
+            let Some(body) = document.body() else {
+                return;
+            };
+
+            let callback = Closure::wrap(Box::new(
+                move |_records: js_sys::Array, _observer: MutationObserver| {
+                    trigger_math_render();
+                },
+            )
+                as Box<dyn FnMut(js_sys::Array, MutationObserver)>);
+            let observer_instance = MutationObserver::new(callback.as_ref().unchecked_ref()).ok();
+
+            let Some(observer_instance) = observer_instance else {
+                return;
+            };
+
+            let options = MutationObserverInit::new();
+            options.set_child_list(true);
+            options.set_subtree(true);
+
+            if observer_instance
+                .observe_with_options(&body, &options)
+                .is_ok()
+            {
+                observer.set_value(Some((observer_instance, callback)));
+            }
+        });
+
+        on_cleanup(move || {
+            observer.update_value(|value| {
+                if let Some((observer_instance, _callback)) = value.take() {
+                    observer_instance.disconnect();
+                }
+            });
+        });
+    }
 
     view! { <></> }
 }

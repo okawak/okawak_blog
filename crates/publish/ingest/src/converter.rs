@@ -264,8 +264,12 @@ fn replace_katex_placeholders(html: &str, placeholders: &[KatexPlaceholder]) -> 
         .map(|placeholder| {
             let content = html_escape(&normalize_katex_content(&placeholder.content));
             let replacement = match placeholder.mode {
-                KatexMode::Inline => format!(r#"<span class="katex-inline">{content}</span>"#),
-                KatexMode::Display => format!(r#"<span class="katex-display">{content}</span>"#),
+                KatexMode::Inline => {
+                    format!(r#"<span class="okawak-katex-inline">{content}</span>"#)
+                }
+                KatexMode::Display => {
+                    format!(r#"<span class="okawak-katex-display">{content}</span>"#)
+                }
             };
 
             (placeholder.token.as_str(), replacement)
@@ -365,7 +369,7 @@ fn repair_unparsed_strong_markers(html: &str) -> String {
 
 fn apply_unparsed_strong_markers(html: &str) -> String {
     static STRONG_KATEX_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"(?s)\*\*((?:<span class="katex-(?:inline|display)">.*?</span>))\*\*"#)
+        Regex::new(r#"(?s)\*\*((?:<span class="okawak-katex-(?:inline|display)">.*?</span>))\*\*"#)
             .expect("Invalid KaTeX strong marker regex")
     });
 
@@ -653,15 +657,15 @@ This is a test with [[Another Article|link]] and **bold** text.
     #[rstest]
     #[case::inline_math(
         "Here is some inline math: $x^2 + y^2 = z^2$ and more text.",
-        "<p>Here is some inline math: <span class=\"katex-inline\">x^2 + y^2 = z^2</span> and more text.</p>\n"
+        "<p>Here is some inline math: <span class=\"okawak-katex-inline\">x^2 + y^2 = z^2</span> and more text.</p>\n"
     )]
     #[case::display_math(
         "Here is display math:\n$$\\int_0^1 x^2 dx = \\frac{1}{3}$$\nEnd of math.",
-        "<p>Here is display math:\n<span class=\"katex-display\">\\int_0^1 x^2 dx = \\frac{1}{3}</span>\nEnd of math.</p>\n"
+        "<p>Here is display math:\n<span class=\"okawak-katex-display\">\\int_0^1 x^2 dx = \\frac{1}{3}</span>\nEnd of math.</p>\n"
     )]
     #[case::mixed_math(
         "Inline $a+b$ and display $$c+d$$ math.",
-        "<p>Inline <span class=\"katex-inline\">a+b</span> and display <span class=\"katex-display\">c+d</span> math.</p>\n"
+        "<p>Inline <span class=\"okawak-katex-inline\">a+b</span> and display <span class=\"okawak-katex-display\">c+d</span> math.</p>\n"
     )]
     fn test_katex_math_processing(#[case] input: &str, #[case] expected: &str) {
         let result = convert_markdown_to_html(input).unwrap();
@@ -678,9 +682,9 @@ This is a test with [[Another Article|link]] and **bold** text.
             result.contains("<strong>「サンプリング」</strong>と<strong>「モデル化」</strong>"),
             "unexpected html:\n{result}"
         );
-        assert!(
-            result.contains("<strong><span class=\"katex-inline\">x = (x_1, x_2)</span></strong>")
-        );
+        assert!(result.contains(
+            "<strong><span class=\"okawak-katex-inline\">x = (x_1, x_2)</span></strong>"
+        ));
         assert!(!result.contains("**"));
     }
 
@@ -700,8 +704,8 @@ This is a test with [[Another Article|link]] and **bold** text.
 
         let result = convert_markdown_to_html(markdown).unwrap();
 
-        assert!(result.contains(r#"<span class="katex-inline">x + y</span>"#));
-        assert!(result.contains(r#"<span class="katex-display">a + b</span>"#));
+        assert!(result.contains(r#"<span class="okawak-katex-inline">x + y</span>"#));
+        assert!(result.contains(r#"<span class="okawak-katex-display">a + b</span>"#));
         assert!(!result.contains('\u{200B}'));
         assert!(!result.contains('\u{200C}'));
         assert!(!result.contains('\u{200D}'));
@@ -715,8 +719,8 @@ This is a test with [[Another Article|link]] and **bold** text.
         let result = convert_markdown_to_html(markdown).unwrap();
 
         assert!(result.contains("<code>code with `$x$` inside</code>"));
-        assert!(result.contains(r#"<span class="katex-inline">y</span>"#));
-        assert!(!result.contains(r#"<span class="katex-inline">x</span>"#));
+        assert!(result.contains(r#"<span class="okawak-katex-inline">y</span>"#));
+        assert!(!result.contains(r#"<span class="okawak-katex-inline">x</span>"#));
     }
 
     #[test]
@@ -729,8 +733,8 @@ This is a test with [[Another Article|link]] and **bold** text.
             result
                 .contains("<pre><code class=\"language-text\">literal ``` and $x$\n</code></pre>")
         );
-        assert!(result.contains(r#"<span class="katex-inline">y</span>"#));
-        assert!(!result.contains(r#"<span class="katex-inline">x</span>"#));
+        assert!(result.contains(r#"<span class="okawak-katex-inline">y</span>"#));
+        assert!(!result.contains(r#"<span class="okawak-katex-inline">x</span>"#));
     }
 
     #[rstest]
@@ -778,7 +782,7 @@ This is a test with [[Another Article|link]] and **bold** text.
         let result = convert_markdown_to_html(markdown).unwrap();
 
         assert!(result.contains(r#"href="https://example.com/search?q=$x$""#));
-        assert!(!result.contains("katex-inline"));
+        assert!(!result.contains("okawak-katex-inline"));
     }
 
     #[test]
@@ -789,7 +793,7 @@ This is a test with [[Another Article|link]] and **bold** text.
 
         assert!(result.contains("&lt;img"));
         assert!(result.contains("$x$.png"));
-        assert!(!result.contains("katex-inline"));
+        assert!(!result.contains("okawak-katex-inline"));
     }
 
     #[test]
@@ -798,7 +802,7 @@ This is a test with [[Another Article|link]] and **bold** text.
 
         let result = convert_markdown_to_html(markdown).unwrap();
 
-        assert!(result.contains(r#"<span class="katex-inline">z</span>"#));
+        assert!(result.contains(r#"<span class="okawak-katex-inline">z</span>"#));
     }
 
     #[test]
@@ -809,7 +813,7 @@ This is a test with [[Another Article|link]] and **bold** text.
 
         assert!(result.contains("$100"));
         assert!(result.contains("$x$"));
-        assert!(!result.contains("katex-inline"));
+        assert!(!result.contains("okawak-katex-inline"));
     }
 
     // -----------------------------------------------------------------
@@ -1064,7 +1068,7 @@ This is a test with [[Another Article|link]] and **bold** text.
             "inline code content should not be KaTeX-processed; got:\n{result}"
         );
         assert!(
-            !result.contains("katex-inline"),
+            !result.contains("okawak-katex-inline"),
             "no KaTeX span expected inside inline code; got:\n{result}"
         );
     }
@@ -1078,11 +1082,11 @@ This is a test with [[Another Article|link]] and **bold** text.
         let result = convert_markdown_to_html(markdown).unwrap();
 
         assert!(
-            !result.contains("katex-display"),
+            !result.contains("okawak-katex-display"),
             "fenced code block should not produce KaTeX display; got:\n{result}"
         );
         assert!(
-            !result.contains("katex-inline"),
+            !result.contains("okawak-katex-inline"),
             "fenced code block should not produce KaTeX inline; got:\n{result}"
         );
         assert!(
@@ -1100,7 +1104,7 @@ This is a test with [[Another Article|link]] and **bold** text.
         let result = convert_markdown_to_html(markdown).unwrap();
 
         assert!(
-            result.contains(r#"<span class="katex-inline">a+b</span>"#),
+            result.contains(r#"<span class="okawak-katex-inline">a+b</span>"#),
             "math outside code should be converted to KaTeX span; got:\n{result}"
         );
         assert!(
@@ -1123,8 +1127,8 @@ This is a test with [[Another Article|link]] and **bold** text.
     fn test_katex_placeholders_skip_code(#[case] markdown: &str) {
         let result = convert_markdown_to_html(markdown).unwrap();
 
-        assert!(result.contains("katex-inline"));
+        assert!(result.contains("okawak-katex-inline"));
         assert!(result.contains("$not_math$"));
-        assert!(!result.contains("<span class=\"katex-inline\">not_math</span>"));
+        assert!(!result.contains("<span class=\"okawak-katex-inline\">not_math</span>"));
     }
 }

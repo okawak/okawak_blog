@@ -32,7 +32,7 @@ leptos_ui.workspace = true
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys.workspace = true
 serde-wasm-bindgen.workspace = true
-web-sys = { workspace = true, features = ["Element", "Location", "Window"] }
+web-sys = { workspace = true, features = ["Document", "Element", "HtmlElement", "Location", "MutationObserver", "MutationObserverInit", "Window"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 infra = { path = "../infra", optional = true }

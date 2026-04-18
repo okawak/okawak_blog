@@ -157,16 +157,13 @@ pub fn ArticlePage() -> impl IntoView {
                         .into_any()
                 }
                 Some(Ok(None)) => {
-                    let (category_param, slug_param) = params
-                        .with(|params: &ParamsMap| {
-                            (
-                                params.get("category").unwrap_or_default(),
-                                normalize_article_slug_param(
-                                        &params.get("slug").unwrap_or_default(),
-                                    )
-                                    .to_string(),
-                            )
-                        });
+                    let (category_param, slug_param) = params.with(|params: &ParamsMap| {
+                        let slug = params.get("slug").unwrap_or_default();
+                        (
+                            params.get("category").unwrap_or_default(),
+                            normalize_article_slug_param(&slug).to_string(),
+                        )
+                    });
                     let page_title = format!(
                         "ページが見つかりませんでした | {SITE_NAME}",
                     );
