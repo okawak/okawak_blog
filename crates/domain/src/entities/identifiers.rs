@@ -1,17 +1,9 @@
 //! Type-safe identifier types for domain entities.
 
 use crate::error::{DomainError, Result};
-use serde::{Deserialize, Deserializer, Serialize, de::Error as DeError};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::{fmt, str::FromStr};
 
-fn deserialize_validated_string<'de, D, T>(deserializer: D) -> std::result::Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: FromStr<Err = DomainError>,
-{
-    let value = String::deserialize(deserializer)?;
-    T::from_str(&value).map_err(D::Error::custom)
-}
 
 macro_rules! impl_display_and_deserialize {
     ($type:ty) => {
@@ -25,7 +17,7 @@ macro_rules! impl_display_and_deserialize {
             where
                 D: Deserializer<'de>,
             {
-                deserialize_validated_string(deserializer)
+                super::deserialize_validated_string(deserializer)
             }
         }
     };
