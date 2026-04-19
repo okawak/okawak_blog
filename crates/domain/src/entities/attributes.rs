@@ -4,7 +4,6 @@ use crate::error::{DomainError, Result};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{fmt, str::FromStr};
 
-
 /// Article title with business-rule validation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Title(String);

@@ -6,10 +6,10 @@ mod article;
 mod attributes;
 mod identifiers;
 
+use crate::error::DomainError;
 pub use article::{Article, ArticleSummary};
 pub use attributes::{Category, ContentKind, Title};
 pub use identifiers::{ArticleId, PageKey, Slug};
-use crate::error::DomainError;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use std::str::FromStr;
 
@@ -23,4 +23,3 @@ where
     let value = String::deserialize(deserializer)?;
     T::from_str(&value).map_err(D::Error::custom)
 }
-

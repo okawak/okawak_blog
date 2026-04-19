@@ -4,7 +4,6 @@ use crate::error::{DomainError, Result};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{fmt, str::FromStr};
 
-
 macro_rules! impl_display_and_deserialize {
     ($type:ty) => {
         impl fmt::Display for $type {
