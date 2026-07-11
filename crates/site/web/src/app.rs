@@ -50,7 +50,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     
                     const scope = root || document.body;
                     const normalizeExpression = (value) =>
-                    (value || '').replace(/[  ​‌‍⁡ ⁠﻿]/g, '');
+                    (value || '').replace(/[\u2009\u200A\u200B\u200C\u200D\u2061\u202F\u2060\uFEFF]/g, '');
                     
                     scope.querySelectorAll('.okawak-katex-inline').forEach((element) => {
                     if (element.dataset.katexRendered === 'true') return;

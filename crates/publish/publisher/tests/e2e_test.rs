@@ -4,6 +4,7 @@ use indoc::indoc;
 use publisher::{Config, run_main, slug};
 use std::{fs, path::Path};
 use support::collect_html_files;
+use support::write_about_page;
 use tempfile::TempDir;
 
 /// End-to-end test that simulates a realistic Obsidian vault.
@@ -15,6 +16,7 @@ async fn test_end_to_end_obsidian_processing() {
 
     // Create a realistic Obsidian directory structure.
     fs::create_dir_all(&obsidian_dir).unwrap();
+    write_about_page(&obsidian_dir);
     fs::create_dir_all(obsidian_dir.join("tech")).unwrap();
     fs::create_dir_all(obsidian_dir.join("blog")).unwrap();
 
@@ -343,6 +345,7 @@ async fn test_large_volume_processing() {
     let output_dir = temp_dir.path().join("dist");
 
     fs::create_dir_all(&obsidian_dir).unwrap();
+    write_about_page(&obsidian_dir);
 
     // Generate 100 test files.
     for i in 0..100 {
@@ -494,8 +497,19 @@ async fn test_partial_failure_handling() {
         output_dir: output_dir.clone(),
     };
 
-    // Processing should continue even when some files fail.
-    let result = run_main(&config).await;
+    // The deployment path rejects incomplete input before writing artifacts.
+    let strict_result = run_main(&config).await;
+    assert!(
+        strict_result.is_err(),
+        "Deployment publishing must reject partial failures"
+    );
+    assert!(
+        !output_dir.exists(),
+        "Strict publishing must fail before writing an incomplete artifact set"
+    );
+
+    // The explicitly tolerant path keeps processing valid files for diagnostics.
+    let result = publisher::run_allowing_partial(&config).await;
     assert!(
         result.is_ok(),
         "Should continue processing despite partial failures"

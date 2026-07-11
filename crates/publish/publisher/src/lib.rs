@@ -6,8 +6,8 @@ pub mod slug;
 mod types;
 
 use artifacts::{
-    SiteDirectories, build_site_artifacts, write_article_page, write_category_page,
-    write_page_document, write_site_artifacts,
+    SiteDirectories, build_site_artifacts, validate_site_artifacts, write_article_page,
+    write_category_page, write_page_document, write_site_artifacts,
 };
 use classify::{
     build_file_mapping, classify_obsidian_files, ensure_unique_category_landings,
@@ -37,10 +37,33 @@ pub async fn run_main(config: &Config) -> Result<()> {
     let enrich: BookmarkEnricher = Arc::new(|html: String| {
         Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich(&html).await })
     });
-    run_with_enricher(config, enrich).await
+    run_with_policy(config, enrich, PublishPolicy::Strict).await
 }
 
 pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Result<()> {
+    run_with_policy(config, enrich, PublishPolicy::Strict).await
+}
+
+/// Generates diagnostic artifacts even when individual content files are invalid.
+/// Production and deployment callers should use [`run_main`] instead.
+pub async fn run_allowing_partial(config: &Config) -> Result<()> {
+    let enrich: BookmarkEnricher = Arc::new(|html: String| {
+        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich(&html).await })
+    });
+    run_with_policy(config, enrich, PublishPolicy::AllowPartial).await
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PublishPolicy {
+    Strict,
+    AllowPartial,
+}
+
+async fn run_with_policy(
+    config: &Config,
+    enrich: BookmarkEnricher,
+    policy: PublishPolicy,
+) -> Result<()> {
     let start_time = std::time::Instant::now();
     info!("=== Publisher Started ===");
     info!("Input directory: {}", config.obsidian_dir.display());
@@ -63,6 +86,9 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
     info!("Skipped files: {skipped}");
     if errors > 0 {
         warn!("Error files: {errors}");
+    }
+    if policy == PublishPolicy::Strict && errors > 0 {
+        return Err(ObsidianError::ContentErrors { count: errors });
     }
 
     ensure_unique_page_keys(&pages)?;
@@ -149,6 +175,16 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
         Ok::<_, artifacts::ArtifactsError>(site_artifacts)
     })
     .await??;
+
+    if policy == PublishPolicy::Strict {
+        let site_root = config.output_dir.join("site");
+        let validation =
+            tokio::task::spawn_blocking(move || validate_site_artifacts(site_root)).await??;
+        info!(
+            "Validated {} articles across {} categories",
+            validation.article_count, validation.category_count
+        );
+    }
 
     let processed_count = site_artifacts.article_index.len();
     let duration = start_time.elapsed();

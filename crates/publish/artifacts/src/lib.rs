@@ -9,11 +9,17 @@ use domain::{
 };
 use serde::Serialize;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     io::BufWriter,
     path::{Path, PathBuf},
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArtifactValidationSummary {
+    pub article_count: usize,
+    pub category_count: usize,
+}
 
 /// Complete artifact bundle produced from already-validated article metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -192,6 +198,165 @@ pub fn write_site_artifacts(
     )?;
 
     Ok(())
+}
+
+/// Validates that a generated site is complete enough for destructive deployment.
+pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactValidationSummary> {
+    let site_root = site_root.as_ref();
+    let article_index: ArticleIndexDocument =
+        read_required_json(site_root, Path::new("articles/index.json"))?;
+    if article_index.articles.is_empty() {
+        return Err(ArtifactsError::Validation(
+            "articles/index.json must contain at least one article".to_string(),
+        ));
+    }
+
+    let site_metadata: SiteMetadataDocument =
+        read_required_json(site_root, Path::new("metadata/site.json"))?;
+    if site_metadata.total_articles != article_index.articles.len() {
+        return Err(ArtifactsError::Validation(format!(
+            "metadata/site.json total_articles={} does not match articles/index.json count={}",
+            site_metadata.total_articles,
+            article_index.articles.len(),
+        )));
+    }
+
+    let mut article_categories = HashSet::new();
+    for article in &article_index.articles {
+        let category = article.category.parse::<Category>().map_err(|error| {
+            ArtifactsError::Validation(format!(
+                "articles/index.json contains invalid category {}: {error}",
+                article.category
+            ))
+        })?;
+        let slug = Slug::new(article.slug.clone()).map_err(|error| {
+            ArtifactsError::Validation(format!(
+                "articles/index.json contains invalid slug {}: {error}",
+                article.slug
+            ))
+        })?;
+        let relative_path = PathBuf::from("articles")
+            .join(category.as_str())
+            .join(format!("{}.html", slug.as_str()));
+        read_required_nonempty(site_root, &relative_path)?;
+        article_categories.insert(category);
+    }
+
+    let metadata_category_names: HashSet<_> = site_metadata
+        .categories
+        .iter()
+        .map(|category| category.category.as_str())
+        .collect();
+    let mut missing_article_categories: Vec<_> = article_categories
+        .iter()
+        .filter(|category| !metadata_category_names.contains(category.as_str()))
+        .map(|category| category.as_str())
+        .collect();
+    if !missing_article_categories.is_empty() {
+        missing_article_categories.sort_unstable();
+        return Err(ArtifactsError::Validation(format!(
+            "metadata/site.json is missing article categories: {}",
+            missing_article_categories.join(", "),
+        )));
+    }
+
+    for category_metadata in &site_metadata.categories {
+        let category = category_metadata
+            .category
+            .parse::<Category>()
+            .map_err(|error| {
+                ArtifactsError::Validation(format!(
+                    "metadata/site.json contains invalid category {}: {error}",
+                    category_metadata.category
+                ))
+            })?;
+        let category_root = PathBuf::from("categories").join(category.as_str());
+        let category_index_path = category_root.join("index.json");
+        let category_index: CategoryIndexDocument =
+            read_required_json(site_root, &category_index_path)?;
+        if category_index.category != category.as_str() {
+            return Err(ArtifactsError::Validation(format!(
+                "{} declares category {} instead of {}",
+                category_index_path.display(),
+                category_index.category,
+                category.as_str(),
+            )));
+        }
+
+        let expected_articles: Vec<_> = article_index
+            .articles
+            .iter()
+            .filter(|article| article.category == category.as_str())
+            .cloned()
+            .collect();
+        if category_index.articles != expected_articles {
+            return Err(ArtifactsError::Validation(format!(
+                "{} does not match articles/index.json",
+                category_index_path.display(),
+            )));
+        }
+        if category_metadata.article_count != category_index.articles.len() {
+            return Err(ArtifactsError::Validation(format!(
+                "metadata count for {} is {}, but category index contains {} articles",
+                category.as_str(),
+                category_metadata.article_count,
+                category_index.articles.len(),
+            )));
+        }
+
+        read_required_nonempty(site_root, &category_root.join("page.html"))?;
+    }
+
+    let about_path = Path::new("pages/about.json");
+    let about: PageArtifactDocument = read_required_json(site_root, about_path)?;
+    if about.page.as_str() != "about" {
+        return Err(ArtifactsError::Validation(format!(
+            "{} declares page {} instead of about",
+            about_path.display(),
+            about.page,
+        )));
+    }
+    if about.html.trim().is_empty() {
+        return Err(ArtifactsError::Validation(format!(
+            "required artifact {} contains empty html",
+            about_path.display(),
+        )));
+    }
+
+    Ok(ArtifactValidationSummary {
+        article_count: article_index.articles.len(),
+        category_count: site_metadata.categories.len(),
+    })
+}
+
+fn read_required_json<T: serde::de::DeserializeOwned>(
+    site_root: &Path,
+    relative_path: &Path,
+) -> Result<T> {
+    let contents = read_required_nonempty(site_root, relative_path)?;
+    serde_json::from_str(&contents).map_err(|error| {
+        ArtifactsError::Validation(format!(
+            "{} is not valid artifact JSON: {error}",
+            relative_path.display()
+        ))
+    })
+}
+
+fn read_required_nonempty(site_root: &Path, relative_path: &Path) -> Result<String> {
+    let path = site_root.join(relative_path);
+    let contents = fs::read_to_string(&path).map_err(|error| {
+        ArtifactsError::Validation(format!(
+            "required artifact {} cannot be read: {error}",
+            relative_path.display()
+        ))
+    })?;
+    if contents.trim().is_empty() {
+        return Err(ArtifactsError::Validation(format!(
+            "required artifact {} is empty",
+            relative_path.display()
+        )));
+    }
+    Ok(contents)
 }
 
 fn write_json_pretty(path: &Path, value: &impl Serialize) -> Result<()> {
@@ -398,5 +563,178 @@ mod tests {
 
         assert!(fallback_html.contains("<h1>技術</h1>"));
         assert!(fallback_html.contains("技術カテゴリの記事一覧です。"));
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_accepts_complete_site() {
+        let temp_dir = TempDir::new().unwrap();
+        let site_directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let article_meta = build_article_meta(
+            "Artifact Test",
+            "artifact00001",
+            Category::Tech,
+            Some(1),
+            "2025-01-01T00:00:00+09:00",
+        );
+        let site_artifacts = build_site_artifacts(vec![article_meta.clone()], vec![]);
+
+        write_article_page(
+            &site_directories,
+            Category::Tech,
+            &article_meta.slug,
+            "<h1>Artifact Test</h1>",
+        )
+        .unwrap();
+        write_site_artifacts(&site_directories, &site_artifacts).unwrap();
+        write_required_about_page(&site_directories);
+
+        let summary = validate_site_artifacts(temp_dir.path().join("site")).unwrap();
+
+        assert_eq!(summary.article_count, 1);
+        assert_eq!(summary.category_count, 1);
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_empty_article_index() {
+        let temp_dir = TempDir::new().unwrap();
+        let site_directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let site_artifacts = build_site_artifacts(vec![], vec![]);
+        write_site_artifacts(&site_directories, &site_artifacts).unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(error.to_string().contains("at least one article"));
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_missing_article_html() {
+        let temp_dir = TempDir::new().unwrap();
+        let site_directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let article_meta = build_article_meta(
+            "Artifact Test",
+            "artifact00001",
+            Category::Tech,
+            Some(1),
+            "2025-01-01T00:00:00+09:00",
+        );
+        let site_artifacts = build_site_artifacts(vec![article_meta], vec![]);
+        write_site_artifacts(&site_directories, &site_artifacts).unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("articles/tech/artifact00001.html")
+        );
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_missing_category_page() {
+        let temp_dir = TempDir::new().unwrap();
+        let site_directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let article_meta = build_article_meta(
+            "Artifact Test",
+            "artifact00001",
+            Category::Tech,
+            Some(1),
+            "2025-01-01T00:00:00+09:00",
+        );
+        let site_artifacts = build_site_artifacts(vec![article_meta.clone()], vec![]);
+        write_article_page(
+            &site_directories,
+            Category::Tech,
+            &article_meta.slug,
+            "<h1>Artifact Test</h1>",
+        )
+        .unwrap();
+        write_site_artifacts(&site_directories, &site_artifacts).unwrap();
+        fs::remove_file(
+            site_directories
+                .categories_dir
+                .join("tech")
+                .join("page.html"),
+        )
+        .unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(error.to_string().contains("categories/tech/page.html"));
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_missing_about_page() {
+        let temp_dir = TempDir::new().unwrap();
+        let site_directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let article_meta = build_article_meta(
+            "Artifact Test",
+            "artifact00001",
+            Category::Tech,
+            Some(1),
+            "2025-01-01T00:00:00+09:00",
+        );
+        let site_artifacts = build_site_artifacts(vec![article_meta.clone()], vec![]);
+        write_article_page(
+            &site_directories,
+            Category::Tech,
+            &article_meta.slug,
+            "<h1>Artifact Test</h1>",
+        )
+        .unwrap();
+        write_site_artifacts(&site_directories, &site_artifacts).unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(error.to_string().contains("pages/about.json"));
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_article_category_missing_from_metadata() {
+        let temp_dir = TempDir::new().unwrap();
+        let site_directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let article_meta = build_article_meta(
+            "Artifact Test",
+            "artifact00001",
+            Category::Tech,
+            Some(1),
+            "2025-01-01T00:00:00+09:00",
+        );
+        let site_artifacts = build_site_artifacts(vec![article_meta.clone()], vec![]);
+        write_article_page(
+            &site_directories,
+            Category::Tech,
+            &article_meta.slug,
+            "<h1>Artifact Test</h1>",
+        )
+        .unwrap();
+        write_site_artifacts(&site_directories, &site_artifacts).unwrap();
+        write_required_about_page(&site_directories);
+        write_json_pretty(
+            &site_directories.metadata_dir.join("site.json"),
+            &SiteMetadataDocument {
+                total_articles: 1,
+                categories: vec![],
+            },
+        )
+        .unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(error.to_string().contains("missing article categories"));
+        assert!(error.to_string().contains("tech"));
+    }
+
+    fn write_required_about_page(site_directories: &SiteDirectories) {
+        write_page_document(
+            site_directories,
+            &PageArtifactDocument {
+                page: PageKey::new("about".to_string()).unwrap(),
+                title: "About".to_string(),
+                description: Some("About this site".to_string()),
+                html: "<article><h1>About</h1></article>".to_string(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            },
+        )
+        .unwrap();
     }
 }

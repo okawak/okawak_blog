@@ -9,4 +9,7 @@ pub enum ArtifactsError {
 
     #[error("failed to serialize artifact JSON: {0}")]
     Json(#[from] serde_json::Error),
+
+    #[error("artifact validation failed: {0}")]
+    Validation(String),
 }

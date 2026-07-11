@@ -19,3 +19,24 @@ pub fn collect_html_files(root: &Path) -> Vec<PathBuf> {
 
     html_files
 }
+
+pub fn write_about_page(obsidian_dir: &Path) {
+    fs::write(
+        obsidian_dir.join("about.md"),
+        r#"---
+title: "About"
+kind: page
+page: about
+summary: "About this site"
+created: "2025-01-01T00:00:00+09:00"
+updated: "2025-01-01T00:00:00+09:00"
+is_completed: true
+---
+
+# About
+
+This page is required for deployment.
+"#,
+    )
+    .unwrap();
+}

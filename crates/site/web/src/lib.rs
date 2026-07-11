@@ -4,7 +4,6 @@ pub mod app;
 pub mod components;
 pub mod error;
 pub mod routes;
-pub mod types; // Web-specific type definitions.
 
 pub const SITE_NAME: &str = "ぶくせんの探窟メモ";
 pub const SITE_ORIGIN: &str = "https://www.okawak.net";

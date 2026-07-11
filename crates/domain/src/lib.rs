@@ -9,15 +9,11 @@ pub mod entities;
 pub mod publishable;
 pub mod site_page;
 
-// Business rules implemented as pure functions.
-pub mod business_rules;
-
 // Domain error types.
 pub mod error;
 
 // Re-exports.
 pub use artifact_document::*;
-pub use business_rules::*;
 pub use entities::*;
 pub use error::{DomainError, Result};
 pub use publishable::*;

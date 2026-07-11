@@ -59,8 +59,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .fallback(file_and_error_handler(shell))
         .with_state(leptos_options);
 
-    println!("Server listening on http://{}", &addr);
-    println!("Visit http://{} to see the Leptos app", &addr);
+    println!("Server listening on http://{}", addr);
+    println!("Visit http://{} to see the Leptos app", addr);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(listener, app.into_make_service()).await?;

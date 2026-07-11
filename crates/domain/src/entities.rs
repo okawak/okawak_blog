@@ -2,14 +2,12 @@
 //!
 //! Domain modeling built around algebraic data types.
 
-mod article;
 mod attributes;
 mod identifiers;
 
 use crate::error::DomainError;
-pub use article::{Article, ArticleSummary};
 pub use attributes::{Category, ContentKind, Title};
-pub use identifiers::{ArticleId, PageKey, Slug};
+pub use identifiers::{PageKey, Slug};
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use std::str::FromStr;
 

@@ -101,6 +101,8 @@ cargo run --release -p publisher
 AWS S3 への同期は GitHub Actions workflow が担当します。
 この crate の責務は、ローカルに `site/` 配下の公開成果物を生成するところまでです。
 
+通常の publisher 実行は deploy 用の厳格モードとして動作します。入力ファイルに解析・検証エラーがある場合や、記事が 0 件、必須 artifact が欠落している場合は非 0 で終了します。部分的な成果物を許容する `run_allowing_partial` は、エラー診断や限定的なテスト用途にだけ使用します。
+
 ## アーキテクチャ
 
 ### モジュール構成
