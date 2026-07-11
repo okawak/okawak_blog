@@ -17,7 +17,8 @@ pub(crate) struct ClassifiedFiles {
 }
 
 /// Obsidian ファイルのリストを解析し、記事・ページ・カテゴリに分類する。
-///  でないファイルはスキップ、解析エラーはエラーとしてカウントする。
+/// `parsed.front_matter.is_completed` が true でないファイルはスキップし、
+/// 解析エラーはエラーとしてカウントする。
 pub(crate) fn classify_obsidian_files(
     markdown_files: Vec<PathBuf>,
     config: &Config,
@@ -34,12 +35,8 @@ pub(crate) fn classify_obsidian_files(
                 let result: Result<()> = match parsed.front_matter.kind {
                     ContentKind::Article => process_valid_article_file(&file_path, parsed, config)
                         .map(|f| articles.push(f)),
-                    ContentKind::Page => {
-                        process_valid_page_file(parsed).map(|f| pages.push(f))
-                    }
-                    ContentKind::Home => {
-                        process_valid_home_file(parsed).map(|f| pages.push(f))
-                    }
+                    ContentKind::Page => process_valid_page_file(parsed).map(|f| pages.push(f)),
+                    ContentKind::Home => process_valid_home_file(parsed).map(|f| pages.push(f)),
                     ContentKind::Category => {
                         process_valid_category_file(parsed).map(|f| categories.push(f))
                     }
@@ -60,7 +57,13 @@ pub(crate) fn classify_obsidian_files(
         }
     }
 
-    ClassifiedFiles { articles, pages, categories, skipped, errors }
+    ClassifiedFiles {
+        articles,
+        pages,
+        categories,
+        skipped,
+        errors,
+    }
 }
 
 fn process_valid_article_file(
@@ -114,9 +117,10 @@ fn process_valid_category_file(parsed_file: ParsedObsidianFile) -> Result<Parsed
     })
 }
 
-/// OS 固有のパス区切り文字を  に統一する。
+/// OS 固有のパス区切り文字を `/` に統一する。
 fn normalize_path_for_url(path: &Path) -> String {
-    path.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/")
+    path.to_string_lossy()
+        .replace(std::path::MAIN_SEPARATOR, "/")
 }
 
 /// ベースディレクトリを除いた相対パスを取得する。
@@ -192,7 +196,7 @@ pub(crate) fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Categ
     let category = front_matter
         .category
         .as_deref()
-        .ok_or_else(|| ObsidianError::Parse("Completed articles require a category".to_string()))?;
+        .ok_or_else(|| ObsidianError::Parse("Completed content requires a category".to_string()))?;
     category.parse().map_err(Into::into)
 }
 

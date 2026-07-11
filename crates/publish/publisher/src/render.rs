@@ -1,11 +1,13 @@
+use crate::BookmarkEnricher;
+use crate::error::Result;
 use crate::types::{
     ParsedArticleFile, ParsedCategoryFile, ParsedPageFile, RenderedArticle,
     RenderedCategoryLanding, RenderedPage,
 };
-use crate::BookmarkEnricher;
-use crate::error::Result;
 use artifacts::CategoryLandingMetadata;
-use domain::{ArticleBody, ArticleMeta, ArticleMetaInput, Category, PageArtifactDocument, Slug, Title};
+use domain::{
+    ArticleBody, ArticleMeta, ArticleMetaInput, Category, PageArtifactDocument, Slug, Title,
+};
 use ingest::{FileMapping, convert_markdown_to_html, convert_obsidian_links};
 use log::warn;
 
@@ -71,24 +73,38 @@ pub(crate) async fn render_category(
     enrich: BookmarkEnricher,
 ) -> Result<RenderedCategoryLanding> {
     let html = render_html(&parsed_file.markdown_body, file_mapping, &enrich).await?;
+    let title = normalize_category_title(parsed_file.category, &parsed_file.front_matter.title);
+    let description = normalize_category_description(parsed_file.front_matter.summary.as_deref());
     let html = if html.trim().is_empty() {
-        build_fallback_category_landing_html(
-            parsed_file.category,
-            &parsed_file.front_matter.title,
-            parsed_file.front_matter.summary.as_deref(),
-        )
+        build_fallback_category_landing_html(parsed_file.category, &title, description.as_deref())
     } else {
         html
     };
     Ok(RenderedCategoryLanding {
         metadata: CategoryLandingMetadata {
             category: parsed_file.category,
-            title: parsed_file.front_matter.title,
-            description: parsed_file.front_matter.summary,
+            title,
+            description,
             updated_at: parsed_file.front_matter.updated,
         },
         html,
     })
+}
+
+fn normalize_category_title(category: Category, title: &str) -> String {
+    let title = title.trim();
+    if title.is_empty() {
+        category.display_name().to_owned()
+    } else {
+        title.to_owned()
+    }
+}
+
+fn normalize_category_description(description: Option<&str>) -> Option<String> {
+    description
+        .map(str::trim)
+        .filter(|description| !description.is_empty())
+        .map(str::to_owned)
 }
 
 fn build_fallback_category_landing_html(
@@ -155,5 +171,16 @@ mod tests {
         assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
         assert!(html.contains("&quot;quoted&quot; &amp; &lt;tag&gt;"));
         assert!(!html.contains("<script>alert(1)</script>"));
+    }
+
+    #[test]
+    fn test_normalize_category_metadata_trims_and_falls_back() {
+        assert_eq!(normalize_category_title(Category::Physics, "   "), "物理学");
+        assert_eq!(normalize_category_title(Category::Tech, "  Tech  "), "Tech");
+        assert_eq!(normalize_category_description(Some("   ")), None);
+        assert_eq!(
+            normalize_category_description(Some("  Technology landing  ")),
+            Some("Technology landing".to_string())
+        );
     }
 }
