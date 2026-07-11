@@ -63,20 +63,26 @@ jobs:
       - name: Build publisher
         run: cargo build --release -p publisher
 
-      - name: Run publisher
+      - name: Generate and validate artifacts
         run: |
+          set -euo pipefail
           RUST_LOG=info cargo run --release -p publisher
 
-          # 処理結果の検証
-          if [ -d "${{ env.UPLOAD_PATH }}" ]; then
-            file_count=$(find ${{ env.UPLOAD_PATH }} -name "*.html" | wc -l)
-            if [ "$file_count" -eq 0 ]; then
-              echo "⚠️  Warning: No HTML files were generated"
-            fi
-          else
+          if [ ! -d "${{ env.UPLOAD_PATH }}" ]; then
             echo "❌ Output directory not found"
             exit 1
           fi
+
+          test -s "${{ env.UPLOAD_PATH }}/articles/index.json"
+          test -s "${{ env.UPLOAD_PATH }}/metadata/site.json"
+
+          file_count=$(find "${{ env.UPLOAD_PATH }}/articles" -name "*.html" -type f | wc -l | tr -d ' ')
+          if [ "$file_count" -eq 0 ]; then
+            echo "❌ No article HTML files were generated"
+            exit 1
+          fi
+
+          echo "✅ Validated ${file_count} article HTML files"
 
       - name: Validate AWS secrets
         run: |
@@ -95,6 +101,8 @@ jobs:
 
       - name: Sync to S3
         run: |
+          # The publisher and the explicit artifact checks above must succeed before
+          # this destructive synchronization is allowed to run.
           aws s3 sync ${{ env.UPLOAD_PATH }} s3://${{ secrets.S3_BUCKET }} \
             --delete \
             --cache-control "public, max-age=300"

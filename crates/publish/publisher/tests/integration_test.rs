@@ -1,7 +1,9 @@
 mod support;
 
 use indoc::indoc;
-use publisher::{Config, offline_bookmark_enricher, run_main, run_with_enricher};
+use publisher::{
+    Config, offline_bookmark_enricher, run_allowing_partial, run_main, run_with_enricher,
+};
 use std::fs;
 use std::path::PathBuf;
 use support::collect_html_files;
@@ -21,13 +23,9 @@ async fn test_run_main_with_empty_directory() {
         output_dir: output_dir.clone(),
     };
 
-    // Run `run_main`.
+    // A deployable artifact set must contain at least one article.
     let result = run_main(&config).await;
-    assert!(result.is_ok());
-
-    // Verify that the output directory was created.
-    assert!(output_dir.exists());
-    assert!(output_dir.is_dir());
+    assert!(result.is_err());
 }
 
 #[tokio::test]
@@ -126,7 +124,7 @@ async fn test_run_main_with_incomplete_file() {
     };
 
     // Run `run_main`.
-    let result = run_main(&config).await;
+    let result = run_allowing_partial(&config).await;
     assert!(result.is_ok());
 
     // Verify that no HTML file is generated for incomplete content.
@@ -170,7 +168,7 @@ async fn test_run_main_with_static_page_file() {
         output_dir: output_dir.clone(),
     };
 
-    let result = run_main(&config).await;
+    let result = run_allowing_partial(&config).await;
     assert!(result.is_ok());
 
     let page_document =
@@ -212,7 +210,7 @@ async fn test_run_main_with_home_fragment_file() {
         output_dir: output_dir.clone(),
     };
 
-    let result = run_main(&config).await;
+    let result = run_allowing_partial(&config).await;
     assert!(result.is_ok());
 
     let page_document =

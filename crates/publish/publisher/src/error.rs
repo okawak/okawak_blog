@@ -30,4 +30,7 @@ pub enum ObsidianError {
 
     #[error("Domain validation failed: {0}")]
     Domain(#[from] domain::DomainError),
+
+    #[error("Publisher rejected {count} invalid content file(s)")]
+    ContentErrors { count: usize },
 }

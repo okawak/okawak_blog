@@ -494,8 +494,19 @@ async fn test_partial_failure_handling() {
         output_dir: output_dir.clone(),
     };
 
-    // Processing should continue even when some files fail.
-    let result = run_main(&config).await;
+    // The deployment path rejects incomplete input before writing artifacts.
+    let strict_result = run_main(&config).await;
+    assert!(
+        strict_result.is_err(),
+        "Deployment publishing must reject partial failures"
+    );
+    assert!(
+        !output_dir.exists(),
+        "Strict publishing must fail before writing an incomplete artifact set"
+    );
+
+    // The explicitly tolerant path keeps processing valid files for diagnostics.
+    let result = publisher::run_allowing_partial(&config).await;
     assert!(
         result.is_ok(),
         "Should continue processing despite partial failures"

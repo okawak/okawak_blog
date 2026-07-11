@@ -5,9 +5,6 @@ pub type Result<T> = std::result::Result<T, DomainError>;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum DomainError {
-    #[error("無効なIDです: {id}")]
-    InvalidId { id: String },
-
     #[error("無効なスラッグです: {slug}")]
     InvalidSlug { slug: String },
 
@@ -20,19 +17,11 @@ pub enum DomainError {
     #[error("無効なパスです: {path}")]
     InvalidPath { path: String },
 
-    #[error("ビジネスルール違反: {rule}")]
-    BusinessRuleViolation { rule: String },
-
     #[error("バリデーションエラー: {field}")]
     ValidationError { field: String },
 }
 
 impl DomainError {
-    /// Helper for creating business-rule violation errors.
-    pub fn business_rule<S: Into<String>>(rule: S) -> Self {
-        Self::BusinessRuleViolation { rule: rule.into() }
-    }
-
     /// Helper for creating validation errors.
     pub fn validation<S: Into<String>>(field: S) -> Self {
         Self::ValidationError {

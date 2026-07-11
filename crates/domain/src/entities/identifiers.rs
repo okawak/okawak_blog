@@ -22,55 +22,6 @@ macro_rules! impl_display_and_deserialize {
     };
 }
 
-/// Type-safe article identifier.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-pub struct ArticleId(String);
-
-impl ArticleId {
-    pub fn new() -> Self {
-        // Simple ID generation for now. A production system would use UUIDs externally.
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let mut hasher = DefaultHasher::new();
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .hash(&mut hasher);
-        let id = format!("article_{}", hasher.finish());
-        Self(id)
-    }
-
-    pub fn from_string(id: String) -> Result<Self> {
-        if id.is_empty() {
-            return Err(DomainError::InvalidId {
-                id: "IDは空にできません".to_string(),
-            });
-        }
-        Ok(Self(id))
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Default for ArticleId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl FromStr for ArticleId {
-    type Err = DomainError;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Self::from_string(s.to_string())
-    }
-}
-
-impl_display_and_deserialize!(ArticleId);
 /// URL-safe slug identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct Slug(String);
