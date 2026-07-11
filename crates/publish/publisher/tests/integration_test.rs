@@ -6,7 +6,7 @@ use publisher::{
 };
 use std::fs;
 use std::path::PathBuf;
-use support::collect_html_files;
+use support::{collect_html_files, write_about_page};
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -56,6 +56,7 @@ async fn test_run_main_with_sample_file() {
 
     let sample_file = obsidian_dir.join("test.md");
     fs::write(&sample_file, sample_content).unwrap();
+    write_about_page(&obsidian_dir);
 
     let config = Config {
         obsidian_dir,
@@ -261,6 +262,7 @@ async fn test_run_main_with_category_landing_file() {
 
     fs::write(obsidian_dir.join("tech/article.md"), article_content).unwrap();
     fs::write(obsidian_dir.join("tech/index.md"), category_content).unwrap();
+    write_about_page(&obsidian_dir);
 
     let config = Config {
         obsidian_dir,
@@ -339,6 +341,7 @@ async fn test_run_with_enricher_with_bookmark_article() {
 
     let sample_file = obsidian_dir.join("bookmark.md");
     fs::write(&sample_file, sample_content).unwrap();
+    write_about_page(&obsidian_dir);
 
     let config = Config {
         obsidian_dir,

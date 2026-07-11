@@ -4,6 +4,7 @@ use indoc::indoc;
 use publisher::{Config, run_main, slug};
 use std::{fs, path::Path};
 use support::collect_html_files;
+use support::write_about_page;
 use tempfile::TempDir;
 
 /// End-to-end test that simulates a realistic Obsidian vault.
@@ -15,6 +16,7 @@ async fn test_end_to_end_obsidian_processing() {
 
     // Create a realistic Obsidian directory structure.
     fs::create_dir_all(&obsidian_dir).unwrap();
+    write_about_page(&obsidian_dir);
     fs::create_dir_all(obsidian_dir.join("tech")).unwrap();
     fs::create_dir_all(obsidian_dir.join("blog")).unwrap();
 
@@ -343,6 +345,7 @@ async fn test_large_volume_processing() {
     let output_dir = temp_dir.path().join("dist");
 
     fs::create_dir_all(&obsidian_dir).unwrap();
+    write_about_page(&obsidian_dir);
 
     // Generate 100 test files.
     for i in 0..100 {

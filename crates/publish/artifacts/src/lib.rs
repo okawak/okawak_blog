@@ -9,7 +9,7 @@ use domain::{
 };
 use serde::Serialize;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     io::BufWriter,
     path::{Path, PathBuf},
@@ -221,6 +221,7 @@ pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactVa
         )));
     }
 
+    let mut article_categories = HashSet::new();
     for article in &article_index.articles {
         let category = article.category.parse::<Category>().map_err(|error| {
             ArtifactsError::Validation(format!(
@@ -238,6 +239,25 @@ pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactVa
             .join(category.as_str())
             .join(format!("{}.html", slug.as_str()));
         read_required_nonempty(site_root, &relative_path)?;
+        article_categories.insert(category);
+    }
+
+    let metadata_category_names: HashSet<_> = site_metadata
+        .categories
+        .iter()
+        .map(|category| category.category.as_str())
+        .collect();
+    let mut missing_article_categories: Vec<_> = article_categories
+        .iter()
+        .filter(|category| !metadata_category_names.contains(category.as_str()))
+        .map(|category| category.as_str())
+        .collect();
+    if !missing_article_categories.is_empty() {
+        missing_article_categories.sort_unstable();
+        return Err(ArtifactsError::Validation(format!(
+            "metadata/site.json is missing article categories: {}",
+            missing_article_categories.join(", "),
+        )));
     }
 
     for category_metadata in &site_metadata.categories {
@@ -285,6 +305,22 @@ pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactVa
         }
 
         read_required_nonempty(site_root, &category_root.join("page.html"))?;
+    }
+
+    let about_path = Path::new("pages/about.json");
+    let about: PageArtifactDocument = read_required_json(site_root, about_path)?;
+    if about.page.as_str() != "about" {
+        return Err(ArtifactsError::Validation(format!(
+            "{} declares page {} instead of about",
+            about_path.display(),
+            about.page,
+        )));
+    }
+    if about.html.trim().is_empty() {
+        return Err(ArtifactsError::Validation(format!(
+            "required artifact {} contains empty html",
+            about_path.display(),
+        )));
     }
 
     Ok(ArtifactValidationSummary {
@@ -550,6 +586,7 @@ mod tests {
         )
         .unwrap();
         write_site_artifacts(&site_directories, &site_artifacts).unwrap();
+        write_required_about_page(&site_directories);
 
         let summary = validate_site_artifacts(temp_dir.path().join("site")).unwrap();
 
@@ -623,5 +660,81 @@ mod tests {
         let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
 
         assert!(error.to_string().contains("categories/tech/page.html"));
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_missing_about_page() {
+        let temp_dir = TempDir::new().unwrap();
+        let site_directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let article_meta = build_article_meta(
+            "Artifact Test",
+            "artifact00001",
+            Category::Tech,
+            Some(1),
+            "2025-01-01T00:00:00+09:00",
+        );
+        let site_artifacts = build_site_artifacts(vec![article_meta.clone()], vec![]);
+        write_article_page(
+            &site_directories,
+            Category::Tech,
+            &article_meta.slug,
+            "<h1>Artifact Test</h1>",
+        )
+        .unwrap();
+        write_site_artifacts(&site_directories, &site_artifacts).unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(error.to_string().contains("pages/about.json"));
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_article_category_missing_from_metadata() {
+        let temp_dir = TempDir::new().unwrap();
+        let site_directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let article_meta = build_article_meta(
+            "Artifact Test",
+            "artifact00001",
+            Category::Tech,
+            Some(1),
+            "2025-01-01T00:00:00+09:00",
+        );
+        let site_artifacts = build_site_artifacts(vec![article_meta.clone()], vec![]);
+        write_article_page(
+            &site_directories,
+            Category::Tech,
+            &article_meta.slug,
+            "<h1>Artifact Test</h1>",
+        )
+        .unwrap();
+        write_site_artifacts(&site_directories, &site_artifacts).unwrap();
+        write_required_about_page(&site_directories);
+        write_json_pretty(
+            &site_directories.metadata_dir.join("site.json"),
+            &SiteMetadataDocument {
+                total_articles: 1,
+                categories: vec![],
+            },
+        )
+        .unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(error.to_string().contains("missing article categories"));
+        assert!(error.to_string().contains("tech"));
+    }
+
+    fn write_required_about_page(site_directories: &SiteDirectories) {
+        write_page_document(
+            site_directories,
+            &PageArtifactDocument {
+                page: PageKey::new("about".to_string()).unwrap(),
+                title: "About".to_string(),
+                description: Some("About this site".to_string()),
+                html: "<article><h1>About</h1></article>".to_string(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            },
+        )
+        .unwrap();
     }
 }
