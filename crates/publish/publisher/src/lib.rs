@@ -1,19 +1,19 @@
+mod classify;
 pub mod config;
 pub mod error;
-pub mod slug;
-mod classify;
 mod render;
+pub mod slug;
 mod types;
 
 use artifacts::{
     SiteDirectories, build_site_artifacts, write_article_page, write_category_page,
     write_page_document, write_site_artifacts,
 };
-pub use config::Config;
 use classify::{
     build_file_mapping, classify_obsidian_files, ensure_unique_category_landings,
     ensure_unique_page_keys,
 };
+pub use config::Config;
 pub use error::{ObsidianError, Result};
 use futures::{StreamExt, TryStreamExt, future::BoxFuture, stream};
 use ingest::scan_obsidian_files;
@@ -49,8 +49,13 @@ pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Res
     let markdown_files = scan_obsidian_files(&config.obsidian_dir)?;
     info!("Found {} markdown files", markdown_files.len());
 
-    let classify::ClassifiedFiles { articles, pages, categories, skipped, errors } =
-        classify_obsidian_files(markdown_files, config);
+    let classify::ClassifiedFiles {
+        articles,
+        pages,
+        categories,
+        skipped,
+        errors,
+    } = classify_obsidian_files(markdown_files, config);
 
     info!("Valid article files: {}", articles.len());
     info!("Valid page files: {}", pages.len());
