@@ -29,8 +29,8 @@ flowchart LR
     F --> G[GitHub Actions upload]
     G --> H[S3]
     H --> I[crates/site/infra]
-    I --> J[crates/site/server]
-    J --> K[crates/site/web]
+    I --> K[crates/site/web SSR]
+    J[crates/site/server] --> K
     K --> L[Browser]
 ```
 
@@ -82,11 +82,14 @@ okawak_blog/
   - local reader
   - S3 reader
 - `crates/site/server`
-  - artifact 読取 API
-  - Axum + Leptos SSR の統合バックエンド
+  - Axum + Leptos SSR のホスト
+  - reader の生成と Leptos context への注入
+  - 互換用の記事一覧 API と health endpoint
 - `crates/site/web`
   - Leptos UI
   - route 定義
+  - Leptos server function による page document の組み立て
+  - SSR feature 時のみ `ArtifactReader` 境界を利用
   - metadata / canonical / Open Graph 生成
 
 `terraform/` は読み取り専用とし、このリポジトリの通常作業では編集しない。
@@ -116,7 +119,8 @@ flowchart TB
     Site --> Domain
     P3 --> P4
     S2 --> S1
-    S3 --> S2
+    S2 --> S3
+    S3 -. "SSR feature only" .-> S1
 ```
 
 ## コンテンツモデル
@@ -322,7 +326,9 @@ flowchart LR
 - `StaticPageDocument`
   - `about` や `home` fragment の共通 page contract
 
-`site/web` はこの page contract をもとに metadata と UI を組み立てる。reader や storage 実装には依存しない。
+`site/web` はこの page contract をもとに metadata と UI を組み立てる。SSR feature では Leptos context から `DynArtifactReader` を受け取り、server function 内で page document を組み立てる。local / S3 などの storage 実装詳細には依存しない。hydrate build は `infra` に依存しない。
+
+公開 route の page document 読み込みは Leptos server function を正式経路とする。`site/server` は reader を生成して context に注入し、SSR と server function をホストする。手書きの `/api/page/*` は持たず、404 と storage error の扱いは各 server function に集約する。`/api/articles` は page document を組み立てない互換 endpoint として維持する。
 
 ## Reader 経路
 
