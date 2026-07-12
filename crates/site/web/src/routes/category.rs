@@ -130,7 +130,7 @@ pub fn CategoryPage() -> impl IntoView {
     let params = use_params_map();
     let category =
         move || params.with(|params: &ParamsMap| params.get("category").unwrap_or_default());
-    let category_page = Resource::<Result<Option<CategoryPageDocument>, String>>::new(
+    let category_page = Resource::<Result<Option<CategoryPageDocument>, String>>::new_blocking(
         category,
         move |category| async move {
             if category.is_empty() {
@@ -145,7 +145,8 @@ pub fn CategoryPage() -> impl IntoView {
 
     view! {
         <Suspense fallback=move || {
-            let category_param = category();
+            let category_param = params
+                .with(|params: &ParamsMap| params.get("category").unwrap_or_default());
             let canonical_url = if category_param.is_empty() {
                 build_site_url("/")
             } else {
@@ -154,107 +155,26 @@ pub fn CategoryPage() -> impl IntoView {
 
             view! {
                 <PageMetadata
-                    title=SITE_NAME.to_string()
-                    description="カテゴリページです。"
+                    title=format!("{category_param} | {SITE_NAME}")
+                    description=format!("{category_param} カテゴリの記事一覧です。")
                     canonical_url
                 />
+                <div class=category_style::loading>"カテゴリを読み込み中..."</div>
             }
         }>
             {move || match category_page.get() {
                 Some(Ok(Some(document))) => {
                     let page_title = build_category_page_title(&document, SITE_NAME);
                     let page_description = build_category_page_description(&document);
-                    let canonical_url = build_site_url(
-                        &build_category_page_canonical_path(&document),
-                    );
+                    let canonical_url =
+                        build_site_url(&build_category_page_canonical_path(&document));
 
                     view! {
                         <PageMetadata title=page_title description=page_description canonical_url />
+                        <CategoryPageContent document />
                     }
                         .into_any()
                 }
-                Some(Ok(None)) => {
-                    let category_param = params
-                        .with(|params: &ParamsMap| params.get("category").unwrap_or_default());
-                    let page_title = format!(
-                        "ページが見つかりませんでした | {SITE_NAME}",
-                    );
-                    let page_description = if category_param.is_empty() {
-                        "ページが見つかりませんでした。".to_string()
-                    } else {
-                        format!(
-                            "{category_param} カテゴリのページが見つかりませんでした。",
-                        )
-                    };
-                    let canonical_url = if category_param.is_empty() {
-                        build_site_url("/")
-                    } else {
-                        build_site_url(&format!("/{category_param}"))
-                    };
-
-                    view! {
-                        <PageMetadata title=page_title description=page_description canonical_url />
-                    }
-                        .into_any()
-                }
-                Some(Err(_)) => {
-                    let category_param = params
-                        .with(|params: &ParamsMap| params.get("category").unwrap_or_default());
-                    let page_title = if category_param.is_empty() {
-                        format!("カテゴリの読み込みに失敗しました | {SITE_NAME}")
-                    } else {
-                        format!("{category_param} | {SITE_NAME}")
-                    };
-                    let page_description = if category_param.is_empty() {
-                        "カテゴリの読み込みに失敗しました。".to_string()
-                    } else {
-                        format!(
-                            "{category_param} カテゴリの読み込みに失敗しました。",
-                        )
-                    };
-                    let canonical_url = if category_param.is_empty() {
-                        build_site_url("/")
-                    } else {
-                        build_site_url(&format!("/{category_param}"))
-                    };
-
-                    view! {
-                        <PageMetadata title=page_title description=page_description canonical_url />
-                    }
-                        .into_any()
-                }
-                None => {
-                    let category_param = params
-                        .with(|params: &ParamsMap| params.get("category").unwrap_or_default());
-                    let page_title = if category_param.is_empty() {
-                        SITE_NAME.to_string()
-                    } else {
-                        format!("{category_param} | {SITE_NAME}")
-                    };
-                    let page_description = if category_param.is_empty() {
-                        "カテゴリページです。".to_string()
-                    } else {
-                        format!("{category_param} カテゴリの記事一覧です。")
-                    };
-                    let canonical_url = if category_param.is_empty() {
-                        build_site_url("/")
-                    } else {
-                        build_site_url(&format!("/{category_param}"))
-                    };
-
-                    view! {
-                        <PageMetadata title=page_title description=page_description canonical_url />
-                    }
-                        .into_any()
-                }
-            }}
-        </Suspense>
-
-        <Suspense fallback=|| {
-            view! { <div class=category_style::loading>"カテゴリを読み込み中..."</div> }
-        }>
-            {move || match category_page.get() {
-                Some(Ok(Some(document))) => view! { <CategoryPageContent document /> }.into_any(),
                 Some(Ok(None)) => {
                     mark_not_found_response();
                     view! { <NotFoundPage /> }.into_any()

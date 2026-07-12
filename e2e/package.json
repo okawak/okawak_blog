@@ -1,0 +1,15 @@
+{
+  "name": "okawak-blog-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "bun@1.3.14",
+  "scripts": {
+    "test": "playwright test && playwright test --config playwright.empty-home.config.ts",
+    "test:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
+  }
+}

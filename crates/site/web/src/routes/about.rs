@@ -3,6 +3,7 @@ use crate::routes::not_found::NotFoundPage;
 use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
+#[cfg(feature = "ssr")]
 use domain::PageKey;
 use domain::StaticPageDocument;
 use domain::{
@@ -68,14 +69,7 @@ fn AboutPageContent(document: StaticPageDocument) -> impl IntoView {
 
 #[component]
 pub fn AboutPage() -> impl IntoView {
-    let fallback_document = StaticPageDocument {
-        page: PageKey::new("about".to_string()).expect("about is a valid page key"),
-        title: "About".to_string(),
-        description: Some("About ページです。".to_string()),
-        html: String::new(),
-    };
-    let fallback_document_for_metadata = fallback_document.clone();
-    let about_page = Resource::<Result<Option<StaticPageDocument>, String>>::new(
+    let about_page = Resource::<Result<Option<StaticPageDocument>, String>>::new_blocking(
         || (),
         move |_| async move {
             get_about_page_document()
@@ -85,76 +79,29 @@ pub fn AboutPage() -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || {
-            let page_title = build_static_page_title(&fallback_document_for_metadata, SITE_NAME);
-            let page_description =
-                build_static_page_description(&fallback_document_for_metadata);
-            let canonical_url = build_site_url(
-                &build_static_page_canonical_path(&fallback_document_for_metadata),
-            );
-
-            view! { <PageMetadata title=page_title description=page_description canonical_url /> }
+        <Suspense fallback=|| {
+            view! {
+                <PageMetadata
+                    title=format!("About | {SITE_NAME}")
+                    description="About ページです。"
+                    canonical_url=build_site_url("/about")
+                />
+                <div class=about_style::loading>"ページを読み込み中..."</div>
+            }
         }>
             {move || match about_page.get() {
                 Some(Ok(Some(document))) => {
                     let page_title = build_static_page_title(&document, SITE_NAME);
                     let page_description = build_static_page_description(&document);
-                    let canonical_url = build_site_url(
-                        &build_static_page_canonical_path(&document),
-                    );
+                    let canonical_url =
+                        build_site_url(&build_static_page_canonical_path(&document));
 
                     view! {
                         <PageMetadata title=page_title description=page_description canonical_url />
+                        <AboutPageContent document />
                     }
                         .into_any()
                 }
-                Some(Ok(None)) => {
-                    let page_title = format!(
-                        "ページが見つかりませんでした | {SITE_NAME}",
-                    );
-                    let page_description = "ページが見つかりませんでした。"
-                        .to_string();
-                    let canonical_url = build_site_url("/");
-
-                    view! {
-                        <PageMetadata title=page_title description=page_description canonical_url />
-                    }
-                        .into_any()
-                }
-                Some(Err(_)) => {
-                    let page_title = format!("About の読み込みに失敗しました | {SITE_NAME}");
-                    let page_description =
-                        "About ページの読み込みに失敗しました。時間をおいて再度お試しください。"
-                            .to_string();
-                    let canonical_url = build_site_url(
-                        &build_static_page_canonical_path(&fallback_document),
-                    );
-
-                    view! {
-                        <PageMetadata title=page_title description=page_description canonical_url />
-                    }
-                        .into_any()
-                }
-                None => {
-                    let page_title = build_static_page_title(&fallback_document, SITE_NAME);
-                    let page_description = build_static_page_description(&fallback_document);
-                    let canonical_url = build_site_url(
-                        &build_static_page_canonical_path(&fallback_document),
-                    );
-
-                    view! {
-                        <PageMetadata title=page_title description=page_description canonical_url />
-                    }
-                        .into_any()
-                }
-            }}
-        </Suspense>
-
-        <Suspense fallback=|| {
-            view! { <div class=about_style::loading>"ページを読み込み中..."</div> }
-        }>
-            {move || match about_page.get() {
-                Some(Ok(Some(document))) => view! { <AboutPageContent document /> }.into_any(),
                 Some(Ok(None)) => {
                     mark_not_found_response();
                     view! { <NotFoundPage /> }.into_any()

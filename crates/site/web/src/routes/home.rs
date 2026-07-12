@@ -112,6 +112,7 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
 fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
     let article_href = build_article_path(&article.category, &article.slug);
     let title = article.title.as_str().to_string();
+    let article_label = title.clone();
     let category = article.category_display_name;
     let description = article
         .description
@@ -122,7 +123,12 @@ fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
     let updated_at = article.updated_at;
 
     view! {
-        <A href={article_href} {..} class=home_style::article_card_link>
+        <A
+            href={article_href}
+            {..}
+            class=home_style::article_card_link
+            attr:aria-label=article_label
+        >
             <article class=home_style::article_card>
                 <div class=home_style::article_meta>
                     <span class=home_style::article_category>{category}</span>
@@ -152,11 +158,7 @@ fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
 /// Home page component.
 #[component]
 pub fn HomePage() -> impl IntoView {
-    let fallback_title = build_home_page_title(SITE_NAME);
-    let fallback_description =
-        "公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。";
-    let fallback_canonical_url = build_site_url(build_home_page_canonical_path());
-    let home_page = Resource::<Result<HomePageDocument, String>>::new(
+    let home_page = Resource::<Result<HomePageDocument, String>>::new_blocking(
         || (),
         move |_| async move {
             get_home_page_document()
@@ -166,52 +168,6 @@ pub fn HomePage() -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || {
-            view! {
-                <PageMetadata
-                    title=fallback_title
-                    description=fallback_description
-                    canonical_url=fallback_canonical_url.clone()
-                />
-            }
-        }>
-            {move || match home_page.get() {
-                Some(Ok(document)) => {
-                    let page_title = build_home_page_title(SITE_NAME);
-                    let page_description = build_home_page_description(&document);
-                    let canonical_url = build_site_url(build_home_page_canonical_path());
-
-                    view! {
-                        <PageMetadata title=page_title description=page_description canonical_url />
-                    }
-                        .into_any()
-                }
-                Some(Err(_)) => {
-                    let page_title = format!("読み込み失敗 | {}", build_home_page_title(SITE_NAME));
-                    let page_description =
-                        "ホームページの読み込みに失敗しました。時間をおいて再度お試しください。"
-                            .to_string();
-                    let canonical_url = build_site_url(build_home_page_canonical_path());
-
-                    view! {
-                        <PageMetadata title=page_title description=page_description canonical_url />
-                    }
-                        .into_any()
-                }
-                None => {
-                    let page_title = build_home_page_title(SITE_NAME);
-                    let page_description =
-                        "ホームページを読み込み中です。最新の記事を準備しています。".to_string();
-                    let canonical_url = build_site_url(build_home_page_canonical_path());
-
-                    view! {
-                        <PageMetadata title=page_title description=page_description canonical_url />
-                    }
-                        .into_any()
-                }
-            }}
-        </Suspense>
-
         <div class=home_style::home_page>
             <section class=home_style::profile_section>
                 <p class=home_style::eyebrow>{"Artifact-Driven Blog"}</p>
@@ -230,16 +186,39 @@ pub fn HomePage() -> impl IntoView {
                 </div>
 
                 <Suspense fallback=|| {
-                    view! { <div class=home_style::loading>"記事を読み込み中..."</div> }
+                    view! {
+                        <PageMetadata
+                            title=build_home_page_title(SITE_NAME)
+                            description="公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。"
+                            canonical_url=build_site_url(build_home_page_canonical_path())
+                        />
+                        <div class=home_style::loading>"記事を読み込み中..."</div>
+                    }
                 }>
                     {move || match home_page.get() {
-                        Some(Ok(document)) if document.articles.is_empty() => {
+                        Some(Ok(document)) => {
+                            let page_title = build_home_page_title(SITE_NAME);
+                            let page_description = build_home_page_description(&document);
+                            let canonical_url = build_site_url(build_home_page_canonical_path());
+                            let content = if document.articles.is_empty() {
+                                view! {
+                                    <div class=home_style::no_articles>"記事がありません"</div>
+                                }
+                                    .into_any()
+                            } else {
+                                view! { <HomePageContent document /> }.into_any()
+                            };
+
                             view! {
-                                <div class=home_style::no_articles>"記事がありません"</div>
+                                <PageMetadata
+                                    title=page_title
+                                    description=page_description
+                                    canonical_url
+                                />
+                                {content}
                             }
                                 .into_any()
                         }
-                        Some(Ok(document)) => view! { <HomePageContent document /> }.into_any(),
                         Some(Err(error)) => {
                             view! {
                                 <div class=home_style::error>
