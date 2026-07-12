@@ -16,12 +16,21 @@ credential更新スクリプトは、`okawak` userの通常環境にある`secre
 
 前提:
 
-- systemd unitを一度起動し、`/var/lib/okawak_blog`が作成されている
 - `okawak` userが`secret-get` profileを利用できる
 - AWS CLIと`jq`が導入済み
+- `okawak` userがruntime directory作成とservice再起動に必要な`sudo`権限を持つ
+
+home配下のcredentialsから移行する初回だけ、serviceのdeploy前にruntime credentialsを配置します。
 
 ```bash
-sudo systemctl start okawak_blog
+OKAWAK_BLOG_SKIP_RESTART=1 ./service/update_aws_creds.sh
+mise run production-deploy
+curl --fail http://127.0.0.1:8008/api/ready
+```
+
+以降のcredential rotationでは、スクリプトがfileを置き換えてserviceを再起動します。
+
+```bash
 ./service/update_aws_creds.sh
 ```
 
