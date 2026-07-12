@@ -37,9 +37,11 @@ curl --fail http://127.0.0.1:8008/api/ready
 別の検証用pathへ書く場合だけ、次のenvを指定できます。
 
 ```bash
-OKAWAK_BLOG_RUNTIME_CREDENTIAL_FILE=/tmp/okawak-blog-credentials \
+OKAWAK_BLOG_RUNTIME_CREDENTIAL_FILE=/tmp/okawak-blog-runtime/aws/credentials \
   ./service/update_aws_creds.sh
 ```
+
+override先にもruntime専用directoryを指定してください。スクリプトは既存directoryのmodeやownerを変更せず、既存directoryが実行userの所有で書き込み可能な場合だけ利用します。`/tmp/credentials`のように共有directoryを直接親にするpathは拒否します。
 
 ## Runtime probes
 
