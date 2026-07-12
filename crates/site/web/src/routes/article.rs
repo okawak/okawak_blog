@@ -38,11 +38,12 @@ pub async fn get_article_page_document(
             Ok(slug) => slug,
             Err(_) => return Ok(None),
         };
-        let article_index = artifact_reader.read_article_index().await?;
+        let snapshot = artifact_reader.snapshot().await?;
+        let article_index = snapshot.read_article_index().await?;
         let Some(summary) = find_article_summary(&article_index, &category, &slug) else {
             return Ok(None);
         };
-        let html = match artifact_reader.read_article_html(&category, &slug).await {
+        let html = match snapshot.read_article_html(&category, &slug).await {
             Ok(html) => html,
             Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error.into()),
@@ -129,13 +130,14 @@ pub fn ArticlePage() -> impl IntoView {
 
     view! {
         <Suspense fallback=move || {
-            let (category_param, slug_param) = params.with(|params: &ParamsMap| {
-                let slug = params.get("slug").unwrap_or_default();
-                (
-                    params.get("category").unwrap_or_default(),
-                    normalize_article_slug_param(&slug).to_string(),
-                )
-            });
+            let (category_param, slug_param) = params
+                .with(|params: &ParamsMap| {
+                    let slug = params.get("slug").unwrap_or_default();
+                    (
+                        params.get("category").unwrap_or_default(),
+                        normalize_article_slug_param(&slug).to_string(),
+                    )
+                });
             let canonical_url = build_site_url(&format!("/{category_param}/{slug_param}"));
 
             view! {
@@ -152,8 +154,9 @@ pub fn ArticlePage() -> impl IntoView {
                 Some(Ok(Some(document))) => {
                     let page_title = build_article_page_title(&document, SITE_NAME);
                     let page_description = build_article_page_description(&document);
-                    let canonical_url =
-                        build_site_url(&build_article_page_canonical_path(&document));
+                    let canonical_url = build_site_url(
+                        &build_article_page_canonical_path(&document),
+                    );
 
                     view! {
                         <PageMetadata

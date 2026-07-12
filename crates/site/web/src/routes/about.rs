@@ -24,9 +24,10 @@ pub async fn get_about_page_document() -> Result<Option<StaticPageDocument>, Ser
     {
         let artifact_reader = use_context::<DynArtifactReader>()
             .ok_or_else(|| ServerFnError::new("artifact reader context is missing"))?;
+        let snapshot = artifact_reader.snapshot().await?;
         let page = PageKey::new("about".to_string())
             .map_err(|error| ServerFnError::new(error.to_string()))?;
-        let artifact = match artifact_reader.read_page_document(&page).await {
+        let artifact = match snapshot.read_page_document(&page).await {
             Ok(artifact) => artifact,
             Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error.into()),
@@ -93,8 +94,9 @@ pub fn AboutPage() -> impl IntoView {
                 Some(Ok(Some(document))) => {
                     let page_title = build_static_page_title(&document, SITE_NAME);
                     let page_description = build_static_page_description(&document);
-                    let canonical_url =
-                        build_site_url(&build_static_page_canonical_path(&document));
+                    let canonical_url = build_site_url(
+                        &build_static_page_canonical_path(&document),
+                    );
 
                     view! {
                         <PageMetadata title=page_title description=page_description canonical_url />

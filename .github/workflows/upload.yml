@@ -84,6 +84,26 @@ jobs:
 
           echo "✅ Validated ${file_count} article HTML files"
 
+      - name: Build release pointer
+        run: |
+          set -euo pipefail
+          source_commit=$(git -C crates/publish/publisher/obsidian rev-parse HEAD)
+          release_id="${GITHUB_SHA:0:12}-${source_commit:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          artifact_prefix="releases/${release_id}/site"
+
+          jq -n \
+            --argjson schema_version 1 \
+            --arg release_id "$release_id" \
+            --arg artifact_prefix "$artifact_prefix" \
+            --arg publisher_commit "$GITHUB_SHA" \
+            --arg source_commit "$source_commit" \
+            --arg generated_at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            '{schema_version: $schema_version, release_id: $release_id, artifact_prefix: $artifact_prefix, publisher_commit: $publisher_commit, source_commit: $source_commit, generated_at: $generated_at}' \
+            > "$RUNNER_TEMP/release.json"
+
+          echo "RELEASE_ID=$release_id" >> "$GITHUB_ENV"
+          echo "ARTIFACT_PREFIX=$artifact_prefix" >> "$GITHUB_ENV"
+
       - name: Validate AWS secrets
         run: |
           if [ -z "${{ secrets.AWS_REGION }}" ] || [ -z "${{ secrets.AWS_ACCOUNT_ID }}" ] || [ -z "${{ secrets.AWS_ROLE_NAME }}" ] || [ -z "${{ secrets.S3_BUCKET }}" ]; then
@@ -99,17 +119,34 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
 
-      - name: Sync to S3
+      - name: Upload immutable release and switch pointer
         run: |
-          # The publisher and the explicit artifact checks above must succeed before
-          # this destructive synchronization is allowed to run.
-          aws s3 sync ${{ env.UPLOAD_PATH }} s3://${{ secrets.S3_BUCKET }} \
-            --delete \
-            --cache-control "public, max-age=300"
+          set -euo pipefail
+          release_uri="s3://${{ secrets.S3_BUCKET }}/${ARTIFACT_PREFIX}"
 
-          # S3バケットの内容確認
-          s3_object_count=$(aws s3 ls s3://${{ secrets.S3_BUCKET }}/ --recursive | grep ".html" | wc -l)
-          echo "🪣 S3 bucket now contains ${s3_object_count} HTML files"
+          aws s3 sync "${{ env.UPLOAD_PATH }}" "$release_uri" \
+            --cache-control "public, max-age=31536000, immutable"
+
+          local_html_count=$(find "${{ env.UPLOAD_PATH }}" -name "*.html" -type f | wc -l | tr -d ' ')
+          remote_html_count=$(aws s3 ls "$release_uri/" --recursive | awk '/\.html$/ { count++ } END { print count + 0 }')
+          if [ "$remote_html_count" -ne "$local_html_count" ]; then
+            echo "❌ Release validation failed: local=${local_html_count}, remote=${remote_html_count}"
+            exit 1
+          fi
+
+          aws s3 cp "$RUNNER_TEMP/release.json" \
+            "s3://${{ secrets.S3_BUCKET }}/releases/${RELEASE_ID}/manifest.json" \
+            --content-type "application/json" \
+            --cache-control "public, max-age=31536000, immutable"
+
+          # current.json is updated last. Readers either see the previous complete
+          # release or this complete release, never an in-place partial upload.
+          aws s3 cp "$RUNNER_TEMP/release.json" \
+            "s3://${{ secrets.S3_BUCKET }}/current.json" \
+            --content-type "application/json" \
+            --cache-control "no-store"
+
+          echo "🪣 Published release ${RELEASE_ID} with ${remote_html_count} HTML files"
 
       - name: Notify on failure
         if: failure()

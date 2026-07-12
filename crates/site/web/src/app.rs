@@ -140,16 +140,8 @@ pub fn App() -> impl IntoView {
                     }>
                         <Route path=path!("") view=HomePage ssr=SsrMode::Async />
                         <Route path=path!("about") view=AboutPage ssr=SsrMode::Async />
-                        <Route
-                            path=path!(":category/:slug")
-                            view=ArticlePage
-                            ssr=SsrMode::Async
-                        />
-                        <Route
-                            path=path!(":category")
-                            view=CategoryPage
-                            ssr=SsrMode::Async
-                        />
+                        <Route path=path!(":category/:slug") view=ArticlePage ssr=SsrMode::Async />
+                        <Route path=path!(":category") view=CategoryPage ssr=SsrMode::Async />
                     </FlatRoutes>
                 </main>
             </Router>
