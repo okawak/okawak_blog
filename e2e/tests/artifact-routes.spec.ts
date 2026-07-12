@@ -26,6 +26,21 @@ async function expectMetadata(
   );
 }
 
+async function expectNotFoundMetadata(page: Page, canonicalPath: string) {
+  const title = `ページが見つかりません | ${SITE_NAME}`;
+  const description = "お探しのページは見つかりませんでした。";
+
+  await expectMetadata(page, title, canonicalPath);
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+    "content",
+    description,
+  );
+  await expect(page.locator('meta[property="og:description"]')).toHaveAttribute(
+    "content",
+    description,
+  );
+}
+
 test("home renders artifacts and hydrates article navigation", async ({ page }) => {
   const response = await page.goto("/");
 
@@ -78,9 +93,11 @@ test("missing article and category return 404 pages", async ({ page }) => {
 
   expect(articleResponse?.status()).toBe(404);
   await expect(page.getByText("ページが見つかりませんでした。")).toBeVisible();
+  await expectNotFoundMetadata(page, "/tech/missing-article");
 
   const categoryResponse = await page.goto("/statistics");
 
   expect(categoryResponse?.status()).toBe(404);
   await expect(page.getByText("ページが見つかりませんでした。")).toBeVisible();
+  await expectNotFoundMetadata(page, "/statistics");
 });
