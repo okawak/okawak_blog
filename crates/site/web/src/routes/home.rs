@@ -196,16 +196,18 @@ pub fn HomePage() -> impl IntoView {
                     }
                 }>
                     {move || match home_page.get() {
-                        Some(Ok(document)) if document.articles.is_empty() => {
-                            view! {
-                                <div class=home_style::no_articles>"記事がありません"</div>
-                            }
-                                .into_any()
-                        }
                         Some(Ok(document)) => {
                             let page_title = build_home_page_title(SITE_NAME);
                             let page_description = build_home_page_description(&document);
                             let canonical_url = build_site_url(build_home_page_canonical_path());
+                            let content = if document.articles.is_empty() {
+                                view! {
+                                    <div class=home_style::no_articles>"記事がありません"</div>
+                                }
+                                    .into_any()
+                            } else {
+                                view! { <HomePageContent document /> }.into_any()
+                            };
 
                             view! {
                                 <PageMetadata
@@ -213,7 +215,7 @@ pub fn HomePage() -> impl IntoView {
                                     description=page_description
                                     canonical_url
                                 />
-                                <HomePageContent document />
+                                {content}
                             }
                                 .into_any()
                         }
