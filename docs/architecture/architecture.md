@@ -330,6 +330,8 @@ flowchart LR
 
 公開 route の page document 読み込みは Leptos server function を正式経路とする。`site/server` は reader を生成して context に注入し、SSR と server function をホストする。手書きの `/api/page/*` は持たず、404 と storage error の扱いは各 server function に集約する。`/api/articles` は page document を組み立てない互換 endpoint として維持する。
 
+home、about、category、articleの公開routeは`SsrMode::Async`で描画する。title、canonical、Open Graph metadataがartifactの内容に依存するため、非同期resourceの解決前に`<head>`をstreamingしない。各routeではblocking resourceを使い、metadataと本文を同じ`Suspense`境界で組み立てる。
+
 ## Reader 経路
 
 artifact の読取は `ArtifactReader` 境界を経由する。

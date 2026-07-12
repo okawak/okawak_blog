@@ -114,7 +114,7 @@ pub fn ArticlePage() -> impl IntoView {
             )
         })
     };
-    let article_page = Resource::<Result<Option<ArticlePageDocument>, String>>::new(
+    let article_page = Resource::<Result<Option<ArticlePageDocument>, String>>::new_blocking(
         article_params,
         move |(category, slug)| async move {
             if category.is_empty() || slug.is_empty() {
@@ -136,28 +136,24 @@ pub fn ArticlePage() -> impl IntoView {
                     normalize_article_slug_param(&slug).to_string(),
                 )
             });
-            let canonical_url = if category_param.is_empty() || slug_param.is_empty() {
-                build_site_url("/")
-            } else {
-                build_site_url(&format!("/{category_param}/{slug_param}"))
-            };
+            let canonical_url = build_site_url(&format!("/{category_param}/{slug_param}"));
 
             view! {
                 <PageMetadata
-                    title=SITE_NAME.to_string()
-                    description="記事ページです。"
+                    title=format!("{slug_param} | {SITE_NAME}")
+                    description=format!("{category_param} カテゴリの記事です。")
                     canonical_url
                     og_type="article"
                 />
+                <div class=article_style::loading>"記事を読み込み中..."</div>
             }
         }>
             {move || match article_page.get() {
                 Some(Ok(Some(document))) => {
                     let page_title = build_article_page_title(&document, SITE_NAME);
                     let page_description = build_article_page_description(&document);
-                    let canonical_url = build_site_url(
-                        &build_article_page_canonical_path(&document),
-                    );
+                    let canonical_url =
+                        build_site_url(&build_article_page_canonical_path(&document));
 
                     view! {
                         <PageMetadata
@@ -166,121 +162,10 @@ pub fn ArticlePage() -> impl IntoView {
                             canonical_url
                             og_type="article"
                         />
+                        <ArticlePageContent document />
                     }
                         .into_any()
                 }
-                Some(Ok(None)) => {
-                    let (category_param, slug_param) = params
-                        .with(|params: &ParamsMap| {
-                            let slug = params.get("slug").unwrap_or_default();
-                            (
-                                params.get("category").unwrap_or_default(),
-                                normalize_article_slug_param(&slug).to_string(),
-                            )
-                        });
-                    let page_title = format!(
-                        "ページが見つかりませんでした | {SITE_NAME}",
-                    );
-                    let page_description = if category_param.is_empty() || slug_param.is_empty() {
-                        "記事が見つかりませんでした。".to_string()
-                    } else {
-                        format!(
-                            "{category_param} カテゴリの {slug_param} は見つかりませんでした。",
-                        )
-                    };
-                    let canonical_url = if category_param.is_empty() || slug_param.is_empty() {
-                        build_site_url("/")
-                    } else {
-                        build_site_url(&format!("/{category_param}/{slug_param}"))
-                    };
-
-                    view! {
-                        <PageMetadata title=page_title description=page_description canonical_url />
-                    }
-                        .into_any()
-                }
-                Some(Err(_)) => {
-                    let (category_param, slug_param) = params
-                        .with(|params: &ParamsMap| {
-                            (
-                                params.get("category").unwrap_or_default(),
-                                normalize_article_slug_param(
-                                        &params.get("slug").unwrap_or_default(),
-                                    )
-                                    .to_string(),
-                            )
-                        });
-                    let page_title = format!(
-                        "記事の読み込みに失敗しました | {SITE_NAME}",
-                    );
-                    let page_description = if category_param.is_empty() || slug_param.is_empty() {
-                        "記事の読み込みに失敗しました。".to_string()
-                    } else {
-                        format!(
-                            "{category_param} カテゴリの {slug_param} の読み込みに失敗しました。",
-                        )
-                    };
-                    let canonical_url = if category_param.is_empty() || slug_param.is_empty() {
-                        build_site_url("/")
-                    } else {
-                        build_site_url(&format!("/{category_param}/{slug_param}"))
-                    };
-
-                    view! {
-                        <PageMetadata
-                            title=page_title
-                            description=page_description
-                            canonical_url
-                            og_type="article"
-                        />
-                    }
-                        .into_any()
-                }
-                None => {
-                    let (category_param, slug_param) = params
-                        .with(|params: &ParamsMap| {
-                            (
-                                params.get("category").unwrap_or_default(),
-                                normalize_article_slug_param(
-                                        &params.get("slug").unwrap_or_default(),
-                                    )
-                                    .to_string(),
-                            )
-                        });
-                    let page_title = if slug_param.is_empty() {
-                        SITE_NAME.to_string()
-                    } else {
-                        format!("{slug_param} | {SITE_NAME}")
-                    };
-                    let page_description = if category_param.is_empty() {
-                        "記事ページです。".to_string()
-                    } else {
-                        format!("{category_param} カテゴリの記事です。")
-                    };
-                    let canonical_url = if category_param.is_empty() || slug_param.is_empty() {
-                        build_site_url("/")
-                    } else {
-                        build_site_url(&format!("/{category_param}/{slug_param}"))
-                    };
-
-                    view! {
-                        <PageMetadata
-                            title=page_title
-                            description=page_description
-                            canonical_url
-                            og_type="article"
-                        />
-                    }
-                        .into_any()
-                }
-            }}
-        </Suspense>
-
-        <Suspense fallback=|| {
-            view! { <div class=article_style::loading>"記事を読み込み中..."</div> }
-        }>
-            {move || match article_page.get() {
-                Some(Ok(Some(document))) => view! { <ArticlePageContent document /> }.into_any(),
                 Some(Ok(None)) => {
                     mark_not_found_response();
                     view! { <NotFoundPage /> }.into_any()

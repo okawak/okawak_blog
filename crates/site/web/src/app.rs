@@ -8,6 +8,7 @@ use crate::routes::not_found::NotFoundPage;
 use leptos::prelude::*;
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
+    SsrMode,
     components::{FlatRoutes, Route, Router},
     hooks::use_location,
     path,
@@ -137,10 +138,18 @@ pub fn App() -> impl IntoView {
                     <FlatRoutes fallback=|| {
                         view! { <NotFoundPage /> }
                     }>
-                        <Route path=path!("") view=HomePage />
-                        <Route path=path!("about") view=AboutPage />
-                        <Route path=path!(":category/:slug") view=ArticlePage />
-                        <Route path=path!(":category") view=CategoryPage />
+                        <Route path=path!("") view=HomePage ssr=SsrMode::Async />
+                        <Route path=path!("about") view=AboutPage ssr=SsrMode::Async />
+                        <Route
+                            path=path!(":category/:slug")
+                            view=ArticlePage
+                            ssr=SsrMode::Async
+                        />
+                        <Route
+                            path=path!(":category")
+                            view=CategoryPage
+                            ssr=SsrMode::Async
+                        />
                     </FlatRoutes>
                 </main>
             </Router>

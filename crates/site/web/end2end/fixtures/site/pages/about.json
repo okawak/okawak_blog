@@ -1,0 +1,7 @@
+{
+  "page": "about",
+  "title": "Fixture About",
+  "description": "About fixture description",
+  "html": "<p>About fixture body</p>",
+  "updated_at": "2026-01-02T00:00:00+09:00"
+}
