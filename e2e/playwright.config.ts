@@ -2,7 +2,7 @@ import path from "node:path";
 import { devices, defineConfig } from "@playwright/test";
 
 const baseURL = "http://127.0.0.1:8008";
-const repoRoot = path.resolve(__dirname, "../../../..");
+const repoRoot = path.resolve(__dirname, "..");
 const fixtureRoot = path.resolve(__dirname, "fixtures/site");
 
 export default defineConfig({
@@ -28,7 +28,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "sh crates/site/web/end2end/run-server.sh",
+    command: "sh e2e/run-server.sh",
     cwd: repoRoot,
     env: {
       ...process.env,

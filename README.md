@@ -78,6 +78,7 @@ okawak_blog/
 │       ├── infra/            # Leptos サーバー側の S3 / cache / runtime adapter
 │       ├── server/           # 公開成果物を読む統合バックエンド
 │       └── web/              # Leptos SSR 公開 UI
+├── e2e/                      # 公開サイト全体の browser E2E
 ├── docs/
 │   └── architecture/
 ├── service/
@@ -91,6 +92,7 @@ okawak_blog/
 - `crates/site/infra`: Leptos サーバーが公開成果物を読むための S3 / cache / runtime adapter。local reader は dev / test 用に残し、本番は S3 reader を使う
 - `crates/site/server`: S3 上の成果物を読んで配信する統合バックエンド
 - `crates/site/web`: Leptos SSR の公開 UI
+- `e2e`: server / web / artifact reader をまたぐ、固定 artifact ベースの browser E2E
 
 ## 公開成果物のイメージ
 
@@ -206,6 +208,7 @@ cargo install leptosfmt
 また、private Obsidian repo を入力として使うため、local artifact を再生成したいときは `mise run publish-local` を実行します。`publish-local` は内部で `git submodule update --init --recursive` を実行しますが、先に明示的に同期したい場合は `mise run sync-obsidian` を使えます。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
 `crates/site/web/package.json` の依存のインストール/更新確認は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` で行えます。
+browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-install-browser`、実行は `mise run test-e2e` を使ってください。E2E は root の `e2e/` に置き、private Obsidian submodule や S3 に依存しない固定 artifact で実行します。
 
 ローカル開発用 task では、次の env を自動で設定します。
 
@@ -236,10 +239,12 @@ mise run format
 mise run web-install
 mise run web-update
 mise run web-outdated
+mise run e2e-install-browser
 mise run test
 mise run test-domain
 mise run test-server
 mise run test-web
+mise run test-e2e
 mise run clippy
 mise run check
 mise run build-local

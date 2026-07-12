@@ -42,6 +42,35 @@ cd crates/site/web
 bun outdated
 '''
 
+[tasks.e2e-install]
+description = "Install root E2E dependencies with bun"
+run = '''
+cd e2e
+bun install --frozen-lockfile
+'''
+
+[tasks.e2e-update]
+description = "Update root E2E dependencies with bun"
+run = '''
+cd e2e
+bun update
+'''
+
+[tasks.e2e-outdated]
+description = "Show outdated root E2E dependencies with bun"
+run = '''
+cd e2e
+bun outdated
+'''
+
+[tasks.e2e-install-browser]
+description = "Install the Chromium browser used by Playwright E2E"
+depends = ["e2e-install"]
+run = '''
+cd e2e
+bunx playwright install chromium
+'''
+
 [tasks.sync-obsidian]
 description = "Initialize and update the private Obsidian submodule"
 run = "git submodule update --init --remote --merge --recursive"
@@ -227,6 +256,14 @@ run = "cargo test -p server"
 description = "Run web tests"
 run = "cargo test -p web"
 
+[tasks.test-e2e]
+description = "Run artifact-driven browser E2E with bun and Chromium"
+depends = ["e2e-install-browser"]
+run = '''
+cd e2e
+bun run test
+'''
+
 [tasks.test-release]
 description = "Run tests in release mode"
 run = "cargo test --workspace --release"
@@ -265,7 +302,13 @@ echo "  mise run build-local"
 echo "  mise run build-project"
 echo "  mise run web-install"
 echo "  mise run web-update"
+echo "  mise run web-outdated"
+echo "  mise run e2e-install"
+echo "  mise run e2e-update"
+echo "  mise run e2e-outdated"
+echo "  mise run e2e-install-browser"
 echo "  mise run test"
+echo "  mise run test-e2e"
 echo "  mise run clippy"
 echo "  mise run check"
 '''

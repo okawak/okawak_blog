@@ -1,15 +1,12 @@
 {
-  "name": "end2end",
+  "name": "okawak-blog-e2e",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "packageManager": "bun@1.3.14",
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "devDependencies": {
     "@playwright/test": "1.61.1",
     "@types/node": "^20.12.12",

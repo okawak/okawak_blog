@@ -40,6 +40,7 @@ okawak_blog/
 │       ├── infra/
 │       ├── server/
 │       └── web/
+├── e2e/
 ├── docs/
 ├── service/
 └── terraform/
@@ -136,6 +137,12 @@ okawak_blog/
 - 公開成果物を読む側として整理する
 - 現行 route は `/`、`/about`、`/:category`、`/:category/:slug`
 
+### `e2e`
+
+- server / web / artifact reader をまたぐ browser E2E を置く
+- private Obsidian submodule、S3、AWS credentials に依存しない固定 artifact fixture を使う
+- package manager は Bun とし、root の `mise` task から準備・実行する
+
 ### `crates/publish/publisher`
 
 - 現在もっとも `publisher` に近いアプリ
@@ -205,6 +212,7 @@ okawak_blog/
 - local artifact の更新が必要なときだけ `mise run publish-local` または `mise run sync-obsidian` を使う
 - `mise run pull` は deploy 用に main の更新だけを行い、submodule 更新が必要なときだけ `mise run pull-with-submodules` を使う
 - `crates/site/web/package.json` の依存操作は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` を使う
+- `e2e/package.json` の依存操作は root から `mise run e2e-install` / `mise run e2e-update` / `mise run e2e-outdated` を使い、Chromium の初回準備は `mise run e2e-install-browser` を使う
 - 同一ネットワークの別端末から確認する一時用途では `mise run dev-lan` を使う。これは `0.0.0.0:8008` で待ち受けるだけで、absolute URL まで揃えたいときだけ `OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008` を前置する
 - 本番 runtime は `service/okawak_blog.service` 側の env により `s3` reader を使う
 
@@ -223,6 +231,7 @@ okawak_blog/
 - `mise run web-install`
 - `mise run web-update`
 - `mise run web-outdated`
+- `mise run e2e-install-browser`
 
 ### テスト・確認
 
@@ -230,6 +239,7 @@ okawak_blog/
 - `mise run test-domain`
 - `mise run test-server`
 - `mise run test-web`
+- `mise run test-e2e`
 - `mise run clippy`
 - `mise run check`
 - `mise run check-domain`

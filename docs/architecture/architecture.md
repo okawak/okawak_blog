@@ -49,6 +49,7 @@ okawak_blog/
 │       ├── infra/
 │       ├── server/
 │       └── web/
+├── e2e/
 ├── docs/
 │   └── architecture/
 ├── service/
@@ -91,6 +92,10 @@ okawak_blog/
   - Leptos server function による page document の組み立て
   - SSR feature 時のみ `ArtifactReader` 境界を利用
   - metadata / canonical / Open Graph 生成
+- `e2e`
+  - `crates/site/server`、`crates/site/web`、`crates/site/infra` をまたぐ browser E2E
+  - private Obsidian submodule や S3 に依存しない固定 artifact fixture
+  - Bun で依存を管理し、Playwright + Chromium で公開 route、metadata、hydration を検証
 
 `terraform/` は読み取り専用とし、このリポジトリの通常作業では編集しない。
 
