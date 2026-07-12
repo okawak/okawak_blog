@@ -1,6 +1,7 @@
 //! HTTP API handlers.
 
 pub mod articles;
+pub mod readiness;
 
 pub use articles::*;
 
@@ -13,6 +14,7 @@ use leptos::prelude::LeptosOptions;
 pub fn create_api_router(artifact_reader: DynArtifactReader) -> Router<LeptosOptions> {
     Router::new()
         .route("/articles", get(articles::list_articles))
+        .route("/ready", get(readiness::artifact_readiness))
         .layer(Extension(artifact_reader))
 }
 
@@ -24,7 +26,7 @@ mod tests {
         http::{Request, StatusCode},
     };
     use infra::LocalArtifactReader;
-    use std::sync::Arc;
+    use std::{fs, sync::Arc};
     use tempfile::TempDir;
     use tower::util::ServiceExt;
 
@@ -48,5 +50,45 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_readiness_returns_ok_when_site_metadata_is_readable() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join("metadata")).unwrap();
+        fs::write(
+            temp_dir.path().join("metadata/site.json"),
+            r#"{"total_articles":0,"categories":[]}"#,
+        )
+        .unwrap();
+
+        let response = create_test_router(temp_dir.path())
+            .oneshot(
+                Request::builder()
+                    .uri("/ready")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_readiness_returns_service_unavailable_when_site_metadata_is_missing() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let response = create_test_router(temp_dir.path())
+            .oneshot(
+                Request::builder()
+                    .uri("/ready")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }

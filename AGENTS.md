@@ -168,6 +168,9 @@ okawak_blog/
 ### `service`
 
 - `systemd`、`nginx`、運用補助ファイルを置く
+- runtime用AWS credentialsは`/var/lib/okawak_blog/aws/credentials`へ置き、`AWS_SHARED_CREDENTIALS_FILE`で明示する
+- `ProtectHome=true`を維持し、serviceからhome directoryのcredentialsを読ませない
+- `/api/health`はliveness、`/api/ready`はartifact readerのreadinessとして扱う
 
 ### `terraform`
 

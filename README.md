@@ -177,6 +177,10 @@ category: "tech"
 - `nginx` を前段に置いて HTTPS 終端とリバースプロキシを担当させる
 - アプリケーション本体は単一バイナリとして扱う
 - SSR サーバーは S3 上の成果物を読み、必要に応じて静的ファイルも配信する
+- `/api/health` はprocess liveness、`/api/ready` はartifact readerのreadinessとして分ける
+- runtime用AWS credentialsは`/var/lib/okawak_blog/aws/credentials`へ置き、home directoryには依存しない
+
+VPS上のservice設定とcredential更新手順は[service/README.md](./service/README.md)を参照してください。
 
 ## 開発原則
 

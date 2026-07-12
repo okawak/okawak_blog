@@ -85,7 +85,8 @@ okawak_blog/
 - `crates/site/server`
   - Axum + Leptos SSR のホスト
   - reader の生成と Leptos context への注入
-  - 互換用の記事一覧 API と health endpoint
+  - 互換用の記事一覧 API
+  - process liveness (`/api/health`) と artifact readiness (`/api/ready`)
 - `crates/site/web`
   - Leptos UI
   - route 定義
@@ -357,6 +358,15 @@ reader 側の設定は主に次の env で切り替える。
 - `OKAWAK_BLOG_ARTIFACT_PREFIX`
 
 `OKAWAK_BLOG_SITE_ORIGIN` は canonical / Open Graph 用の absolute URL 生成に使う。
+
+本番のAWS SDKは`AWS_SHARED_CREDENTIALS_FILE=/var/lib/okawak_blog/aws/credentials`を明示して使う。runtime credentialsはsystemdの`StateDirectory=okawak_blog`配下に置き、`ProtectHome=true`を維持したまま読み取れる構成とする。credential fileの生成・更新は`service/update_aws_creds.sh`が担い、`site/infra`にはcredential管理責務を持ち込まない。
+
+runtime probeは次のように分ける。
+
+- `/api/health`
+  - processがHTTP requestへ応答できることだけを確認するliveness
+- `/api/ready`
+  - configured `ArtifactReader`からsite metadataを読めることを確認するreadiness
 
 ## ローカル開発と本番運用
 

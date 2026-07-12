@@ -41,6 +41,16 @@ async function expectNotFoundMetadata(page: Page, canonicalPath: string) {
   );
 }
 
+test("runtime probes distinguish liveness and artifact readiness", async ({ request }) => {
+  const healthResponse = await request.get("/api/health");
+  expect(healthResponse.status()).toBe(200);
+  expect(await healthResponse.text()).toBe("OK");
+
+  const readinessResponse = await request.get("/api/ready");
+  expect(readinessResponse.status()).toBe(200);
+  expect(await readinessResponse.text()).toBe("READY");
+});
+
 test("home renders artifacts and hydrates article navigation", async ({ page }) => {
   const response = await page.goto("/");
 
