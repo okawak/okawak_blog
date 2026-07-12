@@ -8,6 +8,9 @@ pub async fn list_articles(
     Extension(artifact_reader): Extension<DynArtifactReader>,
 ) -> Result<Json<ArticleIndexDocument>, StatusCode> {
     let document = artifact_reader
+        .snapshot()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .read_article_index()
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

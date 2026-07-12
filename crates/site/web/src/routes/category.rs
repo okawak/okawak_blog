@@ -36,13 +36,14 @@ pub async fn get_category_page_document(
             Ok(category) => category,
             Err(_) => return Ok(None),
         };
+        let snapshot = artifact_reader.snapshot().await?;
 
-        let category_index = match artifact_reader.read_category_index(category.as_str()).await {
+        let category_index = match snapshot.read_category_index(category.as_str()).await {
             Ok(index) => index,
             Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error.into()),
         };
-        let html = match artifact_reader.read_category_html(&category).await {
+        let html = match snapshot.read_category_html(&category).await {
             Ok(html) => html,
             Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error.into()),
@@ -166,8 +167,9 @@ pub fn CategoryPage() -> impl IntoView {
                 Some(Ok(Some(document))) => {
                     let page_title = build_category_page_title(&document, SITE_NAME);
                     let page_description = build_category_page_description(&document);
-                    let canonical_url =
-                        build_site_url(&build_category_page_canonical_path(&document));
+                    let canonical_url = build_site_url(
+                        &build_category_page_canonical_path(&document),
+                    );
 
                     view! {
                         <PageMetadata title=page_title description=page_description canonical_url />

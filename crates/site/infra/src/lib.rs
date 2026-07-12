@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::Client;
 use domain::{
-    ArticleIndexDocument, Category, CategoryIndexDocument, PageArtifactDocument, PageKey,
-    SiteMetadataDocument, Slug,
+    ArticleIndexDocument, ArtifactReleasePointerDocument, Category, CategoryIndexDocument,
+    PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
 };
 use std::{
     env,
@@ -22,9 +22,15 @@ const ARTIFACT_BUCKET_ENV: &str = "OKAWAK_BLOG_ARTIFACT_BUCKET";
 const ARTIFACT_PREFIX_ENV: &str = "OKAWAK_BLOG_ARTIFACT_PREFIX";
 
 pub type DynArtifactReader = Arc<dyn ArtifactReader>;
+pub type DynArtifactSnapshot = Arc<dyn ArtifactSnapshot>;
 
 #[async_trait]
 pub trait ArtifactReader: Send + Sync {
+    async fn snapshot(&self) -> Result<DynArtifactSnapshot>;
+}
+
+#[async_trait]
+pub trait ArtifactSnapshot: Send + Sync {
     async fn read_article_index(&self) -> Result<ArticleIndexDocument>;
     async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument>;
     async fn read_category_html(&self, category: &Category) -> Result<String>;
@@ -64,6 +70,13 @@ impl LocalArtifactReader {
 
 #[async_trait]
 impl ArtifactReader for LocalArtifactReader {
+    async fn snapshot(&self) -> Result<DynArtifactSnapshot> {
+        Ok(Arc::new(self.clone()))
+    }
+}
+
+#[async_trait]
+impl ArtifactSnapshot for LocalArtifactReader {
     async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
         self.read_json("articles/index.json").await
     }
@@ -131,10 +144,24 @@ impl S3ArtifactLocation {
             None => relative.to_string(),
         }
     }
+
+    fn with_relative_prefix(&self, relative: &str) -> Self {
+        let prefix = self.key_for(relative);
+        Self {
+            bucket: self.bucket.clone(),
+            prefix: Some(prefix),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct S3ArtifactReader {
+    client: Client,
+    location: S3ArtifactLocation,
+}
+
+#[derive(Debug, Clone)]
+pub struct S3ArtifactSnapshot {
     client: Client,
     location: S3ArtifactLocation,
 }
@@ -146,6 +173,12 @@ impl S3ArtifactReader {
 
     pub fn location(&self) -> &S3ArtifactLocation {
         &self.location
+    }
+}
+
+impl S3ArtifactSnapshot {
+    fn new(client: Client, location: S3ArtifactLocation) -> Self {
+        Self { client, location }
     }
 
     async fn read_text(&self, relative: &str) -> Result<String> {
@@ -177,6 +210,29 @@ impl S3ArtifactReader {
 
 #[async_trait]
 impl ArtifactReader for S3ArtifactReader {
+    async fn snapshot(&self) -> Result<DynArtifactSnapshot> {
+        let base = S3ArtifactSnapshot::new(self.client.clone(), self.location.clone());
+        let location = match base
+            .read_json::<ArtifactReleasePointerDocument>("current.json")
+            .await
+        {
+            Ok(pointer) => {
+                pointer.validate()?;
+                self.location.with_relative_prefix(&pointer.artifact_prefix)
+            }
+            Err(error) if error.is_not_found() => self.location.clone(),
+            Err(error) => return Err(error),
+        };
+
+        Ok(Arc::new(S3ArtifactSnapshot::new(
+            self.client.clone(),
+            location,
+        )))
+    }
+}
+
+#[async_trait]
+impl ArtifactSnapshot for S3ArtifactSnapshot {
     async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
         self.read_json("articles/index.json").await
     }
@@ -360,19 +416,20 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         write_fixture_site(temp_dir.path());
         let reader = LocalArtifactReader::new(temp_dir.path());
+        let snapshot = reader.snapshot().await.unwrap();
 
-        let document = reader.read_article_index().await.unwrap();
-        let category = reader.read_category_index("tech").await.unwrap();
-        let category_html = reader.read_category_html(&Category::Tech).await.unwrap();
-        let metadata = reader.read_site_metadata().await.unwrap();
-        let html = reader
+        let document = snapshot.read_article_index().await.unwrap();
+        let category = snapshot.read_category_index("tech").await.unwrap();
+        let category_html = snapshot.read_category_html(&Category::Tech).await.unwrap();
+        let metadata = snapshot.read_site_metadata().await.unwrap();
+        let html = snapshot
             .read_article_html(
                 &Category::Tech,
                 &Slug::new("intro00000001".to_string()).unwrap(),
             )
             .await
             .unwrap();
-        let page = reader
+        let page = snapshot
             .read_page_document(&PageKey::new("about".to_string()).unwrap())
             .await
             .unwrap();
@@ -400,6 +457,17 @@ mod tests {
         assert_eq!(
             location.key_for("/metadata/site.json"),
             "site/metadata/site.json"
+        );
+    }
+
+    #[test]
+    fn test_s3_artifact_location_composes_release_prefix() {
+        let location = S3ArtifactLocation::new("blog-bucket", Some("public")).unwrap();
+        let release = location.with_relative_prefix("releases/release-123/site");
+
+        assert_eq!(
+            release.key_for("articles/index.json"),
+            "public/releases/release-123/site/articles/index.json"
         );
     }
 

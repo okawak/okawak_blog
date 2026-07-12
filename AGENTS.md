@@ -1,261 +1,79 @@
 # AGENTS.md
 
-## 会話ガイドライン
+## 会話とGit
 
-- 常に日本語で会話する
+- 常に日本語で簡潔に会話する
+- commit は署名付きで作る。commit 前に署名設定を確認する
+- ユーザーの既存差分を無断で破棄・上書きしない
 
-## このリポジトリの位置付け
+## リポジトリの位置付け
 
-`okawak_blog` は、Rust 製のブログ CMS を作るリポジトリではありません。Obsidian で書いた Markdown を公開成果物へ変換し、それを Leptos SSR で配信するための、静的コンテンツ公開基盤 + SSR 表示基盤として扱います。
+`okawak_blog` は、private な Obsidian Markdown を公開 artifact へ変換し、Leptos SSR で配信する静的コンテンツ公開基盤である。主役は常駐 API や CMS ではなく、ビルド時のコンテンツ生成パイプラインである。
 
-主役は常駐 API サーバーではなく、コンテンツ生成パイプラインです。
+参照優先順位:
 
-## 優先して参照する文書
+1. `docs/architecture/architecture.md`（現行設計の一次情報）
+2. GitHub Issue / PR（個別計画と進捗）
+3. `README.md`（概要と利用方法）
 
-1. `docs/architecture/architecture.md`
-2. GitHub Issue / PR
-3. `README.md`
+実在しない構成を現行実装として記述しない。実装計画は Issue / PR に置き、恒久文書には現在有効な設計判断だけを残す。
 
-### 参照ルール
+## 必須アーキテクチャ原則
 
-- 現行アーキテクチャの一次情報は `docs/architecture/architecture.md`
-- 個別作業の進め方と進捗は GitHub Issue / PR を優先する
-- 長期的に残す設計判断は `docs/architecture/` に集約する
-- `README.md` は最終的な目標像の概要説明であり、現行実装の一次情報としては扱わない
+- source of truth は private Obsidian repository。public repository へ記事 Markdown を通常ファイルとして commit しない
+- publisher は git submodule の Obsidian repository を入力にする。必要な作業時だけ submodule を初期化・更新する
+- Markdown / frontmatter / link / embed の解決と HTML 生成はビルド時に行う
+- SSR runtime は公開 artifact の読取、ルーティング、メタ情報付与に集中する
+- production は単一 server binary を優先する
 
-## 現行構成を一次情報として扱う
+依存と配置の境界:
 
-### 現在の workspace
+- `crates/domain`: publisher と reader が共有する純粋な型・契約・ルール。I/O、`async`、AWS SDK、Axum、Leptos を持ち込まない。WASM 互換を意識する
+- `crates/publish/ingest`: vault 走査、frontmatter、Markdown変換、Obsidian記法の解決
+- `crates/publish/artifacts`: artifact の組み立てとローカル書出し
+- `crates/publish/bookmark`: 外部 HTTP を伴う bookmark enrichment
+- `crates/publish/publisher`: publish 処理の orchestration。publisher 専用処理は `crates/publish/` に置く
+- `crates/site/infra`: server が artifact を読む外部境界（local / S3、設定、将来のcache）。vault読取、Markdown変換、uploadを置かない
+- `crates/site/server`: Axum + Leptos SSR host、reader注入、API、health/readiness
+- `crates/site/web`: Leptos UI / route / metadata。SSR時もstorage実装へ直接依存しない
+- `e2e`: repository root直下のbrowser E2E。Bun + Playwrightを使い、private submoduleやAWSに依存しないfixtureで検証する
+- `service`: systemd、nginx、運用補助
+- `terraform`: 読み取り専用。編集せず、このdirectoryでcommandを実行しない
 
-```text
-okawak_blog/
-├── crates/
-│   ├── domain/
-│   ├── publish/
-│   │   ├── publisher/
-│   │   ├── artifacts/
-│   │   ├── bookmark/
-│   │   └── ingest/
-│   └── site/
-│       ├── infra/
-│       ├── server/
-│       └── web/
-├── e2e/
-├── docs/
-├── service/
-└── terraform/
-```
-
-### 文書化と実装の注意
-
-- 未作成の crate / app を、現在存在するものとして書かない
-- README や設計メモを書くときは、現行実装と一致する内容を優先する
-- 実装計画は GitHub Issue / PR に寄せ、恒久文書には現行設計だけを残す
-
-## アーキテクチャ原則
-
-### コンテンツパイプライン中心
-
-- Obsidian の Markdown を読み取る
-- Front Matter を検証する
-- `kind` によって article / category / page / home を判定する
-- 内部リンクや埋め込みを解決する
-- HTML / index JSON を生成する
-- S3 に成果物を配置する
-- Leptos SSR サーバーがそれを読んで配信する
-
-### Obsidian ソースの扱い
-
-- 記事ソースの source of truth は private な別 Obsidian リポジトリ
-- `obsidian` の Markdown はこの public リポジトリへ通常ファイルとして commit しない
-- publisher は git submodule として取得した Obsidian repo を入力に使う
-- ローカル開発でも GitHub Actions でも submodule を初期化・更新してから publisher を実行する
-
-### Markdown 変換はビルド時
-
-- Markdown をリクエスト時に毎回変換しない
-- HTML 生成は publisher 側に寄せる
-- SSR サーバーは、成果物読取・ルーティング・メタ情報付与に集中する
-- `about` と `home` も page artifact 契約で読む
-
-### Rust らしい責務分割
-
-- `domain` は純粋関数と小さな型を中心にする
-- `domain` は I/O を知らない
-- `domain` は `async` 前提にしない
-- `domain` は AWS SDK、Leptos、Axum を知らない
-- 外部境界は trait で薄く切る
-- 単一バイナリでの本番運用を優先する
-
-### publisher 側と reader 側の配置境界
-
-- Obsidian 読み取り、Front Matter 解析、Markdown 変換、成果物生成など publisher 専用の実装は `crates/publish/` に置く
-- `crates/site/infra` は Leptos サーバーが公開成果物を読むための infrastructure に限定する
-- `crates/site/infra` に publisher 側の vault reader、Markdown renderer、upload 実装を置かない
-- publisher と reader の両方で共有する純粋な契約やルールだけを `crates/domain` に置く
+`domain`、`publish`、`site` の責務をまたぐ純粋契約だけを `domain` へ置く。publisher専用処理を reader 側へ移さず、ビルド時に解決できる責務をruntimeへ持ち込まない。
 
 ## 非目標
 
-明示されない限り、以下は作らない前提で考える。
-
-- DB ベースの記事管理
-- ユーザー認証・認可
-- 管理画面
-- UI からの記事作成・編集
-- マルチユーザー機能
-- SaaS 的 CMS 機能
-- リアルタイム更新基盤
-
-## 各ディレクトリの扱い
-
-### `crates/domain`
-
-- 純粋ドメインロジックを置く
-- I/O 禁止
-- `async/await` 禁止
-- WASM 互換を意識する
-- publisher と reader で共有する公開成果物契約はここで扱う
-- artifact から組み立てる site page contract のような pure model もここで扱う
-- `ContentKind`、`PageKey`、`section_path` を含む content model もここで扱う
-
-### `crates/site/infra`
-
-- Leptos サーバー側の infrastructure 専用として扱う
-- 現在は `ArtifactReader` 境界の first cut として local / S3 artifact reader を置いている
-- local reader は dev / test 用、S3 reader は本番読取経路として扱う
-- 将来的な責務は S3 読み取り、キャッシュ、設定読込など reader 側の外部境界
-- Obsidian vault 読み取り、Front Matter parse、Markdown render、S3 upload はここへ置かない
-
-### `crates/site/server`
-
-- 現在のサーバー実装
-- S3 上の公開成果物を読む blog 側の中心として扱う
-
-### `crates/site/web`
-
-- Leptos UI / SSR ルーティング層
-- 公開成果物を読む側として整理する
-- 現行 route は `/`、`/about`、`/:category`、`/:category/:slug`
-
-### `e2e`
-
-- server / web / artifact reader をまたぐ browser E2E を置く
-- private Obsidian submodule、S3、AWS credentials に依存しない固定 artifact fixture を使う
-- package manager は Bun とし、root の `mise` task から準備・実行する
-
-### `crates/publish/publisher`
-
-- 現在もっとも `publisher` に近いアプリ
-- ingest / artifacts / bookmark など publisher 専用の補助 crate を `crates/publish/` 配下へ置く
-- 入力となる Obsidian Markdown は private repo の git submodule から取得する
-- category 配下の path から `section_path` を導出する
-
-### `crates/publish/artifacts`
-
-- publisher 側の artifact 組み立てとローカル書き出しを担う補助 crate
-- `publisher` から切り出した publisher 専用ロジックの受け皿として扱う
-
-### `crates/publish/ingest`
-
-- Obsidian vault の走査、Front Matter 解析、Markdown 変換を担う補助 crate
-- `publisher` から切り出した publisher 入力処理の受け皿として扱う
-
-### `crates/publish/bookmark`
-
-- 外部 HTTP を伴う bookmark enrichment を担う補助 crate
-- OGP 取得、bookmark 変換、将来的な retry や cache などをここへ寄せる
-
-### `service`
-
-- `systemd`、`nginx`、運用補助ファイルを置く
-- runtime用AWS credentialsは`/var/lib/okawak_blog/aws/credentials`へ置き、`AWS_SHARED_CREDENTIALS_FILE`で明示する
-- `ProtectHome=true`を維持し、serviceからhome directoryのcredentialsを読ませない
-- `/api/health`はliveness、`/api/ready`はartifact readerのreadinessとして扱う
-
-### `terraform`
-
-- 読み取りのみ
-- 編集禁止
-- このディレクトリではコマンドを実行しない
+明示されない限り、DBベースの記事管理、認証認可、管理画面、UI編集、マルチユーザー、SaaS CMS、リアルタイム更新基盤は作らない。
 
 ## 開発プロセス
 
-### 実装前の準備
+- 大きめの実装前に GitHub Issue を作成または更新し、目的、責務、依存方向、タスク、受け入れ条件を書く
+- 可能な限りTDDで進め、純粋ロジックは失敗テストを先に置く。仕様変更でない限りテストを都合よく変更しない
+- 責務や依存方向を変えたら `docs/architecture/` と必要な利用文書を更新する
+- 過剰なrepository pattern、肥大化する`shared`、`unimplemented!()`前提の大きなmodelを避ける
+- 型で状態遷移や不変条件を表せる場合は優先する
+- GitHub Actionsは原則として利用中actionの最新majorを指定する
 
-- 大きめの実装に入る前に GitHub Issue を作成または更新する
-- Issue には実装方針、依存方向、各層の責務、タスク分解を書く
-- 具体的なコード断片を先に恒久ドキュメントへ書き込みすぎない
-- 恒久的に残す価値がある内容だけを `docs/architecture/` に反映する
+## タスクと運用
 
-### TDD
+タスクランナーはrepository rootの`mise.toml`を正とする。利用可能なtaskは`mise tasks ls`で確認し、直接commandを複製せず`mise run <task>`を優先する。
 
-- 可能な限り TDD で進める
-- 純粋ロジックは先にテストを書く
-- 実装中は、仕様変更でない限りテストを都合よく変えない
+主要な確認:
 
-### 文書更新
-
-- 責務分割や依存方向を変えたら README / AGENTS / `docs/architecture/` を更新する
-- 実在しない構成を、現行実装として書かない
-- 実装計画や進捗メモを repo 内 docs に増やし続けない
-
-## コーディングと設計上の注意
-
-- 過剰な repository パターンを持ち込まない
-- `shared` 的な置き場を安易に肥大化させない
-- ビルド時に解決できる責務をサーバーランタイムへ持ち込まない
-- `unimplemented!()` 前提の大きなモデルを増やさない
-- 型で状態遷移を表せるなら優先する
-
-## 実行コマンドの目安
-
-- タスクランナーは `mise` を使う
-- task 定義は repo root の `mise.toml`
-- `mise` 経由のローカル task では、`OKAWAK_BLOG_ARTIFACT_SOURCE=local` と `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site` を使って local artifact を読む
-- local artifact の更新が必要なときだけ `mise run publish-local` または `mise run sync-obsidian` を使う
-- `mise run pull` は deploy 用に main の更新だけを行い、submodule 更新が必要なときだけ `mise run pull-with-submodules` を使う
-- `crates/site/web/package.json` の依存操作は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` を使う
-- `e2e/package.json` の依存操作は root から `mise run e2e-install` / `mise run e2e-update` / `mise run e2e-outdated` を使い、Chromium の初回準備は `mise run e2e-install-browser` を使う
-- 同一ネットワークの別端末から確認する一時用途では `mise run dev-lan` を使う。これは `0.0.0.0:8008` で待ち受けるだけで、absolute URL まで揃えたいときだけ `OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008` を前置する
-- 本番 runtime は `service/okawak_blog.service` 側の env により `s3` reader を使う
-
-### 開発
-
-- `mise run check-deps`
-- `mise run sync-obsidian`
-- `mise run pull-with-submodules`
-- `mise run publish-local`
-- `mise run dev`
-- `mise run dev-lan`
-- `mise run integrated-dev`
-- `mise run watch`
 - `mise run format`
-- `mise run build-local`
-- `mise run web-install`
-- `mise run web-update`
-- `mise run web-outdated`
-- `mise run e2e-install-browser`
-
-### テスト・確認
-
 - `mise run test`
-- `mise run test-domain`
-- `mise run test-server`
-- `mise run test-web`
-- `mise run test-e2e`
 - `mise run clippy`
 - `mise run check`
-- `mise run check-domain`
-- `mise run check-server`
+- `mise run test-e2e`
 
-### デプロイ・運用
+ローカルartifact readerは次を使う。
 
-- `mise run build-project`
-- `mise run pull`
-- `mise run full-deploy`
-- `mise run production-deploy`
-- `mise run status`
-- `mise run logs`
-- `mise run logs-recent`
+- `OKAWAK_BLOG_ARTIFACT_SOURCE=local`
+- `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site`
 
-`sudo` を伴うタスクは、ローカル開発環境ではなく VPS 前提で扱う。
+artifact更新が必要な場合だけ`mise run publish-local`または`mise run sync-obsidian`を使う。web / E2Eの依存操作もrootの`web-*` / `e2e-*` taskを使う。本番runtimeのS3設定とcredentialsは`service/okawak_blog.service`および`service/README.md`を参照する。
+
+- `/api/health`: process liveness
+- `/api/ready`: artifact reader readiness
+- `sudo`を伴うtaskはVPS運用向けとして扱う
