@@ -86,10 +86,13 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Install cargo-leptos
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-leptos@${{ env.CARGO_LEPTOS_VERSION }}
-          fallback: none
+        env:
+          CARGO_LEPTOS_NO_MODIFY_PATH: "1"
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf \
+            "https://github.com/leptos-rs/cargo-leptos/releases/download/v${CARGO_LEPTOS_VERSION}/cargo-leptos-installer.sh" \
+            | sh
+          cargo leptos --version
 
       - name: Install web dependencies
         working-directory: crates/site/web
