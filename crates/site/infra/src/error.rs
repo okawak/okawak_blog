@@ -12,6 +12,8 @@ pub enum InfraError {
     Utf8(#[from] std::string::FromUtf8Error),
     #[error("missing artifact configuration: {0}")]
     MissingConfig(&'static str),
+    #[error("invalid artifact configuration {key}: {value}")]
+    InvalidConfig { key: &'static str, value: String },
     #[error("unsupported artifact source: {0}")]
     UnsupportedSource(String),
     #[error("failed to read s3 object s3://{bucket}/{key}: {source}")]

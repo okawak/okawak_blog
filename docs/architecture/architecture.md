@@ -369,10 +369,13 @@ artifact の読取は2段階の境界を経由する。
   - dev / test 用
   - `mise` のローカル task で利用
   - configured local rootをそのままsnapshotにする
+  - file更新の即時反映を維持するためmemory cache decoratorを適用しない
 - S3 reader
   - 本番用
   - `service/okawak_blog.service` 側の env で選択
-  - `current.json`をsnapshot取得時に1回だけ読み、全artifact keyを同じrelease prefixへ固定する
+  - `current.json`を読み、全artifact keyを同じrelease prefixへ固定する
+  - release snapshotを短いTTLで再利用し、同一snapshot内のimmutable artifactをmemory cacheする
+  - 同じartifactへのconcurrent missは1回のunderlying readへまとめ、load errorはcacheしない
   - 移行互換として`current.json`が存在しない場合だけ従来のbucket rootを読む
 
 reader 側の設定は主に次の env で切り替える。
@@ -382,8 +385,13 @@ reader 側の設定は主に次の env で切り替える。
 - `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT`
 - `OKAWAK_BLOG_ARTIFACT_BUCKET`
 - `OKAWAK_BLOG_ARTIFACT_PREFIX`
+- `OKAWAK_BLOG_ARTIFACT_CACHE_TTL_SECONDS`
+  - S3の`current.json`を再確認する間隔
+  - defaultは5秒。`0`でcacheを無効化する
 
 `OKAWAK_BLOG_SITE_ORIGIN` は canonical / Open Graph 用の absolute URL 生成に使う。
+
+cacheはrelease snapshot単位で所有する。TTL経過後に`current.json`を再確認し、release identityが同じならartifact cacheを保持する。identityが変わった場合だけ新しいcacheへ切り替わり、既存requestが保持する古いsnapshotはそのrequestの完了まで有効である。legacy rootにはidentityを付けず、TTLごとにcacheを作り直す。snapshot更新失敗時に期限切れcacheへfallbackせず、errorを返して次回requestで再試行する。stale-if-errorやretry policyは別の配信最適化として扱う。
 
 本番のAWS SDKは`AWS_SHARED_CREDENTIALS_FILE=/var/lib/okawak_blog/aws/credentials`を明示して使う。runtime credentialsはsystemdの`StateDirectory=okawak_blog`配下に置き、`ProtectHome=true`を維持したまま読み取れる構成とする。credential fileの生成・更新は`service/update_aws_creds.sh`が担い、`site/infra`にはcredential管理責務を持ち込まない。
 
