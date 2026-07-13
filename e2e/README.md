@@ -17,3 +17,37 @@ mise run test-e2e
 テストは `fixtures/site` の固定 artifact だけを読みます。private Obsidian submodule、S3、AWS credentials には依存しません。Playwright が `127.0.0.1:8008` で専用の Leptos サーバーを起動し、home、about、category、article、404 status、metadata、hydration 後の route 遷移を Chromium で検証します。
 
 失敗時の trace は `e2e/test-results` に保存されます。
+
+## ローカルから実S3を確認する
+
+CIへS3接続を組み込む前の手動統合確認には、通常の固定artifact E2Eとは分離した`test-e2e-s3`を使います。このtaskはAWS SDKの標準credential chainでS3を読み、`/api/ready`、home、article index、実articleのSSR表示とmetadataを確認します。
+
+bucket名やcredentialはrepositoryへ保存せず、実行時に渡してください。`AWS_PROFILE`を省略した場合はdefault profileを含む標準credential chainが使われます。regionは`AWS_REGION`、`AWS_DEFAULT_REGION`、またはprofileで設定できます。
+
+```bash
+# 開発サーバーを起動してブラウザから手動確認
+AWS_PROFILE=<read-only-profile> \
+AWS_REGION=ap-northeast-1 \
+OKAWAK_BLOG_ARTIFACT_BUCKET=<bucket> \
+mise run dev-s3
+
+# Playwright smoke testを実行
+AWS_PROFILE=<read-only-profile> \
+AWS_REGION=ap-northeast-1 \
+OKAWAK_BLOG_ARTIFACT_BUCKET=<bucket> \
+mise run test-e2e-s3
+```
+
+artifactがbucket root以外にある場合だけ、先頭と末尾の`/`を除いたprefixも渡します。readerは`<prefix>/current.json`を起点にrelease artifactを解決します。
+
+```bash
+OKAWAK_BLOG_ARTIFACT_PREFIX=<prefix> \
+AWS_PROFILE=<read-only-profile> \
+AWS_REGION=ap-northeast-1 \
+OKAWAK_BLOG_ARTIFACT_BUCKET=<bucket> \
+mise run test-e2e-s3
+```
+
+credentialには対象keyへの`s3:GetObject`だけを付与したread-only profileを推奨します。`/api/health`が成功して`/api/ready`が失敗する場合は、profile/region、bucket/prefix、`current.json`とrelease artifactへのGetObject権限を確認してください。
+
+このtestは実データとAWS credentialに依存するため、通常の`mise run test-e2e`やCIからは実行されません。

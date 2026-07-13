@@ -214,7 +214,9 @@ cargo install leptosfmt
 `crates/site/web/package.json` の依存のインストール/更新確認は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` で行えます。
 browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-install-browser`、実行は `mise run test-e2e` を使ってください。E2E は root の `e2e/` に置き、private Obsidian submodule や S3 に依存しない固定 artifact で実行します。
 
-ローカル開発用 task では、次の env を自動で設定します。
+本番相当のS3 readerを開発端末から確認するときは、通常の固定artifact E2Eと分離した`mise run dev-s3`または`mise run test-e2e-s3`を使います。bucketやcredentialは保存せず、`AWS_PROFILE`、region、`OKAWAK_BLOG_ARTIFACT_BUCKET`、必要な場合だけ`OKAWAK_BLOG_ARTIFACT_PREFIX`を実行時に渡します。詳細は[e2e/README.md](./e2e/README.md)を参照してください。
+
+通常のローカルartifact開発用taskでは、次のenvを自動で設定します。
 
 - `OKAWAK_BLOG_ARTIFACT_SOURCE=local`
 - `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site`
@@ -236,6 +238,7 @@ mise run sync-obsidian
 mise run pull-with-submodules
 mise run publish-local
 mise run dev
+mise run dev-s3
 mise run dev-lan
 mise run integrated-dev
 mise run watch
@@ -249,6 +252,7 @@ mise run test-domain
 mise run test-server
 mise run test-web
 mise run test-e2e
+mise run test-e2e-s3
 mise run clippy
 mise run check
 mise run build-local

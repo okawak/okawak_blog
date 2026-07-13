@@ -94,6 +94,22 @@ depends = ["check-deps", "format"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
 run = "cargo leptos serve -p server"
 
+[tasks.check-s3-env]
+description = "Check environment variables required by local S3 tasks"
+run = '''
+if [ -z "${OKAWAK_BLOG_ARTIFACT_BUCKET:-}" ]; then
+  echo "OKAWAK_BLOG_ARTIFACT_BUCKET is required."
+  echo "Example: AWS_PROFILE=<profile> AWS_REGION=<region> OKAWAK_BLOG_ARTIFACT_BUCKET=<bucket> mise run dev-s3"
+  exit 1
+fi
+'''
+
+[tasks.dev-s3]
+description = "Run the local Leptos development server with S3 artifacts"
+depends = ["check-deps", "format", "check-s3-env"]
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "s3", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
+run = "cargo leptos serve -p server"
+
 [tasks.dev-lan]
 description = "Run the local Leptos development server on 0.0.0.0 for same-network testing"
 depends = ["check-deps", "format"]
@@ -264,6 +280,15 @@ cd e2e
 bun run test
 '''
 
+[tasks.test-e2e-s3]
+description = "Run the local browser smoke test against S3 artifacts"
+depends = ["check-s3-env", "e2e-install-browser"]
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "s3", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
+run = '''
+cd e2e
+bun run test:s3
+'''
+
 [tasks.test-release]
 description = "Run tests in release mode"
 run = "cargo test --workspace --release"
@@ -296,6 +321,7 @@ echo ""
 echo "Common commands:"
 echo "  mise run publish-local"
 echo "  mise run dev"
+echo "  mise run dev-s3"
 echo "  mise run dev-lan"
 echo "  mise run watch"
 echo "  mise run build-local"
@@ -309,6 +335,7 @@ echo "  mise run e2e-outdated"
 echo "  mise run e2e-install-browser"
 echo "  mise run test"
 echo "  mise run test-e2e"
+echo "  mise run test-e2e-s3"
 echo "  mise run clippy"
 echo "  mise run check"
 '''
