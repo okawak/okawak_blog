@@ -68,12 +68,12 @@
 - `mise run test-e2e`
 - `mise run test-e2e-s3`（明示的な実S3手動確認のみ）
 
-ローカルartifact readerは次を使う。
+開発サーバーはS3 readerを標準とし、`mise run dev`で次を使う。
 
-- `OKAWAK_BLOG_ARTIFACT_SOURCE=local`
-- `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site`
+- `OKAWAK_BLOG_ARTIFACT_SOURCE=s3`
+- `OKAWAK_BLOG_ARTIFACT_BUCKET`（実行時に必須）
 
-artifact更新が必要な場合だけ`mise run publish-local`または`mise run sync-obsidian`を使う。web / E2Eの依存操作もrootの`web-*` / `e2e-*` taskを使う。ローカルから実S3を読む場合は`dev-s3` / `test-e2e-s3`を明示的に使い、本番runtimeのS3設定とcredentialsは`service/okawak_blog.service`および`service/README.md`を参照する。
+publisher側の作業で必要な場合だけ`mise run sync-obsidian`を使う。local artifact readerは自動test fixtureに限定し、開発用mise taskを追加しない。web / E2Eの依存操作もrootの`web-*` / `e2e-*` taskを使う。S3の手動確認は`dev` / `test-e2e-s3`を使い、本番runtimeのS3設定とcredentialsは`service/okawak_blog.service`および`service/README.md`を参照する。
 
 - `/api/health`: process liveness
 - `/api/ready`: artifact reader readiness

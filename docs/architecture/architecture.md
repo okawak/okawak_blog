@@ -367,12 +367,12 @@ artifact の読取は2段階の境界を経由する。
   - article index、metadata、HTMLなどを同じreleaseから読む
 
 - local reader
-  - dev / test 用
-  - `mise` のローカル task で利用
+  - 自動test fixtureとreader単体test用
+  - 開発サーバー用の`mise` taskでは利用しない
   - configured local rootをそのままsnapshotにする
   - file更新の即時反映を維持するためmemory cache decoratorを適用しない
 - S3 reader
-  - 本番配信と、明示的なローカル手動統合確認で利用
+  - 本番配信とローカル開発サーバーの標準reader
   - `service/okawak_blog.service` 側の env で選択
   - `current.json`を読み、全artifact keyを同じrelease prefixへ固定する
   - release snapshotを短いTTLで再利用し、同一snapshot内のimmutable artifactをmemory cacheする
@@ -405,16 +405,16 @@ runtime probeは次のように分ける。
 
 ## ローカル開発と本番運用
 
-ローカルでは `mise` task を使い、publisher が出力した local artifact をそのまま読む。
+ローカル開発サーバーは、GitHub Actionsが公開したS3 artifactを読む。local artifactを使う開発用`mise` taskは持たず、開発と本番で同じS3 reader境界を通す。
 
 ```text
-Obsidian submodule
-  -> mise run publish-local
-  -> crates/publish/publisher/dist/site
-  -> mise run dev / build-local
+GitHub Actions publisher
+  -> S3 releases/<release-id>/site
+  -> current.json pointer
+  -> mise run dev / test-e2e-s3
 ```
 
-本番相当のS3 reader境界を開発端末から確認するときだけ、`dev-s3`または`test-e2e-s3`を明示的に使う。これらはAWS SDKの標準credential chainと実S3 artifactを使う手動統合確認であり、固定fixtureを使う通常の`test-e2e`やCIには混ぜない。bucket、任意prefix、credentialは実行時envとローカルAWS設定から受け取り、repositoryには保存しない。
+`dev`と`test-e2e-s3`はAWS SDKのcredential chainと実S3 artifactを使う。bucket、任意prefix、credentialは実行時envとローカルAWS設定から受け取り、repositoryには保存しない。固定fixtureを使う`test-e2e`は、開発環境の表示確認ではなく、外部状態に依存しないCI回帰テストとして維持する。
 
 本番では GitHub Actions が artifact を S3 に置き、VPS 上の単一バイナリがそれを読む。
 
