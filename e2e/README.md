@@ -18,9 +18,9 @@ mise run test-e2e
 
 失敗時の trace は `e2e/test-results` に保存されます。
 
-## ローカルから実S3を確認する
+## 実S3を確認する
 
-CIへS3接続を組み込む前の手動統合確認には、通常の固定artifact E2Eとは分離した`test-e2e-s3`を使います。このtaskはAWS SDKの標準credential chainでS3を読み、`/api/ready`、home、article index、実articleのSSR表示とmetadataを確認します。
+通常の固定artifact E2Eとは分離した`test-e2e-s3`は、AWS SDKの標準credential chainでS3を読み、`/api/ready`、home、article index、実articleのSSR表示とmetadataを確認します。ローカルからの手動確認に加え、S3 upload workflowがimmutable releaseを公開する前のsmoke testにも使います。
 
 bucket名やcredentialはrepositoryへ保存せず、実行時に渡してください。task自身はAWS CLIを実行せず、server内のAWS SDKがcredentialを読みます。`aws configure --profile blog-s3`などでshared config / credentials fileへ設定済みなら`AWS_PROFILE=blog-s3`で選択でき、省略時はdefault profileが使われます。regionは`AWS_REGION`、`AWS_DEFAULT_REGION`、またはprofileで設定できます。
 
@@ -57,4 +57,9 @@ mise run test-e2e-s3
 
 credentialには対象keyへの`s3:GetObject`だけを付与したread-only profileを推奨します。`/api/health`が成功して`/api/ready`が失敗する場合は、profile/region、bucket/prefix、`current.json`とrelease artifactへのGetObject権限を確認してください。
 
-このtestは実データとAWS credentialに依存するため、通常の`mise run test-e2e`やCIからは実行されません。
+## CIでの実行
+
+- `.github/workflows/ci.yml`はpull requestとmain pushで固定fixtureの`bun run test`を実行し、AWS credentialやprivate submoduleなしで回帰を検出します。
+- `.github/workflows/upload.yml`は生成物をimmutable release prefixへuploadした後、そのprefixを`test-e2e-s3`で直接検証します。成功した場合だけ`current.json`を切り替えます。
+
+S3 smoke testはOIDCで取得したupload workflowの一時credentialを再利用し、pull requestへAWS credentialを渡しません。失敗時のPlaywright traceはGitHub Actions artifactに7日間保存されます。
