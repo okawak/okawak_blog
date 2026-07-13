@@ -1,5 +1,7 @@
+mod cache;
 mod error;
 
+pub use cache::CachingArtifactReader;
 pub use error::{InfraError, Result};
 
 use async_trait::async_trait;
@@ -13,6 +15,7 @@ use std::{
     env,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
 const DEFAULT_LOCAL_SITE_ROOT: &str = "crates/publish/publisher/dist/site";
@@ -20,6 +23,8 @@ const ARTIFACT_SOURCE_ENV: &str = "OKAWAK_BLOG_ARTIFACT_SOURCE";
 const ARTIFACT_LOCAL_ROOT_ENV: &str = "OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT";
 const ARTIFACT_BUCKET_ENV: &str = "OKAWAK_BLOG_ARTIFACT_BUCKET";
 const ARTIFACT_PREFIX_ENV: &str = "OKAWAK_BLOG_ARTIFACT_PREFIX";
+const ARTIFACT_CACHE_TTL_SECONDS_ENV: &str = "OKAWAK_BLOG_ARTIFACT_CACHE_TTL_SECONDS";
+const DEFAULT_ARTIFACT_CACHE_TTL_SECONDS: u64 = 5;
 
 pub type DynArtifactReader = Arc<dyn ArtifactReader>;
 pub type DynArtifactSnapshot = Arc<dyn ArtifactSnapshot>;
@@ -31,6 +36,10 @@ pub trait ArtifactReader: Send + Sync {
 
 #[async_trait]
 pub trait ArtifactSnapshot: Send + Sync {
+    fn cache_identity(&self) -> Option<&str> {
+        None
+    }
+
     async fn read_article_index(&self) -> Result<ArticleIndexDocument>;
     async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument>;
     async fn read_category_html(&self, category: &Category) -> Result<String>;
@@ -164,6 +173,7 @@ pub struct S3ArtifactReader {
 pub struct S3ArtifactSnapshot {
     client: Client,
     location: S3ArtifactLocation,
+    cache_identity: Option<String>,
 }
 
 impl S3ArtifactReader {
@@ -177,8 +187,12 @@ impl S3ArtifactReader {
 }
 
 impl S3ArtifactSnapshot {
-    fn new(client: Client, location: S3ArtifactLocation) -> Self {
-        Self { client, location }
+    fn new(client: Client, location: S3ArtifactLocation, cache_identity: Option<String>) -> Self {
+        Self {
+            client,
+            location,
+            cache_identity,
+        }
     }
 
     async fn read_text(&self, relative: &str) -> Result<String> {
@@ -211,28 +225,37 @@ impl S3ArtifactSnapshot {
 #[async_trait]
 impl ArtifactReader for S3ArtifactReader {
     async fn snapshot(&self) -> Result<DynArtifactSnapshot> {
-        let base = S3ArtifactSnapshot::new(self.client.clone(), self.location.clone());
-        let location = match base
+        let base = S3ArtifactSnapshot::new(self.client.clone(), self.location.clone(), None);
+        let (location, cache_identity) = match base
             .read_json::<ArtifactReleasePointerDocument>("current.json")
             .await
         {
             Ok(pointer) => {
                 pointer.validate()?;
-                self.location.with_relative_prefix(&pointer.artifact_prefix)
+                let cache_identity = pointer.artifact_prefix.clone();
+                (
+                    self.location.with_relative_prefix(&pointer.artifact_prefix),
+                    Some(cache_identity),
+                )
             }
-            Err(error) if error.is_not_found() => self.location.clone(),
+            Err(error) if error.is_not_found() => (self.location.clone(), None),
             Err(error) => return Err(error),
         };
 
         Ok(Arc::new(S3ArtifactSnapshot::new(
             self.client.clone(),
             location,
+            cache_identity,
         )))
     }
 }
 
 #[async_trait]
 impl ArtifactSnapshot for S3ArtifactSnapshot {
+    fn cache_identity(&self) -> Option<&str> {
+        self.cache_identity.as_deref()
+    }
+
     async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
         self.read_json("articles/index.json").await
     }
@@ -270,8 +293,13 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArtifactSourceConfig {
-    Local { site_root: PathBuf },
-    S3 { location: S3ArtifactLocation },
+    Local {
+        site_root: PathBuf,
+    },
+    S3 {
+        location: S3ArtifactLocation,
+        cache_ttl: Duration,
+    },
 }
 
 impl ArtifactSourceConfig {
@@ -292,8 +320,20 @@ impl ArtifactSourceConfig {
                 let bucket = read_var(ARTIFACT_BUCKET_ENV)
                     .ok_or(InfraError::MissingConfig(ARTIFACT_BUCKET_ENV))?;
                 let prefix = read_var(ARTIFACT_PREFIX_ENV);
+                let cache_ttl = read_var(ARTIFACT_CACHE_TTL_SECONDS_ENV)
+                    .map(|value| {
+                        value.parse::<u64>().map(Duration::from_secs).map_err(|_| {
+                            InfraError::InvalidConfig {
+                                key: ARTIFACT_CACHE_TTL_SECONDS_ENV,
+                                value,
+                            }
+                        })
+                    })
+                    .transpose()?
+                    .unwrap_or(Duration::from_secs(DEFAULT_ARTIFACT_CACHE_TTL_SECONDS));
                 Ok(Self::S3 {
                     location: S3ArtifactLocation::new(bucket, prefix)?,
+                    cache_ttl,
                 })
             }
             unsupported => Err(InfraError::UnsupportedSource(unsupported.to_string())),
@@ -313,10 +353,14 @@ pub async fn build_artifact_reader(config: ArtifactSourceConfig) -> Result<DynAr
         ArtifactSourceConfig::Local { site_root } => {
             Ok(Arc::new(LocalArtifactReader::new(site_root)))
         }
-        ArtifactSourceConfig::S3 { location } => {
+        ArtifactSourceConfig::S3 {
+            location,
+            cache_ttl,
+        } => {
             let shared_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
             let client = Client::new(&shared_config);
-            Ok(Arc::new(S3ArtifactReader::new(client, location)))
+            let reader: DynArtifactReader = Arc::new(S3ArtifactReader::new(client, location));
+            Ok(Arc::new(CachingArtifactReader::new(reader, cache_ttl)))
         }
     }
 }
@@ -523,8 +567,44 @@ mod tests {
             source,
             ArtifactSourceConfig::S3 {
                 location: S3ArtifactLocation::new("blog-bucket", Some("/public/site/")).unwrap(),
+                cache_ttl: Duration::from_secs(DEFAULT_ARTIFACT_CACHE_TTL_SECONDS),
             }
         );
+    }
+
+    #[test]
+    fn test_artifact_source_config_from_env_uses_s3_cache_ttl_override() {
+        let source = ArtifactSourceConfig::from_env_with(|key| match key {
+            ARTIFACT_SOURCE_ENV => Some("s3".to_string()),
+            ARTIFACT_BUCKET_ENV => Some("blog-bucket".to_string()),
+            ARTIFACT_CACHE_TTL_SECONDS_ENV => Some("0".to_string()),
+            _ => None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            source,
+            ArtifactSourceConfig::S3 {
+                location: S3ArtifactLocation::new("blog-bucket", None::<String>).unwrap(),
+                cache_ttl: Duration::ZERO,
+            }
+        );
+    }
+
+    #[test]
+    fn test_artifact_source_config_from_env_rejects_invalid_s3_cache_ttl() {
+        let result = ArtifactSourceConfig::from_env_with(|key| match key {
+            ARTIFACT_SOURCE_ENV => Some("s3".to_string()),
+            ARTIFACT_BUCKET_ENV => Some("blog-bucket".to_string()),
+            ARTIFACT_CACHE_TTL_SECONDS_ENV => Some("soon".to_string()),
+            _ => None,
+        });
+
+        assert!(matches!(
+            result,
+            Err(InfraError::InvalidConfig { key, value })
+                if key == ARTIFACT_CACHE_TTL_SECONDS_ENV && value == "soon"
+        ));
     }
 
     #[test]

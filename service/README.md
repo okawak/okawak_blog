@@ -52,3 +52,16 @@ curl --fail http://127.0.0.1:8008/api/ready
 
 - `/api/health`: process liveness。artifactの状態は確認しません。
 - `/api/ready`: configured `ArtifactReader`からsite metadataを読めた場合だけ`200 OK`を返します。credentials、S3、local artifact、JSON decodeの問題がある場合は`503 Service Unavailable`です。
+
+## Artifact cache
+
+本番のS3 readerは、release snapshotとそのimmutable artifactをprocess memoryでcacheします。
+
+- `OKAWAK_BLOG_ARTIFACT_CACHE_TTL_SECONDS=5`: production unitの既定値
+- TTL内は同じrelease snapshotを再利用するため、新しい`current.json`の反映には最大でTTL分の遅延が生じる
+- TTL経過時にrelease identityが同じなら、取得済みartifactは引き続きcacheする
+- `0`を指定するとsnapshotとartifactのcacheを無効化する
+- load errorはcacheしない。期限切れsnapshotの更新に失敗した場合もstale contentへfallbackしない
+- local readerにはcacheを適用しない
+
+値は0以上の整数秒で指定します。不正値の場合はserver起動時のconfiguration errorになります。
