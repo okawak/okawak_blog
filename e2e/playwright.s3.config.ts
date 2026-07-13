@@ -3,19 +3,24 @@ import { devices, defineConfig } from "@playwright/test";
 
 const baseURL = "http://127.0.0.1:8008";
 const repoRoot = path.resolve(__dirname, "..");
-const fixtureRoot = path.resolve(__dirname, "fixtures/site");
+const bucket = process.env.OKAWAK_BLOG_ARTIFACT_BUCKET;
+
+if (!bucket) {
+  throw new Error(
+    "OKAWAK_BLOG_ARTIFACT_BUCKET is required for the S3 browser smoke test.",
+  );
+}
 
 export default defineConfig({
-  testDir: "./tests",
-  testIgnore: ["empty-home/**", "s3/**"],
-  outputDir: "test-results",
+  testDir: "./tests/s3",
+  outputDir: "test-results/s3",
   timeout: 30_000,
   expect: {
     timeout: 5_000,
   },
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   workers: 1,
   reporter: "list",
   use: {
@@ -24,7 +29,7 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "chromium",
+      name: "chromium-s3",
       use: devices["Desktop Chrome"],
     },
   ],
@@ -33,8 +38,8 @@ export default defineConfig({
     cwd: repoRoot,
     env: {
       ...process.env,
-      OKAWAK_BLOG_ARTIFACT_SOURCE: "local",
-      OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT: fixtureRoot,
+      OKAWAK_BLOG_ARTIFACT_SOURCE: "s3",
+      OKAWAK_BLOG_ARTIFACT_BUCKET: bucket,
       OKAWAK_BLOG_SITE_ORIGIN: baseURL,
     },
     url: `${baseURL}/api/health`,

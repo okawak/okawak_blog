@@ -89,7 +89,7 @@ okawak_blog/
 
 - `crates/domain`: 公開成果物契約、site page contract、純粋関数を中心にした共有ドメイン層
 - `crates/publish/*`: Obsidian 読み取り、Markdown 変換、成果物生成を担う publisher 側
-- `crates/site/infra`: Leptos サーバーが公開成果物を読むための S3 / cache / runtime adapter。local reader は dev / test 用に残し、本番は S3 reader を使う
+- `crates/site/infra`: Leptos サーバーが公開成果物を読むための S3 / cache / runtime adapter。開発と本番はS3 readerを使い、local readerは自動test用に残す
 - `crates/site/server`: S3 上の成果物を読んで配信する統合バックエンド
 - `crates/site/web`: Leptos SSR の公開 UI
 - `e2e`: server / web / artifact reader をまたぐ、固定 artifact ベースの browser E2E
@@ -209,24 +209,19 @@ cargo install leptosfmt
 スタイリング用のツールチェーンは別途検討中です。方針は Issue `#39` で整理し、確定後にセットアップ手順へ反映します。
 ただし、現時点の web build task は既存の `stylance` コマンドを前提にしています。
 
-また、private Obsidian repo を入力として使うため、local artifact を再生成したいときは `mise run publish-local` を実行します。`publish-local` は内部で `git submodule update --init --recursive` を実行しますが、先に明示的に同期したい場合は `mise run sync-obsidian` を使えます。
+private Obsidian repoを使うpublisher側の開発では、必要なときだけ`mise run sync-obsidian`でsubmoduleを同期します。開発サーバーの表示確認ではlocal artifactを生成せず、GitHub Actionsが公開したS3 artifactを読みます。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
 `crates/site/web/package.json` の依存のインストール/更新確認は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` で行えます。
 browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-install-browser`、実行は `mise run test-e2e` を使ってください。E2E は root の `e2e/` に置き、private Obsidian submodule や S3 に依存しない固定 artifact で実行します。
 
-ローカル開発用 task では、次の env を自動で設定します。
+開発端末での表示確認は、S3 readerを使う`mise run dev`または`mise run test-e2e-s3`を標準とします。taskはAWS CLIを実行せず、AWS SDKが設定済みprofileまたは環境変数credentialを読みます。bucketやcredentialは保存せず、`AWS_PROFILE`、region、`OKAWAK_BLOG_ARTIFACT_BUCKET`、必要な場合だけ`OKAWAK_BLOG_ARTIFACT_PREFIX`を実行時に渡します。詳細は[e2e/README.md](./e2e/README.md)を参照してください。
 
-- `OKAWAK_BLOG_ARTIFACT_SOURCE=local`
-- `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site`
+`mise run dev`は次のenvを自動で設定します。
+
+- `OKAWAK_BLOG_ARTIFACT_SOURCE=s3`
 - `OKAWAK_BLOG_SITE_ORIGIN=http://127.0.0.1:8008`
 
-そのため、`mise run dev` や `mise run build-local` のようなローカル task は、S3 ではなく publisher が生成した local artifact を読む前提で動作します。開発サーバー系 task は artifact を自動再生成しないので、記事内容を更新した後や初回セットアップ時は先に `mise run publish-local` を実行してください。`mise run build-project` は deploy 用の build で、local artifact や private submodule には依存しません。
-
-同じネットワーク上の別端末から動作確認したい場合は `mise run dev-lan` を使います。これは `LEPTOS_SITE_ADDR=0.0.0.0:8008` で待ち受けるだけの task で、別端末からはホストの IP アドレスを直接指定してアクセスします。absolute URL までその IP に揃えたい場合だけ、次のように host IP を明示して実行します。
-
-```bash
-OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008 mise run dev-lan
-```
+`OKAWAK_BLOG_ARTIFACT_BUCKET`は必須で、任意のprefixやAWS credentialとともに実行時に渡します。local artifact readerを使う開発用mise taskは提供しません。固定fixtureを使う`test-e2e`は、外部状態に依存しないCI回帰テストとして別に維持します。`mise run build-project`はdeploy用のbuildで、artifactやprivate submoduleには依存しません。
 
 主要コマンドは以下です。
 
@@ -234,11 +229,7 @@ OKAWAK_BLOG_SITE_ORIGIN=http://<host-ip>:8008 mise run dev-lan
 mise run check-deps
 mise run sync-obsidian
 mise run pull-with-submodules
-mise run publish-local
 mise run dev
-mise run dev-lan
-mise run integrated-dev
-mise run watch
 mise run format
 mise run web-install
 mise run web-update
@@ -249,9 +240,9 @@ mise run test-domain
 mise run test-server
 mise run test-web
 mise run test-e2e
+mise run test-e2e-s3
 mise run clippy
 mise run check
-mise run build-local
 ```
 
 VPS 前提のデプロイ・運用タスクも `mise` に移しています。

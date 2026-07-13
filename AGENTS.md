@@ -36,7 +36,7 @@
 - `crates/site/infra`: server が artifact を読む外部境界（local / S3、設定、将来のcache）。vault読取、Markdown変換、uploadを置かない
 - `crates/site/server`: Axum + Leptos SSR host、reader注入、API、health/readiness
 - `crates/site/web`: Leptos UI / route / metadata。SSR時もstorage実装へ直接依存しない
-- `e2e`: repository root直下のbrowser E2E。Bun + Playwrightを使い、private submoduleやAWSに依存しないfixtureで検証する
+- `e2e`: repository root直下のbrowser E2E。通常CIはprivate submoduleやAWSに依存しないfixtureで検証し、実S3の手動smoke testは専用configへ分離する
 - `service`: systemd、nginx、運用補助
 - `terraform`: 読み取り専用。編集せず、このdirectoryでcommandを実行しない
 
@@ -66,13 +66,14 @@
 - `mise run clippy`
 - `mise run check`
 - `mise run test-e2e`
+- `mise run test-e2e-s3`（明示的な実S3手動確認のみ）
 
-ローカルartifact readerは次を使う。
+開発サーバーはS3 readerを標準とし、`mise run dev`で次を使う。
 
-- `OKAWAK_BLOG_ARTIFACT_SOURCE=local`
-- `OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT=crates/publish/publisher/dist/site`
+- `OKAWAK_BLOG_ARTIFACT_SOURCE=s3`
+- `OKAWAK_BLOG_ARTIFACT_BUCKET`（実行時に必須）
 
-artifact更新が必要な場合だけ`mise run publish-local`または`mise run sync-obsidian`を使う。web / E2Eの依存操作もrootの`web-*` / `e2e-*` taskを使う。本番runtimeのS3設定とcredentialsは`service/okawak_blog.service`および`service/README.md`を参照する。
+publisher側の作業で必要な場合だけ`mise run sync-obsidian`を使う。local artifact readerは自動test fixtureに限定し、開発用mise taskを追加しない。web / E2Eの依存操作もrootの`web-*` / `e2e-*` taskを使う。S3の手動確認は`dev` / `test-e2e-s3`を使い、本番runtimeのS3設定とcredentialsは`service/okawak_blog.service`および`service/README.md`を参照する。
 
 - `/api/health`: process liveness
 - `/api/ready`: artifact reader readiness
