@@ -22,7 +22,14 @@ mise run test-e2e
 
 CIへS3接続を組み込む前の手動統合確認には、通常の固定artifact E2Eとは分離した`test-e2e-s3`を使います。このtaskはAWS SDKの標準credential chainでS3を読み、`/api/ready`、home、article index、実articleのSSR表示とmetadataを確認します。
 
-bucket名やcredentialはrepositoryへ保存せず、実行時に渡してください。`AWS_PROFILE`を省略した場合はdefault profileを含む標準credential chainが使われます。regionは`AWS_REGION`、`AWS_DEFAULT_REGION`、またはprofileで設定できます。
+bucket名やcredentialはrepositoryへ保存せず、実行時に渡してください。task自身はAWS CLIを実行せず、server内のAWS SDKがcredentialを読みます。`aws configure --profile blog-s3`などでshared config / credentials fileへ設定済みなら`AWS_PROFILE=blog-s3`で選択でき、省略時はdefault profileが使われます。regionは`AWS_REGION`、`AWS_DEFAULT_REGION`、またはprofileで設定できます。
+
+```bash
+# 初回だけ。すでにprofileを設定済みなら不要
+aws configure --profile blog-s3
+```
+
+profileを使わず、`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、必要に応じて`AWS_SESSION_TOKEN`を実行環境へ設定する方法でも動作します。現在の`aws-config` dependencyはdefault featureを無効化しているため、SSOや`credential_process`を使うprofileはこのローカルtestの対象外です。
 
 ```bash
 # 開発サーバーを起動してブラウザから手動確認
