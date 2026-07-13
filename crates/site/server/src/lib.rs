@@ -8,3 +8,6 @@ pub use web::*;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod handlers;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod http_cache;

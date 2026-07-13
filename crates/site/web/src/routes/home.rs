@@ -1,6 +1,8 @@
 use crate::components::PageMetadata;
 use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
+use axum::http::StatusCode;
+#[cfg(feature = "ssr")]
 use domain::PageKey;
 #[cfg(feature = "ssr")]
 use domain::build_home_page_document;
@@ -9,6 +11,8 @@ use domain::{
     build_home_page_canonical_path, build_home_page_description, build_home_page_title,
 };
 use leptos::prelude::*;
+#[cfg(feature = "ssr")]
+use leptos_axum::ResponseOptions;
 use leptos_router::components::A;
 use std::sync::Arc;
 use stylance::import_style;
@@ -223,6 +227,7 @@ pub fn HomePage() -> impl IntoView {
                                 .into_any()
                         }
                         Some(Err(error)) => {
+                            mark_internal_server_error_response();
                             view! {
                                 <div class=home_style::error>
                                     {format!("記事の読み込みに失敗しました: {error}")}
@@ -237,3 +242,13 @@ pub fn HomePage() -> impl IntoView {
         </div>
     }
 }
+
+#[cfg(feature = "ssr")]
+fn mark_internal_server_error_response() {
+    if let Some(response) = use_context::<ResponseOptions>() {
+        response.set_status(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+}
+
+#[cfg(not(feature = "ssr"))]
+fn mark_internal_server_error_response() {}

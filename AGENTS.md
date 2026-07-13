@@ -34,7 +34,7 @@
 - `crates/publish/bookmark`: 外部 HTTP を伴う bookmark enrichment
 - `crates/publish/publisher`: publish 処理の orchestration。publisher 専用処理は `crates/publish/` に置く
 - `crates/site/infra`: server が artifact を読む外部境界（local / S3、設定、将来のcache）。vault読取、Markdown変換、uploadを置かない
-- `crates/site/server`: Axum + Leptos SSR host、reader注入、API、health/readiness
+- `crates/site/server`: Axum + Leptos SSR host、reader注入、API、health/readiness、release-aware conditional GET
 - `crates/site/web`: Leptos UI / route / metadata。SSR時もstorage実装へ直接依存しない
 - `e2e`: repository root直下のbrowser E2E。通常CIはprivate submoduleやAWSに依存しないfixtureで検証し、実S3 smoke testはローカル手動確認とupload workflowの公開前gateに使う
 - `service`: systemd、nginx、運用補助
