@@ -174,6 +174,7 @@ pub fn ArticlePage() -> impl IntoView {
                     view! { <NotFoundPage /> }.into_any()
                 }
                 Some(Err(error)) => {
+                    mark_internal_server_error_response();
                     view! {
                         <div class=article_style::error>
                             {format!("記事の読み込みに失敗しました: {error}")}
@@ -196,6 +197,16 @@ fn mark_not_found_response() {
 
 #[cfg(not(feature = "ssr"))]
 fn mark_not_found_response() {}
+
+#[cfg(feature = "ssr")]
+fn mark_internal_server_error_response() {
+    if let Some(response) = use_context::<ResponseOptions>() {
+        response.set_status(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+}
+
+#[cfg(not(feature = "ssr"))]
+fn mark_internal_server_error_response() {}
 
 fn normalize_article_slug_param(slug: &str) -> &str {
     slug.strip_suffix(".html").unwrap_or(slug)

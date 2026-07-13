@@ -182,6 +182,7 @@ pub fn CategoryPage() -> impl IntoView {
                     view! { <NotFoundPage /> }.into_any()
                 }
                 Some(Err(error)) => {
+                    mark_internal_server_error_response();
                     view! {
                         <div class=category_style::error>
                             {format!("カテゴリの読み込みに失敗しました: {error}")}
@@ -204,3 +205,13 @@ fn mark_not_found_response() {
 
 #[cfg(not(feature = "ssr"))]
 fn mark_not_found_response() {}
+
+#[cfg(feature = "ssr")]
+fn mark_internal_server_error_response() {
+    if let Some(response) = use_context::<ResponseOptions>() {
+        response.set_status(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+}
+
+#[cfg(not(feature = "ssr"))]
+fn mark_internal_server_error_response() {}

@@ -79,6 +79,9 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-browser-e2e-${{ env.CARGO_LEPTOS_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-browser-e2e-${{ env.CARGO_LEPTOS_VERSION }}-
+            ${{ runner.os }}-rust-ci-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2

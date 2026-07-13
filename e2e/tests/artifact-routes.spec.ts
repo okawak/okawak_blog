@@ -111,3 +111,10 @@ test("missing article and category return 404 pages", async ({ page }) => {
   await expect(page.getByText("ページが見つかりませんでした。")).toBeVisible();
   await expectNotFoundMetadata(page, "/statistics");
 });
+
+test("artifact read errors return 500 responses", async ({ request }) => {
+  const response = await request.get("/physics");
+
+  expect(response.status()).toBe(500);
+  expect(response.headers().etag).toBeUndefined();
+});

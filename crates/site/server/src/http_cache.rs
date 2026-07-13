@@ -231,6 +231,10 @@ mod tests {
                 }),
             )
             .route("/missing", get(|| async { StatusCode::NOT_FOUND }))
+            .route(
+                "/error",
+                get(|| async { StatusCode::INTERNAL_SERVER_ERROR }),
+            )
             .route("/api/health", get(|| async { "OK" }))
             .layer(axum::middleware::from_fn_with_state(
                 cache_state(identity, enabled),
@@ -325,6 +329,7 @@ mod tests {
             (Some("release-1"), false, "/"),
             (Some("release-1"), true, "/api/health"),
             (Some("release-1"), true, "/missing"),
+            (Some("release-1"), true, "/error"),
         ] {
             let response = test_app(identity, enabled, Arc::new(AtomicUsize::new(0)))
                 .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
