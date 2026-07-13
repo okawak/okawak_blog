@@ -36,7 +36,7 @@
 - `crates/site/infra`: server が artifact を読む外部境界（local / S3、設定、将来のcache）。vault読取、Markdown変換、uploadを置かない
 - `crates/site/server`: Axum + Leptos SSR host、reader注入、API、health/readiness
 - `crates/site/web`: Leptos UI / route / metadata。SSR時もstorage実装へ直接依存しない
-- `e2e`: repository root直下のbrowser E2E。通常CIはprivate submoduleやAWSに依存しないfixtureで検証し、実S3の手動smoke testは専用configへ分離する
+- `e2e`: repository root直下のbrowser E2E。通常CIはprivate submoduleやAWSに依存しないfixtureで検証し、実S3 smoke testはローカル手動確認とupload workflowの公開前gateに使う
 - `service`: systemd、nginx、運用補助
 - `terraform`: 読み取り専用。編集せず、このdirectoryでcommandを実行しない
 
@@ -66,7 +66,7 @@
 - `mise run clippy`
 - `mise run check`
 - `mise run test-e2e`
-- `mise run test-e2e-s3`（明示的な実S3手動確認のみ）
+- `mise run test-e2e-s3`（ローカルからの明示的な実S3確認）
 
 開発サーバーはS3 readerを標準とし、`mise run dev`で次を使う。
 

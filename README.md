@@ -212,7 +212,7 @@ cargo install leptosfmt
 private Obsidian repoを使うpublisher側の開発では、必要なときだけ`mise run sync-obsidian`でsubmoduleを同期します。開発サーバーの表示確認ではlocal artifactを生成せず、GitHub Actionsが公開したS3 artifactを読みます。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
 `crates/site/web/package.json` の依存のインストール/更新確認は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` で行えます。
-browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-install-browser`、実行は `mise run test-e2e` を使ってください。E2E は root の `e2e/` に置き、private Obsidian submodule や S3 に依存しない固定 artifact で実行します。
+browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-install-browser`、実行は `mise run test-e2e` を使ってください。E2E は root の `e2e/` に置き、通常CIではprivate Obsidian submoduleやS3に依存しない固定artifactで実行します。upload workflowはimmutable releaseを実S3 smoke testで検証し、成功後だけ`current.json`を切り替えます。
 
 開発端末での表示確認は、S3 readerを使う`mise run dev`または`mise run test-e2e-s3`を標準とします。taskはAWS CLIを実行せず、AWS SDKが設定済みprofileまたは環境変数credentialを読みます。bucketやcredentialは保存せず、`AWS_PROFILE`、region、`OKAWAK_BLOG_ARTIFACT_BUCKET`、必要な場合だけ`OKAWAK_BLOG_ARTIFACT_PREFIX`を実行時に渡します。詳細は[e2e/README.md](./e2e/README.md)を参照してください。
 

@@ -96,7 +96,7 @@ okawak_blog/
 - `e2e`
   - `crates/site/server`、`crates/site/web`、`crates/site/infra` をまたぐ browser E2E
   - 通常CIではprivate Obsidian submoduleやS3に依存しない固定artifact fixture
-  - 実S3の検証は専用Playwright configを使うローカル手動smoke testへ分離
+  - 実S3の検証は専用Playwright configを使い、ローカル手動確認とrelease公開前smoke testへ分離
   - Bun で依存を管理し、Playwright + Chromium で公開 route、metadata、hydration を検証
 
 `terraform/` は読み取り専用とし、このリポジトリの通常作業では編集しない。
@@ -293,7 +293,7 @@ releases/
         └── metadata/
 ```
 
-`current.json`とreleaseごとの`manifest.json`は同じ`ArtifactReleasePointerDocument`を使い、schema version、release ID、artifact prefix、publisher commit、Obsidian source commit、生成時刻を保持する。workflowは`site/`のuploadと検証を完了してから`current.json`を最後に更新する。これによりreaderは更新途中のreleaseを公開対象として選ばない。
+`current.json`とreleaseごとの`manifest.json`は同じ`ArtifactReleasePointerDocument`を使い、schema version、release ID、artifact prefix、publisher commit、Obsidian source commit、生成時刻を保持する。workflowは`site/`のuploadとobject数検証を終え、release prefixを直接読むbrowser E2Eが成功してから`current.json`を最後に更新する。これによりreaderは更新途中または表示検証に失敗したreleaseを公開対象として選ばない。
 
 ```mermaid
 flowchart TB
@@ -414,7 +414,7 @@ GitHub Actions publisher
   -> mise run dev / test-e2e-s3
 ```
 
-`dev`と`test-e2e-s3`はAWS SDKのcredential chainと実S3 artifactを使う。bucket、任意prefix、credentialは実行時envとローカルAWS設定から受け取り、repositoryには保存しない。固定fixtureを使う`test-e2e`は、開発環境の表示確認ではなく、外部状態に依存しないCI回帰テストとして維持する。
+`dev`と`test-e2e-s3`はAWS SDKのcredential chainと実S3 artifactを使う。bucket、任意prefix、credentialは実行時envとローカルAWS設定から受け取り、repositoryには保存しない。固定fixtureを使う`test-e2e`は、開発環境の表示確認ではなく、pull requestとmain pushで外部状態に依存せず実行するCI回帰テストとして維持する。upload workflowではOIDCの一時credentialを使い、immutable release prefixを`test-e2e-s3`で検証した後だけ公開pointerを切り替える。
 
 本番では GitHub Actions が artifact を S3 に置き、VPS 上の単一バイナリがそれを読む。
 

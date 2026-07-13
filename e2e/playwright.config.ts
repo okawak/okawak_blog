@@ -39,6 +39,6 @@ export default defineConfig({
     },
     url: `${baseURL}/api/health`,
     reuseExistingServer: false,
-    timeout: 180_000,
+    timeout: 600_000,
   },
 });
