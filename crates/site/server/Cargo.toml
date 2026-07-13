@@ -40,6 +40,7 @@ ssr = ["dep:web"]
 hydrate = ["web/hydrate"]
 
 [dev-dependencies]
+async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true

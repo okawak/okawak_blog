@@ -90,7 +90,7 @@ okawak_blog/
 - `crates/domain`: 公開成果物契約、site page contract、純粋関数を中心にした共有ドメイン層
 - `crates/publish/*`: Obsidian 読み取り、Markdown 変換、成果物生成を担う publisher 側
 - `crates/site/infra`: Leptos サーバーが公開成果物を読むための S3 / cache / runtime adapter。開発と本番はS3 readerを使い、local readerは自動test用に残す
-- `crates/site/server`: S3 上の成果物を読んで配信する統合バックエンド
+- `crates/site/server`: S3 上の成果物を読んで配信し、release-aware ETagを扱う統合バックエンド
 - `crates/site/web`: Leptos SSR の公開 UI
 - `e2e`: server / web / artifact reader をまたぐ、固定 artifact ベースの browser E2E
 

@@ -1,10 +1,11 @@
 //! Main entry point for the integrated Leptos SSR server.
 
-use axum::{Router, routing::get};
+use axum::{Router, middleware, routing::get};
 use infra::{ArtifactSourceConfig, build_artifact_reader};
 use leptos::prelude::*;
 use leptos_axum::{LeptosRoutes, file_and_error_handler, generate_route_list};
 use server::handlers::create_api_router;
+use server::http_cache::{ArtifactHttpCacheState, artifact_conditional_get};
 use tower_http::services::ServeDir;
 use web::app::{App, shell};
 
@@ -20,6 +21,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = leptos_options.site_addr;
     let artifact_source = ArtifactSourceConfig::from_env()?;
     let artifact_reader = build_artifact_reader(artifact_source.clone()).await?;
+    let validators_enabled = matches!(
+        &artifact_source,
+        ArtifactSourceConfig::S3 { cache_ttl, .. } if !cache_ttl.is_zero()
+    );
 
     println!("Starting Leptos blog server on http://{}", addr);
     println!("Leptos設定読み込み完了: {:?}", addr);
@@ -57,6 +62,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         // Fallback handler.
         .fallback(file_and_error_handler(shell))
+        .layer(middleware::from_fn_with_state(
+            ArtifactHttpCacheState::new(artifact_reader, validators_enabled),
+            artifact_conditional_get,
+        ))
         .with_state(leptos_options);
 
     println!("Server listening on http://{}", addr);
