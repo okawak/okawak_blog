@@ -1,4 +1,6 @@
-use crate::components::PageMetadata;
+use crate::components::ui::badge::{Badge, BadgeVariant};
+use crate::components::ui::card::Card;
+use crate::components::{ArticleCard, PageMetadata};
 use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
@@ -7,20 +9,17 @@ use domain::PageKey;
 #[cfg(feature = "ssr")]
 use domain::build_home_page_document;
 use domain::{
-    HomePageDocument, SiteArticleCard, build_article_path, build_category_path,
-    build_home_page_canonical_path, build_home_page_description, build_home_page_title,
+    HomePageDocument, build_category_path, build_home_page_canonical_path,
+    build_home_page_description, build_home_page_title,
 };
 use leptos::prelude::*;
 #[cfg(feature = "ssr")]
 use leptos_axum::ResponseOptions;
 use leptos_router::components::A;
 use std::sync::Arc;
-use stylance::import_style;
 
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
-
-import_style!(home_style, "home.module.scss");
 
 #[server]
 pub async fn get_home_page_document() -> Result<HomePageDocument, ServerFnError> {
@@ -67,15 +66,22 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
         .map(|category| {
             let href = build_category_path(&category.category);
             view! {
-                <li class=home_style::category_chip>
-                    <A href={href} {..} class=home_style::category_link>
-                        <span class=home_style::category_name>
+                <li>
+                    <Badge
+                        variant=BadgeVariant::Outline
+                        class="gap-2 rounded-full border-border bg-background/45 px-3 py-1.5 text-sm"
+                    >
+                        <A
+                            href={href}
+                            {..}
+                            class="font-semibold text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
                             {category.category_display_name}
+                        </A>
+                        <span class="text-xs font-normal text-muted-foreground">
+                            {format!("{}本", category.article_count)}
                         </span>
-                    </A>
-                    <span class=home_style::category_count>
-                        {format!("{}本", category.article_count)}
-                    </span>
+                    </Badge>
                 </li>
             }
         })
@@ -87,76 +93,34 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
         .collect_view();
 
     view! {
-        <div class=home_style::content_grid>
-            <section class=home_style::overview_panel>
+        <div class="grid gap-6 lg:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
+            <Card class="gap-4 border-border/80 bg-gradient-to-b from-card to-secondary/70 p-6">
                 {home_fragment_html
                     .map(|html| {
                         view! {
                             // Publisher artifacts escape raw HTML and neutralize unsafe links before persistence.
-                            <div class=home_style::overview_copy inner_html=html></div>
+                            <div
+                                class="leading-8 text-muted-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                                inner_html=html
+                            ></div>
                         }
                             .into_any()
                     })
                     .unwrap_or_else(|| {
                         view! {
-                            <p class=home_style::overview_copy>
+                            <p class="m-0 leading-8 text-muted-foreground">
                                 {"公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。"}
                             </p>
                         }
                             .into_any()
-                    })} <p class=home_style::overview_stats>{page_description}</p>
-                <ul class=home_style::category_list>{category_items}</ul>
+                    })} <p class="m-0 text-lg leading-8">{page_description}</p>
+                <ul class="m-0 flex list-none flex-wrap gap-3 p-0">{category_items}</ul>
+            </Card>
+
+            <section class="grid content-start gap-4" aria-label="最近の記事">
+                {article_items}
             </section>
-
-            <section class=home_style::article_list>{article_items}</section>
         </div>
-    }
-}
-
-#[component]
-fn ArticleCard(article: SiteArticleCard) -> impl IntoView {
-    let article_href = build_article_path(&article.category, &article.slug);
-    let title = article.title.as_str().to_string();
-    let article_label = title.clone();
-    let category = article.category_display_name;
-    let description = article
-        .description
-        .unwrap_or_else(|| "説明はまだありません。".to_string());
-    let tags = article.tags;
-    let has_tags = !tags.is_empty();
-    let created_at = article.created_at;
-    let updated_at = article.updated_at;
-
-    view! {
-        <A
-            href={article_href}
-            {..}
-            class=home_style::article_card_link
-            attr:aria-label=article_label
-        >
-            <article class=home_style::article_card>
-                <div class=home_style::article_meta>
-                    <span class=home_style::article_category>{category}</span>
-                    <span class=home_style::category_count>
-                        {format!("公開 {} / 更新 {}", created_at, updated_at)}
-                    </span>
-                </div>
-
-                <h3 class=home_style::article_title>{title}</h3>
-                <p class=home_style::article_description>{description}</p>
-
-                <Show when=move || has_tags fallback=|| ()>
-                    <ul class=home_style::tag_list>
-                        {tags
-                            .iter()
-                            .map(|tag| {
-                                view! { <li class=home_style::tag>{format!("#{tag}")}</li> }
-                            })
-                            .collect_view()}
-                    </ul>
-                </Show>
-            </article>
-        </A>
     }
 }
 
@@ -173,21 +137,29 @@ pub fn HomePage() -> impl IntoView {
     );
 
     view! {
-        <div class=home_style::home_page>
-            <section class=home_style::profile_section>
-                <p class=home_style::eyebrow>{"Artifact-Driven Blog"}</p>
-                <h1>{SITE_NAME}</h1>
-                <div class=home_style::profile_text>
-                    <p>
+        <div class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-12 px-4 py-8 text-left sm:px-6 sm:py-12">
+            <section class="rounded-2xl border border-border/70 bg-gradient-to-br from-card via-card to-secondary/70 px-6 py-10 text-center shadow-[0_18px_42px_rgb(0_0_0/0.28)] sm:px-10">
+                <p class="m-0 text-sm tracking-[0.16em] text-primary uppercase">
+                    {"Artifact-Driven Blog"}
+                </p>
+                <h1 class="m-0 mt-4 text-3xl leading-tight font-bold after:mx-auto after:mt-3 after:block after:h-1 after:w-12 after:rounded-full after:bg-primary sm:text-4xl">
+                    {SITE_NAME}
+                </h1>
+                <div class="mx-auto mt-5 max-w-3xl">
+                    <p class="m-0 leading-8 text-muted-foreground">
                         {"気になったことをメモしておくブログです。Obsidian から生成した成果物をもとに、Leptos で公開ページを組み立てています。"}
                     </p>
                 </div>
             </section>
 
-            <section class=home_style::latest_articles>
-                <div class=home_style::section_header>
-                    <h2>{"最近の記事"}</h2>
-                    <p>{"まずは home を artifact 駆動に置き換えています。"}</p>
+            <section>
+                <div class="mb-6 grid gap-2">
+                    <h2 class="m-0 text-2xl font-semibold after:mt-2 after:block after:h-1 after:w-12 after:rounded-full after:bg-primary">
+                        {"最近の記事"}
+                    </h2>
+                    <p class="m-0 text-muted-foreground">
+                        {"新しい順に、公開済みの記事を紹介します。"}
+                    </p>
                 </div>
 
                 <Suspense fallback=|| {
@@ -197,7 +169,9 @@ pub fn HomePage() -> impl IntoView {
                             description="公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。"
                             canonical_url=build_site_url(build_home_page_canonical_path())
                         />
-                        <div class=home_style::loading>"記事を読み込み中..."</div>
+                        <div class="rounded-xl bg-secondary p-8 text-center text-muted-foreground">
+                            "記事を読み込み中..."
+                        </div>
                     }
                 }>
                     {move || match home_page.get() {
@@ -207,7 +181,7 @@ pub fn HomePage() -> impl IntoView {
                             let canonical_url = build_site_url(build_home_page_canonical_path());
                             let content = if document.articles.is_empty() {
                                 view! {
-                                    <div class=home_style::no_articles>
+                                    <div class="rounded-xl bg-secondary p-8 text-center text-muted-foreground">
                                         "記事がありません"
                                     </div>
                                 }
@@ -229,13 +203,13 @@ pub fn HomePage() -> impl IntoView {
                         Some(Err(error)) => {
                             mark_internal_server_error_response();
                             view! {
-                                <div class=home_style::error>
+                                <div class="rounded-xl bg-secondary p-8 text-center text-muted-foreground">
                                     {format!("記事の読み込みに失敗しました: {error}")}
                                 </div>
                             }
                                 .into_any()
                         }
-                        None => view! { <div class=home_style::loading></div> }.into_any(),
+                        None => view! { <div></div> }.into_any(),
                     }}
                 </Suspense>
             </section>

@@ -3,12 +3,14 @@
 //! Common UI elements such as the header, footer, and sidebar live here.
 
 // Public submodules.
+pub mod article_card;
 pub mod footer;
 pub mod header;
 pub mod page_metadata;
 pub mod ui;
 
 // Re-export frequently used components.
+pub use article_card::ArticleCard;
 pub use footer::Footer;
 pub use header::Header;
 pub use page_metadata::PageMetadata;
