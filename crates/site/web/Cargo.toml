@@ -82,7 +82,6 @@ extensions = [".module.scss", ".module.css"]
 # Useful to include a @use statement to all scss modules.
 scss_prelude = """
 @use "main" as *;
-@use "sass:color";
 """
 
 # hash_len
