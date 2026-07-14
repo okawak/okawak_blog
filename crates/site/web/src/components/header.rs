@@ -15,7 +15,7 @@ pub fn Header() -> impl IntoView {
     let (menu_open, set_menu_open) = signal(false);
 
     view! {
-        <header class="sticky top-0 z-50 h-[var(--site-header-height)] border-b border-border/60 bg-background/95 shadow-[0_8px_24px_rgb(0_0_0/0.45)] backdrop-blur-sm">
+        <header class="sticky top-0 z-50 h-[var(--site-header-height)] border-b border-border/60 bg-[image:var(--site-header-background)] shadow-[0_8px_24px_rgb(0_0_0/0.45)] backdrop-blur-sm">
             <div class="relative mx-auto flex h-full max-w-[var(--site-content-width)] items-center justify-between gap-3 px-4 sm:px-6">
                 <A
                     href="/"
