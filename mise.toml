@@ -5,6 +5,8 @@ SERVICE_FILE = "service/okawak_blog.service"
 NGINX_CONFIG = "service/blog_nginx.conf"
 BIN_DIR = "./bin"
 TARGET_BIN = "./target/release/server"
+LEPTOS_SASS_VERSION = "1.101.0"
+LEPTOS_TAILWIND_VERSION = "v4.3.2"
 
 [tasks.check-deps]
 description = "Check if required tools are installed"
