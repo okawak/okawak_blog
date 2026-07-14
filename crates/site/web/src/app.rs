@@ -130,11 +130,11 @@ pub fn App() -> impl IntoView {
         // sets the document title
         <Title text=SITE_NAME />
 
-        <div class="app-container">
+        <div class="flex min-h-dvh flex-col bg-background text-foreground">
             <Router>
                 <MathRenderer />
                 <Header />
-                <main class="content-container">
+                <main class="content-container flex-1">
                     <FlatRoutes fallback=|| {
                         view! { <NotFoundPage /> }
                     }>

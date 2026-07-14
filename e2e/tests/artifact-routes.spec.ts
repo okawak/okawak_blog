@@ -78,6 +78,51 @@ test("home renders artifacts and hydrates article navigation", async ({ page }) 
   );
 });
 
+test("mobile navigation stays in the viewport and exposes its state", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const header = page.locator("header");
+  const logo = header.getByRole("link", { name: SITE_NAME });
+  const menuButton = header.locator('button[aria-controls="site-header-nav"]');
+  const navigation = header.locator("#site-header-nav");
+
+  await expect(logo).toBeVisible();
+  await expect(menuButton).toBeVisible();
+  await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+  await expect(menuButton).toHaveAttribute(
+    "aria-label",
+    "ナビゲーションメニューを開く",
+  );
+  await expect(navigation).toBeHidden();
+
+  const logoBox = await logo.boundingBox();
+  const buttonBox = await menuButton.boundingBox();
+  expect(logoBox).not.toBeNull();
+  expect(buttonBox).not.toBeNull();
+  expect(logoBox!.x + logoBox!.width).toBeLessThan(buttonBox!.x);
+
+  await menuButton.click();
+
+  await expect(menuButton).toHaveAttribute("aria-expanded", "true");
+  await expect(menuButton).toHaveAttribute(
+    "aria-label",
+    "ナビゲーションメニューを閉じる",
+  );
+  await expect(navigation).toBeVisible();
+
+  const navigationBox = await navigation.boundingBox();
+  expect(navigationBox).not.toBeNull();
+  expect(navigationBox!.x).toBeGreaterThanOrEqual(0);
+  expect(navigationBox!.x + navigationBox!.width).toBeLessThanOrEqual(390);
+
+  await navigation.getByRole("link", { name: "About" }).click();
+
+  await expect(page).toHaveURL(/\/about$/);
+  await expect(navigation).toBeHidden();
+  await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+});
+
 test("about renders its page artifact", async ({ page }) => {
   const response = await page.goto("/about");
 
