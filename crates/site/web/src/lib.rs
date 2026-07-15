@@ -3,6 +3,7 @@
 pub mod app;
 pub mod components;
 pub mod error;
+pub mod format;
 pub mod routes;
 
 pub const SITE_NAME: &str = "ぶくせんの探窟メモ";

@@ -1,4 +1,5 @@
 use crate::components::PageMetadata;
+use crate::format::format_display_date;
 use crate::routes::not_found::NotFoundPage;
 use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
@@ -68,6 +69,8 @@ fn ArticlePageContent(document: ArticlePageDocument) -> impl IntoView {
     let category = document.article.category_display_name;
     let created_at = document.article.created_at;
     let updated_at = document.article.updated_at;
+    let created_at_label = format_display_date(&created_at);
+    let updated_at_label = format_display_date(&updated_at);
     let description = document.article.description;
     let tags = document.article.tags;
     let has_tags = !tags.is_empty();
@@ -79,7 +82,8 @@ fn ArticlePageContent(document: ArticlePageDocument) -> impl IntoView {
                 <p class=article_style::article_category>{category}</p>
                 <h1 class=article_style::article_title>{title}</h1>
                 <p class=article_style::article_dates>
-                    {format!("公開 {} / 更新 {}", created_at, updated_at)}
+                    {"公開 "} <time datetime=created_at>{created_at_label}</time> {" / 更新 "}
+                    <time datetime=updated_at>{updated_at_label}</time>
                 </p>
                 {description
                     .map(|description| {

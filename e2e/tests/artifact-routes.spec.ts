@@ -41,6 +41,15 @@ async function expectNotFoundMetadata(page: Page, canonicalPath: string) {
   );
 }
 
+async function expectFormattedFixtureDates(page: Page) {
+  await expect(
+    page.locator('time[datetime="2026-01-01T00:00"]'),
+  ).toHaveText("2026年1月1日");
+  await expect(
+    page.locator('time[datetime="2026-01-02T00:00:00+09:00"]'),
+  ).toHaveText("2026年1月2日");
+}
+
 test("runtime probes distinguish liveness and artifact readiness", async ({ request }) => {
   const healthResponse = await request.get("/api/health");
   expect(healthResponse.status()).toBe(200);
@@ -58,6 +67,7 @@ test("home renders artifacts and hydrates article navigation", async ({ page }) 
   await expect(page.locator("main").getByRole("heading", { name: SITE_NAME })).toBeVisible();
   await expect(page.getByText("Fixture home content")).toBeVisible();
   await expect(page.getByRole("link", { name: "E2E Article" })).toBeVisible();
+  await expectFormattedFixtureDates(page);
   await expectMetadata(page, SITE_NAME, "");
 
   let documentRequests = 0;
@@ -69,6 +79,7 @@ test("home renders artifacts and hydrates article navigation", async ({ page }) 
 
   await expect(page).toHaveURL(/\/tech\/e2e-article$/);
   await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
+  await expectFormattedFixtureDates(page);
   expect(documentRequests).toBe(0);
   await expectMetadata(
     page,
@@ -76,6 +87,15 @@ test("home renders artifacts and hydrates article navigation", async ({ page }) 
     "/tech/e2e-article",
     "article",
   );
+});
+
+test("site shell keeps the warm gradient background", async ({ page }) => {
+  await page.goto("/");
+
+  const backgroundImage = await page.evaluate(
+    () => getComputedStyle(document.body).backgroundImage,
+  );
+  expect(backgroundImage).toContain("linear-gradient");
 });
 
 test("mobile navigation stays in the viewport and exposes its state", async ({ page }) => {
@@ -123,6 +143,19 @@ test("mobile navigation stays in the viewport and exposes its state", async ({ p
   await expect(menuButton).toHaveAttribute("aria-expanded", "false");
 });
 
+test("home article cards stay within the mobile viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const articleCard = page.locator("main article").filter({ hasText: "E2E Article" });
+  await expect(articleCard).toBeVisible();
+
+  const cardBox = await articleCard.boundingBox();
+  expect(cardBox).not.toBeNull();
+  expect(cardBox!.x).toBeGreaterThanOrEqual(0);
+  expect(cardBox!.x + cardBox!.width).toBeLessThanOrEqual(390);
+});
+
 test("about renders its page artifact", async ({ page }) => {
   const response = await page.goto("/about");
 
@@ -140,7 +173,31 @@ test("category renders landing content and grouped articles", async ({ page }) =
   await expect(page.getByRole("heading", { name: "Tech landing" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "rust / async" })).toBeVisible();
   await expect(page.getByRole("link", { name: "E2E Article" })).toBeVisible();
+  await expectFormattedFixtureDates(page);
   await expectMetadata(page, `Fixture Tech | ${SITE_NAME}`, "/tech");
+});
+
+test("category landing content stays within the mobile viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tech");
+
+  const wideContent = page.getByTestId("wide-landing-content");
+  await expect(wideContent).toBeVisible();
+
+  const fitsLandingSection = await wideContent.evaluate((element) => {
+    const landingSection = element.closest("section");
+    if (!landingSection) {
+      return false;
+    }
+
+    return element.getBoundingClientRect().width <= landingSection.getBoundingClientRect().width;
+  });
+  expect(fitsLandingSection).toBe(true);
+
+  const pageHasNoHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+  );
+  expect(pageHasNoHorizontalOverflow).toBe(true);
 });
 
 test("missing article and category return 404 pages", async ({ page }) => {

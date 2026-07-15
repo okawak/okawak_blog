@@ -33,6 +33,11 @@
   --site-header-height: 5.625rem;
   --site-content-width: 64rem;
   --site-page-padding: 2rem;
+  --site-page-background: linear-gradient(
+    to bottom,
+    var(--card) 0%,
+    var(--background) 100%
+  );
   --site-header-background: linear-gradient(
     110deg,
     var(--background) 0%,
@@ -135,7 +140,8 @@
   }
 
   body {
-    @apply m-0 min-h-dvh bg-background font-sans text-foreground antialiased;
+    @apply m-0 min-h-dvh font-sans text-foreground antialiased;
+    background: var(--site-page-background);
     line-height: 1.6;
     text-align: center;
   }

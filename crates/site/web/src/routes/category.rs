@@ -1,4 +1,5 @@
-use crate::components::PageMetadata;
+use crate::components::ui::card::Card;
+use crate::components::{ArticleCard, PageMetadata};
 use crate::routes::not_found::NotFoundPage;
 use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
@@ -7,22 +8,17 @@ use domain::CategoryPageDocument;
 #[cfg(feature = "ssr")]
 use domain::{Category, build_category_page_document};
 use domain::{
-    build_article_path, build_category_page_canonical_path, build_category_page_description,
-    build_category_page_title,
+    build_category_page_canonical_path, build_category_page_description, build_category_page_title,
 };
 #[cfg(feature = "ssr")]
 use infra::DynArtifactReader;
 use leptos::prelude::*;
 #[cfg(feature = "ssr")]
 use leptos_axum::ResponseOptions;
-use leptos_router::components::A;
 use leptos_router::{hooks::use_params_map, params::ParamsMap};
 #[cfg(feature = "ssr")]
 use std::str::FromStr;
 use std::sync::Arc;
-use stylance::import_style;
-
-import_style!(category_style, "category.module.scss");
 
 #[server]
 pub async fn get_category_page_document(
@@ -77,51 +73,33 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
             let article_items = section
                 .articles
                 .into_iter()
-                .map(|article| {
-                    let href = build_article_path(&article.category, &article.slug);
-                    let title = article.title.as_str().to_string();
-                    let description = article
-                        .description
-                        .unwrap_or_else(|| "説明はまだありません。".to_string());
-                    let updated_at = article.updated_at;
-
-                    view! {
-                        <article class=category_style::article_card>
-                            <h3 class=category_style::article_title>
-                                <A href={href} {..} class=category_style::article_link>
-                                    {title}
-                                </A>
-                            </h3>
-                            <p class=category_style::article_description>{description}</p>
-                            <p class=category_style::article_meta>
-                                {format!("更新 {}", updated_at)}
-                            </p>
-                        </article>
-                    }
-                })
+                .map(|article| view! { <ArticleCard article /> })
                 .collect_view();
 
             view! {
-                <section class=category_style::section_group>
-                    <h2 class=category_style::section_heading>{section_heading}</h2>
-                    <div class=category_style::article_list>{article_items}</div>
+                <section class="grid gap-4">
+                    <h2 class="m-0 text-xl font-semibold text-foreground">{section_heading}</h2>
+                    <div class="grid gap-4">{article_items}</div>
                 </section>
             }
         })
         .collect_view();
 
     view! {
-        <div class=category_style::category_page>
-            <header class=category_style::category_header>
-                <p class=category_style::eyebrow>{"Category"}</p>
-                <p class=category_style::category_title>{title}</p>
-                <p class=category_style::category_description>{page_description}</p>
-            </header>
+        <div class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-6 px-4 py-8 text-left sm:px-6 sm:py-12">
+            <Card class="gap-3 border-border/80 bg-gradient-to-b from-card to-secondary/70 p-6 sm:p-8">
+                <p class="m-0 text-sm tracking-[0.16em] text-primary uppercase">{"Category"}</p>
+                <h1 class="m-0 text-3xl leading-tight font-bold sm:text-4xl">{title}</h1>
+                <p class="m-0 leading-7 text-muted-foreground">{page_description}</p>
+            </Card>
 
             // Publisher artifacts escape raw HTML and neutralize unsafe links before persistence.
-            <section class=category_style::landing_content inner_html=landing_html></section>
+            <section
+                class="min-w-0 max-w-full rounded-xl border border-border/80 bg-card p-6 leading-8 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_*]:max-w-full [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto"
+                inner_html=landing_html
+            ></section>
 
-            <div class=category_style::section_list>{section_items}</div>
+            <div class="grid gap-6">{section_items}</div>
         </div>
     }
 }
@@ -160,7 +138,9 @@ pub fn CategoryPage() -> impl IntoView {
                     description=format!("{category_param} カテゴリの記事一覧です。")
                     canonical_url
                 />
-                <div class=category_style::loading>"カテゴリを読み込み中..."</div>
+                <div class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground">
+                    "カテゴリを読み込み中..."
+                </div>
             }
         }>
             {move || match category_page.get() {
@@ -184,13 +164,13 @@ pub fn CategoryPage() -> impl IntoView {
                 Some(Err(error)) => {
                     mark_internal_server_error_response();
                     view! {
-                        <div class=category_style::error>
+                        <div class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground">
                             {format!("カテゴリの読み込みに失敗しました: {error}")}
                         </div>
                     }
                         .into_any()
                 }
-                None => view! { <div class=category_style::loading></div> }.into_any(),
+                None => view! { <div></div> }.into_any(),
             }}
         </Suspense>
     }
