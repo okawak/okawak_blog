@@ -89,6 +89,15 @@ test("home renders artifacts and hydrates article navigation", async ({ page }) 
   );
 });
 
+test("site shell keeps the warm gradient background", async ({ page }) => {
+  await page.goto("/");
+
+  const backgroundImage = await page.evaluate(
+    () => getComputedStyle(document.body).backgroundImage,
+  );
+  expect(backgroundImage).toContain("linear-gradient");
+});
+
 test("mobile navigation stays in the viewport and exposes its state", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

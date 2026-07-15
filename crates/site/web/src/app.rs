@@ -130,7 +130,7 @@ pub fn App() -> impl IntoView {
         // sets the document title
         <Title text=SITE_NAME />
 
-        <div class="flex min-h-dvh flex-col bg-background text-foreground">
+        <div class="flex min-h-dvh flex-col text-foreground">
             <Router>
                 <MathRenderer />
                 <Header />
