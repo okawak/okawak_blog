@@ -157,7 +157,7 @@ pub fn ArticlePage() -> impl IntoView {
     view! {
         <Suspense fallback=move || {
             let (category_param, slug_param) = params
-                .with(|params: &ParamsMap| {
+                .with_untracked(|params: &ParamsMap| {
                     let slug = params.get("slug").unwrap_or_default();
                     (
                         params.get("category").unwrap_or_default(),
