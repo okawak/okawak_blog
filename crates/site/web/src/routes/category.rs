@@ -95,7 +95,7 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
 
             // Publisher artifacts escape raw HTML and neutralize unsafe links before persistence.
             <section
-                class="max-w-full rounded-xl border border-border/80 bg-card p-6 leading-8 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                class="min-w-0 max-w-full rounded-xl border border-border/80 bg-card p-6 leading-8 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_*]:max-w-full [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto"
                 inner_html=landing_html
             ></section>
 

@@ -168,6 +168,29 @@ test("category renders landing content and grouped articles", async ({ page }) =
   await expectMetadata(page, `Fixture Tech | ${SITE_NAME}`, "/tech");
 });
 
+test("category landing content stays within the mobile viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tech");
+
+  const wideContent = page.getByTestId("wide-landing-content");
+  await expect(wideContent).toBeVisible();
+
+  const fitsLandingSection = await wideContent.evaluate((element) => {
+    const landingSection = element.closest("section");
+    if (!landingSection) {
+      return false;
+    }
+
+    return element.getBoundingClientRect().width <= landingSection.getBoundingClientRect().width;
+  });
+  expect(fitsLandingSection).toBe(true);
+
+  const pageHasNoHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+  );
+  expect(pageHasNoHorizontalOverflow).toBe(true);
+});
+
 test("missing article and category return 404 pages", async ({ page }) => {
   const articleResponse = await page.goto("/tech/missing-article");
 
