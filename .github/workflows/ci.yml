@@ -15,9 +15,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  BUN_VERSION: 1.3.14
-  CARGO_LEPTOS_VERSION: 0.3.7
-  LEPTOS_TAILWIND_VERSION: v4.3.2
 
 jobs:
   verify:
@@ -26,6 +23,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Set up shared build tools
+        uses: jdx/mise-action@v4
+
+      - name: Check tool version consistency
+        run: mise run versions-check
 
       - name: Prepare Rust toolchain
         run: |
@@ -79,40 +82,26 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-browser-e2e-${{ env.CARGO_LEPTOS_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-browser-e2e-${{ hashFiles('mise.toml', 'mise.lock', '**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-browser-e2e-${{ env.CARGO_LEPTOS_VERSION }}-
+            ${{ runner.os }}-browser-e2e-
             ${{ runner.os }}-rust-ci-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Install cargo-leptos
-        env:
-          CARGO_LEPTOS_NO_MODIFY_PATH: "1"
-        run: |
-          curl --proto '=https' --tlsv1.2 -LsSf \
-            "https://github.com/leptos-rs/cargo-leptos/releases/download/v${CARGO_LEPTOS_VERSION}/cargo-leptos-installer.sh" \
-            | sh
-          cargo leptos --version
+      - name: Set up shared build tools
+        uses: jdx/mise-action@v4
 
       - name: Install web dependencies
-        working-directory: crates/site/web
-        run: bun install --frozen-lockfile
+        run: mise run web-install
 
       - name: Install E2E dependencies
-        working-directory: e2e
-        run: bun install --frozen-lockfile
+        run: mise run e2e-install
 
       - name: Install Chromium
         working-directory: e2e
         run: bunx playwright install --with-deps chromium
 
       - name: Run fixture browser E2E
-        working-directory: e2e
-        run: bun run test
+        run: mise run test-e2e
 
       - name: Upload Playwright traces
         if: failure()
