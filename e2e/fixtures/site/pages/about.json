@@ -2,6 +2,6 @@
   "page": "about",
   "title": "Fixture About",
   "description": "About fixture description",
-  "html": "<p>About fixture body</p>",
+  "html": "<h1>About artifact</h1><p>About fixture body</p><ul><li>Artifact-driven publishing</li><li>Leptos SSR</li></ul>",
   "updated_at": "2026-01-02T00:00:00+09:00"
 }
