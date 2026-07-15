@@ -13,7 +13,7 @@ pub fn Footer() -> impl IntoView {
                     <small>
                         "Powered by "
                         <a
-                            class="text-primary no-underline transition-colors hover:text-[var(--color-primary-hover)] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                            class="text-primary no-underline transition-colors hover:text-primary-hover focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                             href="https://leptos.dev"
                             target="_blank"
                             rel="noopener noreferrer"

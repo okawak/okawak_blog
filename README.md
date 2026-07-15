@@ -206,14 +206,13 @@ cargo install cargo-leptos
 cargo install leptosfmt
 ```
 
-スタイリング用のツールチェーンは別途検討中です。方針は Issue `#39` で整理し、確定後にセットアップ手順へ反映します。
-ただし、現時点の web build task は既存の `stylance` コマンドを前提にしています。
+web UIはRust/UI由来のprimitiveとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/site/web/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
 
 private Obsidian repoを使うpublisher側の開発では、必要なときだけ`mise run sync-obsidian`でsubmoduleを同期します。開発サーバーの表示確認ではlocal artifactを生成せず、GitHub Actionsが公開したS3 artifactを読みます。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
 `crates/site/web/package.json` の依存のインストール/更新確認は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` で行えます。
 
-`cargo-leptos`が取得するSass / Tailwind CLIのバージョンは、`mise.toml`の`LEPTOS_SASS_VERSION` / `LEPTOS_TAILWIND_VERSION`で固定します。GitHub Actionsでも同じ値をworkflowの共通envに設定し、ローカル開発・E2E・デプロイで揃えます。Bun管理のTailwind依存は`crates/site/web/package.json`を正とします。
+`cargo-leptos`が取得するTailwind CLIのバージョンは、`mise.toml`の`LEPTOS_TAILWIND_VERSION`で固定します。GitHub Actionsでも同じ値をworkflowの共通envに設定し、ローカル開発・E2E・デプロイで揃えます。Bun管理のTailwind依存は`crates/site/web/package.json`を正とします。
 browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-install-browser`、実行は `mise run test-e2e` を使ってください。E2E は root の `e2e/` に置き、通常CIではprivate Obsidian submoduleやS3に依存しない固定artifactで実行します。upload workflowはimmutable releaseを実S3 smoke testで検証し、成功後だけ`current.json`を切り替えます。
 
 開発端末での表示確認は、S3 readerを使う`mise run dev`または`mise run test-e2e-s3`を標準とします。taskはAWS CLIを実行せず、AWS SDKが設定済みprofileまたは環境変数credentialを読みます。bucketやcredentialは保存せず、`AWS_PROFILE`、region、`OKAWAK_BLOG_ARTIFACT_BUCKET`、必要な場合だけ`OKAWAK_BLOG_ARTIFACT_PREFIX`を実行時に渡します。詳細は[e2e/README.md](./e2e/README.md)を参照してください。

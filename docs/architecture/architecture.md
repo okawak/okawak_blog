@@ -358,6 +358,23 @@ flowchart LR
 
 home、about、category、articleの公開routeは`SsrMode::Async`で描画する。title、canonical、Open Graph metadataがartifactの内容に依存するため、非同期resourceの解決前に`<head>`をstreamingしない。各routeではblocking resourceを使い、metadataと本文を同じ`Suspense`境界で組み立てる。
 
+## UI styling境界
+
+`site/web`のUIはRust/UI由来のprimitiveとTailwind CSSを主系にする。
+
+- `src/components/ui/`
+  - Rust/UI registry由来の汎用primitive
+  - site固有のlayoutや文言を持たない
+- `src/components/`と`src/routes/`
+  - Tailwind classでsite chrome、page layout、responsive designを構成する
+- `style/tailwind.css`
+  - semantic color、radius、typography、site layout tokenとbase styleのsource of truth
+- `style/content.css`
+  - article、about、category landing、home fragmentの生成HTMLだけを`.content-prose`配下で整形するplain CSS
+  - heading、code、table、image、bookmark、KaTeXなどpublisher artifactの表現を担当する
+
+`cargo-leptos`は`tailwind-input-file`からCSSを生成する。Sass、Stylance、routeごとのCSS module生成工程は持たない。これによりRust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
+
 ## Reader 経路
 
 artifact の読取は2段階の境界を経由する。

@@ -13,6 +13,7 @@
   --popover: #2b1f1a;
   --popover-foreground: #e1d9d1;
   --primary: #c2a262;
+  --primary-hover: #d0b579;
   --primary-foreground: #0d0a08;
   --secondary: #3b2c25;
   --secondary-foreground: #e1d9d1;
@@ -33,7 +34,6 @@
   /* Site layout tokens. */
   --site-header-height: 5.625rem;
   --site-content-width: 64rem;
-  --site-page-padding: 2rem;
   --site-page-background: linear-gradient(
     to bottom,
     var(--card) 0%,
@@ -46,36 +46,6 @@
     var(--background) 100%
   );
 
-  /* Legacy aliases used by Stylance routes during the migration. */
-  --color-bg-dark: var(--background);
-  --color-bg-mid: var(--card);
-  --color-bg-light: var(--secondary);
-  --color-text: var(--foreground);
-  --color-text-soft: var(--muted-foreground);
-  --color-accent: var(--primary);
-  --color-primary-hover: #d0b579;
-  --color-surface: var(--card);
-  --color-surface-variant: var(--secondary);
-  --color-outline: var(--border);
-  --font-family-sans: var(--site-font-sans);
-  --font-size-base: 1rem;
-  --font-size-sm: 0.875rem;
-  --font-size-lg: 1.125rem;
-  --font-size-xl: 1.25rem;
-  --font-size-2xl: 1.5rem;
-  --header-height: var(--site-header-height);
-  --sidebar-width: 13rem;
-  --padding-page: var(--site-page-padding);
-  --border-radius-sm: 0.25rem;
-  --border-radius: var(--radius);
-  --border-radius-lg: 0.75rem;
-  --border-radius-xl: 1rem;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 10%);
-  --shadow: 0 4px 12px rgb(0 0 0 / 50%);
-  --shadow-lg: 0 8px 16px rgb(0 0 0 / 70%);
-  --transition-fast: 150ms ease;
-  --transition-normal: 300ms ease;
-  --transition-slow: 500ms ease;
 }
 
 .dark {
@@ -86,6 +56,7 @@
   --popover: #2b1f1a;
   --popover-foreground: #e1d9d1;
   --primary: #c2a262;
+  --primary-hover: #d0b579;
   --primary-foreground: #0d0a08;
   --secondary: #3b2c25;
   --secondary-foreground: #e1d9d1;
@@ -113,6 +84,7 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
