@@ -82,6 +82,15 @@ test("home renders artifacts and hydrates article navigation", async ({ page }) 
   await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
   await expect(page.locator("main .content-prose")).toContainText("Article fixture body");
   await expectFormattedFixtureDates(page);
+  const articleWidths = await page.locator("main article").evaluate((article) => {
+    const header = article.querySelector(":scope > header");
+    const prose = article.querySelector(":scope > .content-prose");
+    return {
+      header: header?.getBoundingClientRect().width ?? 0,
+      prose: prose?.getBoundingClientRect().width ?? 0,
+    };
+  });
+  expect(articleWidths.prose).toBeCloseTo(articleWidths.header, 0);
   expect(documentRequests).toBe(0);
   await expectMetadata(
     page,
@@ -216,6 +225,8 @@ test("generated article content stays readable on mobile", async ({ page }) => {
   await expect(prose).toBeVisible();
   await expect(page.getByTestId("article-bookmark")).toBeVisible();
   await expect(page.getByTestId("article-katex")).toBeVisible();
+  await expect(wideCode.locator("code")).toHaveClass(/hljs/);
+  await expect(wideCode.locator(".hljs-keyword").first()).toBeVisible();
 
   const contentStyles = await prose.evaluate((element) => ({
     textAlign: getComputedStyle(element).textAlign,

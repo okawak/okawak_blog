@@ -99,12 +99,37 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 // Load highlight.js from the CDN.
                 <link
                     rel="stylesheet"
-                    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/default.min.css"
+                    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css"
                 />
                 <script
                     defer
                     src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"
+                    onload="window.okawakScheduleCodeHighlight && window.okawakScheduleCodeHighlight();"
                 ></script>
+                <script>
+                    {r#"
+                    window.okawakHighlightCode = function(root) {
+                    if (!window.hljs) return;
+                    const scope = root || document.body;
+                    scope.querySelectorAll('.content-prose pre code:not([data-highlighted])')
+                    .forEach((element) => window.hljs.highlightElement(element));
+                    };
+                    window.okawakScheduleCodeHighlight = function(root) {
+                    let remaining = 200;
+                    const attempt = function() {
+                    if (window.hljs && window.okawakHighlightCode) {
+                    window.okawakHighlightCode(root);
+                    return;
+                    }
+                    if (remaining > 0) {
+                    remaining -= 1;
+                    window.setTimeout(attempt, 50);
+                    }
+                    };
+                    attempt();
+                    };
+                    "#}
+                </script>
                 <AutoReload options=options.clone() />
                 <HydrationScripts options />
                 <MetaTags />
@@ -132,7 +157,7 @@ pub fn App() -> impl IntoView {
 
         <div class="flex min-h-dvh flex-col text-foreground">
             <Router>
-                <MathRenderer />
+                <GeneratedContentRenderer />
                 <Header />
                 <main class="content-container flex-1">
                     <FlatRoutes fallback=|| {
@@ -151,7 +176,7 @@ pub fn App() -> impl IntoView {
 }
 
 #[component]
-fn MathRenderer() -> impl IntoView {
+fn GeneratedContentRenderer() -> impl IntoView {
     let location = use_location();
 
     #[cfg(target_arch = "wasm32")]
@@ -163,7 +188,7 @@ fn MathRenderer() -> impl IntoView {
         let _ = location.pathname.get();
 
         #[cfg(target_arch = "wasm32")]
-        schedule_math_render(&render_scheduled_for_location);
+        schedule_generated_content_render(&render_scheduled_for_location);
 
         #[cfg(not(target_arch = "wasm32"))]
         trigger_math_render();
@@ -210,11 +235,13 @@ fn MathRenderer() -> impl IntoView {
                         record
                             .dyn_into::<web_sys::MutationRecord>()
                             .ok()
-                            .is_some_and(|record| mutation_record_contains_math(&record))
+                            .is_some_and(|record| {
+                                mutation_record_contains_generated_content(&record)
+                            })
                     });
 
                     if should_render {
-                        schedule_math_render(&render_scheduled);
+                        schedule_generated_content_render(&render_scheduled);
                     }
                 },
             )
@@ -319,7 +346,32 @@ fn trigger_math_render() {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn schedule_math_render(render_scheduled: &std::rc::Rc<std::cell::Cell<bool>>) {
+fn trigger_code_highlight() {
+    use js_sys::{Function, Reflect};
+    use wasm_bindgen::{JsCast, JsValue};
+
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let highlight = Reflect::get(
+        window.as_ref(),
+        &JsValue::from_str("okawakScheduleCodeHighlight"),
+    )
+    .ok()
+    .and_then(|value| value.dyn_into::<Function>().ok())
+    .or_else(|| {
+        Reflect::get(window.as_ref(), &JsValue::from_str("okawakHighlightCode"))
+            .ok()
+            .and_then(|value| value.dyn_into::<Function>().ok())
+    });
+
+    if let Some(highlight) = highlight {
+        let _ = highlight.call0(window.as_ref());
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn schedule_generated_content_render(render_scheduled: &std::rc::Rc<std::cell::Cell<bool>>) {
     use wasm_bindgen::{JsCast, closure::Closure};
 
     if render_scheduled.get() {
@@ -335,6 +387,7 @@ fn schedule_math_render(render_scheduled: &std::rc::Rc<std::cell::Cell<bool>>) {
     let callback = Closure::once(move || {
         render_scheduled.set(false);
         trigger_math_render();
+        trigger_code_highlight();
     });
 
     let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
@@ -345,20 +398,28 @@ fn schedule_math_render(render_scheduled: &std::rc::Rc<std::cell::Cell<bool>>) {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn mutation_record_contains_math(record: &web_sys::MutationRecord) -> bool {
+fn mutation_record_contains_generated_content(record: &web_sys::MutationRecord) -> bool {
     let nodes = record.added_nodes();
-    (0..nodes.length()).any(|index| nodes.item(index).as_ref().is_some_and(node_contains_math))
+    (0..nodes.length()).any(|index| {
+        nodes
+            .item(index)
+            .as_ref()
+            .is_some_and(node_contains_generated_content)
+    })
 }
 
 #[cfg(target_arch = "wasm32")]
-fn node_contains_math(node: &web_sys::Node) -> bool {
+fn node_contains_generated_content(node: &web_sys::Node) -> bool {
     use wasm_bindgen::JsCast;
 
     node.dyn_ref::<web_sys::Element>().is_some_and(|element| {
         element.class_list().contains("okawak-katex-inline")
             || element.class_list().contains("okawak-katex-display")
+            || element.tag_name().eq_ignore_ascii_case("code")
             || element
-                .query_selector(".okawak-katex-inline, .okawak-katex-display")
+                .query_selector(
+                    ".okawak-katex-inline, .okawak-katex-display, .content-prose pre code",
+                )
                 .ok()
                 .flatten()
                 .is_some()

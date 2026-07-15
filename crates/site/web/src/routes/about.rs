@@ -63,7 +63,7 @@ fn AboutPageContent(document: StaticPageDocument) -> impl IntoView {
             // HTML from markdown and neutralizes unsafe anchor href schemes before writing the
             // artifact.
             <article
-                class="content-prose mx-auto w-full max-w-3xl rounded-xl border border-border/80 bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.22)] sm:p-8"
+                class="content-prose w-full rounded-xl border border-border/80 bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.22)] sm:p-8"
                 inner_html=html
             ></article>
         </div>
