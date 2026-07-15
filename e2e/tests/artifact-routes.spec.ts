@@ -66,6 +66,7 @@ test("home renders artifacts and hydrates article navigation", async ({ page }) 
   expect(response?.status()).toBe(200);
   await expect(page.locator("main").getByRole("heading", { name: SITE_NAME })).toBeVisible();
   await expect(page.getByText("Fixture home content")).toBeVisible();
+  await expect(page.locator("main .content-prose")).toContainText("Fixture home content");
   await expect(page.getByRole("link", { name: "E2E Article" })).toBeVisible();
   await expectFormattedFixtureDates(page);
   await expectMetadata(page, SITE_NAME, "");
@@ -79,7 +80,17 @@ test("home renders artifacts and hydrates article navigation", async ({ page }) 
 
   await expect(page).toHaveURL(/\/tech\/e2e-article$/);
   await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
+  await expect(page.locator("main .content-prose")).toContainText("Article fixture body");
   await expectFormattedFixtureDates(page);
+  const articleWidths = await page.locator("main article").evaluate((article) => {
+    const header = article.querySelector(":scope > header");
+    const prose = article.querySelector(":scope > .content-prose");
+    return {
+      header: header?.getBoundingClientRect().width ?? 0,
+      prose: prose?.getBoundingClientRect().width ?? 0,
+    };
+  });
+  expect(articleWidths.prose).toBeCloseTo(articleWidths.header, 0);
   expect(documentRequests).toBe(0);
   await expectMetadata(
     page,
@@ -162,6 +173,7 @@ test("about renders its page artifact", async ({ page }) => {
   expect(response?.status()).toBe(200);
   await expect(page.getByRole("heading", { name: "Fixture About" })).toBeVisible();
   await expect(page.getByText("About fixture body")).toBeVisible();
+  await expect(page.locator("main .content-prose")).toContainText("About fixture body");
   await expectMetadata(page, `Fixture About | ${SITE_NAME}`, "/about");
 });
 
@@ -171,6 +183,7 @@ test("category renders landing content and grouped articles", async ({ page }) =
   expect(response?.status()).toBe(200);
   await expect(page.getByText("Fixture Tech", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tech landing" })).toBeVisible();
+  await expect(page.locator("main .content-prose")).toContainText("Category fixture body");
   await expect(page.getByRole("heading", { name: "rust / async" })).toBeVisible();
   await expect(page.getByRole("link", { name: "E2E Article" })).toBeVisible();
   await expectFormattedFixtureDates(page);
@@ -193,6 +206,42 @@ test("category landing content stays within the mobile viewport", async ({ page 
     return element.getBoundingClientRect().width <= landingSection.getBoundingClientRect().width;
   });
   expect(fitsLandingSection).toBe(true);
+
+  const pageHasNoHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+  );
+  expect(pageHasNoHorizontalOverflow).toBe(true);
+});
+
+test("generated article content stays readable on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tech/e2e-article");
+
+  const prose = page.locator("main .content-prose");
+  const wideImage = page.getByTestId("article-wide-image");
+  const wideCode = page.getByTestId("article-wide-code");
+  const wideTable = page.getByTestId("article-wide-table");
+
+  await expect(prose).toBeVisible();
+  await expect(page.getByTestId("article-bookmark")).toBeVisible();
+  await expect(page.getByTestId("article-katex")).toBeVisible();
+  await expect(wideCode.locator("code")).toHaveClass(/hljs/);
+  await expect(wideCode.locator(".hljs-keyword").first()).toBeVisible();
+
+  const contentStyles = await prose.evaluate((element) => ({
+    textAlign: getComputedStyle(element).textAlign,
+    imageFits: (() => {
+      const image = element.querySelector('[data-testid="article-wide-image"]');
+      return image
+        ? image.getBoundingClientRect().width <= element.getBoundingClientRect().width
+        : false;
+    })(),
+  }));
+  expect(contentStyles.textAlign).toBe("left");
+  expect(contentStyles.imageFits).toBe(true);
+  await expect(wideImage).toBeVisible();
+  expect(await wideCode.evaluate((element) => getComputedStyle(element).overflowX)).toBe("auto");
+  expect(await wideTable.evaluate((element) => getComputedStyle(element).overflowX)).toBe("auto");
 
   const pageHasNoHorizontalOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
