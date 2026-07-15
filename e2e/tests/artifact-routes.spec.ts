@@ -2,6 +2,16 @@ import { expect, test, type Page } from "@playwright/test";
 
 const SITE_NAME = "ぶくせんの探窟メモ";
 
+function captureReactiveWarnings(page: Page) {
+  const warnings: string[] = [];
+  page.on("console", (message) => {
+    if (message.text().includes("outside a reactive tracking context")) {
+      warnings.push(message.text());
+    }
+  });
+  return warnings;
+}
+
 async function expectMetadata(
   page: Page,
   title: string,
@@ -61,6 +71,8 @@ test("runtime probes distinguish liveness and artifact readiness", async ({ requ
 });
 
 test("home renders artifacts and hydrates article navigation", async ({ page }) => {
+  const reactiveWarnings = captureReactiveWarnings(page);
+
   const response = await page.goto("/");
 
   expect(response?.status()).toBe(200);
@@ -98,6 +110,7 @@ test("home renders artifacts and hydrates article navigation", async ({ page }) 
     "/tech/e2e-article",
     "article",
   );
+  expect(reactiveWarnings).toEqual([]);
 });
 
 test("site shell keeps the warm gradient background", async ({ page }) => {
@@ -178,6 +191,7 @@ test("about renders its page artifact", async ({ page }) => {
 });
 
 test("category renders landing content and grouped articles", async ({ page }) => {
+  const reactiveWarnings = captureReactiveWarnings(page);
   const response = await page.goto("/tech");
 
   expect(response?.status()).toBe(200);
@@ -188,6 +202,7 @@ test("category renders landing content and grouped articles", async ({ page }) =
   await expect(page.getByRole("link", { name: "E2E Article" })).toBeVisible();
   await expectFormattedFixtureDates(page);
   await expectMetadata(page, `Fixture Tech | ${SITE_NAME}`, "/tech");
+  expect(reactiveWarnings).toEqual([]);
 });
 
 test("category landing content stays within the mobile viewport", async ({ page }) => {

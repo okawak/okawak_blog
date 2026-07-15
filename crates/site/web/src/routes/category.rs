@@ -125,7 +125,7 @@ pub fn CategoryPage() -> impl IntoView {
     view! {
         <Suspense fallback=move || {
             let category_param = params
-                .with(|params: &ParamsMap| params.get("category").unwrap_or_default());
+                .with_untracked(|params: &ParamsMap| params.get("category").unwrap_or_default());
             let canonical_url = if category_param.is_empty() {
                 build_site_url("/")
             } else {
