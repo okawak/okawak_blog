@@ -43,7 +43,7 @@ async function expectNotFoundMetadata(page: Page, canonicalPath: string) {
 
 async function expectFormattedFixtureDates(page: Page) {
   await expect(
-    page.locator('time[datetime="2026-01-01T00:00:00+09:00"]'),
+    page.locator('time[datetime="2026-01-01T00:00"]'),
   ).toHaveText("2026年1月1日");
   await expect(
     page.locator('time[datetime="2026-01-02T00:00:00+09:00"]'),
