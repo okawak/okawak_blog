@@ -22,6 +22,8 @@ config.json
 output.json
 tmp*
 dist/
+mise.local.lock
+mise.*.local.lock
 
 # System files
 .DS_Store
