@@ -12,7 +12,7 @@ use std::{
     hash::{Hash, Hasher},
     process,
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 const CACHE_CONTROL_VALUE: &str = "public, max-age=0, must-revalidate";
@@ -22,11 +22,18 @@ pub struct ArtifactHttpCacheState {
     artifact_reader: DynArtifactReader,
     enabled: bool,
     process_tag: Arc<str>,
+    process_started_at: SystemTime,
+}
+
+struct ArtifactValidators {
+    etag: String,
+    last_modified: Option<SystemTime>,
 }
 
 impl ArtifactHttpCacheState {
     pub fn new(artifact_reader: DynArtifactReader, enabled: bool) -> Self {
-        let started_at = SystemTime::now()
+        let process_started_at = SystemTime::now();
+        let started_at = process_started_at
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
@@ -34,6 +41,7 @@ impl ArtifactHttpCacheState {
             artifact_reader,
             enabled,
             process_tag: format!("{}-{started_at}", process::id()).into(),
+            process_started_at,
         }
     }
 
@@ -47,17 +55,24 @@ impl ArtifactHttpCacheState {
             artifact_reader,
             enabled,
             process_tag: process_tag.into(),
+            process_started_at: UNIX_EPOCH,
         }
     }
 
-    async fn etag_for(&self, uri: &Uri) -> Option<String> {
+    async fn validators_for(&self, uri: &Uri) -> Option<ArtifactValidators> {
         if !self.enabled {
             return None;
         }
 
         let snapshot = self.artifact_reader.snapshot().await.ok()?;
         let identity = snapshot.cache_identity()?;
-        Some(build_weak_etag(&self.process_tag, identity, uri))
+        Some(ArtifactValidators {
+            etag: build_weak_etag(&self.process_tag, identity, uri),
+            last_modified: representation_last_modified(
+                snapshot.last_modified(),
+                self.process_started_at,
+            ),
+        })
     }
 }
 
@@ -70,20 +85,35 @@ pub async fn artifact_conditional_get(
         return next.run(request).await;
     }
 
-    let etag = state.etag_for(request.uri()).await;
-    if let Some(etag) = etag.as_deref()
-        && if_none_match_matches(request.headers(), etag)
+    let validators = state.validators_for(request.uri()).await;
+    let has_if_none_match = request.headers().contains_key(header::IF_NONE_MATCH);
+    if has_if_none_match
+        && let Some(validators) = validators.as_ref()
+        && if_none_match_matches(request.headers(), &validators.etag)
     {
         let mut response = StatusCode::NOT_MODIFIED.into_response();
-        insert_cache_headers(response.headers_mut(), etag);
+        insert_cache_headers(response.headers_mut(), validators);
         return response;
     }
+    let not_modified_since = !has_if_none_match
+        && validators
+            .as_ref()
+            .and_then(|validators| validators.last_modified)
+            .is_some_and(|last_modified| {
+                if_modified_since_not_modified(request.headers(), last_modified)
+            });
 
     let mut response = next.run(request).await;
     if response.status() == StatusCode::OK
-        && let Some(etag) = etag.as_deref()
+        && let Some(validators) = validators.as_ref()
     {
-        insert_cache_headers(response.headers_mut(), etag);
+        if not_modified_since {
+            let mut response = StatusCode::NOT_MODIFIED.into_response();
+            insert_cache_headers(response.headers_mut(), validators);
+            return response;
+        }
+
+        insert_cache_headers(response.headers_mut(), validators);
     }
     response
 }
@@ -114,11 +144,48 @@ fn weak_opaque_tag(etag: &str) -> Option<&str> {
     (etag.len() >= 2 && etag.starts_with('"') && etag.ends_with('"')).then_some(etag)
 }
 
-fn insert_cache_headers(headers: &mut HeaderMap, etag: &str) {
+fn if_modified_since_not_modified(headers: &HeaderMap, last_modified: SystemTime) -> bool {
+    let mut values = headers.get_all(header::IF_MODIFIED_SINCE).iter();
+    let Some(value) = values.next() else {
+        return false;
+    };
+    if values.next().is_some() {
+        return false;
+    }
+
+    value
+        .to_str()
+        .ok()
+        .and_then(|value| httpdate::parse_http_date(value).ok())
+        .is_some_and(|if_modified_since| last_modified <= if_modified_since)
+}
+
+fn truncate_to_http_seconds(value: SystemTime) -> Option<SystemTime> {
+    let seconds = value.duration_since(UNIX_EPOCH).ok()?.as_secs();
+    UNIX_EPOCH.checked_add(Duration::from_secs(seconds))
+}
+
+fn representation_last_modified(
+    release_generated_at: Option<SystemTime>,
+    process_started_at: SystemTime,
+) -> Option<SystemTime> {
+    release_generated_at
+        .map(|release_generated_at| release_generated_at.max(process_started_at))
+        .and_then(truncate_to_http_seconds)
+}
+
+fn insert_cache_headers(headers: &mut HeaderMap, validators: &ArtifactValidators) {
     headers.insert(
         header::ETAG,
-        HeaderValue::from_str(etag).expect("generated ETag is a valid header value"),
+        HeaderValue::from_str(&validators.etag).expect("generated ETag is a valid header value"),
     );
+    if let Some(last_modified) = validators.last_modified {
+        headers.insert(
+            header::LAST_MODIFIED,
+            HeaderValue::from_str(&httpdate::fmt_http_date(last_modified))
+                .expect("generated Last-Modified is a valid header value"),
+        );
+    }
     headers.insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static(CACHE_CONTROL_VALUE),
@@ -161,7 +228,14 @@ mod tests {
         Arc,
         atomic::{AtomicUsize, Ordering},
     };
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
     use tower::ServiceExt;
+
+    const RELEASE_LAST_MODIFIED: &str = "Tue, 14 Nov 2023 22:13:20 GMT";
+
+    fn release_last_modified() -> SystemTime {
+        UNIX_EPOCH + Duration::from_secs(1_700_000_000)
+    }
 
     #[derive(Clone)]
     struct FixedReader {
@@ -177,12 +251,17 @@ mod tests {
 
     struct FixedSnapshot {
         identity: Option<String>,
+        last_modified: Option<SystemTime>,
     }
 
     #[async_trait]
     impl ArtifactSnapshot for FixedSnapshot {
         fn cache_identity(&self) -> Option<&str> {
             self.identity.as_deref()
+        }
+
+        fn last_modified(&self) -> Option<SystemTime> {
+            self.last_modified
         }
 
         async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
@@ -213,6 +292,7 @@ mod tests {
     fn cache_state(identity: Option<&str>, enabled: bool) -> ArtifactHttpCacheState {
         let snapshot: DynArtifactSnapshot = Arc::new(FixedSnapshot {
             identity: identity.map(str::to_string),
+            last_modified: identity.map(|_| release_last_modified()),
         });
         let reader: DynArtifactReader = Arc::new(FixedReader { snapshot });
         ArtifactHttpCacheState::with_process_tag(reader, enabled, "process-1")
@@ -254,6 +334,22 @@ mod tests {
             etag,
             build_weak_etag("process-1", "release-1", &Uri::from_static("/about"))
         );
+    }
+
+    #[test]
+    fn last_modified_uses_the_newer_release_or_process_time() {
+        let release = release_last_modified();
+        let newer_process = release + Duration::from_secs(60);
+
+        assert_eq!(
+            representation_last_modified(Some(release), UNIX_EPOCH),
+            Some(release)
+        );
+        assert_eq!(
+            representation_last_modified(Some(release), newer_process),
+            Some(newer_process)
+        );
+        assert_eq!(representation_last_modified(None, newer_process), None);
     }
 
     #[test]
@@ -300,6 +396,10 @@ mod tests {
             first.headers().get(header::CACHE_CONTROL).unwrap(),
             CACHE_CONTROL_VALUE
         );
+        assert_eq!(
+            first.headers().get(header::LAST_MODIFIED).unwrap(),
+            RELEASE_LAST_MODIFIED
+        );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
         let second = app
@@ -316,10 +416,97 @@ mod tests {
         assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
         assert_eq!(second.headers().get(header::ETAG), Some(&etag));
         assert_eq!(
+            second.headers().get(header::LAST_MODIFIED).unwrap(),
+            RELEASE_LAST_MODIFIED
+        );
+        assert_eq!(
             second.headers().get(header::CACHE_CONTROL).unwrap(),
             CACHE_CONTROL_VALUE
         );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn if_modified_since_returns_304_after_selecting_a_successful_response() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let response = test_app(Some("release-1"), true, Arc::clone(&calls))
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header(header::IF_MODIFIED_SINCE, RELEASE_LAST_MODIFIED)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+        assert_eq!(
+            response.headers().get(header::LAST_MODIFIED).unwrap(),
+            RELEASE_LAST_MODIFIED
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn if_none_match_takes_precedence_over_if_modified_since() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let response = test_app(Some("release-1"), true, Arc::clone(&calls))
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header(header::IF_NONE_MATCH, "\"different\"")
+                    .header(header::IF_MODIFIED_SINCE, RELEASE_LAST_MODIFIED)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn stale_invalid_or_multiple_if_modified_since_values_are_ignored() {
+        for values in [
+            vec!["Tue, 14 Nov 2023 22:13:19 GMT"],
+            vec!["invalid"],
+            vec![RELEASE_LAST_MODIFIED, RELEASE_LAST_MODIFIED],
+        ] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let app = test_app(Some("release-1"), true, Arc::clone(&calls));
+            let mut request = Request::builder().uri("/").body(Body::empty()).unwrap();
+            for value in values {
+                request
+                    .headers_mut()
+                    .append(header::IF_MODIFIED_SINCE, HeaderValue::from_static(value));
+            }
+
+            let response = app.oneshot(request).await.unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn if_modified_since_does_not_turn_missing_or_error_responses_into_304() {
+        for uri in ["/missing", "/error"] {
+            let response = test_app(Some("release-1"), true, Arc::new(AtomicUsize::new(0)))
+                .oneshot(
+                    Request::builder()
+                        .uri(uri)
+                        .header(header::IF_MODIFIED_SINCE, RELEASE_LAST_MODIFIED)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_ne!(response.status(), StatusCode::NOT_MODIFIED, "{uri}");
+            assert!(response.headers().get(header::LAST_MODIFIED).is_none());
+        }
     }
 
     #[tokio::test]

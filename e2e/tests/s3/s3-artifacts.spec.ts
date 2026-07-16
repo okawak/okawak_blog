@@ -24,6 +24,25 @@ test("S3 release artifacts pass readiness and render a published article", async
 
   const articleIndexResponse = await request.get("/api/articles");
   expect(articleIndexResponse.status()).toBe(200);
+  const etag = articleIndexResponse.headers().etag;
+  const lastModified = articleIndexResponse.headers()["last-modified"];
+  expect(Boolean(lastModified)).toBe(Boolean(etag));
+  if (etag && lastModified) {
+    expect(Number.isNaN(Date.parse(lastModified))).toBe(false);
+
+    const conditionalResponse = await request.get("/api/articles", {
+      headers: { "If-Modified-Since": lastModified },
+    });
+    expect(conditionalResponse.status()).toBe(304);
+
+    const etagPrecedenceResponse = await request.get("/api/articles", {
+      headers: {
+        "If-None-Match": '"different"',
+        "If-Modified-Since": lastModified,
+      },
+    });
+    expect(etagPrecedenceResponse.status()).toBe(200);
+  }
   const articleIndex = (await articleIndexResponse.json()) as ArticleIndex;
   expect(articleIndex.articles.length).toBeGreaterThan(0);
 

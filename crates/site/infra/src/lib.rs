@@ -15,7 +15,7 @@ use std::{
     env,
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 const DEFAULT_LOCAL_SITE_ROOT: &str = "crates/publish/publisher/dist/site";
@@ -37,6 +37,10 @@ pub trait ArtifactReader: Send + Sync {
 #[async_trait]
 pub trait ArtifactSnapshot: Send + Sync {
     fn cache_identity(&self) -> Option<&str> {
+        None
+    }
+
+    fn last_modified(&self) -> Option<SystemTime> {
         None
     }
 
@@ -174,6 +178,27 @@ pub struct S3ArtifactSnapshot {
     client: Client,
     location: S3ArtifactLocation,
     cache_identity: Option<String>,
+    last_modified: Option<SystemTime>,
+}
+
+struct ResolvedArtifactRelease {
+    location: S3ArtifactLocation,
+    cache_identity: String,
+    last_modified: SystemTime,
+}
+
+fn resolve_artifact_release(
+    location: &S3ArtifactLocation,
+    pointer: ArtifactReleasePointerDocument,
+) -> Result<ResolvedArtifactRelease> {
+    pointer.validate()?;
+    let last_modified = pointer.generated_at_time()?;
+    let cache_identity = pointer.artifact_prefix.clone();
+    Ok(ResolvedArtifactRelease {
+        location: location.with_relative_prefix(&pointer.artifact_prefix),
+        cache_identity,
+        last_modified,
+    })
 }
 
 impl S3ArtifactReader {
@@ -187,11 +212,17 @@ impl S3ArtifactReader {
 }
 
 impl S3ArtifactSnapshot {
-    fn new(client: Client, location: S3ArtifactLocation, cache_identity: Option<String>) -> Self {
+    fn new(
+        client: Client,
+        location: S3ArtifactLocation,
+        cache_identity: Option<String>,
+        last_modified: Option<SystemTime>,
+    ) -> Self {
         Self {
             client,
             location,
             cache_identity,
+            last_modified,
         }
     }
 
@@ -225,20 +256,20 @@ impl S3ArtifactSnapshot {
 #[async_trait]
 impl ArtifactReader for S3ArtifactReader {
     async fn snapshot(&self) -> Result<DynArtifactSnapshot> {
-        let base = S3ArtifactSnapshot::new(self.client.clone(), self.location.clone(), None);
-        let (location, cache_identity) = match base
+        let base = S3ArtifactSnapshot::new(self.client.clone(), self.location.clone(), None, None);
+        let (location, cache_identity, last_modified) = match base
             .read_json::<ArtifactReleasePointerDocument>("current.json")
             .await
         {
             Ok(pointer) => {
-                pointer.validate()?;
-                let cache_identity = pointer.artifact_prefix.clone();
+                let release = resolve_artifact_release(&self.location, pointer)?;
                 (
-                    self.location.with_relative_prefix(&pointer.artifact_prefix),
-                    Some(cache_identity),
+                    release.location,
+                    Some(release.cache_identity),
+                    Some(release.last_modified),
                 )
             }
-            Err(error) if error.is_not_found() => (self.location.clone(), None),
+            Err(error) if error.is_not_found() => (self.location.clone(), None, None),
             Err(error) => return Err(error),
         };
 
@@ -246,6 +277,7 @@ impl ArtifactReader for S3ArtifactReader {
             self.client.clone(),
             location,
             cache_identity,
+            last_modified,
         )))
     }
 }
@@ -254,6 +286,10 @@ impl ArtifactReader for S3ArtifactReader {
 impl ArtifactSnapshot for S3ArtifactSnapshot {
     fn cache_identity(&self) -> Option<&str> {
         self.cache_identity.as_deref()
+    }
+
+    fn last_modified(&self) -> Option<SystemTime> {
+        self.last_modified
     }
 
     async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
@@ -368,7 +404,9 @@ pub async fn build_artifact_reader(config: ArtifactSourceConfig) -> Result<DynAr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{ArticleSummaryDocument, CategoryMetadataDocument};
+    use domain::{
+        ARTIFACT_RELEASE_SCHEMA_VERSION, ArticleSummaryDocument, CategoryMetadataDocument,
+    };
     use std::fs;
     use tempfile::TempDir;
 
@@ -511,6 +549,29 @@ mod tests {
 
         assert_eq!(
             release.key_for("articles/index.json"),
+            "public/releases/release-123/site/articles/index.json"
+        );
+    }
+
+    #[test]
+    fn test_release_pointer_resolves_snapshot_metadata() {
+        let location = S3ArtifactLocation::new("blog-bucket", Some("public")).unwrap();
+        let pointer = ArtifactReleasePointerDocument {
+            schema_version: ARTIFACT_RELEASE_SCHEMA_VERSION,
+            release_id: "release-123".to_string(),
+            artifact_prefix: "releases/release-123/site".to_string(),
+            publisher_commit: "publisher-sha".to_string(),
+            source_commit: "source-sha".to_string(),
+            generated_at: "2026-07-12T12:00:00Z".to_string(),
+        };
+        let expected_last_modified = pointer.generated_at_time().unwrap();
+
+        let release = resolve_artifact_release(&location, pointer).unwrap();
+
+        assert_eq!(release.cache_identity, "releases/release-123/site");
+        assert_eq!(release.last_modified, expected_last_modified);
+        assert_eq!(
+            release.location.key_for("articles/index.json"),
             "public/releases/release-123/site/articles/index.json"
         );
     }

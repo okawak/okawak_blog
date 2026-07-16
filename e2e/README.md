@@ -20,7 +20,7 @@ mise run test-e2e
 
 ## 実S3を確認する
 
-通常の固定artifact E2Eとは分離した`test-e2e-s3`は、AWS SDKの標準credential chainでS3を読み、`/api/ready`、home、article index、実articleのSSR表示とmetadataを確認します。ローカルからの手動確認に加え、S3 upload workflowがimmutable releaseを公開する前のsmoke testにも使います。
+通常の固定artifact E2Eとは分離した`test-e2e-s3`は、AWS SDKの標準credential chainでS3を読み、`/api/ready`、home、article index、実articleのSSR表示とmetadataを確認します。`current.json`からreleaseを選択した場合はETag / Last-Modifiedと条件付きGETも検証します。ローカルからの手動確認に加え、S3 upload workflowがimmutable releaseを公開する前のsmoke testにも使います。
 
 bucket名やcredentialはrepositoryへ保存せず、実行時に渡してください。task自身はAWS CLIを実行せず、server内のAWS SDKがcredentialを読みます。`aws configure --profile blog-s3`などでshared config / credentials fileへ設定済みなら`AWS_PROFILE=blog-s3`で選択でき、省略時はdefault profileが使われます。regionは`AWS_REGION`、`AWS_DEFAULT_REGION`、またはprofileで設定できます。
 

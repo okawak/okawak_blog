@@ -29,6 +29,7 @@ web = { path = "../web", features = ["hydrate"] }
 infra = { path = "../infra" }
 web = { path = "../web", features = ["ssr"], optional = true }
 axum.workspace = true
+httpdate.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tower-http = { workspace = true, features = ["fs"] }
 leptos = { workspace = true, features = ["ssr"] }

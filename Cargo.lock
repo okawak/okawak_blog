@@ -1241,6 +1241,7 @@ dependencies = [
 name = "domain"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "rstest",
  "serde",
  "serde_json",
@@ -3654,6 +3655,7 @@ dependencies = [
  "async-trait",
  "axum",
  "domain",
+ "httpdate",
  "infra",
  "leptos",
  "leptos_axum",

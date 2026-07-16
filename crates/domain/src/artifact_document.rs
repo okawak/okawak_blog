@@ -2,6 +2,7 @@
 
 use crate::{CategoryIndex, PageKey, PublishedArticleSummary, SiteMetadata};
 use serde::{Deserialize, Serialize};
+use std::time::SystemTime;
 
 pub const ARTIFACT_RELEASE_SCHEMA_VERSION: u32 = 1;
 
@@ -17,6 +18,12 @@ pub struct ArtifactReleasePointerDocument {
 }
 
 impl ArtifactReleasePointerDocument {
+    pub fn generated_at_time(&self) -> crate::Result<SystemTime> {
+        parse_rfc3339_utc(&self.generated_at)
+            .map(|timestamp| timestamp.to_utc().into())
+            .ok_or_else(|| crate::DomainError::validation("generated_at"))
+    }
+
     pub fn validate(&self) -> crate::Result<()> {
         if self.schema_version != ARTIFACT_RELEASE_SCHEMA_VERSION {
             return Err(crate::DomainError::validation("schema_version"));
@@ -30,14 +37,20 @@ impl ArtifactReleasePointerDocument {
         for (field, value) in [
             ("publisher_commit", self.publisher_commit.as_str()),
             ("source_commit", self.source_commit.as_str()),
-            ("generated_at", self.generated_at.as_str()),
         ] {
             if value.trim().is_empty() {
                 return Err(crate::DomainError::validation(field));
             }
         }
+        self.generated_at_time()?;
         Ok(())
     }
+}
+
+fn parse_rfc3339_utc(value: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .ok()
+        .filter(|timestamp| timestamp.offset().local_minus_utc() == 0)
 }
 
 fn is_safe_path_segment(value: &str) -> bool {
@@ -211,6 +224,27 @@ mod tests {
                 Err(crate::DomainError::ValidationError { field }) if field == "artifact_prefix"
             ));
         }
+    }
+
+    #[test]
+    fn artifact_release_pointer_requires_rfc3339_utc_generated_at() {
+        for generated_at in [
+            "not-a-timestamp",
+            "2026-07-12T12:00:00",
+            "2026-07-12T21:00:00+09:00",
+        ] {
+            let mut pointer = release_pointer("releases/release-123/site");
+            pointer.generated_at = generated_at.to_string();
+
+            assert!(matches!(
+                pointer.validate(),
+                Err(crate::DomainError::ValidationError { field }) if field == "generated_at"
+            ));
+        }
+
+        let mut pointer = release_pointer("releases/release-123/site");
+        pointer.generated_at = "2026-07-12T12:00:00+00:00".to_string();
+        assert!(pointer.validate().is_ok());
     }
 
     #[test]
