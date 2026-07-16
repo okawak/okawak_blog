@@ -8,7 +8,7 @@ use std::{
     collections::HashMap,
     future::Future,
     sync::Arc,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 use tokio::sync::{Mutex, OnceCell};
 
@@ -106,6 +106,10 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
         self.inner.cache_identity()
     }
 
+    fn last_modified(&self) -> Option<SystemTime> {
+        self.inner.last_modified()
+    }
+
     async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
         self.article_index
             .get_or_try_init(|| self.inner.read_article_index())
@@ -197,6 +201,7 @@ mod tests {
         article_reads: Arc<AtomicUsize>,
         fail_next_article_read: Arc<AtomicBool>,
         cache_identity: Option<&'static str>,
+        last_modified: Option<SystemTime>,
     }
 
     #[async_trait]
@@ -207,6 +212,7 @@ mod tests {
                 article_reads: Arc::clone(&self.article_reads),
                 fail_next_article_read: Arc::clone(&self.fail_next_article_read),
                 cache_identity: self.cache_identity,
+                last_modified: self.last_modified,
             }))
         }
     }
@@ -215,12 +221,17 @@ mod tests {
         article_reads: Arc<AtomicUsize>,
         fail_next_article_read: Arc<AtomicBool>,
         cache_identity: Option<&'static str>,
+        last_modified: Option<SystemTime>,
     }
 
     #[async_trait]
     impl ArtifactSnapshot for CountingSnapshot {
         fn cache_identity(&self) -> Option<&str> {
             self.cache_identity
+        }
+
+        fn last_modified(&self) -> Option<SystemTime> {
+            self.last_modified
         }
 
         async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
@@ -278,6 +289,7 @@ mod tests {
             article_reads: Arc::clone(&article_reads),
             fail_next_article_read: Arc::new(AtomicBool::new(fail_next_article_read)),
             cache_identity: Some("release-1"),
+            last_modified: Some(std::time::UNIX_EPOCH + Duration::from_secs(1_700_000_000)),
         });
         (
             CachingArtifactReader::new(inner, Duration::from_secs(60)),
@@ -291,6 +303,11 @@ mod tests {
         let (reader, snapshot_calls, article_reads) = counting_reader(false);
         let first = reader.snapshot().await.unwrap();
         let second = reader.snapshot().await.unwrap();
+
+        assert_eq!(
+            first.last_modified(),
+            Some(std::time::UNIX_EPOCH + Duration::from_secs(1_700_000_000))
+        );
 
         let (first_result, second_result) =
             tokio::join!(first.read_article_index(), second.read_article_index());
@@ -310,6 +327,7 @@ mod tests {
             article_reads: Arc::clone(&article_reads),
             fail_next_article_read: Arc::new(AtomicBool::new(false)),
             cache_identity: Some("release-1"),
+            last_modified: None,
         });
         let reader = CachingArtifactReader::new(inner, Duration::ZERO);
 
@@ -388,6 +406,7 @@ mod tests {
             article_reads: Arc::clone(&article_reads),
             fail_next_article_read: Arc::new(AtomicBool::new(false)),
             cache_identity: Some("release-1"),
+            last_modified: None,
         });
         let reader = CachingArtifactReader::new(inner, Duration::from_millis(1));
 
@@ -419,6 +438,7 @@ mod tests {
                 article_reads: Arc::clone(&article_reads),
                 fail_next_article_read: Arc::new(AtomicBool::new(false)),
                 cache_identity,
+                last_modified: None,
             })
         };
         let cached = CachedSnapshot {
