@@ -294,7 +294,7 @@ releases/
         └── metadata/
 ```
 
-`current.json`とreleaseごとの`manifest.json`は同じ`ArtifactReleasePointerDocument`を使い、schema version、release ID、artifact prefix、publisher commit、Obsidian source commit、RFC 3339 UTCの生成時刻を保持する。workflowは`site/`のuploadとobject数検証を終え、release prefixを直接読むbrowser E2Eが成功してから`current.json`を最後に更新する。これによりreaderは更新途中または表示検証に失敗したreleaseを公開対象として選ばない。
+`current.json`とreleaseごとの`manifest.json`は同じ`ArtifactReleasePointerDocument`を使い、schema version、release ID、artifact prefix、publisher commit、Obsidian source commit、RFC 3339 UTCの生成時刻を保持する。workflowはrepository単位のconcurrency groupで公開runを直列化し、実行中runをcancelしない。`site/`のuploadとobject数検証を終え、release prefixを直接読むbrowser E2Eが成功してから`current.json`を最後に更新する。これによりreaderは更新途中または表示検証に失敗したreleaseを公開対象として選ばず、並行runの完了順によって公開pointerが古いreleaseへ戻ることも防ぐ。
 
 ```mermaid
 flowchart TB
