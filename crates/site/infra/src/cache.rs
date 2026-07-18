@@ -19,19 +19,25 @@ pub struct CachingArtifactReader {
 }
 
 struct CachedSnapshot {
-    loaded_at: Instant,
+    checked_at: Instant,
     snapshot: DynArtifactSnapshot,
 }
 
 impl CachedSnapshot {
     fn is_fresh(&self, now: Instant, ttl: Duration) -> bool {
-        now.duration_since(self.loaded_at) < ttl
+        now.duration_since(self.checked_at) < ttl
     }
 
     fn has_same_identity(&self, candidate: &DynArtifactSnapshot) -> bool {
         self.snapshot
             .cache_identity()
             .is_some_and(|identity| Some(identity) == candidate.cache_identity())
+    }
+
+    fn immutable_fallback(&mut self, checked_at: Instant) -> Option<(String, DynArtifactSnapshot)> {
+        let identity = self.snapshot.cache_identity()?.to_string();
+        self.checked_at = checked_at;
+        Some((identity, Arc::clone(&self.snapshot)))
     }
 }
 
@@ -59,17 +65,41 @@ impl ArtifactReader for CachingArtifactReader {
             return Ok(Arc::clone(&cached.snapshot));
         }
 
-        let inner_snapshot = self.inner.snapshot().await?;
+        let inner_snapshot = match self.inner.snapshot().await {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                if let Some((identity, snapshot)) = cached
+                    .as_mut()
+                    .and_then(|cached| cached.immutable_fallback(Instant::now()))
+                {
+                    eprintln!(
+                        "Artifact snapshot refresh failed; serving stale release {identity}: {error}"
+                    );
+                    return Ok(snapshot);
+                }
+                return Err(error);
+            }
+        };
         if let Some(cached) = cached.as_mut()
             && cached.has_same_identity(&inner_snapshot)
         {
-            cached.loaded_at = Instant::now();
+            cached.checked_at = Instant::now();
             return Ok(Arc::clone(&cached.snapshot));
+        }
+        if inner_snapshot.cache_identity().is_none()
+            && let Some((identity, snapshot)) = cached
+                .as_mut()
+                .and_then(|cached| cached.immutable_fallback(Instant::now()))
+        {
+            eprintln!(
+                "Artifact snapshot refresh lost current release; serving stale release {identity}"
+            );
+            return Ok(snapshot);
         }
 
         let snapshot: DynArtifactSnapshot = Arc::new(CachingArtifactSnapshot::new(inner_snapshot));
         *cached = Some(CachedSnapshot {
-            loaded_at: Instant::now(),
+            checked_at: Instant::now(),
             snapshot: Arc::clone(&snapshot),
         });
         Ok(snapshot)
@@ -194,7 +224,10 @@ mod tests {
     use super::*;
     use crate::InfraError;
     use domain::CategoryMetadataDocument;
+    use std::collections::VecDeque;
+    use std::sync::Mutex as StdMutex;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::time::UNIX_EPOCH;
 
     struct CountingReader {
         snapshot_calls: Arc<AtomicUsize>,
@@ -222,6 +255,44 @@ mod tests {
         fail_next_article_read: Arc<AtomicBool>,
         cache_identity: Option<&'static str>,
         last_modified: Option<SystemTime>,
+    }
+
+    #[derive(Clone, Copy)]
+    enum SnapshotOutcome {
+        Success(Option<&'static str>),
+        Failure,
+    }
+
+    struct SequencedReader {
+        outcomes: StdMutex<VecDeque<SnapshotOutcome>>,
+        snapshot_calls: Arc<AtomicUsize>,
+        article_reads: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl ArtifactReader for SequencedReader {
+        async fn snapshot(&self) -> Result<DynArtifactSnapshot> {
+            self.snapshot_calls.fetch_add(1, Ordering::SeqCst);
+            let outcome = self
+                .outcomes
+                .lock()
+                .unwrap()
+                .pop_front()
+                .expect("test snapshot outcome");
+
+            match outcome {
+                SnapshotOutcome::Success(cache_identity) => Ok(Arc::new(CountingSnapshot {
+                    article_reads: Arc::clone(&self.article_reads),
+                    fail_next_article_read: Arc::new(AtomicBool::new(false)),
+                    cache_identity,
+                    last_modified: cache_identity
+                        .map(|_| UNIX_EPOCH + Duration::from_secs(1_700_000_000)),
+                })),
+                SnapshotOutcome::Failure => {
+                    Err(InfraError::Io(std::io::Error::other("refresh failed")))
+                }
+            }
+        }
     }
 
     #[async_trait]
@@ -293,6 +364,24 @@ mod tests {
         });
         (
             CachingArtifactReader::new(inner, Duration::from_secs(60)),
+            snapshot_calls,
+            article_reads,
+        )
+    }
+
+    fn sequenced_reader(
+        outcomes: impl IntoIterator<Item = SnapshotOutcome>,
+        snapshot_ttl: Duration,
+    ) -> (CachingArtifactReader, Arc<AtomicUsize>, Arc<AtomicUsize>) {
+        let snapshot_calls = Arc::new(AtomicUsize::new(0));
+        let article_reads = Arc::new(AtomicUsize::new(0));
+        let inner: DynArtifactReader = Arc::new(SequencedReader {
+            outcomes: StdMutex::new(outcomes.into_iter().collect()),
+            snapshot_calls: Arc::clone(&snapshot_calls),
+            article_reads: Arc::clone(&article_reads),
+        });
+        (
+            CachingArtifactReader::new(inner, snapshot_ttl),
             snapshot_calls,
             article_reads,
         )
@@ -386,14 +475,14 @@ mod tests {
     async fn snapshot_expires_at_ttl_boundary() {
         let (reader, snapshot_calls, _) = counting_reader(false);
         let snapshot = reader.snapshot().await.unwrap();
-        let loaded_at = Instant::now();
+        let checked_at = Instant::now();
         let cached = CachedSnapshot {
-            loaded_at,
+            checked_at,
             snapshot,
         };
 
-        assert!(cached.is_fresh(loaded_at, Duration::from_secs(5)));
-        assert!(!cached.is_fresh(loaded_at + Duration::from_secs(5), Duration::from_secs(5)));
+        assert!(cached.is_fresh(checked_at, Duration::from_secs(5)));
+        assert!(!cached.is_fresh(checked_at + Duration::from_secs(5), Duration::from_secs(5)));
         assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
     }
 
@@ -430,6 +519,99 @@ mod tests {
         assert_eq!(article_reads.load(Ordering::SeqCst), 1);
     }
 
+    #[tokio::test]
+    async fn refresh_failure_serves_stale_immutable_release_until_next_ttl() {
+        let ttl = Duration::from_millis(10);
+        let (reader, snapshot_calls, article_reads) = sequenced_reader(
+            [
+                SnapshotOutcome::Success(Some("release-1")),
+                SnapshotOutcome::Failure,
+                SnapshotOutcome::Success(Some("release-1")),
+            ],
+            ttl,
+        );
+
+        let first = reader.snapshot().await.unwrap();
+        first.read_article_index().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(15)).await;
+        let stale = reader.snapshot().await.unwrap();
+        stale.read_article_index().await.unwrap();
+        let before_next_ttl = reader.snapshot().await.unwrap();
+
+        assert!(Arc::ptr_eq(&first, &stale));
+        assert!(Arc::ptr_eq(&first, &before_next_ttl));
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(article_reads.load(Ordering::SeqCst), 1);
+
+        tokio::time::sleep(Duration::from_millis(15)).await;
+        let refreshed = reader.snapshot().await.unwrap();
+
+        assert!(Arc::ptr_eq(&first, &refreshed));
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn refresh_failure_without_immutable_release_returns_error() {
+        let ttl = Duration::from_millis(10);
+        let (initial_failure, _, _) =
+            sequenced_reader([SnapshotOutcome::Failure], Duration::from_secs(60));
+
+        assert!(initial_failure.snapshot().await.is_err());
+
+        let (legacy_reader, snapshot_calls, _) = sequenced_reader(
+            [SnapshotOutcome::Success(None), SnapshotOutcome::Failure],
+            ttl,
+        );
+        legacy_reader.snapshot().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(15)).await;
+
+        assert!(legacy_reader.snapshot().await.is_err());
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn immutable_release_does_not_downgrade_to_legacy_root() {
+        let ttl = Duration::from_millis(10);
+        let (reader, snapshot_calls, _) = sequenced_reader(
+            [
+                SnapshotOutcome::Success(Some("release-1")),
+                SnapshotOutcome::Success(None),
+                SnapshotOutcome::Success(Some("release-2")),
+            ],
+            ttl,
+        );
+
+        let release_1 = reader.snapshot().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(15)).await;
+        let stale = reader.snapshot().await.unwrap();
+
+        assert!(Arc::ptr_eq(&release_1, &stale));
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 2);
+
+        tokio::time::sleep(Duration::from_millis(15)).await;
+        let release_2 = reader.snapshot().await.unwrap();
+
+        assert!(!Arc::ptr_eq(&release_1, &release_2));
+        assert_eq!(release_2.cache_identity(), Some("release-2"));
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn zero_ttl_does_not_serve_stale_release() {
+        let (reader, snapshot_calls, _) = sequenced_reader(
+            [
+                SnapshotOutcome::Success(Some("release-1")),
+                SnapshotOutcome::Failure,
+            ],
+            Duration::ZERO,
+        );
+
+        reader.snapshot().await.unwrap();
+
+        assert!(reader.snapshot().await.is_err());
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 2);
+    }
+
     #[test]
     fn missing_or_different_release_identity_does_not_reuse_cache() {
         let article_reads = Arc::new(AtomicUsize::new(0));
@@ -442,14 +624,14 @@ mod tests {
             })
         };
         let cached = CachedSnapshot {
-            loaded_at: Instant::now(),
+            checked_at: Instant::now(),
             snapshot: snapshot(Some("release-1")),
         };
 
         assert!(!cached.has_same_identity(&snapshot(Some("release-2"))));
 
         let legacy = CachedSnapshot {
-            loaded_at: Instant::now(),
+            checked_at: Instant::now(),
             snapshot: snapshot(None),
         };
         assert!(!legacy.has_same_identity(&snapshot(None)));
