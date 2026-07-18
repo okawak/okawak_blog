@@ -315,7 +315,7 @@ IAM Roles Anywhereだけで安定配信できた後、現在のlegacy access key
 - 未cache記事を読める
 - reboot後も成功
 - CloudTrailでRoles Anywhere `CreateSession`が継続
-- static credential timerが停止済み
+- 旧cronが停止済みで、新しいstatic credential timerが存在しない
 
 問題があれば旧keyを`Active`へ戻し、applicationをrollbackします。
 

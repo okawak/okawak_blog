@@ -15,7 +15,7 @@
   - expected plan、state機密性、rollback
 - [VPS runtime service](../../service/README.md)
   - 現行systemd service
-  - static credential反映timer
+  - static credentialの初回bootstrap
   - health / readinessとartifact cache
 
 ## Terraformの扱い
