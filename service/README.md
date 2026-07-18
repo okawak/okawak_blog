@@ -2,53 +2,49 @@
 
 本番のLeptos SSR serverは`okawak_blog.service`で起動し、S3 artifact readerを使います。
 
-AWS側のrotation停止、IAM Roles Anywhereのresource準備、VPS切替、rollback、旧key撤去は[docs/operations/aws-runtime-auth-migration.md](../docs/operations/aws-runtime-auth-migration.md)を一次手順とします。この文書のstatic credential fileは移行中だけのrollback手段です。
+AWS側のrotation停止、IAM Roles Anywhereのresource準備、VPS切替、rollback、旧key撤去は[docs/operations/aws-runtime-auth-migration.md](../docs/operations/aws-runtime-auth-migration.md)を一次手順とします。
 
 ## AWS credentials
 
-runtime専用の共有credentials fileは次の場所へ置きます。
+production serviceはIAM Roles Anywhereの`credential_process`を使います。
+
+```text
+/usr/local/bin/aws_signing_helper
+/etc/okawak_blog/aws/config
+/etc/okawak_blog/aws/client-cert.pem
+/etc/okawak_blog/aws/client-key.pem
+```
+
+systemd unitは次を明示します。
+
+```text
+AWS_PROFILE=blog-s3
+AWS_CONFIG_FILE=/etc/okawak_blog/aws/config
+AWS_EC2_METADATA_DISABLED=true
+```
+
+`ProtectHome=true`を維持するため、serviceは`~/.aws`へ依存しません。AWS SDKはhelperから期限付きrole credentialを取得し、期限前に再取得します。temporary credentialをfileへ書くtimerやapplication独自のrefresh処理は導入しません。
+
+helper、certificate、private key、AWS configの作成・配置・単体検証は移行runbookの[Phase 2](../docs/operations/aws-runtime-auth-migration.md#phase-2-管理端末からvpsへcredential-helperとcertificateを配置)に従います。
+
+## Rollback用static credential
+
+移行中に作成した次のfileは、IAM Roles Anywhereの安定観測が終わるまでrollback用として維持します。
 
 ```text
 /var/lib/okawak_blog/aws/credentials
 ```
 
-このdirectoryのrootはsystemdの`StateDirectory=okawak_blog`が作成し、unitは`AWS_SHARED_CREDENTIALS_FILE`でfileを明示します。`ProtectHome=true`を維持するため、serviceは`~/.aws/credentials`を読みません。
+production unitはこのfileを参照しません。rollback時だけunitを旧設定へ戻し、次を復元します。
 
-`credentials-bootstrap`は、現在S3読取に成功しているhome配下の`blog-s3` profileを、上記runtime fileへ一度だけ複製します。AWS CLIのcredential resolutionを使い、credential値を標準出力へ表示しません。既存runtime fileの内容が異なる場合は上書きを拒否します。
-
-このbootstrapはcredentialの取得・rotation・定期更新を行いません。S3 readerへSecrets Manager権限や管理権限を追加せず、IAM Roles Anywhereへ切り替えるまで現在のkeyをrollback用に維持します。現行のrotation Lambdaは手動実行しないでください。
-
-前提:
-
-- `okawak` userの`blog-s3` profileでS3読取に成功する
-- AWS CLIが導入済み
-- `okawak` userがruntime directoryを作成できる。必要な場合だけ、scriptがそのdirectoryの作成に`sudo`を使う
-
-bootstrap前にidentityとS3読取を確認します。出力されるARNだけを比較し、credential値は表示・記録しないでください。
-
-```bash
-AWS_PROFILE=blog-s3 aws sts get-caller-identity
-AWS_PROFILE=blog-s3 aws s3api head-object \
-  --bucket okawak-blog-resources-bucket \
-  --key current.json
+```text
+Environment=AWS_SHARED_CREDENTIALS_FILE=/var/lib/okawak_blog/aws/credentials
 ```
 
-Secrets Managerのmetadata確認はVPSではなく、管理端末のadmin identityで行います。`oci-blog-reader`の`DescribeSecret`が`AccessDenied`になる場合、その権限を追加しません。
-
-### 2025年版cronからの移行
-
-home配下のcredentialsから移行する初回だけ、serviceのdeploy前にruntime credentialsを配置します。
+`credentials-bootstrap`は、home配下の長期`blog-s3` profileをruntime fileへ一度だけ複製する移行・rollback専用taskです。credential値を標準出力へ表示せず、既存fileの内容が異なる場合は上書きを拒否します。
 
 ```bash
 mise run credentials-bootstrap
-mise run production-deploy
-curl --fail http://127.0.0.1:8008/api/ready
-```
-
-新serviceのreadiness、home、実記事を確認してから`crontab -e`で次の旧entryだけを削除します。`crontab -r`は他のentryも削除するため使いません。repositoryから新しいcredential refresh timerは導入しません。
-
-```text
-5 4 * * * /usr/local/bin/update_aws_creds.sh
 ```
 
 bootstrap元profileは`mise.toml`の`OKAWAK_BLOG_BOOTSTRAP_SOURCE_PROFILE=blog-s3`を既定値とします。これは手動taskだけの設定であり、systemd serviceへは渡しません。別の検証用pathを使う場合だけ、次のenvを指定できます。
@@ -58,7 +54,7 @@ OKAWAK_BLOG_RUNTIME_CREDENTIAL_FILE=/tmp/okawak-blog-runtime/aws/credentials \
   ./service/bootstrap_aws_credentials.sh
 ```
 
-override先にもruntime専用directoryを指定してください。スクリプトは既存directoryのmodeやownerを変更せず、既存directoryが実行userの所有で書き込み可能な場合だけ利用します。`/tmp/credentials`のように共有directoryを直接親にするpathは拒否します。
+override先にもruntime専用directoryを指定してください。スクリプトは既存directoryのmodeやownerを変更せず、既存directoryが実行userの所有で書き込み可能な場合だけ利用します。`/tmp/credentials`のように共有directoryを直接親にするpathは拒否します。rollbackの全手順は移行runbookの[Rollback](../docs/operations/aws-runtime-auth-migration.md#rollback)を参照してください。
 
 ## Runtime probes
 

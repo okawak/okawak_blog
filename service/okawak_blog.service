@@ -16,7 +16,8 @@ TimeoutStopSec=30
 
 Environment=AWS_PROFILE=blog-s3
 Environment=AWS_REGION=ap-northeast-1
-Environment=AWS_SHARED_CREDENTIALS_FILE=/var/lib/okawak_blog/aws/credentials
+Environment=AWS_CONFIG_FILE=/etc/okawak_blog/aws/config
+Environment=AWS_EC2_METADATA_DISABLED=true
 Environment=OKAWAK_BLOG_ARTIFACT_SOURCE=s3
 Environment=OKAWAK_BLOG_ARTIFACT_BUCKET=okawak-blog-resources-bucket
 Environment=OKAWAK_BLOG_ARTIFACT_CACHE_TTL_SECONDS=5
