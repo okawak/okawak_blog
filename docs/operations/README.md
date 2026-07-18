@@ -15,7 +15,8 @@
   - expected plan、state機密性、rollback
 - [VPS runtime service](../../service/README.md)
   - 現行systemd service
-  - static credentialの初回bootstrap
+  - IAM Roles Anywhereのruntime設定
+  - static credentialのrollback bootstrap
   - health / readinessとartifact cache
 
 ## Terraformの扱い

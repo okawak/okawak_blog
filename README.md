@@ -178,10 +178,11 @@ category: "tech"
 - アプリケーション本体は単一バイナリとして扱う
 - SSR サーバーは S3 上の成果物を読み、必要に応じて静的ファイルも配信する
 - `/api/health` はprocess liveness、`/api/ready` はartifact readerのreadinessとして分ける
-- runtime用AWS credentialsは`/var/lib/okawak_blog/aws/credentials`へ置き、home directoryには依存しない
-- IAM Roles Anywhereへの切替までは、既存のS3 reader profileをruntime用fileへ一度だけbootstrapしてrollback手段とする
+- runtimeのAWS認証はIAM Roles AnywhereのX.509 identityと`credential_process`を使い、期限付きrole credentialを取得する
+- helper、AWS config、VPS用certificateはroot管理pathへ置き、home directoryには依存しない
+- 移行中にbootstrapした`/var/lib/okawak_blog/aws/credentials`は安定観測が終わるまでrollback用として維持する
 
-VPS上のservice設定とstatic credential bootstrapは[service/README.md](./service/README.md)、IAM Roles Anywhereへの移行は[移行runbook](./docs/operations/aws-runtime-auth-migration.md)、ownerが実装するTerraform変更は[Terraform変更計画](./docs/operations/aws-runtime-auth-terraform-plan.md)を参照してください。
+VPS上のservice設定とrollback credentialは[service/README.md](./service/README.md)、IAM Roles Anywhereへの移行は[移行runbook](./docs/operations/aws-runtime-auth-migration.md)、ownerが実装するTerraform変更は[Terraform変更計画](./docs/operations/aws-runtime-auth-terraform-plan.md)を参照してください。
 
 ## 開発原則
 
@@ -254,7 +255,7 @@ mise run pull
 mise run build-project
 mise run full-deploy
 mise run production-deploy
-mise run credentials-bootstrap
+mise run credentials-bootstrap # migration / rollback only
 mise run status
 mise run logs
 mise run logs-recent
