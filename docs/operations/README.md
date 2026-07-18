@@ -9,6 +9,10 @@
   - IAM Roles AnywhereのAWS側準備
   - VPS、Rust AWS SDK、systemdの切替
   - 検証、rollback、旧credential撤去
+- [AWS runtime認証のTerraform変更計画](./aws-runtime-auth-terraform-plan.md)
+  - repository ownerが実装するresourceとfile構成
+  - 並行追加とlegacy撤去の2段階apply
+  - expected plan、state機密性、rollback
 - [VPS runtime service](../../service/README.md)
   - 現行systemd service
   - static credential反映timer
@@ -16,6 +20,6 @@
 
 ## Terraformの扱い
 
-`terraform/`は参照専用です。このrepositoryからTerraform commandを実行せず、fileも変更しません。AWS Consoleまたは権限を持つ管理端末で行った変更はTerraform stateへ反映されないため、移行中および移行後にこのrepositoryのTerraformを`apply`しないでください。特に現行のSecrets Manager rotation、IAM user、access keyは再作成・再有効化される可能性があります。
+Codexを含む通常のrepository作業では`terraform/`をread-onlyとし、Terraform commandも実行しません。一方、認証基盤の最終的なdesired stateはTerraformで管理するのが自然なため、repository ownerが[変更計画](./aws-runtime-auth-terraform-plan.md)に従ってHCLとstateを更新します。
 
-AWS側の管理方法を将来変更する場合は、Terraform read-only方針自体を先に見直し、別Issueでstate移行とimport / removeの計画を立てます。
+ownerのTerraform変更が準備・reviewされるまでは、現行HCLを`apply`しません。手動でrotationを停止した後に旧HCLをapplyすると、危険なrotationが再有効化される可能性があります。
