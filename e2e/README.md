@@ -60,6 +60,6 @@ credentialには対象keyへの`s3:GetObject`だけを付与したread-only prof
 ## CIでの実行
 
 - `.github/workflows/ci.yml`はpull requestとmain pushで固定fixtureの`bun run test`を実行し、AWS credentialやprivate submoduleなしで回帰を検出します。
-- `.github/workflows/upload.yml`は生成物をimmutable release prefixへuploadした後、そのprefixを`test-e2e-s3`で直接検証します。成功した場合だけ`current.json`を切り替えます。
+- `.github/workflows/upload.yml`は`main`から`workflow_dispatch`で手動実行します。生成物をimmutable release prefixへuploadした後、そのprefixを`test-e2e-s3`で直接検証し、成功した場合だけ`current.json`を切り替えます。
 
 S3 smoke testはOIDCで取得したupload workflowの一時credentialを再利用し、pull requestへAWS credentialを渡しません。失敗時のPlaywright traceはGitHub Actions artifactに7日間保存されます。

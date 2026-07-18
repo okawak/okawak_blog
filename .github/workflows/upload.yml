@@ -1,10 +1,12 @@
-name: Sync Obsidian to S3
+name: Publish Obsidian to S3
 
 on:
-  schedule:
-    # 毎週月曜日の00:00 JSTに実行
-    - cron: "0 15 * * 0"
   workflow_dispatch:
+
+concurrency:
+  group: artifact-publication-${{ github.repository }}
+  queue: max
+  cancel-in-progress: false
 
 env:
   RUST_BACKTRACE: 1
@@ -18,6 +20,14 @@ jobs:
       contents: read
 
     steps:
+      - name: Validate publication ref
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Artifact publication must run from main (got ${GITHUB_REF})."
+            exit 1
+          fi
+
       - name: Get App Token
         uses: actions/create-github-app-token@v3
         id: app-token
@@ -172,6 +182,16 @@ jobs:
           path: e2e/test-results/s3/
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Verify publication is based on latest main
+        run: |
+          set -euo pipefail
+          latest_main_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
+
+          if [ "$GITHUB_SHA" != "$latest_main_sha" ]; then
+            echo "::error::Refusing to publish stale run ${GITHUB_SHA}; latest main is ${latest_main_sha}."
+            exit 1
+          fi
 
       - name: Switch release pointer
         run: |
