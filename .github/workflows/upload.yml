@@ -1,13 +1,11 @@
-name: Sync Obsidian to S3
+name: Publish Obsidian to S3
 
 on:
-  schedule:
-    # 毎週月曜日の00:00 JSTに実行
-    - cron: "0 15 * * 0"
   workflow_dispatch:
 
 concurrency:
   group: artifact-publication-${{ github.repository }}
+  queue: max
   cancel-in-progress: false
 
 env:
@@ -22,6 +20,14 @@ jobs:
       contents: read
 
     steps:
+      - name: Validate publication ref
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Artifact publication must run from main (got ${GITHUB_REF})."
+            exit 1
+          fi
+
       - name: Get App Token
         uses: actions/create-github-app-token@v3
         id: app-token
