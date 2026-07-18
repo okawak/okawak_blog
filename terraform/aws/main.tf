@@ -33,3 +33,12 @@ module "s3_image_uploader" {
   uploader_name = var.image_uploader_user_name
   force_destroy = true # terraform destroy 時に中身も削除する
 }
+
+module "runtime_identity" {
+  source = "./runtime_identity"
+
+  name                   = "okawak-blog-runtime"
+  bucket_arn             = module.s3.bucket_arn
+  ca_certificate_pem     = file(var.roles_anywhere_ca_certificate_path)
+  certificate_subject_cn = var.roles_anywhere_certificate_subject_cn
+}

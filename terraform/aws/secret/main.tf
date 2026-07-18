@@ -83,15 +83,6 @@ resource "aws_lambda_permission" "allow_secretsmanager" {
   source_arn    = aws_secretsmanager_secret.secret.arn
 }
 
-resource "aws_secretsmanager_secret_rotation" "rotation" {
-  secret_id           = aws_secretsmanager_secret.secret.id
-  rotation_lambda_arn = aws_lambda_function.rotate.arn
-  rotation_rules {
-    automatically_after_days = var.rotation_interval
-  }
-  depends_on = [aws_lambda_permission.allow_secretsmanager]
-}
-
 data "aws_iam_policy_document" "secret_policy" {
   statement {
     sid = "AllowReaderUser"

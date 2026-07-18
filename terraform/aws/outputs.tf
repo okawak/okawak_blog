@@ -38,3 +38,15 @@ output "image_uploader_access_key" {
   value     = module.s3_image_uploader.secret_access_key
   sensitive = true
 }
+
+output "roles_anywhere_trust_anchor_arn" {
+  value = module.runtime_identity.trust_anchor_arn
+}
+
+output "roles_anywhere_profile_arn" {
+  value = module.runtime_identity.profile_arn
+}
+
+output "roles_anywhere_role_arn" {
+  value = module.runtime_identity.role_arn
+}
