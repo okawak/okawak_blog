@@ -183,6 +183,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Verify publication is based on latest main
+        run: |
+          set -euo pipefail
+          latest_main_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
+
+          if [ "$GITHUB_SHA" != "$latest_main_sha" ]; then
+            echo "::error::Refusing to publish stale run ${GITHUB_SHA}; latest main is ${latest_main_sha}."
+            exit 1
+          fi
+
       - name: Switch release pointer
         run: |
           set -euo pipefail
