@@ -181,7 +181,7 @@ category: "tech"
 - runtime用AWS credentialsは`/var/lib/okawak_blog/aws/credentials`へ置き、home directoryには依存しない
 - systemd timerはSecrets Managerの値が変わった場合だけruntime credentialを更新し、service再起動後のreadinessを確認する
 
-VPS上のservice設定とcredential更新手順は[service/README.md](./service/README.md)を参照してください。
+VPS上のservice設定と暫定credential更新は[service/README.md](./service/README.md)、IAM Roles Anywhereへの移行は[docs/operations/aws-runtime-auth-migration.md](./docs/operations/aws-runtime-auth-migration.md)を参照してください。
 
 ## 開発原則
 

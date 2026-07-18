@@ -2,6 +2,8 @@
 
 本番のLeptos SSR serverは`okawak_blog.service`で起動し、S3 artifact readerを使います。
 
+AWS側のrotation停止、IAM Roles Anywhereのresource準備、VPS切替、rollback、旧key撤去は[docs/operations/aws-runtime-auth-migration.md](../docs/operations/aws-runtime-auth-migration.md)を一次手順とします。この文書のstatic credential timerは移行中の暫定運用です。
+
 ## AWS credentials
 
 runtime専用の共有credentials fileは次の場所へ置きます。
