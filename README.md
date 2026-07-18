@@ -179,8 +179,9 @@ category: "tech"
 - SSR サーバーは S3 上の成果物を読み、必要に応じて静的ファイルも配信する
 - `/api/health` はprocess liveness、`/api/ready` はartifact readerのreadinessとして分ける
 - runtime用AWS credentialsは`/var/lib/okawak_blog/aws/credentials`へ置き、home directoryには依存しない
+- systemd timerはSecrets Managerの値が変わった場合だけruntime credentialを更新し、service再起動後のreadinessを確認する
 
-VPS上のservice設定とcredential更新手順は[service/README.md](./service/README.md)を参照してください。
+VPS上のservice設定と暫定credential更新は[service/README.md](./service/README.md)、IAM Roles Anywhereへの移行は[移行runbook](./docs/operations/aws-runtime-auth-migration.md)、ownerが実装するTerraform変更は[Terraform変更計画](./docs/operations/aws-runtime-auth-terraform-plan.md)を参照してください。
 
 ## 開発原則
 
@@ -188,7 +189,7 @@ VPS上のservice設定とcredential更新手順は[service/README.md](./service/
 - 大きめの実装に入る前に GitHub Issue に実装方針とタスク分解を書く
 - 実装中の進捗や判断は GitHub Issue / PR に残し、恒久的な知識だけを `docs/architecture/` に昇格する
 - 長期的に参照する設計判断は `docs/architecture/` に直接反映する
-- `terraform/` は読み取り専用とし、編集やコマンド実行を行わない
+- `terraform/`は通常のagent作業ではread-onlyとする。repository ownerが明示的に行うinfra変更は、専用の変更計画とplan reviewに従う
 
 ## 開発コマンド
 
@@ -253,6 +254,9 @@ mise run pull
 mise run build-project
 mise run full-deploy
 mise run production-deploy
+mise run credentials-refresh-install
+mise run credentials-refresh-status
+mise run credentials-refresh-logs
 mise run status
 mise run logs
 mise run logs-recent

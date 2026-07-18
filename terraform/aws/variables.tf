@@ -39,3 +39,13 @@ variable "image_uploader_user_name" {
   type        = string
   default     = "obsidian-image-uploader"
 }
+
+variable "roles_anywhere_ca_certificate_path" {
+  description = "Path to the public external CA certificate bundle"
+  type        = string
+}
+
+variable "roles_anywhere_certificate_subject_cn" {
+  type    = string
+  default = "okawak-blog-vps"
+}

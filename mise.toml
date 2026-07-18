@@ -7,6 +7,11 @@ bun = "1.3.14"
 PROJECT_NAME = "okawak_blog"
 SERVICE_NAME = "okawak_blog"
 SERVICE_FILE = "service/okawak_blog.service"
+CREDENTIAL_UPDATE_SCRIPT = "service/update_aws_creds.sh"
+CREDENTIAL_REFRESH_SERVICE_FILE = "service/okawak_blog-aws-credentials.service"
+CREDENTIAL_REFRESH_TIMER_FILE = "service/okawak_blog-aws-credentials.timer"
+CREDENTIAL_REFRESH_SERVICE_NAME = "okawak_blog-aws-credentials.service"
+CREDENTIAL_REFRESH_TIMER_NAME = "okawak_blog-aws-credentials.timer"
 NGINX_CONFIG = "service/blog_nginx.conf"
 BIN_DIR = "./bin"
 TARGET_BIN = "./target/release/server"
@@ -182,6 +187,42 @@ run = "sudo journalctl -u $SERVICE_NAME --lines=50"
 [tasks.restart]
 description = "Restart the systemd service"
 run = "sudo systemctl restart $SERVICE_NAME"
+
+[tasks.credentials-bootstrap]
+description = "Populate the runtime credential file before the first hardened service deploy"
+run = "OKAWAK_BLOG_SKIP_RESTART=1 $CREDENTIAL_UPDATE_SCRIPT"
+
+[tasks.credentials-refresh-install]
+description = "Install and enable the idempotent AWS credential refresh timer"
+run = '''
+sudo install -m 755 "$CREDENTIAL_UPDATE_SCRIPT" /usr/local/bin/update_aws_creds.sh
+sudo install -m 644 "$CREDENTIAL_REFRESH_SERVICE_FILE" "/etc/systemd/system/$CREDENTIAL_REFRESH_SERVICE_NAME"
+sudo install -m 644 "$CREDENTIAL_REFRESH_TIMER_FILE" "/etc/systemd/system/$CREDENTIAL_REFRESH_TIMER_NAME"
+sudo systemctl daemon-reload
+sudo systemctl enable --now "$CREDENTIAL_REFRESH_TIMER_NAME"
+'''
+
+[tasks.credentials-refresh]
+description = "Run the AWS credential refresh immediately through systemd"
+run = '''
+sudo systemctl start "$CREDENTIAL_REFRESH_SERVICE_NAME"
+sudo systemctl show "$CREDENTIAL_REFRESH_SERVICE_NAME" \
+  --property=Result \
+  --property=ExecMainStatus \
+  --no-pager
+'''
+
+[tasks.credentials-refresh-status]
+description = "Show the AWS credential refresh timer and recent service status"
+run = '''
+sudo systemctl status "$CREDENTIAL_REFRESH_TIMER_NAME" --no-pager
+sudo systemctl status "$CREDENTIAL_REFRESH_SERVICE_NAME" --no-pager || true
+sudo systemctl list-timers "$CREDENTIAL_REFRESH_TIMER_NAME" --no-pager
+'''
+
+[tasks.credentials-refresh-logs]
+description = "Show recent AWS credential refresh logs"
+run = "sudo journalctl -u $CREDENTIAL_REFRESH_SERVICE_NAME --lines=50 --no-pager"
 
 [tasks.full-deploy]
 description = "Run the full deploy flow"
