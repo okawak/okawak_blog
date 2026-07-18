@@ -40,6 +40,7 @@ jobs:
         run: |
           bash -n service/update_aws_creds.sh
           bash service/tests/update_aws_creds_test.sh
+          bash service/tests/systemd_units_test.sh
 
       - name: Cache Cargo dependencies
         uses: actions/cache@v6

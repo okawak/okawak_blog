@@ -12,27 +12,58 @@ runtime専用の共有credentials fileは次の場所へ置きます。
 
 このdirectoryのrootはsystemdの`StateDirectory=okawak_blog`が作成し、unitは`AWS_SHARED_CREDENTIALS_FILE`でfileを明示します。`ProtectHome=true`を維持するため、serviceは`~/.aws/credentials`を読みません。
 
-credential更新スクリプトは、`okawak` userの通常環境にある`secret-get` profileでAWS Secrets Managerを読み、runtime専用fileを同一directory内でatomicに置き換えます。
+credential更新スクリプトは、`okawak` userの通常環境にある`secret-get` profileでAWS Secrets Managerを読みます。現在のruntime credentialと同じならfileとserviceに触れず、変更された場合だけatomicに置き換えてserviceを再起動します。再起動後は`/api/ready`を確認し、失敗時は旧credentialを戻して再起動を試みた上で、systemd serviceの失敗として記録します。
+
+この処理はSecrets Managerに保存済みのcredentialをruntimeへ反映するもので、IAM access keyのrotation自体ではありません。`secret-get`と`blog-s3`が同じIAM userである場合、そのuserの旧keyを削除してから新keyを取得する自己rotationは成立しません。AWS側の安全なrotation基盤が整うまで、現行のrotation Lambdaを手動実行しないでください。
 
 前提:
 
 - `okawak` userが`secret-get` profileを利用できる
 - AWS CLIと`jq`が導入済み
 - `okawak` userがruntime directory作成とservice再起動に必要な`sudo`権限を持つ
+- `/usr/bin/systemctl restart okawak_blog`だけをpasswordなしで実行できるよう、`sudoers`を最小権限で設定する
+
+`secret-get`のbootstrap identityを確認します。出力されるARNだけを比較し、credential値は表示・記録しないでください。
+
+```bash
+AWS_PROFILE=secret-get aws sts get-caller-identity
+AWS_PROFILE=blog-s3 aws sts get-caller-identity
+```
+
+両者が同じIAM userなら、現行キーを削除するrotationは無効のまま維持します。長期的にはIAM Roles Anywhereと`credential_process`など、長期AWS access keyをbootstrapに使わない方式へ移行します。
+
+service再起動用の`sudoers`は`visudo`で作成します。`systemctl`のpathはVPS上の`command -v systemctl`で確認してください。
+
+```text
+okawak ALL=(root) NOPASSWD: /usr/bin/systemctl restart okawak_blog
+```
+
+### 2025年版cronからの移行
 
 home配下のcredentialsから移行する初回だけ、serviceのdeploy前にruntime credentialsを配置します。
 
 ```bash
-OKAWAK_BLOG_SKIP_RESTART=1 ./service/update_aws_creds.sh
+mise run credentials-bootstrap
 mise run production-deploy
 curl --fail http://127.0.0.1:8008/api/ready
+mise run credentials-refresh-install
+mise run credentials-refresh
 ```
 
-以降のcredential rotationでは、スクリプトがfileを置き換えてserviceを再起動します。
+新timerの動作を確認してから`crontab -e`で次の旧entryだけを削除します。`crontab -r`は他のentryも削除するため使いません。
+
+```text
+5 4 * * * /usr/local/bin/update_aws_creds.sh
+```
+
+timerは毎日4:05に実行し、VPSが停止していた場合は`Persistent=true`により次回起動後に補完します。状態とjournalはrootの`mise` taskで確認できます。
 
 ```bash
-./service/update_aws_creds.sh
+mise run credentials-refresh-status
+mise run credentials-refresh-logs
 ```
+
+`runtime credentials unchanged`は正常です。この場合はfile更新もservice再起動も行いません。`runtime credentials updated`の場合だけ、service再起動とreadiness確認が行われます。
 
 別の検証用pathへ書く場合だけ、次のenvを指定できます。
 

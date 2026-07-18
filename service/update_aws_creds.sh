@@ -6,6 +6,10 @@ SRC_PROFILE="secret-get"
 DST_PROFILE="blog-s3" # Leptos が使うプロファイル
 RUNTIME_CREDENTIAL_FILE="${OKAWAK_BLOG_RUNTIME_CREDENTIAL_FILE:-/var/lib/okawak_blog/aws/credentials}"
 RUNTIME_CREDENTIAL_DIR=$(dirname "$RUNTIME_CREDENTIAL_FILE")
+SERVICE_NAME="${OKAWAK_BLOG_SERVICE_NAME:-okawak_blog}"
+READINESS_URL="${OKAWAK_BLOG_READINESS_URL:-http://127.0.0.1:8008/api/ready}"
+READINESS_RETRIES="${OKAWAK_BLOG_READINESS_RETRIES:-10}"
+READINESS_RETRY_INTERVAL_SECONDS="${OKAWAK_BLOG_READINESS_RETRY_INTERVAL_SECONDS:-1}"
 SERVICE_USER=$(id -un)
 SERVICE_GROUP=$(id -gn)
 
@@ -39,6 +43,45 @@ prepare_runtime_credential_dir() {
   fi
 }
 
+check_readiness() {
+  local attempt
+
+  for ((attempt = 1; attempt <= READINESS_RETRIES; attempt++)); do
+    if curl --fail --silent --show-error --output /dev/null "$READINESS_URL"; then
+      return 0
+    fi
+    if [ "$attempt" -lt "$READINESS_RETRIES" ]; then
+      sleep "$READINESS_RETRY_INTERVAL_SECONDS"
+    fi
+  done
+
+  echo "Readiness check failed: $READINESS_URL" >&2
+  return 1
+}
+
+rollback_runtime_credential() {
+  local previous_file=$1
+
+  if [ -n "$previous_file" ]; then
+    mv -f "$previous_file" "$RUNTIME_CREDENTIAL_FILE"
+  else
+    rm -f "$RUNTIME_CREDENTIAL_FILE"
+  fi
+
+  if sudo -n systemctl restart "$SERVICE_NAME" && check_readiness; then
+    echo "Runtime credential refresh failed; previous credential restored." >&2
+  else
+    echo "Runtime credential refresh and rollback readiness both failed." >&2
+  fi
+}
+
+case "$READINESS_RETRIES" in
+  '' | *[!0-9]* | 0)
+    echo "OKAWAK_BLOG_READINESS_RETRIES must be a positive integer." >&2
+    exit 1
+    ;;
+esac
+
 # 1. 既存directoryの権限は変更せず、未作成のruntime専用directoryだけを作る
 prepare_runtime_credential_dir
 
@@ -60,12 +103,36 @@ aws_secret_access_key = $new_secret
 EOF
 
 chmod 600 "$tmp"
+
+if [ -f "$RUNTIME_CREDENTIAL_FILE" ] && cmp -s "$tmp" "$RUNTIME_CREDENTIAL_FILE"; then
+  chmod 600 "$RUNTIME_CREDENTIAL_FILE"
+  rm -f "$tmp"
+  trap - EXIT
+  echo "$(date '+%F %T') runtime credentials unchanged"
+  exit 0
+fi
+
+previous_file=""
+if [ -f "$RUNTIME_CREDENTIAL_FILE" ]; then
+  previous_file=$(mktemp "$RUNTIME_CREDENTIAL_DIR/.credentials.previous.XXXXXX")
+  cp "$RUNTIME_CREDENTIAL_FILE" "$previous_file"
+  chmod 600 "$previous_file"
+fi
+
 mv -f "$tmp" "$RUNTIME_CREDENTIAL_FILE"
 trap - EXIT
 
-# 4. 通常のrotationではLeptos serviceを再起動する。初回移行ではdeploy前に省略できる。
+# 4. credentialが変わった場合だけLeptos serviceを再起動し、S3 readinessを確認する。
+# 初回移行ではdeploy前に省略できる。
 if [ "${OKAWAK_BLOG_SKIP_RESTART:-0}" != "1" ]; then
-  sudo systemctl restart okawak_blog
+  if ! sudo -n systemctl restart "$SERVICE_NAME" || ! check_readiness; then
+    rollback_runtime_credential "$previous_file"
+    exit 1
+  fi
+fi
+
+if [ -n "$previous_file" ]; then
+  rm -f "$previous_file"
 fi
 
 echo "$(date '+%F %T') runtime credentials updated"
