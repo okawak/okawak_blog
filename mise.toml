@@ -102,7 +102,7 @@ run = "cargo clean"
 
 [tasks.build-project]
 description = "Build the integrated Leptos project for deployment"
-depends = ["check-deps"]
+depends = ["check-deps", "web-install"]
 run = "cargo leptos build -p server --release"
 
 [tasks.build-server]

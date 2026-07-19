@@ -205,7 +205,7 @@ mise install
 mise run versions-check
 ```
 
-共通実行tool（Bun、cargo-leptos、leptosfmt）は`mise.toml`をsource of truthとし、`mise.lock`にはmacOS arm64とGitHub Actions Linux x64の解決済みrelease assetを記録します。Rust toolchainは`rust-toolchain.toml`、Cargo / Bun依存は各manifestとlockfile、GitHub Actionsはworkflow内の最新major指定を正とします。
+共通実行tool（Bun、cargo-leptos、leptosfmt）は`mise.toml`をsource of truthとし、`mise.lock`にはmacOS arm64、GitHub Actions Linux x64、VPSが識別するLinux platform aliasの解決済みrelease assetを記録します。Rust toolchainは`rust-toolchain.toml`、Cargo / Bun依存は各manifestとlockfile、GitHub Actionsはworkflow内の最新major指定を正とします。
 
 web UIはRust/UI由来のprimitiveとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/site/web/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
 

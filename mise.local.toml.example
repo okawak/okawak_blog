@@ -1,0 +1,6 @@
+# Oracle Linux 9 VPS only.
+# Copy this file to mise.local.toml after installing cargo-leptos from source.
+
+[settings]
+disable_tools = ["github:leptos-rs/cargo-leptos"]
+locked = true
