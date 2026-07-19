@@ -4,20 +4,14 @@ variable "aws_region" {
   type        = string
 }
 
-# AWS account ID
-variable "account_id" {
-  description = "AWS account ID"
-  type        = string
-}
-
 variable "blog_bucket_name" {
   default = "okawak-blog-resources-bucket"
   type    = string
 }
 
 variable "image_bucket_name" {
-  default = "Image bucket name for Obsidian S3 Image Uploader"
-  type    = string
+  description = "S3 bucket name for Obsidian image uploads"
+  type        = string
 }
 
 variable "image_uploader_user_name" {

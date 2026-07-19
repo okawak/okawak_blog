@@ -4,7 +4,7 @@
 
 https://www.okawak.net
 
-`okawak_blog` は、Obsidian で書いた Markdown を Rust 製の publisher が公開成果物へ変換して S3 に配置し、それを VPS 上の単一バイナリ Leptos SSR サーバーが nginx 配下で公開する、静的コンテンツ公開基盤 + SSR 表示基盤です。
+`okawak_blog` は、Obsidian で書いた Markdown を Rust 製の publisher が公開成果物へ変換して S3 に配置し、それを VPS 上の単一バイナリ Leptos SSR サーバーと Cloudflare Tunnel で公開する、静的コンテンツ公開基盤 + SSR 表示基盤です。
 
 ## 関連文書
 
@@ -20,7 +20,7 @@ https://www.okawak.net
 - GitHub Actions またはローカル実行の publisher が公開成果物を生成する
 - 生成した HTML / index JSON を S3 に配置する
 - Leptos SSR サーバーが S3 上の成果物を読んで配信する
-- VPS + `systemd` + `nginx` で単純に運用できる構成を保つ
+- VPS + `systemd` + Cloudflare Tunnel で単純に運用できる構成を保つ
 
 ## これは何ではないか
 
@@ -174,7 +174,9 @@ category: "tech"
 ## 運用モデル
 
 - VPS 上で Rust 製サーバーバイナリを `systemd` service として起動する
-- `nginx` を前段に置いて HTTPS 終端とリバースプロキシを担当させる
+- Leptos SSR serverはVPSの`127.0.0.1:8008`だけで待ち受ける
+- `cloudflared`を`systemd` serviceとして起動し、外向きTunnel経由でCloudflareへ接続する
+- HTTPS終端とpublic hostnameはCloudflareで管理し、originの80/443をInternetへ公開しない
 - アプリケーション本体は単一バイナリとして扱う
 - SSR サーバーは S3 上の成果物を読み、必要に応じて静的ファイルも配信する
 - `/api/health` はprocess liveness、`/api/ready` はartifact readerのreadinessとして分ける
@@ -182,7 +184,7 @@ category: "tech"
 - helper、AWS config、VPS用certificateはroot管理pathへ置き、home directoryには依存しない
 - long-livedなIAM user access key、Secrets Manager rotation、credential fileはproduction runtimeに持たない
 
-VPS上のservice設定は[service/README.md](./service/README.md)、IAM Roles Anywhereの検証とcertificate更新は[AWS runtime認証runbook](./docs/operations/aws-runtime-auth.md)を参照してください。
+VPS上のservice設定は[service/README.md](./service/README.md)、Tunnel運用は[Cloudflare Tunnel runbook](./docs/operations/cloudflare-tunnel.md)、IAM Roles Anywhereの検証とcertificate更新は[AWS runtime認証runbook](./docs/operations/aws-runtime-auth.md)を参照してください。
 
 ## 開発原則
 

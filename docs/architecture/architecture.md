@@ -395,7 +395,7 @@ artifact の読取は2段階の境界を経由する。
   - `current.json`を読み、全artifact keyを同じrelease prefixへ固定する
   - release snapshotを短いTTLで再利用し、同一snapshot内のimmutable artifactをmemory cacheする
   - 同じartifactへのconcurrent missは1回のunderlying readへまとめ、load errorはcacheしない
-  - 移行互換として`current.json`が存在しない場合だけ従来のbucket rootを読む
+  - 後方互換として`current.json`が存在しない場合だけ従来のbucket rootを読む
 
 reader 側の設定は主に次の env で切り替える。
 
@@ -450,12 +450,13 @@ Obsidian submodule
   -> GitHub Actions publisher
   -> S3 releases/<release-id>/site
   -> current.json pointer switch
-  -> systemd service
-  -> nginx
+  -> okawak_blog.service (127.0.0.1:8008)
+  -> cloudflared.service
+  -> Cloudflare Tunnel
   -> Browser
 ```
 
-S3 upload は Rust アプリに持たせず、workflow の責務として扱う。
+`cloudflared`はVPSからCloudflareへ外向き接続し、originの80/443は公開しない。public hostnameとTunnel routeはCloudflare Dashboardで管理し、OCI TerraformはReserved Public IP、SSH用ingress、Tunnel用egressなどのOCI resourceだけを管理する。S3 upload は Rust アプリに持たせず、workflow の責務として扱う。
 
 ## 非目標
 

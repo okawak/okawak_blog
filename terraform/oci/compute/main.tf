@@ -24,5 +24,9 @@ resource "oci_core_instance" "oraclelinux_instance" {
   metadata = {
     ssh_authorized_keys = file(var.ssh_public_key_path)
   }
-  preserve_boot_volume = false
+  preserve_boot_volume = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }

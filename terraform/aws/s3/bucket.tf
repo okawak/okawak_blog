@@ -1,10 +1,12 @@
-# S3バケットの作成
 resource "aws_s3_bucket" "myblog_bucket" {
   bucket        = var.bucket_name
   force_destroy = var.force_destroy
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
-# バージョニングの有効化
 resource "aws_s3_bucket_versioning" "versioning" {
   bucket = aws_s3_bucket.myblog_bucket.id
 
@@ -13,7 +15,6 @@ resource "aws_s3_bucket_versioning" "versioning" {
   }
 }
 
-# サーバーサイド暗号化の設定
 resource "aws_s3_bucket_server_side_encryption_configuration" "encryption" {
   bucket = aws_s3_bucket.myblog_bucket.id
 
@@ -24,7 +25,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "encryption" {
   }
 }
 
-# オーナーシップコントロールの設定
 resource "aws_s3_bucket_ownership_controls" "ownership" {
   bucket = aws_s3_bucket.myblog_bucket.id
 
@@ -33,7 +33,6 @@ resource "aws_s3_bucket_ownership_controls" "ownership" {
   }
 }
 
-# 意図しないパブリックアクセスの防止
 resource "aws_s3_bucket_public_access_block" "block" {
   bucket                  = aws_s3_bucket.myblog_bucket.bucket
   block_public_acls       = true
@@ -42,9 +41,12 @@ resource "aws_s3_bucket_public_access_block" "block" {
   restrict_public_buckets = true
 }
 
-# 古いバージョンのものを削除する
 resource "aws_s3_bucket_lifecycle_configuration" "lifecycle" {
   bucket = aws_s3_bucket.myblog_bucket.id
+
+  depends_on = [
+    aws_s3_bucket_versioning.versioning,
+  ]
 
   rule {
     id     = "DeleteOldNoncurrentVersions"

@@ -37,7 +37,7 @@
 - `crates/site/server`: Axum + Leptos SSR host、reader注入、API、health/readiness、release-aware conditional GET
 - `crates/site/web`: Leptos UI / route / metadata。SSR時もstorage実装へ直接依存しない
 - `e2e`: repository root直下のbrowser E2E。通常CIはprivate submoduleやAWSに依存しないfixtureで検証し、実S3 smoke testはローカル手動確認とupload workflowの公開前gateに使う
-- `service`: systemd、nginx、運用補助
+- `service`: systemd、Cloudflare Tunnel、運用補助
 - `terraform`: 読み取り専用。編集せず、このdirectoryでcommandを実行しない
 
 `domain`、`publish`、`site` の責務をまたぐ純粋契約だけを `domain` へ置く。publisher専用処理を reader 側へ移さず、ビルド時に解決できる責務をruntimeへ持ち込まない。

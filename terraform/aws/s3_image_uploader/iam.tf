@@ -4,7 +4,7 @@ resource "aws_iam_user" "uploader" {
 
 data "aws_iam_policy_document" "put_policy" {
   statement {
-    actions   = ["s3:PutObject", "s3:PutObjectAcl", "s3:GetObject"]
+    actions   = ["s3:PutObject", "s3:GetObject"]
     resources = ["${aws_s3_bucket.this.arn}/*"]
   }
 }

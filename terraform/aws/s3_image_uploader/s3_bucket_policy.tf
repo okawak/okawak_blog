@@ -21,7 +21,7 @@ data "aws_iam_policy_document" "cdn_policy" {
 resource "aws_s3_bucket_cors_configuration" "image_cors" {
   bucket = aws_s3_bucket.this.id
   cors_rule {
-    allowed_methods = ["GET", "PUT", "POST", "DELETE"]
+    allowed_methods = ["GET", "PUT"]
     allowed_origins = ["*"]
     allowed_headers = ["*"]
     max_age_seconds = 3000
