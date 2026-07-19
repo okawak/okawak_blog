@@ -3,4 +3,3 @@
 
 [settings]
 disable_tools = ["github:leptos-rs/cargo-leptos"]
-locked = true

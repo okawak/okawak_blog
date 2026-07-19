@@ -9,6 +9,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  MISE_LOCKED: "1"
   RUST_BACKTRACE: 1
   UPLOAD_PATH: crates/publish/publisher/dist/site
 

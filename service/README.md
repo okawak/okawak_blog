@@ -14,15 +14,17 @@ VPSの運用userで次を実行します。
 cargo install --locked cargo-leptos --version 0.3.7
 cd /opt/okawak_blog
 install -m 0644 mise.local.toml.example mise.local.toml
+mise settings set locked true
 ```
 
-`mise.local.toml`はGit管理外です。`[settings].disable_tools`はmise配布版の`cargo-leptos`だけを無効化し、`settings.locked=true`はtracked `mise.lock`以外の解決を禁止します。lockfileにmusl用entryが含まれていても、musl版を選択する設定ではありません。
+`mise.local.toml`はGit管理外です。`[settings].disable_tools`はmise配布版の`cargo-leptos`だけを無効化します。`mise settings set locked true`は運用userのglobal settingへ保存され、tracked `mise.lock`以外の解決を継続的に禁止します。lockfileにmusl用entryが含まれていても、musl版を選択する設定ではありません。
 
 新しいSSH sessionで設定と選択binaryを確認します。
 
 ```bash
 cd /opt/okawak_blog
 mise settings get disable_tools
+mise settings get locked
 command -v cargo-leptos
 cargo leptos --version
 mise run check-deps
