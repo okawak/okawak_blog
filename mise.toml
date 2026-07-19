@@ -74,7 +74,11 @@ description = "Install the Chromium browser used by Playwright E2E"
 depends = ["e2e-install"]
 run = '''
 cd e2e
-bunx playwright install chromium
+if [ "${PLAYWRIGHT_INSTALL_WITH_DEPS:-false}" = "true" ]; then
+  bunx playwright install --with-deps chromium
+else
+  bunx playwright install chromium
+fi
 '''
 
 [tasks.sync-obsidian]
@@ -216,9 +220,9 @@ bun run test
 
 [tasks.test-e2e-s3]
 description = "Run the local browser smoke test against S3 artifacts"
+depends = ["e2e-install-browser"]
 run = '''
 : "${OKAWAK_BLOG_ARTIFACT_BUCKET:?OKAWAK_BLOG_ARTIFACT_BUCKET is required}"
-mise run e2e-install-browser
 cd e2e
 bun run test:s3
 '''

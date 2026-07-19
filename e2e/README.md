@@ -12,6 +12,8 @@ mise run e2e-install-browser
 mise run test-e2e
 ```
 
+共通taskはChromium本体だけを導入します。Ubuntu GitHub Actionsではworkflowが`PLAYWRIGHT_INSTALL_WITH_DEPS=true`を明示し、Playwrightのsystem dependenciesも同時に導入します。Oracle LinuxやmacOSのローカル実行ではこの値を設定しません。
+
 依存の更新と確認には `mise run e2e-update` / `mise run e2e-outdated` を使います。
 
 テストは `fixtures/site` の固定 artifact だけを読みます。private Obsidian submodule、S3、AWS credentials には依存しません。Playwright が `127.0.0.1:8008` で専用の Leptos サーバーを起動し、home、about、category、article、404 status、metadata、hydration 後の route 遷移を Chromium で検証します。
