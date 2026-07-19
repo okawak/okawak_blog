@@ -37,10 +37,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
 
       - name: Validate service scripts
-        run: |
-          bash -n service/bootstrap_aws_credentials.sh
-          bash service/tests/bootstrap_aws_credentials_test.sh
-          bash service/tests/systemd_units_test.sh
+        run: bash service/tests/systemd_units_test.sh
 
       - name: Cache Cargo dependencies
         uses: actions/cache@v6

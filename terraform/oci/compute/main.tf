@@ -17,7 +17,7 @@ resource "oci_core_instance" "oraclelinux_instance" {
   }
 
   create_vnic_details {
-    assign_public_ip = true
+    assign_public_ip = false
     subnet_id        = var.subnet_id
   }
 
