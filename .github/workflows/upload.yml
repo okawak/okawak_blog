@@ -104,6 +104,10 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-upload-${{ hashFiles('mise.toml', 'mise.lock', '**/Cargo.lock') }}
           restore-keys: |
+            ${{ runner.os }}-browser-e2e-${{ hashFiles('mise.toml', 'mise.lock', '**/Cargo.lock') }}
+            ${{ runner.os }}-rust-ci-${{ hashFiles('**/Cargo.lock') }}
+            ${{ runner.os }}-browser-e2e-
+            ${{ runner.os }}-rust-ci-
             ${{ runner.os }}-cargo-
 
       - name: Generate and validate artifacts
