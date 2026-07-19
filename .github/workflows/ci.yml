@@ -92,13 +92,6 @@ jobs:
       - name: Install web dependencies
         run: mise run web-install
 
-      - name: Install E2E dependencies
-        run: mise run e2e-install
-
-      - name: Install Chromium
-        working-directory: e2e
-        run: bunx playwright install --with-deps chromium
-
       - name: Run fixture browser E2E
         run: mise run test-e2e
 

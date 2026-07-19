@@ -17,6 +17,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       id-token: write
       contents: read
 
@@ -28,6 +29,36 @@ jobs:
             echo "::error::Artifact publication must run from main (got ${GITHUB_REF})."
             exit 1
           fi
+
+      - name: Verify latest main and successful CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          latest_main_sha="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            --jq '.object.sha')"
+
+          if [ "$GITHUB_SHA" != "$latest_main_sha" ]; then
+            echo "::error::Refusing to publish stale run ${GITHUB_SHA}; latest main is ${latest_main_sha}."
+            exit 1
+          fi
+
+          ci_run_id="$(gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            -f branch=main \
+            -f event=push \
+            -f status=success \
+            -f head_sha="$GITHUB_SHA" \
+            -f per_page=1 \
+            --jq '.workflow_runs[0].id // empty')"
+
+          if [ -z "$ci_run_id" ]; then
+            echo "::error::No successful Rust CI push run found for ${GITHUB_SHA}."
+            exit 1
+          fi
+
+          echo "Validated Rust CI run ${ci_run_id} for ${GITHUB_SHA}."
 
       - name: Get App Token
         uses: actions/create-github-app-token@v3
@@ -74,12 +105,6 @@ jobs:
           key: ${{ runner.os }}-cargo-upload-${{ hashFiles('mise.toml', 'mise.lock', '**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
-      - name: Test publisher
-        run: cargo test -p publisher
-
-      - name: Build publisher
-        run: cargo build --release -p publisher
 
       - name: Generate and validate artifacts
         run: |
@@ -140,13 +165,6 @@ jobs:
       - name: Install web dependencies
         run: mise run web-install
 
-      - name: Install E2E dependencies
-        run: mise run e2e-install
-
-      - name: Install Chromium
-        working-directory: e2e
-        run: bunx playwright install --with-deps chromium
-
       - name: Upload and validate immutable release
         run: |
           set -euo pipefail
@@ -185,9 +203,13 @@ jobs:
           retention-days: 7
 
       - name: Verify publication is based on latest main
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          latest_main_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
+          latest_main_sha="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            --jq '.object.sha')"
 
           if [ "$GITHUB_SHA" != "$latest_main_sha" ]; then
             echo "::error::Refusing to publish stale run ${GITHUB_SHA}; latest main is ${latest_main_sha}."
@@ -218,5 +240,5 @@ jobs:
           echo "Common issues:" >> $GITHUB_STEP_SUMMARY
           echo "- Submodule update failures" >> $GITHUB_STEP_SUMMARY
           echo "- AWS credentials or permissions" >> $GITHUB_STEP_SUMMARY
-          echo "- Build or test failures" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact generation or browser smoke failures" >> $GITHUB_STEP_SUMMARY
           echo "- S3 sync issues" >> $GITHUB_STEP_SUMMARY

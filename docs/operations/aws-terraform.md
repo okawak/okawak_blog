@@ -116,7 +116,7 @@ artifact upload workflowはGitHub OIDCで`oidc-gh-role`を引き受けます。r
 - `AWS_ROLE_NAME`: `oidc-gh-role`
 - `S3_BUCKET`
 
-GitHub App用の`GH_APP_ID`と`GH_APP_PRIVATE_KEY`もprivate Obsidian submoduleのcheckoutに必要です。workflowは`main`から手動実行し、immutable releaseの検証後に`current.json`を切り替えます。
+GitHub App用の`GH_APP_ID`と`GH_APP_PRIVATE_KEY`もprivate Obsidian submoduleのcheckoutに必要です。workflowは`main`から手動実行し、対象commitのCI成功を確認してからartifactを生成します。immutable releaseの検証後、最新`main`を再確認して`current.json`を切り替えます。
 
 ## Image uploader credential
 
