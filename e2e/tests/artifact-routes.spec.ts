@@ -70,6 +70,19 @@ test("runtime probes distinguish liveness and artifact readiness", async ({ requ
   expect(await readinessResponse.text()).toBe("READY");
 });
 
+test("site declares and serves its favicon", async ({ page, request }) => {
+  await page.goto("/");
+
+  const iconLink = page.locator('link[rel~="icon"]');
+  await expect(iconLink).toHaveCount(1);
+  await expect(iconLink).toHaveAttribute("href", "/favicon.ico");
+
+  const response = await request.get("/favicon.ico");
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toMatch(/^image\//);
+  expect((await response.body()).byteLength).toBeGreaterThan(0);
+});
+
 test("home renders artifacts and hydrates article navigation", async ({ page }) => {
   const reactiveWarnings = captureReactiveWarnings(page);
 

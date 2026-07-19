@@ -6,7 +6,7 @@ use leptos::prelude::*;
 use leptos_axum::{LeptosRoutes, file_and_error_handler, generate_route_list};
 use server::handlers::create_api_router;
 use server::http_cache::{ArtifactHttpCacheState, artifact_conditional_get};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use web::app::{App, shell};
 
 async fn health() -> &'static str {
@@ -47,6 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/assets",
             axum::routing::get_service(ServeDir::new("target/site/assets")),
         )
+        .route_service("/favicon.ico", ServeFile::new("target/site/favicon.ico"))
         // Leptos SSR routes must be registered last.
         .leptos_routes_with_context(
             &leptos_options,
