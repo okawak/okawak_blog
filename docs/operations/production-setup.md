@@ -73,8 +73,6 @@ applicationをbuildしてserviceを配置します。
 
 ```bash
 cd /opt/okawak_blog
-mise run versions-check
-mise run build-project
 mise run production-deploy
 
 sudo systemctl enable okawak_blog
@@ -84,7 +82,7 @@ curl --fail http://127.0.0.1:8008/api/health
 curl --fail http://127.0.0.1:8008/api/ready
 ```
 
-`production-deploy`はapplication serviceだけを更新します。Cloudflare Tunnelは独立したserviceとして維持します。
+`production-deploy`は`origin/main`のpull、web依存のinstall、release build、application serviceの入替をこの順で実行します。Cloudflare Tunnelは独立したserviceとして維持します。
 
 ## 5. Cloudflare Tunnelを構築する
 

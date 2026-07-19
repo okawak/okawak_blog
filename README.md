@@ -253,9 +253,6 @@ mise run check
 VPS 前提のデプロイ・運用タスクも `mise` に移しています。
 
 ```bash
-mise run pull
-mise run build-project
-mise run full-deploy
 mise run production-deploy
 mise run status
 mise run logs
