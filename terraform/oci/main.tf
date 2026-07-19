@@ -1,7 +1,6 @@
 module "network" {
   source       = "./network"
   tenancy_ocid = var.tenancy_ocid
-  region       = var.region
 }
 
 module "compute" {

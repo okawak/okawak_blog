@@ -4,18 +4,22 @@
 
 ## Runbooks
 
+- [本番環境の初期構築](./production-setup.md)
+  - 管理端末、AWS、OCI、VPS、Cloudflare Dashboardをまたぐ構築順序
+  - secretの配置境界と構築完了時の確認
 - [AWS runtime認証](./aws-runtime-auth.md)
-  - IAM Roles Anywhereと`credential_process`の現行構成
+  - CA、IAM Roles Anywhere、`credential_process`の初期構築
   - caller identity、S3、serviceの検証
   - X.509 certificateの期限確認と更新
-- [OCI Public IP固定化とTerraform変更計画](./oci-network-terraform-plan.md)
-  - 既存OCI resourceとstateの照合
-  - Reserved Public IPの3段階apply
-  - Cloudflare DNS、reboot、Tunnel移行との境界
-- [Cloudflare Tunnel移行手順](./cloudflare-tunnel-migration.md)
-  - Cloudflare Dashboard管理とOCI Terraform管理の境界
-  - 一度に一つだけ進めるチェックポイント式の移行手順
-  - test hostname、本番切替、origin閉鎖、rollback
+- [AWS Terraform](./aws-terraform.md)
+  - state backendの初回bootstrap
+  - AWS resourceのplan、apply、GitHub Actions設定
+- [OCI network](./oci-network.md)
+  - 管理端末からのTerraform初期構築
+  - Reserved Public IP、SSH、Tunnel egress、Terraform planの確認
+- [Cloudflare Tunnel](./cloudflare-tunnel.md)
+  - DashboardとVPSでのTunnel初期構築
+  - package、token、systemd service、hostname、更新、障害対応
 - [VPS runtime service](../../service/README.md)
   - 現行systemd service
   - IAM Roles Anywhereのruntime設定

@@ -1,7 +1,3 @@
-variable "account_id" {
-  description = "AWS account ID"
-}
-
 variable "gh-user" {
   description = "GitHub user name"
 }
@@ -12,4 +8,9 @@ variable "gh-repo" {
 
 variable "gh-branch" {
   description = "GitHub branch name"
+}
+
+variable "bucket_arn" {
+  description = "Blog artifact bucket ARN"
+  type        = string
 }

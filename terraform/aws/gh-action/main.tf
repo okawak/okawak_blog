@@ -9,7 +9,7 @@ data "aws_iam_policy_document" "role_policy" {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
       type        = "Federated"
-      identifiers = ["arn:aws:iam::${var.account_id}:oidc-provider/token.actions.githubusercontent.com"]
+      identifiers = [aws_iam_openid_connect_provider.github_actions.arn]
     }
     condition {
       test     = "StringEquals"
@@ -30,7 +30,43 @@ resource "aws_iam_role" "gh_role" {
   assume_role_policy = data.aws_iam_policy_document.role_policy.json
 }
 
-resource "aws_iam_role_policy_attachment" "s3_full" {
+data "aws_iam_policy_document" "publish" {
+  statement {
+    sid = "ListBlogBucket"
+
+    actions = [
+      "s3:GetBucketLocation",
+      "s3:ListBucket",
+      "s3:ListBucketMultipartUploads",
+    ]
+
+    resources = [var.bucket_arn]
+  }
+
+  statement {
+    sid = "PublishBlogArtifacts"
+
+    actions = [
+      "s3:AbortMultipartUpload",
+      "s3:GetObject",
+      "s3:ListMultipartUploadParts",
+      "s3:PutObject",
+    ]
+
+    resources = [
+      "${var.bucket_arn}/current.json",
+      "${var.bucket_arn}/releases/*",
+    ]
+  }
+}
+
+resource "aws_iam_policy" "publish" {
+  name        = "okawak-blog-publisher"
+  description = "Publish and validate immutable okawak blog artifacts"
+  policy      = data.aws_iam_policy_document.publish.json
+}
+
+resource "aws_iam_role_policy_attachment" "publish" {
   role       = aws_iam_role.gh_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+  policy_arn = aws_iam_policy.publish.arn
 }

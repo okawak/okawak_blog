@@ -2,7 +2,7 @@
 
 本番のLeptos SSR serverは`okawak_blog.service`で起動し、S3 artifact readerを使います。
 
-IAM Roles Anywhereの検証、certificate更新、障害切り分けは[docs/operations/aws-runtime-auth.md](../docs/operations/aws-runtime-auth.md)を一次手順とします。
+本番環境の構成順序は[本番環境の初期構築](../docs/operations/production-setup.md)、IAM Roles Anywhereの検証、certificate更新、障害切り分けは[AWS runtime認証](../docs/operations/aws-runtime-auth.md)を一次手順とします。
 
 ## AWS credentials
 
@@ -54,9 +54,9 @@ curl --fail http://127.0.0.1:8008/api/ready
 
 値は0以上の整数秒で指定します。不正値の場合はserver起動時のconfiguration errorになります。
 
-## Cloudflare Tunnel migration
+## Cloudflare Tunnel
 
-Cloudflare Tunnelの段階的な導入は[Cloudflare Tunnel移行手順](../docs/operations/cloudflare-tunnel-migration.md)に従います。Tunnel、Published application、DNSはCloudflare Dashboardで管理し、Cloudflare resourceをTerraformへimportしません。
+公開経路の運用、hostname、更新、障害対応は[Cloudflare Tunnel runbook](../docs/operations/cloudflare-tunnel.md)に従います。Tunnel、Published application、DNSはCloudflare Dashboardで管理し、Cloudflare resourceをTerraformへimportしません。
 
 repositoryの`cloudflared.service`はremote-managed Tunnelを次の境界で起動します。
 
@@ -134,4 +134,4 @@ sudo systemctl status cloudflared --no-pager
 sudo journalctl -u cloudflared --since '10 minutes ago' --no-pager
 ```
 
-Tunnelが安定稼働するまでは、既存のnginx、Cloudflare DNS、OCIの80/443 ingressを維持します。
+本番hostnameは`okawak.net`と`www.okawak.net`です。どちらもCloudflare Tunnelへ接続し、OCIの80/443 ingressと直接公開用reverse proxyは使用しません。SSHは60022でLISTENし、22は新規VPSのbootstrap用ingressとしてのみ維持します。

@@ -33,12 +33,15 @@ resource "oci_core_security_list" "my_security_list" {
   display_name   = "security_list_for_okawak_server"
 
   ingress_security_rules {
+    # Bootstrap SSH.
     # 6: TCP
-    protocol = 6
-    source   = "0.0.0.0/0"
+    protocol  = 6
+    source    = "0.0.0.0/0"
+    stateless = false
+
     tcp_options {
-      max = 22
       min = 22
+      max = 22
     }
   }
 
@@ -49,31 +52,6 @@ resource "oci_core_security_list" "my_security_list" {
     tcp_options {
       max = 60022
       min = 60022
-    }
-  }
-
-
-  ingress_security_rules {
-    # 6: TCP
-    protocol  = 6
-    source    = "0.0.0.0/0"
-    stateless = false # stateful
-
-    tcp_options {
-      min = 80
-      max = 80
-    }
-  }
-
-  ingress_security_rules {
-    # 6: TCP
-    protocol  = 6
-    source    = "0.0.0.0/0"
-    stateless = false # stateful
-
-    tcp_options {
-      min = 443
-      max = 443
     }
   }
 
@@ -93,9 +71,15 @@ resource "oci_core_security_list" "my_security_list" {
     protocol  = 1
     source    = "0.0.0.0/0"
     stateless = false # stateful
+
+    icmp_options {
+      type = 3
+      code = 4
+    }
   }
 
   egress_security_rules {
+    # 17: UDP
     protocol    = 17
     destination = "0.0.0.0/0"
     stateless   = false
