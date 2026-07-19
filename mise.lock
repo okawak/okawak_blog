@@ -33,6 +33,18 @@ checksum = "sha256:92b7cee8d677ca3b31ccb47fe367a7d7a2c8a4c5da1f00e59fc362cc2b5c0
 url = "https://github.com/bram209/leptosfmt/releases/download/0.1.33/leptosfmt-0.1.33-x86_64-unknown-linux-musl.tar.gz"
 url_api = "https://api.github.com/repos/bram209/leptosfmt/releases/assets/224981911"
 
+[tools."github:bram209/leptosfmt"."platforms.linux-x64-baseline"]
+url = "https://github.com/bram209/leptosfmt/releases/download/0.1.33/leptosfmt-0.1.33-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/bram209/leptosfmt/releases/assets/224981911"
+
+[tools."github:bram209/leptosfmt"."platforms.linux-x64-musl"]
+url = "https://github.com/bram209/leptosfmt/releases/download/0.1.33/leptosfmt-0.1.33-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/bram209/leptosfmt/releases/assets/224981911"
+
+[tools."github:bram209/leptosfmt"."platforms.linux-x64-musl-baseline"]
+url = "https://github.com/bram209/leptosfmt/releases/download/0.1.33/leptosfmt-0.1.33-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/bram209/leptosfmt/releases/assets/224981911"
+
 [tools."github:bram209/leptosfmt"."platforms.macos-arm64"]
 checksum = "blake3:890e4a6953262f0cb4d3acc73e53b2077e7143fc828df907a8c3cf49cafb0fe2"
 url = "https://github.com/bram209/leptosfmt/releases/download/0.1.33/leptosfmt-0.1.33-aarch64-apple-darwin.tar.gz"
@@ -46,6 +58,21 @@ backend = "github:leptos-rs/cargo-leptos"
 checksum = "sha256:fda80f4845e92d0e8f5ec13cf1a46982ba7a518ae01182e7e4201312944bc05d"
 url = "https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.7/cargo-leptos-x86_64-unknown-linux-gnu.tar.gz"
 url_api = "https://api.github.com/repos/leptos-rs/cargo-leptos/releases/assets/465714627"
+
+[tools."github:leptos-rs/cargo-leptos"."platforms.linux-x64-baseline"]
+checksum = "sha256:fda80f4845e92d0e8f5ec13cf1a46982ba7a518ae01182e7e4201312944bc05d"
+url = "https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.7/cargo-leptos-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/leptos-rs/cargo-leptos/releases/assets/465714627"
+
+[tools."github:leptos-rs/cargo-leptos"."platforms.linux-x64-musl"]
+checksum = "sha256:97f9269a23837918be8a01c18c46239d060d87bb070f65625381be4a41159eda"
+url = "https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.7/cargo-leptos-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/leptos-rs/cargo-leptos/releases/assets/465714636"
+
+[tools."github:leptos-rs/cargo-leptos"."platforms.linux-x64-musl-baseline"]
+checksum = "sha256:97f9269a23837918be8a01c18c46239d060d87bb070f65625381be4a41159eda"
+url = "https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.7/cargo-leptos-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/leptos-rs/cargo-leptos/releases/assets/465714636"
 
 [tools."github:leptos-rs/cargo-leptos"."platforms.macos-arm64"]
 checksum = "sha256:f5464add2ee2778eb11189be1e2f1721d6f30aa47b2cf4f00172962738d99e42"

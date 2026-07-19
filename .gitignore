@@ -24,6 +24,8 @@ tmp*
 dist/
 mise.local.lock
 mise.*.local.lock
+mise.local.toml
+mise.*.local.toml
 
 # System files
 .DS_Store

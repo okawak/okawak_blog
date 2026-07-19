@@ -4,6 +4,35 @@
 
 本番環境の構成順序は[本番環境の初期構築](../docs/operations/production-setup.md)、IAM Roles Anywhereの検証、certificate更新、障害切り分けは[AWS runtime認証](../docs/operations/aws-runtime-auth.md)を一次手順とします。
 
+## VPS build tool override
+
+Oracle Linux 9のglibcでは、miseのGitHub backendが配布する`cargo-leptos 0.3.7`を実行できません。本番VPSだけは同じversionをsourceからbuildし、repository固有のlocal configでmise配布版を無効化します。CIと開発端末は`mise.toml`と`mise.lock`のGNU版を引き続き使用します。
+
+VPSの運用userで次を実行します。
+
+```bash
+cargo install --locked cargo-leptos --version 0.3.7
+cd /opt/okawak_blog
+install -m 0644 mise.local.toml.example mise.local.toml
+mise settings set locked true
+```
+
+`mise.local.toml`はGit管理外です。`[settings].disable_tools`はmise配布版の`cargo-leptos`だけを無効化します。`mise settings set locked true`は運用userのglobal settingへ保存され、tracked `mise.lock`以外の解決を継続的に禁止します。lockfileにmusl用entryが含まれていても、musl版を選択する設定ではありません。
+
+新しいSSH sessionで設定と選択binaryを確認します。
+
+```bash
+cd /opt/okawak_blog
+mise settings get disable_tools
+mise settings get locked
+command -v cargo-leptos
+cargo leptos --version
+mise run check-deps
+git status --short
+```
+
+`command -v cargo-leptos`がmiseのinstall directoryではなく運用userのCargo bin directoryを示し、versionが`0.3.7`、Git差分が空であれば正常です。`mise run build-project`は`web-install`にも依存するため、fresh checkoutでもBun依存を個別に導入する必要はありません。
+
 ## AWS credentials
 
 production serviceはIAM Roles Anywhereの`credential_process`を使います。

@@ -102,7 +102,7 @@ run = "cargo clean"
 
 [tasks.build-project]
 description = "Build the integrated Leptos project for deployment"
-depends = ["check-deps"]
+depends = ["check-deps", "web-install"]
 run = "cargo leptos build -p server --release"
 
 [tasks.build-server]
@@ -129,14 +129,12 @@ fi
 
 [tasks.service]
 description = "Install the systemd unit file"
-depends = ["stop"]
 run = '''
 sudo cp -f "$SERVICE_FILE" "/etc/systemd/system/$SERVICE_NAME.service"
 '''
 
 [tasks.bin]
-description = "Copy the built server binary into ./bin"
-depends = ["build-project"]
+description = "Copy the existing built server binary into ./bin"
 run = '''
 sudo mkdir -p "$BIN_DIR"
 sudo cp "$TARGET_BIN" "$BIN_DIR/$SERVICE_NAME"
@@ -145,7 +143,6 @@ sudo chown -R root:root "$BIN_DIR"
 
 [tasks.deploy]
 description = "Reload systemd and start the service"
-depends = ["service", "bin"]
 run = '''
 sudo systemctl daemon-reload
 sudo systemctl start "$SERVICE_NAME"
@@ -167,20 +164,26 @@ run = "sudo journalctl -u $SERVICE_NAME --lines=50"
 description = "Restart the systemd service"
 run = "sudo systemctl restart $SERVICE_NAME"
 
-[tasks.full-deploy]
-description = "Run the full deploy flow"
-depends = ["check-deps", "pull", "build-project", "bin", "deploy"]
-run = "echo 'full-deploy completed'"
-
 [tasks.production-deploy]
-description = "Deploy the production application service"
-depends = ["full-deploy"]
-run = "echo 'production-deploy completed'"
+description = "Pull, build, and deploy the production application service in order"
+run = '''
+set -euo pipefail
+mise run pull
+mise run quick-deploy
+echo "production-deploy completed"
+'''
 
 [tasks.quick-deploy]
-description = "Rebuild and deploy quickly"
-depends = ["build-project", "bin", "deploy"]
-run = "echo 'quick-deploy completed'"
+description = "Build and deploy the current checkout in order"
+run = '''
+set -euo pipefail
+mise run build-project
+mise run stop
+mise run service
+mise run bin
+mise run deploy
+echo "quick-deploy completed"
+'''
 
 [tasks.ci-flow]
 description = "Run the CI-oriented local flow"
