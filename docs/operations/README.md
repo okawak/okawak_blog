@@ -12,6 +12,10 @@
   - 既存OCI resourceとstateの照合
   - Reserved Public IPの3段階apply
   - Cloudflare DNS、reboot、Tunnel移行との境界
+- [Cloudflare Tunnel移行手順](./cloudflare-tunnel-migration.md)
+  - Cloudflare Dashboard管理とOCI Terraform管理の境界
+  - 一度に一つだけ進めるチェックポイント式の移行手順
+  - test hostname、本番切替、origin閉鎖、rollback
 - [VPS runtime service](../../service/README.md)
   - 現行systemd service
   - IAM Roles Anywhereのruntime設定

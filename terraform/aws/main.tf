@@ -20,8 +20,7 @@ module "s3_image_uploader" {
 }
 
 module "runtime_identity" {
-  source = "./runtime_identity"
-
+  source                 = "./runtime_identity"
   name                   = "okawak-blog-runtime"
   bucket_arn             = module.s3.bucket_arn
   ca_certificate_pem     = file(var.roles_anywhere_ca_certificate_path)
