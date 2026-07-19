@@ -1,0 +1,40 @@
+[Unit]
+Description=Cloudflare Tunnel for okawak Blog
+Wants=network-online.target okawak_blog.service
+After=network-online.target okawak_blog.service
+
+[Service]
+Type=notify
+User=cloudflared
+Group=cloudflared
+ExecStartPre=/usr/bin/test -r /etc/cloudflared/token
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate run --token-file /etc/cloudflared/token
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=0
+TimeoutStopSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHostname=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+UMask=027
+
+[Install]
+WantedBy=multi-user.target

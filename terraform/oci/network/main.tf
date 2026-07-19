@@ -96,6 +96,17 @@ resource "oci_core_security_list" "my_security_list" {
   }
 
   egress_security_rules {
+    protocol    = 17
+    destination = "0.0.0.0/0"
+    stateless   = false
+
+    udp_options {
+      min = 7844
+      max = 7844
+    }
+  }
+
+  egress_security_rules {
     # 6: TCP
     protocol    = 6
     destination = "0.0.0.0/0"

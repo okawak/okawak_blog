@@ -53,3 +53,75 @@ curl --fail http://127.0.0.1:8008/api/ready
 - local readerにはcacheを適用しない
 
 値は0以上の整数秒で指定します。不正値の場合はserver起動時のconfiguration errorになります。
+
+## Cloudflare Tunnel migration
+
+Cloudflare Tunnelの段階的な導入は[Cloudflare Tunnel移行手順](../docs/operations/cloudflare-tunnel-migration.md)に従います。Tunnel、Published application、DNSはCloudflare Dashboardで管理し、Cloudflare resourceをTerraformへimportしません。
+
+repositoryの`cloudflared.service`はremote-managed Tunnelを次の境界で起動します。
+
+- originは`http://127.0.0.1:8008`
+- Tunnel tokenは`/etc/cloudflared/token`から読む
+- tokenをunit、environment、`mise.toml`、Git管理下のfileへ埋め込まない
+- package管理版を使うため`--no-autoupdate`を指定する
+- `okawak_blog.service`との依存は`Wants`に留め、application restart中もTunnel processを維持する
+
+VPSへ配置する前に、RPMが導入するbinary pathが`/usr/bin/cloudflared`であることと、`cloudflared --version`がtoken fileをsupportする`2025.4.0`以上であることを確認します。
+
+```bash
+command -v cloudflared
+cloudflared --version
+```
+
+専用userとtoken directoryを作ります。
+
+```bash
+getent passwd cloudflared || sudo useradd \
+  --system \
+  --home-dir /var/lib/cloudflared \
+  --shell /sbin/nologin \
+  cloudflared
+
+sudo install \
+  -d \
+  -o root \
+  -g cloudflared \
+  -m 0750 \
+  /etc/cloudflared
+```
+
+Dashboardから取得したtokenはshell argumentへ入れず、対話入力で配置します。tokenの値やfile内容を出力しません。
+
+```bash
+sudo bash -c '
+umask 027
+read -rsp "Tunnel token: " token
+printf "\n"
+printf "%s" "$token" > /etc/cloudflared/token
+'
+sudo chown root:cloudflared /etc/cloudflared/token
+sudo chmod 0640 /etc/cloudflared/token
+```
+
+unitを配置して起動します。
+
+```bash
+sudo install \
+  -o root \
+  -g root \
+  -m 0644 \
+  service/cloudflared.service \
+  /etc/systemd/system/cloudflared.service
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now cloudflared
+```
+
+```bash
+sudo systemctl is-enabled cloudflared
+sudo systemctl is-active cloudflared
+sudo systemctl status cloudflared --no-pager
+sudo journalctl -u cloudflared --since '10 minutes ago' --no-pager
+```
+
+Tunnelが安定稼働するまでは、既存のnginx、Cloudflare DNS、OCIの80/443 ingressを維持します。
