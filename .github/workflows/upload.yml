@@ -191,6 +191,7 @@ jobs:
         env:
           CI: "true"
           OKAWAK_BLOG_ARTIFACT_BUCKET: ${{ secrets.S3_BUCKET }}
+          PLAYWRIGHT_INSTALL_WITH_DEPS: "true"
         run: OKAWAK_BLOG_ARTIFACT_PREFIX="$ARTIFACT_PREFIX" mise run test-e2e-s3
 
       - name: Upload Playwright traces

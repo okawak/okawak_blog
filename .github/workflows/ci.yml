@@ -93,6 +93,8 @@ jobs:
         run: mise run web-install
 
       - name: Run fixture browser E2E
+        env:
+          PLAYWRIGHT_INSTALL_WITH_DEPS: "true"
         run: mise run test-e2e
 
       - name: Upload Playwright traces

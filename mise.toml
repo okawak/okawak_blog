@@ -74,7 +74,7 @@ description = "Install the Chromium browser used by Playwright E2E"
 depends = ["e2e-install"]
 run = '''
 cd e2e
-if [ "$(uname -s)" = "Linux" ]; then
+if [ "${PLAYWRIGHT_INSTALL_WITH_DEPS:-false}" = "true" ]; then
   bunx playwright install --with-deps chromium
 else
   bunx playwright install chromium
