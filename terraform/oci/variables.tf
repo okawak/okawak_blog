@@ -32,9 +32,3 @@ variable "source_id" {
   type        = string
   description = "OCI Image OCID for the instance"
 }
-
-#
-# variable "db_admin_password" {
-#   type        = string
-#   description = "Base Database Serviceの管理者パスワード"
-# }

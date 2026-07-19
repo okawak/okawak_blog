@@ -17,7 +17,11 @@ output "availability_domain" {
 
 # compute module
 output "public-ip-for-compute-instance" {
-  value = module.compute.public-ip-for-compute-instance
+  value = oci_core_public_ip.blog.ip_address
+}
+
+output "public-ip-ocid" {
+  value = oci_core_public_ip.blog.id
 }
 
 output "instance-name" {
@@ -51,7 +55,3 @@ output "instance-memory-in-GBs" {
 output "time-created" {
   value = module.compute.time-created
 }
-
-#output "db_system_id" {
-#  value = module.database.db_system_id
-#}

@@ -15,20 +15,6 @@ variable "blog_bucket_name" {
   type    = string
 }
 
-variable "iam_reader_name" {
-  description = "value of IAM user name"
-  type        = string
-}
-variable "secret_name" {
-  description = "Secret name for IAM access key"
-  type        = string
-}
-
-variable "rotation_interval" {
-  description = "IAM access key rotation interval (days)"
-  type        = number
-}
-
 variable "image_bucket_name" {
   default = "Image bucket name for Obsidian S3 Image Uploader"
   type    = string

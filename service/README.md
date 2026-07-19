@@ -2,7 +2,7 @@
 
 本番のLeptos SSR serverは`okawak_blog.service`で起動し、S3 artifact readerを使います。
 
-AWS側のrotation停止、IAM Roles Anywhereのresource準備、VPS切替、rollback、旧key撤去は[docs/operations/aws-runtime-auth-migration.md](../docs/operations/aws-runtime-auth-migration.md)を一次手順とします。
+IAM Roles Anywhereの検証、certificate更新、障害切り分けは[docs/operations/aws-runtime-auth.md](../docs/operations/aws-runtime-auth.md)を一次手順とします。
 
 ## AWS credentials
 
@@ -25,36 +25,7 @@ AWS_EC2_METADATA_DISABLED=true
 
 `ProtectHome=true`を維持するため、serviceは`~/.aws`へ依存しません。AWS SDKはhelperから期限付きrole credentialを取得し、期限前に再取得します。temporary credentialをfileへ書くtimerやapplication独自のrefresh処理は導入しません。
 
-helper、certificate、private key、AWS configの作成・配置・単体検証は移行runbookの[Phase 2](../docs/operations/aws-runtime-auth-migration.md#phase-2-管理端末からvpsへcredential-helperとcertificateを配置)に従います。
-
-## Rollback用static credential
-
-移行中に作成した次のfileは、IAM Roles Anywhereの安定観測が終わるまでrollback用として維持します。
-
-```text
-/var/lib/okawak_blog/aws/credentials
-```
-
-production unitはこのfileを参照しません。rollback時だけunitを旧設定へ戻し、次を復元します。
-
-```text
-Environment=AWS_SHARED_CREDENTIALS_FILE=/var/lib/okawak_blog/aws/credentials
-```
-
-`credentials-bootstrap`は、home配下の長期`blog-s3` profileをruntime fileへ一度だけ複製する移行・rollback専用taskです。credential値を標準出力へ表示せず、既存fileの内容が異なる場合は上書きを拒否します。
-
-```bash
-mise run credentials-bootstrap
-```
-
-bootstrap元profileは`mise.toml`の`OKAWAK_BLOG_BOOTSTRAP_SOURCE_PROFILE=blog-s3`を既定値とします。これは手動taskだけの設定であり、systemd serviceへは渡しません。別の検証用pathを使う場合だけ、次のenvを指定できます。
-
-```bash
-OKAWAK_BLOG_RUNTIME_CREDENTIAL_FILE=/tmp/okawak-blog-runtime/aws/credentials \
-  ./service/bootstrap_aws_credentials.sh
-```
-
-override先にもruntime専用directoryを指定してください。スクリプトは既存directoryのmodeやownerを変更せず、既存directoryが実行userの所有で書き込み可能な場合だけ利用します。`/tmp/credentials`のように共有directoryを直接親にするpathは拒否します。rollbackの全手順は移行runbookの[Rollback](../docs/operations/aws-runtime-auth-migration.md#rollback)を参照してください。
+helper、certificate、private key、AWS configの配置と検証はruntime認証runbookに従います。productionでは`AWS_SHARED_CREDENTIALS_FILE`を指定せず、`/var/lib/okawak_blog/aws/credentials`やhome配下のlong-lived access keyへfallbackしません。
 
 ## Runtime probes
 

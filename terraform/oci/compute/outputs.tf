@@ -1,7 +1,3 @@
-output "public-ip-for-compute-instance" {
-  value = oci_core_instance.oraclelinux_instance.public_ip
-}
-
 output "instance-name" {
   value = oci_core_instance.oraclelinux_instance.display_name
 }
@@ -32,4 +28,8 @@ output "instance-memory-in-GBs" {
 
 output "time-created" {
   value = oci_core_instance.oraclelinux_instance.time_created
+}
+
+output "private_ip" {
+  value = oci_core_instance.oraclelinux_instance.private_ip
 }
