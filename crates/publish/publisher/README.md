@@ -111,15 +111,18 @@ AWS S3 への同期は GitHub Actions workflow が担当します。
 
 ```
 src/
+├── main.rs      # 固定入出力パスの決定と起動
 ├── lib.rs       # publisher orchestration
-├── config.rs    # 設定管理
+├── classify.rs  # content kindごとの分類
+├── render.rs    # Markdownからartifact本文への変換
+├── types.rs     # publisher内部型
 ├── error.rs     # エラー型定義
-├── bookmark.rs  # OGPメタデータ取得とリッチブックマーク生成
 └── slug.rs      # URL用スラッグ生成
 
 別 crate:
 
 - `crates/publish/ingest`: scan / parse / render
+- `crates/publish/bookmark`: OGP metadata / rich bookmark
 - `crates/publish/artifacts`: artifact bundle / local writer
 ```
 

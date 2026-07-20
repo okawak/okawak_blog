@@ -1,7 +1,7 @@
 mod support;
 
 use indoc::indoc;
-use publisher::{Config, run_main, slug};
+use publisher::{run_main, slug};
 use std::{fs, path::Path};
 use support::collect_html_files;
 use support::write_about_page;
@@ -194,13 +194,8 @@ async fn test_end_to_end_obsidian_processing() {
     let memory_file = obsidian_dir.join("tech").join("memory-best-practices.md");
     fs::write(&memory_file, memory_practices).unwrap();
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
     // Run the main processing flow.
-    let result = run_main(&config).await;
+    let result = run_main(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok(), "run_main should succeed");
 
     // Validate the output directory.
@@ -399,14 +394,9 @@ async fn test_large_volume_processing() {
         fs::write(&file_path, content).unwrap();
     }
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
     // Measure processing time.
     let start = std::time::Instant::now();
-    let result = run_main(&config).await;
+    let result = run_main(&obsidian_dir, &output_dir).await;
     let duration = start.elapsed();
 
     assert!(result.is_ok(), "Large volume processing should succeed");
@@ -492,13 +482,8 @@ async fn test_partial_failure_handling() {
     fs::write(obsidian_dir.join("invalid.md"), invalid_yaml).unwrap();
     fs::write(obsidian_dir.join("incomplete.md"), incomplete_file).unwrap();
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
     // The deployment path rejects incomplete input before writing artifacts.
-    let strict_result = run_main(&config).await;
+    let strict_result = run_main(&obsidian_dir, &output_dir).await;
     assert!(
         strict_result.is_err(),
         "Deployment publishing must reject partial failures"
@@ -509,7 +494,7 @@ async fn test_partial_failure_handling() {
     );
 
     // The explicitly tolerant path keeps processing valid files for diagnostics.
-    let result = publisher::run_allowing_partial(&config).await;
+    let result = publisher::run_allowing_partial(&obsidian_dir, &output_dir).await;
     assert!(
         result.is_ok(),
         "Should continue processing despite partial failures"

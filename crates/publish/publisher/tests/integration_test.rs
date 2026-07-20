@@ -2,10 +2,9 @@ mod support;
 
 use indoc::indoc;
 use publisher::{
-    Config, offline_bookmark_enricher, run_allowing_partial, run_main, run_with_enricher,
+    ObsidianError, offline_bookmark_enricher, run_allowing_partial, run_main, run_with_enricher,
 };
 use std::fs;
-use std::path::PathBuf;
 use support::{collect_html_files, write_about_page};
 use tempfile::TempDir;
 
@@ -18,13 +17,8 @@ async fn test_run_main_with_empty_directory() {
     // Create an empty Obsidian directory.
     fs::create_dir_all(&obsidian_dir).unwrap();
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
     // A deployable artifact set must contain at least one article.
-    let result = run_main(&config).await;
+    let result = run_main(&obsidian_dir, &output_dir).await;
     assert!(result.is_err());
 }
 
@@ -58,13 +52,8 @@ async fn test_run_main_with_sample_file() {
     fs::write(&sample_file, sample_content).unwrap();
     write_about_page(&obsidian_dir);
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
     // Run `run_main`.
-    let result = run_main(&config).await;
+    let result = run_main(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
     let site_root = output_dir.join("site");
@@ -119,13 +108,8 @@ async fn test_run_main_with_incomplete_file() {
     let sample_file = obsidian_dir.join("incomplete.md");
     fs::write(&sample_file, incomplete_content).unwrap();
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
     // Run `run_main`.
-    let result = run_allowing_partial(&config).await;
+    let result = run_allowing_partial(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
     // Verify that no HTML file is generated for incomplete content.
@@ -164,12 +148,7 @@ async fn test_run_main_with_static_page_file() {
     let page_file = obsidian_dir.join("about.md");
     fs::write(&page_file, page_content).unwrap();
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
-    let result = run_allowing_partial(&config).await;
+    let result = run_allowing_partial(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
     let page_document =
@@ -206,12 +185,7 @@ async fn test_run_main_with_home_fragment_file() {
     let page_file = obsidian_dir.join("home.md");
     fs::write(&page_file, page_content).unwrap();
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
-    let result = run_allowing_partial(&config).await;
+    let result = run_allowing_partial(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
     let page_document =
@@ -264,12 +238,7 @@ async fn test_run_main_with_category_landing_file() {
     fs::write(obsidian_dir.join("tech/index.md"), category_content).unwrap();
     write_about_page(&obsidian_dir);
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
-    let result = run_main(&config).await;
+    let result = run_main(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
     let category_index = fs::read_to_string(
@@ -295,19 +264,19 @@ async fn test_run_main_with_category_landing_file() {
     assert!(category_page.contains("Welcome to the category landing page."));
 }
 
-#[test]
-fn test_config_validation() {
-    // Verify config behavior with a non-existent directory.
+#[tokio::test]
+async fn test_run_main_rejects_non_existent_obsidian_directory() {
     let temp_dir = TempDir::new().unwrap();
     let non_existent_dir = temp_dir.path().join("non_existent");
+    let output_dir = temp_dir.path().join("dist");
 
-    let config = Config {
-        obsidian_dir: non_existent_dir,
-        output_dir: PathBuf::from("test_output"),
-    };
+    let result = run_main(&non_existent_dir, &output_dir).await;
 
-    // `validate` is not called directly here, so assert the missing-path behavior instead.
-    assert!(!config.obsidian_dir.exists());
+    assert!(matches!(
+        result,
+        Err(ObsidianError::InvalidSourceDirectory(_))
+    ));
+    assert!(!output_dir.exists());
 }
 
 #[tokio::test]
@@ -343,12 +312,7 @@ async fn test_run_with_enricher_with_bookmark_article() {
     fs::write(&sample_file, sample_content).unwrap();
     write_about_page(&obsidian_dir);
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
-    let result = run_with_enricher(&config, offline_bookmark_enricher()).await;
+    let result = run_with_enricher(&obsidian_dir, &output_dir, offline_bookmark_enricher()).await;
     assert!(result.is_ok());
 
     let articles_dir = output_dir.join("site").join("articles");

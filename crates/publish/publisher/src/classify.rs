@@ -1,4 +1,3 @@
-use crate::config::Config;
 use crate::error::{ObsidianError, Result};
 use crate::types::{ParsedArticleFile, ParsedCategoryFile, ParsedPageFile};
 use domain::{Category, ContentKind, PageKey};
@@ -21,7 +20,7 @@ pub(crate) struct ClassifiedFiles {
 /// 解析エラーはエラーとしてカウントする。
 pub(crate) fn classify_obsidian_files(
     markdown_files: Vec<PathBuf>,
-    config: &Config,
+    obsidian_dir: &Path,
 ) -> ClassifiedFiles {
     let mut articles = Vec::new();
     let mut pages = Vec::new();
@@ -33,8 +32,10 @@ pub(crate) fn classify_obsidian_files(
         match parse_obsidian_file(&file_path) {
             Ok(Some(parsed)) if parsed.front_matter.is_completed => {
                 let result: Result<()> = match parsed.front_matter.kind {
-                    ContentKind::Article => process_valid_article_file(&file_path, parsed, config)
-                        .map(|f| articles.push(f)),
+                    ContentKind::Article => {
+                        process_valid_article_file(&file_path, parsed, obsidian_dir)
+                            .map(|f| articles.push(f))
+                    }
                     ContentKind::Page => process_valid_page_file(parsed).map(|f| pages.push(f)),
                     ContentKind::Home => process_valid_home_file(parsed).map(|f| pages.push(f)),
                     ContentKind::Category => {
@@ -69,9 +70,9 @@ pub(crate) fn classify_obsidian_files(
 fn process_valid_article_file(
     file_path: &Path,
     parsed_file: ParsedObsidianFile,
-    config: &Config,
+    obsidian_dir: &Path,
 ) -> Result<ParsedArticleFile> {
-    let relative_path = get_relative_path(file_path, &config.obsidian_dir)?;
+    let relative_path = get_relative_path(file_path, obsidian_dir)?;
     let slug = crate::slug::generate_slug(
         &parsed_file.front_matter.title,
         relative_path,

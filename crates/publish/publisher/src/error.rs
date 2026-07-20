@@ -19,8 +19,8 @@ pub enum ObsidianError {
     #[error("Invalid file path: {0}")]
     Path(String),
 
-    #[error("Configuration error: {0}")]
-    Config(String),
+    #[error("Invalid Obsidian source directory: {0}")]
+    InvalidSourceDirectory(String),
 
     #[error("Failed to parse file content: {0}")]
     Parse(String),
