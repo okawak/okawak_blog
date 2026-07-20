@@ -1,7 +1,9 @@
 use crate::error::{ObsidianError, Result};
+use crate::ingest::{
+    ContentKind, FileMapping, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file,
+};
 use crate::types::{ParsedArticleFile, ParsedCategoryFile, ParsedPageFile};
-use domain::{Category, ContentKind, PageKey};
-use ingest::{FileMapping, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file};
+use domain::{Category, PageKey};
 use log::{error, warn};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};

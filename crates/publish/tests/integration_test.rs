@@ -1,18 +1,18 @@
-mod support;
+mod test_fixtures;
 
 use indoc::indoc;
 use publisher::{BookmarkEnricher, ObsidianError, publish, publish_with_bookmark_enricher};
 use std::{fs, path::Path, sync::Arc};
-use support::{collect_html_files, write_about_page};
 use tempfile::TempDir;
+use test_fixtures::{collect_html_files, write_about_page};
 
 fn offline_bookmark_enricher() -> BookmarkEnricher {
-    Arc::new(|html: String| {
+    Arc::new(|_html: String| {
         Box::pin(async move {
-            bookmark::convert_simple_bookmarks_with(&html, |url, original_title| async move {
-                bookmark::create_fallback_bookmark_data(&url, &original_title)
-            })
-            .await
+            Ok(
+                r#"<a class="bookmark-link"><span class="bookmark-domain">example.com</span></a>"#
+                    .to_string(),
+            )
         })
     })
 }

@@ -1,11 +1,11 @@
-mod support;
+mod test_fixtures;
 
 use indoc::indoc;
 use publisher::{publish, slug};
 use std::{fs, path::Path};
-use support::collect_html_files;
-use support::write_about_page;
 use tempfile::TempDir;
+use test_fixtures::collect_html_files;
+use test_fixtures::write_about_page;
 
 /// End-to-end test that simulates a realistic Obsidian vault.
 #[tokio::test]

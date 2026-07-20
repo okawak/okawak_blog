@@ -11,7 +11,7 @@ concurrency:
 env:
   MISE_LOCKED: "1"
   RUST_BACKTRACE: 1
-  UPLOAD_PATH: crates/publish/publisher/dist/site
+  UPLOAD_PATH: crates/publish/dist/site
 
 jobs:
   deploy:
@@ -134,7 +134,7 @@ jobs:
       - name: Build release pointer
         run: |
           set -euo pipefail
-          source_commit=$(git -C crates/publish/publisher/obsidian rev-parse HEAD)
+          source_commit=$(git -C crates/publish/obsidian rev-parse HEAD)
           release_id="${GITHUB_SHA:0:12}-${source_commit:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           artifact_prefix="releases/${release_id}/site"
 

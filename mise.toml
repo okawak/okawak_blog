@@ -86,7 +86,7 @@ fi
 [tasks.sync-obsidian]
 description = "Initialize and checkout the latest private Obsidian submodule revision"
 run = '''
-obsidian_path="crates/publish/publisher/obsidian"
+obsidian_path="crates/publish/obsidian"
 if [ ! -e "$obsidian_path/.git" ]; then
   git submodule update --init --recursive "$obsidian_path"
 fi
@@ -115,7 +115,7 @@ cargo leptos serve -p server
 [tasks.dev-local]
 description = "Publish the local Obsidian source and serve its generated artifacts"
 depends = ["web-install"]
-env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/publisher/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
 run = '''
 mise run sync-obsidian
 cargo run -p publisher

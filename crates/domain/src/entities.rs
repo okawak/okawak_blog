@@ -6,7 +6,7 @@ mod attributes;
 mod identifiers;
 
 use crate::error::DomainError;
-pub use attributes::{Category, ContentKind, Title};
+pub use attributes::{Category, Title};
 pub use identifiers::{PageKey, Slug};
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use std::str::FromStr;

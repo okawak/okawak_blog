@@ -29,10 +29,8 @@
 依存と配置の境界:
 
 - `crates/domain`: publisher と reader が共有する純粋な型・契約・ルール。I/O、`async`、AWS SDK、Axum、Leptos を持ち込まない。WASM 互換を意識する
-- `crates/publish/ingest`: vault 走査、frontmatter、Markdown変換、Obsidian記法の解決
-- `crates/publish/artifacts`: artifact の組み立てとローカル書出し
-- `crates/publish/bookmark`: 外部 HTTP を伴う bookmark enrichment
-- `crates/publish/publisher`: publish 処理の orchestration。publisher 専用処理は `crates/publish/` に置く
+- `crates/publish`: 単一のpublisher crate。vault走査、frontmatter、Markdown変換、Obsidian記法、bookmark enrichment、artifact生成、orchestrationを内部moduleへ分ける。publisher専用処理をcrate外へ公開しない
+- `ObsidianFrontMatter`と`ContentKind`はpublisherの入力形式であり、共有domain契約へ置かない
 - `crates/site/infra`: server が artifact を読む外部境界（local / S3、設定、将来のcache）。vault読取、Markdown変換、uploadを置かない
 - `crates/site/server`: Axum + Leptos SSR host、reader注入、API、health/readiness、release-aware conditional GET
 - `crates/site/web`: Leptos UI / route / metadata。SSR時もstorage実装へ直接依存しない
@@ -70,7 +68,7 @@
 
 開発サーバーは用途に応じて次を使い分ける。
 
-- `mise run dev-local`: private Obsidian submoduleをremoteの最新状態へ同期し、publisherで生成した`crates/publish/publisher/dist/site`をlocal readerで配信する
+- `mise run dev-local`: private Obsidian submoduleをremoteの最新状態へ同期し、publisherで生成した`crates/publish/dist/site`をlocal readerで配信する
 - `mise run dev`: S3 readerで本番相当のartifact取得を確認する
 
 `mise run dev`は次を使う。

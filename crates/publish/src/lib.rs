@@ -1,31 +1,36 @@
+mod artifacts;
+mod bookmark;
 mod classify;
 pub mod error;
+mod ingest;
 mod render;
 pub mod slug;
 mod types;
 
-use artifacts::{
+use crate::artifacts::{
     SiteDirectories, build_site_artifacts, validate_site_artifacts, write_article_page,
     write_category_page, write_page_document, write_site_artifacts,
 };
-use classify::{
+pub use crate::bookmark::BookmarkError;
+use crate::classify::{
     build_file_mapping, classify_obsidian_files, ensure_unique_category_landings,
     ensure_unique_page_keys,
 };
+use crate::ingest::scan_obsidian_files;
+use crate::render::{render_article, render_category, render_page};
 pub use error::{ObsidianError, Result};
 use futures::{StreamExt, TryStreamExt, future::BoxFuture, stream};
-use ingest::scan_obsidian_files;
 use log::info;
-use render::{render_article, render_category, render_page};
 use std::{path::Path, sync::Arc};
 
 /// Async function that enriches page HTML with rich bookmark cards.
-pub type BookmarkEnricher =
-    Arc<dyn Fn(String) -> BoxFuture<'static, bookmark::Result<String>> + Send + Sync>;
+pub type BookmarkEnricher = Arc<
+    dyn Fn(String) -> BoxFuture<'static, std::result::Result<String, BookmarkError>> + Send + Sync,
+>;
 
 fn rich_bookmark_enricher() -> BookmarkEnricher {
     Arc::new(|html: String| {
-        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich(&html).await })
+        Box::pin(async move { crate::bookmark::convert_simple_bookmarks_to_rich(&html).await })
     })
 }
 
@@ -88,7 +93,7 @@ pub async fn publish_with_bookmark_enricher(
                         &rendered.meta.slug,
                         &rendered.html,
                     )?;
-                    Ok::<_, artifacts::ArtifactsError>((rendered, output_file_path))
+                    Ok::<_, crate::artifacts::ArtifactsError>((rendered, output_file_path))
                 })
                 .await??;
                 info!("...processed {}", output_file_path.display());
@@ -134,7 +139,10 @@ pub async fn publish_with_bookmark_enricher(
                 rendered_category.metadata.category,
                 &rendered_category.html,
             )?;
-            Ok::<_, artifacts::ArtifactsError>((rendered_category.metadata, output_file_path))
+            Ok::<_, crate::artifacts::ArtifactsError>((
+                rendered_category.metadata,
+                output_file_path,
+            ))
         })
         .await??;
         info!("...processed {}", output_file_path.display());
@@ -145,7 +153,7 @@ pub async fn publish_with_bookmark_enricher(
     let site_directories_for_write = site_directories.clone();
     let site_artifacts = tokio::task::spawn_blocking(move || {
         write_site_artifacts(&site_directories_for_write, &site_artifacts)?;
-        Ok::<_, artifacts::ArtifactsError>(site_artifacts)
+        Ok::<_, crate::artifacts::ArtifactsError>(site_artifacts)
     })
     .await??;
 

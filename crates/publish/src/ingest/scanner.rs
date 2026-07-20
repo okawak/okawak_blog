@@ -1,4 +1,4 @@
-use crate::error::Result;
+use super::error::Result;
 use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
 

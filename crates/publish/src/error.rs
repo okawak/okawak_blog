@@ -8,10 +8,10 @@ pub enum ObsidianError {
     Io(#[from] std::io::Error),
 
     #[error("Obsidian publisher operation failed: {0}")]
-    Ingest(#[from] ingest::IngestError),
+    Ingest(#[from] crate::ingest::IngestError),
 
     #[error("Publisher artifact operation failed")]
-    Artifacts(#[from] artifacts::ArtifactsError),
+    Artifacts(#[from] crate::artifacts::ArtifactsError),
 
     #[error("Blocking task failed: {0}")]
     Join(#[from] tokio::task::JoinError),

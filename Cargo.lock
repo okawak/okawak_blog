@@ -104,18 +104,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "artifacts"
-version = "0.1.0"
-dependencies = [
- "domain",
- "rstest",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.19",
-]
-
-[[package]]
 name = "async-lock"
 version = "3.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -705,21 +693,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
 dependencies = [
  "hybrid-array",
-]
-
-[[package]]
-name = "bookmark"
-version = "0.1.0"
-dependencies = [
- "indoc",
- "log",
- "regex",
- "reqwest",
- "rstest",
- "scraper",
- "thiserror 2.0.19",
- "tokio",
- "url",
 ]
 
 [[package]]
@@ -2033,23 +2006,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ingest"
-version = "0.1.0"
-dependencies = [
- "domain",
- "ignore",
- "indoc",
- "log",
- "pulldown-cmark",
- "regex",
- "rstest",
- "serde",
- "serde_yaml",
- "tempfile",
- "thiserror 2.0.19",
-]
-
-[[package]]
 name = "interpolator"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2947,19 +2903,25 @@ name = "publisher"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "artifacts",
- "bookmark",
  "domain",
  "env_logger",
  "futures",
+ "ignore",
  "indoc",
- "ingest",
  "log",
+ "pulldown-cmark",
+ "regex",
+ "reqwest",
  "rstest",
+ "scraper",
+ "serde",
+ "serde_json",
+ "serde_yaml",
  "sha2 0.11.0",
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
+ "url",
 ]
 
 [[package]]
