@@ -91,6 +91,8 @@ cargo run -p publisher
 cargo run --release -p publisher
 ```
 
+repository rootの`mise run dev-local`はprivate Obsidian submoduleをremoteの最新状態へ同期し、通常のpublisherで生成したlocal artifactをLeptos開発サーバーで配信します。
+
 ### ディレクトリ構成
 
 - 入力ディレクトリ: `./crates/publish/publisher/obsidian/Publish` (固定)

@@ -390,7 +390,7 @@ artifact の読取は2段階の境界を経由する。
   - configured local rootをそのままsnapshotにする
   - file更新の即時反映を維持するためmemory cache decoratorを適用しない
 - S3 reader
-  - 本番配信とローカル開発サーバーの標準reader
+  - 本番配信とローカルからの本番相当確認に使うreader
   - `service/okawak_blog.service` 側の env で選択
   - `current.json`を読み、全artifact keyを同じrelease prefixへ固定する
   - release snapshotを短いTTLで再利用し、同一snapshot内のimmutable artifactをmemory cacheする
@@ -432,7 +432,19 @@ runtime probeは次のように分ける。
 
 ## ローカル開発と本番運用
 
-ローカル開発サーバーは、GitHub Actionsが公開したS3 artifactを読む。local artifactを使う開発用`mise` taskは持たず、開発と本番で同じS3 reader境界を通す。
+ローカル開発は目的に応じてlocal artifactとS3 artifactを使い分ける。publisher、artifact契約、UIを一続きで確認する場合は、private Obsidian submoduleからlocal artifactを生成する。
+
+```text
+Obsidian submodule
+  -> mise run dev-local
+  -> local publisher
+  -> crates/publish/publisher/dist/site
+  -> local reader
+```
+
+`dev-local`はprivate Obsidian submoduleに未commit差分がないことを確認してremoteの最新commitをcheckoutし、publisherの通常の厳格モードが成功した場合だけLeptos serverを起動する。同期時にlocal merge commitは作らない。同期またはpublishに失敗した場合はserverを起動しない。local readerにはmemory cacheを適用しないため、生成済みartifactの更新を即時に読める。ただし起動中にsource Markdownを変更した場合、publisherの再実行は明示的に行う。
+
+AWS認証、immutable release pointer、S3 cacheを含む本番相当のreader境界はS3用taskで確認する。
 
 ```text
 GitHub Actions publisher
