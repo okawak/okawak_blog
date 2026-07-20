@@ -9,6 +9,8 @@ SERVICE_NAME = "okawak_blog"
 SERVICE_FILE = "service/okawak_blog.service"
 BIN_DIR = "./bin"
 TARGET_BIN = "./target/release/server"
+TARGET_HASH_FILE = "./target/release/hash.txt"
+DEPLOY_STAGED_SITE = "./target/site-staged"
 LEPTOS_TAILWIND_VERSION = "v4.3.2"
 
 [tasks.check-deps]
@@ -109,6 +111,13 @@ description = "Build the integrated Leptos project for deployment"
 depends = ["check-deps", "web-install"]
 run = "cargo leptos build -p server --release"
 
+[tasks.build-deployment]
+description = "Build a production release outside the live site directory"
+depends = ["check-deps", "web-install"]
+run = '''
+LEPTOS_SITE_ROOT="$DEPLOY_STAGED_SITE" cargo leptos build -p server --release
+'''
+
 [tasks.build-server]
 description = "Build the server binary only"
 depends = ["check-deps"]
@@ -138,10 +147,11 @@ sudo cp -f "$SERVICE_FILE" "/etc/systemd/system/$SERVICE_NAME.service"
 '''
 
 [tasks.bin]
-description = "Copy the existing built server binary into ./bin"
+description = "Copy the existing built server binary and asset hash manifest into ./bin"
 run = '''
 sudo mkdir -p "$BIN_DIR"
 sudo cp "$TARGET_BIN" "$BIN_DIR/$SERVICE_NAME"
+sudo cp "$TARGET_HASH_FILE" "$BIN_DIR/hash.txt"
 sudo chown -R root:root "$BIN_DIR"
 '''
 
@@ -178,14 +188,11 @@ echo "production-deploy completed"
 '''
 
 [tasks.quick-deploy]
-description = "Build and deploy the current checkout in order"
+description = "Build a staged release and activate it with rollback protection"
 run = '''
 set -euo pipefail
-mise run build-project
-mise run stop
-mise run service
-mise run bin
-mise run deploy
+mise run build-deployment
+bash scripts/activate_staged_deployment.sh
 echo "quick-deploy completed"
 '''
 

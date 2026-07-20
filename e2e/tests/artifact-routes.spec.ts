@@ -12,6 +12,19 @@ function captureReactiveWarnings(page: Page) {
   return warnings;
 }
 
+function captureBrowserErrors(page: Page) {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => {
+    errors.push(`pageerror: ${error.message}`);
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      errors.push(`console.error: ${message.text()}`);
+    }
+  });
+  return errors;
+}
+
 async function expectMetadata(
   page: Page,
   title: string,
@@ -89,10 +102,15 @@ test("site declares and serves its favicon", async ({ page, request }) => {
 
 test("home renders artifacts and hydrates article navigation", async ({ page }) => {
   const reactiveWarnings = captureReactiveWarnings(page);
+  const browserErrors = captureBrowserErrors(page);
 
   const response = await page.goto("/");
 
   expect(response?.status()).toBe(200);
+  await expect(page.locator('link#leptos[rel="stylesheet"]')).toHaveAttribute(
+    "href",
+    /\/pkg\/web\.[A-Za-z0-9_-]+\.css$/,
+  );
   await expect(page.locator("main").getByRole("heading", { name: SITE_NAME })).toBeVisible();
   await expect(page.getByText("Fixture home content")).toBeVisible();
   await expect(page.locator("main .content-prose")).toContainText("Fixture home content");
@@ -128,6 +146,7 @@ test("home renders artifacts and hydrates article navigation", async ({ page }) 
     "article",
   );
   expect(reactiveWarnings).toEqual([]);
+  expect(browserErrors).toEqual([]);
 });
 
 test("site shell keeps the warm gradient background", async ({ page }) => {

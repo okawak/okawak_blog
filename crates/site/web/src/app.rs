@@ -6,7 +6,7 @@ use crate::routes::category::CategoryPage;
 use crate::routes::home::HomePage;
 use crate::routes::not_found::NotFoundPage;
 use leptos::prelude::*;
-use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{MetaTags, Title, provide_meta_context};
 use leptos_router::{
     SsrMode,
     components::{FlatRoutes, Route, Router},
@@ -17,6 +17,8 @@ use leptos_router::{
 /// Shell function used for server-side rendering.
 /// This function renders the full HTML document.
 pub fn shell(options: LeptosOptions) -> impl IntoView {
+    let stylesheet_href = stylesheet_href(&options);
+
     view! {
         <!DOCTYPE html>
         <html lang="ja">
@@ -29,6 +31,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     type="image/x-icon"
                     sizes="16x16 32x32 48x48"
                 />
+                <link id="leptos" rel="stylesheet" href=stylesheet_href />
                 // Load Font Awesome from the CDN.
                 <link
                     rel="stylesheet"
@@ -154,10 +157,6 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
-        // injects a stylesheet into the document <head>
-        // id=leptos means cargo-leptos will hot-reload this stylesheet
-        <Stylesheet id="leptos" href="/pkg/web.css" />
-
         // sets the document title
         <Title text=SITE_NAME />
 
@@ -178,6 +177,60 @@ pub fn App() -> impl IntoView {
             </Router>
             <Footer />
         </div>
+    }
+}
+
+fn stylesheet_href(options: &LeptosOptions) -> String {
+    let path = options.css_path();
+    if !options.hash_files {
+        return path;
+    }
+
+    let hash_path = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|parent| parent.join(&*options.hash_file)));
+    let css_hash = hash_path
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|hashes| asset_hash(&hashes, "css").map(str::to_owned));
+
+    match css_hash {
+        Some(hash) => insert_hash_before_extension(&path, &hash, ".css"),
+        None => {
+            leptos::logging::error!("File hashing is active but no CSS hash was found");
+            path
+        }
+    }
+}
+
+fn asset_hash<'a>(hashes: &'a str, asset: &str) -> Option<&'a str> {
+    hashes.lines().find_map(|line| {
+        let (name, hash) = line.trim().split_once(':')?;
+        (name == asset)
+            .then(|| hash.trim())
+            .filter(|hash| !hash.is_empty())
+    })
+}
+
+fn insert_hash_before_extension(path: &str, hash: &str, extension: &str) -> String {
+    path.strip_suffix(extension)
+        .map(|stem| format!("{stem}.{hash}{extension}"))
+        .unwrap_or_else(|| path.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{asset_hash, insert_hash_before_extension};
+
+    #[test]
+    fn builds_hashed_stylesheet_path_from_cargo_leptos_manifest() {
+        let hashes = "js: js-hash\nwasm: wasm-hash\ncss: css-hash\n";
+
+        let hash = asset_hash(hashes, "css").expect("CSS hash");
+
+        assert_eq!(
+            insert_hash_before_extension("/pkg/web.css", hash, ".css"),
+            "/pkg/web.css-hash.css"
+        );
     }
 }
 
