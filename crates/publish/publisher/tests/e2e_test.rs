@@ -1,7 +1,7 @@
 mod support;
 
 use indoc::indoc;
-use publisher::{run_main, slug};
+use publisher::{publish, slug};
 use std::{fs, path::Path};
 use support::collect_html_files;
 use support::write_about_page;
@@ -190,8 +190,8 @@ async fn test_end_to_end_obsidian_processing() {
     fs::write(&memory_file, memory_practices).unwrap();
 
     // Run the main processing flow.
-    let result = run_main(&obsidian_dir, &output_dir).await;
-    assert!(result.is_ok(), "run_main should succeed");
+    let result = publish(&obsidian_dir, &output_dir).await;
+    assert!(result.is_ok(), "publish should succeed");
 
     // Validate the output directory.
     assert!(output_dir.exists(), "Output directory should exist");
@@ -391,7 +391,7 @@ async fn test_large_volume_processing() {
 
     // Measure processing time.
     let start = std::time::Instant::now();
-    let result = run_main(&obsidian_dir, &output_dir).await;
+    let result = publish(&obsidian_dir, &output_dir).await;
     let duration = start.elapsed();
 
     assert!(result.is_ok(), "Large volume processing should succeed");
@@ -410,9 +410,9 @@ async fn test_large_volume_processing() {
     println!("✅ Performance test finished: processed {generated_count} files in {duration:.2?}");
 }
 
-/// Error-handling test for continuing after partial failures.
+/// Error-handling test for rejecting invalid input before writing artifacts.
 #[tokio::test]
-async fn test_partial_failure_handling() {
+async fn test_publish_rejects_content_errors_without_writing_artifacts() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
@@ -477,65 +477,10 @@ async fn test_partial_failure_handling() {
     fs::write(obsidian_dir.join("invalid.md"), invalid_yaml).unwrap();
     fs::write(obsidian_dir.join("incomplete.md"), incomplete_file).unwrap();
 
-    // The deployment path rejects incomplete input before writing artifacts.
-    let strict_result = run_main(&obsidian_dir, &output_dir).await;
-    assert!(
-        strict_result.is_err(),
-        "Deployment publishing must reject partial failures"
-    );
+    let result = publish(&obsidian_dir, &output_dir).await;
+    assert!(result.is_err(), "Publishing must reject content errors");
     assert!(
         !output_dir.exists(),
-        "Strict publishing must fail before writing an incomplete artifact set"
+        "Publishing must fail before writing an incomplete artifact set"
     );
-
-    // The explicitly tolerant path keeps processing valid files for diagnostics.
-    let result = publisher::run_allowing_partial(&obsidian_dir, &output_dir).await;
-    assert!(
-        result.is_ok(),
-        "Should continue processing despite partial failures"
-    );
-
-    // The valid file should still be processed.
-    let valid_slug = slug::generate_slug(
-        "Valid Article",
-        Path::new("valid.md"),
-        "2025-01-15T10:00:00+09:00",
-    )
-    .unwrap();
-    let valid_html = output_dir
-        .join("site")
-        .join("articles")
-        .join("tech")
-        .join(format!("{valid_slug}.html"));
-    assert!(valid_html.exists(), "Valid file should be processed");
-
-    // The malformed file should not be processed.
-    let invalid_slug = slug::generate_slug(
-        "Malformed Article", // Placeholder title used for invalid.md.
-        Path::new("invalid.md"),
-        "2025-01-15T10:00:00+09:00",
-    )
-    .unwrap();
-    let invalid_html = output_dir
-        .join("site")
-        .join("articles")
-        .join("tech")
-        .join(format!("{invalid_slug}.html"));
-    assert!(
-        !invalid_html.exists(),
-        "Invalid file should not be processed"
-    );
-
-    // The incomplete file should not be processed.
-    let incomplete_html = output_dir
-        .join("site")
-        .join("articles")
-        .join("tech")
-        .join("incomplete.html");
-    assert!(
-        !incomplete_html.exists(),
-        "Incomplete file should not be processed"
-    );
-
-    println!("✅ Error-handling test finished: valid files still complete after partial failures");
 }

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use publisher::run_main;
+use publisher::publish;
 use std::path::Path;
 
 const OBSIDIAN_DIR: &str = "crates/publish/publisher/obsidian/Publish";
@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
         .write_style_or("LOG_STYLE", "auto");
     env_logger::init_from_env(env);
 
-    run_main(Path::new(OBSIDIAN_DIR), Path::new(OUTPUT_DIR)).await?;
+    publish(Path::new(OBSIDIAN_DIR), Path::new(OUTPUT_DIR)).await?;
 
     Ok(())
 }

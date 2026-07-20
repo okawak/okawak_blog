@@ -15,7 +15,7 @@ use classify::{
 pub use error::{ObsidianError, Result};
 use futures::{StreamExt, TryStreamExt, future::BoxFuture, stream};
 use ingest::scan_obsidian_files;
-use log::{info, warn};
+use log::info;
 use render::{render_article, render_category, render_page};
 use std::{path::Path, sync::Arc};
 
@@ -29,41 +29,14 @@ fn rich_bookmark_enricher() -> BookmarkEnricher {
     })
 }
 
-pub async fn run_main(obsidian_dir: &Path, output_dir: &Path) -> Result<()> {
-    run_with_enricher(obsidian_dir, output_dir, rich_bookmark_enricher()).await
+pub async fn publish(obsidian_dir: &Path, output_dir: &Path) -> Result<()> {
+    publish_with_bookmark_enricher(obsidian_dir, output_dir, rich_bookmark_enricher()).await
 }
 
-pub async fn run_with_enricher(
+pub async fn publish_with_bookmark_enricher(
     obsidian_dir: &Path,
     output_dir: &Path,
     enrich: BookmarkEnricher,
-) -> Result<()> {
-    run_with_policy(obsidian_dir, output_dir, enrich, PublishPolicy::Strict).await
-}
-
-/// Generates diagnostic artifacts even when individual content files are invalid.
-/// Production and deployment callers should use [`run_main`] instead.
-pub async fn run_allowing_partial(obsidian_dir: &Path, output_dir: &Path) -> Result<()> {
-    run_with_policy(
-        obsidian_dir,
-        output_dir,
-        rich_bookmark_enricher(),
-        PublishPolicy::AllowPartial,
-    )
-    .await
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PublishPolicy {
-    Strict,
-    AllowPartial,
-}
-
-async fn run_with_policy(
-    obsidian_dir: &Path,
-    output_dir: &Path,
-    enrich: BookmarkEnricher,
-    policy: PublishPolicy,
 ) -> Result<()> {
     validate_obsidian_dir(obsidian_dir)?;
 
@@ -88,9 +61,6 @@ async fn run_with_policy(
     info!("Valid category files: {}", categories.len());
     info!("Skipped files: {skipped}");
     if errors > 0 {
-        warn!("Error files: {errors}");
-    }
-    if policy == PublishPolicy::Strict && errors > 0 {
         return Err(ObsidianError::ContentErrors { count: errors });
     }
 
@@ -179,15 +149,13 @@ async fn run_with_policy(
     })
     .await??;
 
-    if policy == PublishPolicy::Strict {
-        let site_root = output_dir.join("site");
-        let validation =
-            tokio::task::spawn_blocking(move || validate_site_artifacts(site_root)).await??;
-        info!(
-            "Validated {} articles across {} categories",
-            validation.article_count, validation.category_count
-        );
-    }
+    let site_root = output_dir.join("site");
+    let validation =
+        tokio::task::spawn_blocking(move || validate_site_artifacts(site_root)).await??;
+    info!(
+        "Validated {} articles across {} categories",
+        validation.article_count, validation.category_count
+    );
 
     let processed_count = site_artifacts.article_index.len();
     let duration = start_time.elapsed();
@@ -195,9 +163,6 @@ async fn run_with_policy(
     info!("=== Processing Summary ===");
     info!("Successfully processed: {processed_count} files");
     info!("  Skipped: {skipped} files");
-    if errors > 0 {
-        warn!("  Errors: {errors} files");
-    }
     info!("  Processing time: {duration:.2?}");
     info!("Output directory: {}", output_dir.display());
 
