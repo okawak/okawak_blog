@@ -68,11 +68,6 @@ async fn test_end_to_end_obsidian_processing() {
 
         詳細は[[メモリ管理のベストプラクティス]]を参照してください。
 
-        ### 参考リンク
-
-        <div class="bookmark">
-          <a href="https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html">Rust Book - Ownership</a>
-        </div>
     "#};
 
     let tech_file = obsidian_dir.join("tech").join("rust-performance.md");

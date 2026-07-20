@@ -2,11 +2,23 @@ mod support;
 
 use indoc::indoc;
 use publisher::{
-    ObsidianError, offline_bookmark_enricher, run_allowing_partial, run_main, run_with_enricher,
+    BookmarkEnricher, ObsidianError, run_allowing_partial, run_main, run_with_enricher,
 };
 use std::fs;
+use std::sync::Arc;
 use support::{collect_html_files, write_about_page};
 use tempfile::TempDir;
+
+fn offline_bookmark_enricher() -> BookmarkEnricher {
+    Arc::new(|html: String| {
+        Box::pin(async move {
+            bookmark::convert_simple_bookmarks_with(&html, |url, original_title| async move {
+                bookmark::create_fallback_bookmark_data(&url, &original_title)
+            })
+            .await
+        })
+    })
+}
 
 #[tokio::test]
 async fn test_run_main_with_empty_directory() {
@@ -287,8 +299,7 @@ async fn test_run_with_enricher_with_bookmark_article() {
 
     fs::create_dir_all(&obsidian_dir).unwrap();
 
-    // Use an offline enricher that converts bookmarks with fallback data only,
-    // so no network request is made and the test never waits for a timeout.
+    // Use an offline enricher that converts bookmarks with fallback data only.
     let sample_content = indoc! {r#"
         ---
         title: "Bookmark Article"
@@ -329,7 +340,7 @@ async fn test_run_with_enricher_with_bookmark_article() {
     );
 
     // The bookmark should have been converted to the rich card format
-    // (fallback data is used when the OGP fetch fails).
+    // (fallback data is used without an OGP request).
     assert!(
         html_content.contains(r#"class="bookmark-link""#),
         "bookmark should be converted to rich format; got: {html_content}"

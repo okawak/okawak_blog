@@ -19,23 +19,18 @@ use log::{info, warn};
 use render::{render_article, render_category, render_page};
 use std::{path::Path, sync::Arc};
 
-/// Async fn that takes page HTML and returns enriched HTML with rich bookmark cards.
-/// Use offline_bookmark_enricher in tests to avoid network access.
+/// Async function that enriches page HTML with rich bookmark cards.
 pub type BookmarkEnricher =
     Arc<dyn Fn(String) -> BoxFuture<'static, bookmark::Result<String>> + Send + Sync>;
 
-/// Returns a BookmarkEnricher that uses fallback data only; no network requests.
-pub fn offline_bookmark_enricher() -> BookmarkEnricher {
+fn rich_bookmark_enricher() -> BookmarkEnricher {
     Arc::new(|html: String| {
-        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich_offline(&html).await })
+        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich(&html).await })
     })
 }
 
 pub async fn run_main(obsidian_dir: &Path, output_dir: &Path) -> Result<()> {
-    let enrich: BookmarkEnricher = Arc::new(|html: String| {
-        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich(&html).await })
-    });
-    run_with_policy(obsidian_dir, output_dir, enrich, PublishPolicy::Strict).await
+    run_with_enricher(obsidian_dir, output_dir, rich_bookmark_enricher()).await
 }
 
 pub async fn run_with_enricher(
@@ -49,13 +44,10 @@ pub async fn run_with_enricher(
 /// Generates diagnostic artifacts even when individual content files are invalid.
 /// Production and deployment callers should use [`run_main`] instead.
 pub async fn run_allowing_partial(obsidian_dir: &Path, output_dir: &Path) -> Result<()> {
-    let enrich: BookmarkEnricher = Arc::new(|html: String| {
-        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich(&html).await })
-    });
     run_with_policy(
         obsidian_dir,
         output_dir,
-        enrich,
+        rich_bookmark_enricher(),
         PublishPolicy::AllowPartial,
     )
     .await
