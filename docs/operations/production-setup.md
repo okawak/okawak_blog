@@ -82,7 +82,9 @@ curl --fail http://127.0.0.1:8008/api/health
 curl --fail http://127.0.0.1:8008/api/ready
 ```
 
-`production-deploy`は`origin/main`のpull、web依存のinstall、release build、application serviceの入替をこの順で実行します。Cloudflare Tunnelは独立したserviceとして維持します。
+`production-deploy`は`origin/main`をpullし、web依存をinstallしてから、liveの`target/site`とは別の`target/site-staged`へrelease buildします。CSS、JavaScript、WebAssemblyには同じbuildで生成したhash付きファイル名を使います。staging bundleが完成した後だけapplication serviceを停止し、site directory、server binary、`bin/hash.txt`を切り替えて起動します。直前のsiteは`target/site-previous`として1世代だけ保持し、currentに存在しない`/pkg` assetをそこから配信します。起動後はhealth / readinessを確認し、失敗時は直前のsiteとbinaryを復元します。これによりbuild途中のassetを稼働中serverが配信せず、切替直前に開かれたページも同じbuildのJavaScriptとWebAssemblyを読み込めます。Cloudflare Tunnelは独立したserviceとして維持します。
+
+失敗したstaging siteを保存できた場合は`target/site-failed`へ残します。原因を確認して不要になった後に削除してから、`mise run production-deploy`を再実行します。
 
 ## 5. Cloudflare Tunnelを構築する
 

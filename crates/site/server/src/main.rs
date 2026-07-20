@@ -41,7 +41,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Static file serving.
         .nest_service(
             "/pkg",
-            axum::routing::get_service(ServeDir::new("target/site/pkg")),
+            axum::routing::get_service(
+                ServeDir::new("target/site/pkg")
+                    .fallback(ServeDir::new("target/site-previous/pkg")),
+            ),
         )
         .nest_service(
             "/assets",
