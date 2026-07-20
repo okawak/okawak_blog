@@ -1,5 +1,4 @@
 mod classify;
-pub mod config;
 pub mod error;
 mod render;
 pub mod slug;
@@ -13,63 +12,40 @@ use classify::{
     build_file_mapping, classify_obsidian_files, ensure_unique_category_landings,
     ensure_unique_page_keys,
 };
-pub use config::Config;
 pub use error::{ObsidianError, Result};
 use futures::{StreamExt, TryStreamExt, future::BoxFuture, stream};
 use ingest::scan_obsidian_files;
-use log::{info, warn};
+use log::info;
 use render::{render_article, render_category, render_page};
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
-/// Async fn that takes page HTML and returns enriched HTML with rich bookmark cards.
-/// Use offline_bookmark_enricher in tests to avoid network access.
+/// Async function that enriches page HTML with rich bookmark cards.
 pub type BookmarkEnricher =
     Arc<dyn Fn(String) -> BoxFuture<'static, bookmark::Result<String>> + Send + Sync>;
 
-/// Returns a BookmarkEnricher that uses fallback data only; no network requests.
-pub fn offline_bookmark_enricher() -> BookmarkEnricher {
+fn rich_bookmark_enricher() -> BookmarkEnricher {
     Arc::new(|html: String| {
-        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich_offline(&html).await })
+        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich(&html).await })
     })
 }
 
-pub async fn run_main(config: &Config) -> Result<()> {
-    let enrich: BookmarkEnricher = Arc::new(|html: String| {
-        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich(&html).await })
-    });
-    run_with_policy(config, enrich, PublishPolicy::Strict).await
+pub async fn publish(obsidian_dir: &Path, output_dir: &Path) -> Result<()> {
+    publish_with_bookmark_enricher(obsidian_dir, output_dir, rich_bookmark_enricher()).await
 }
 
-pub async fn run_with_enricher(config: &Config, enrich: BookmarkEnricher) -> Result<()> {
-    run_with_policy(config, enrich, PublishPolicy::Strict).await
-}
-
-/// Generates diagnostic artifacts even when individual content files are invalid.
-/// Production and deployment callers should use [`run_main`] instead.
-pub async fn run_allowing_partial(config: &Config) -> Result<()> {
-    let enrich: BookmarkEnricher = Arc::new(|html: String| {
-        Box::pin(async move { bookmark::convert_simple_bookmarks_to_rich(&html).await })
-    });
-    run_with_policy(config, enrich, PublishPolicy::AllowPartial).await
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PublishPolicy {
-    Strict,
-    AllowPartial,
-}
-
-async fn run_with_policy(
-    config: &Config,
+pub async fn publish_with_bookmark_enricher(
+    obsidian_dir: &Path,
+    output_dir: &Path,
     enrich: BookmarkEnricher,
-    policy: PublishPolicy,
 ) -> Result<()> {
+    validate_obsidian_dir(obsidian_dir)?;
+
     let start_time = std::time::Instant::now();
     info!("=== Publisher Started ===");
-    info!("Input directory: {}", config.obsidian_dir.display());
-    info!("Output directory: {}", config.output_dir.display());
+    info!("Input directory: {}", obsidian_dir.display());
+    info!("Output directory: {}", output_dir.display());
 
-    let markdown_files = scan_obsidian_files(&config.obsidian_dir)?;
+    let markdown_files = scan_obsidian_files(obsidian_dir)?;
     info!("Found {} markdown files", markdown_files.len());
 
     let classify::ClassifiedFiles {
@@ -78,16 +54,13 @@ async fn run_with_policy(
         categories,
         skipped,
         errors,
-    } = classify_obsidian_files(markdown_files, config);
+    } = classify_obsidian_files(markdown_files, obsidian_dir);
 
     info!("Valid article files: {}", articles.len());
     info!("Valid page files: {}", pages.len());
     info!("Valid category files: {}", categories.len());
     info!("Skipped files: {skipped}");
     if errors > 0 {
-        warn!("Error files: {errors}");
-    }
-    if policy == PublishPolicy::Strict && errors > 0 {
         return Err(ObsidianError::ContentErrors { count: errors });
     }
 
@@ -95,7 +68,7 @@ async fn run_with_policy(
     ensure_unique_category_landings(&categories)?;
 
     let file_mapping = build_file_mapping(&articles);
-    let site_directories = SiteDirectories::prepare(&config.output_dir)?;
+    let site_directories = SiteDirectories::prepare(output_dir)?;
 
     const CONCURRENT_LIMIT: usize = 4;
 
@@ -176,15 +149,13 @@ async fn run_with_policy(
     })
     .await??;
 
-    if policy == PublishPolicy::Strict {
-        let site_root = config.output_dir.join("site");
-        let validation =
-            tokio::task::spawn_blocking(move || validate_site_artifacts(site_root)).await??;
-        info!(
-            "Validated {} articles across {} categories",
-            validation.article_count, validation.category_count
-        );
-    }
+    let site_root = output_dir.join("site");
+    let validation =
+        tokio::task::spawn_blocking(move || validate_site_artifacts(site_root)).await??;
+    info!(
+        "Validated {} articles across {} categories",
+        validation.article_count, validation.category_count
+    );
 
     let processed_count = site_artifacts.article_index.len();
     let duration = start_time.elapsed();
@@ -192,11 +163,8 @@ async fn run_with_policy(
     info!("=== Processing Summary ===");
     info!("Successfully processed: {processed_count} files");
     info!("  Skipped: {skipped} files");
-    if errors > 0 {
-        warn!("  Errors: {errors} files");
-    }
     info!("  Processing time: {duration:.2?}");
-    info!("Output directory: {}", config.output_dir.display());
+    info!("Output directory: {}", output_dir.display());
 
     if !site_artifacts.article_index.is_empty() {
         info!("Processed files:");
@@ -206,5 +174,23 @@ async fn run_with_policy(
     }
 
     info!("=== Publisher Completed ===");
+    Ok(())
+}
+
+fn validate_obsidian_dir(obsidian_dir: &Path) -> Result<()> {
+    if !obsidian_dir.exists() {
+        return Err(ObsidianError::InvalidSourceDirectory(format!(
+            "directory does not exist: {}",
+            obsidian_dir.display()
+        )));
+    }
+
+    if !obsidian_dir.is_dir() {
+        return Err(ObsidianError::InvalidSourceDirectory(format!(
+            "path is not a directory: {}",
+            obsidian_dir.display()
+        )));
+    }
+
     Ok(())
 }

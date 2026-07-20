@@ -1,4 +1,3 @@
-use crate::config::Config;
 use crate::error::{ObsidianError, Result};
 use crate::types::{ParsedArticleFile, ParsedCategoryFile, ParsedPageFile};
 use domain::{Category, ContentKind, PageKey};
@@ -7,21 +6,17 @@ use log::{error, warn};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-/// ファイル分類の結果を保持する構造体。
-pub(crate) struct ClassifiedFiles {
-    pub(crate) articles: Vec<ParsedArticleFile>,
-    pub(crate) pages: Vec<ParsedPageFile>,
-    pub(crate) categories: Vec<ParsedCategoryFile>,
-    pub(crate) skipped: usize,
-    pub(crate) errors: usize,
+pub(super) struct ClassifiedFiles {
+    pub(super) articles: Vec<ParsedArticleFile>,
+    pub(super) pages: Vec<ParsedPageFile>,
+    pub(super) categories: Vec<ParsedCategoryFile>,
+    pub(super) skipped: usize,
+    pub(super) errors: usize,
 }
 
-/// Obsidian ファイルのリストを解析し、記事・ページ・カテゴリに分類する。
-/// `parsed.front_matter.is_completed` が true でないファイルはスキップし、
-/// 解析エラーはエラーとしてカウントする。
-pub(crate) fn classify_obsidian_files(
+pub(super) fn classify_obsidian_files(
     markdown_files: Vec<PathBuf>,
-    config: &Config,
+    obsidian_dir: &Path,
 ) -> ClassifiedFiles {
     let mut articles = Vec::new();
     let mut pages = Vec::new();
@@ -33,8 +28,10 @@ pub(crate) fn classify_obsidian_files(
         match parse_obsidian_file(&file_path) {
             Ok(Some(parsed)) if parsed.front_matter.is_completed => {
                 let result: Result<()> = match parsed.front_matter.kind {
-                    ContentKind::Article => process_valid_article_file(&file_path, parsed, config)
-                        .map(|f| articles.push(f)),
+                    ContentKind::Article => {
+                        process_valid_article_file(&file_path, parsed, obsidian_dir)
+                            .map(|f| articles.push(f))
+                    }
                     ContentKind::Page => process_valid_page_file(parsed).map(|f| pages.push(f)),
                     ContentKind::Home => process_valid_home_file(parsed).map(|f| pages.push(f)),
                     ContentKind::Category => {
@@ -69,9 +66,9 @@ pub(crate) fn classify_obsidian_files(
 fn process_valid_article_file(
     file_path: &Path,
     parsed_file: ParsedObsidianFile,
-    config: &Config,
+    obsidian_dir: &Path,
 ) -> Result<ParsedArticleFile> {
-    let relative_path = get_relative_path(file_path, &config.obsidian_dir)?;
+    let relative_path = get_relative_path(file_path, obsidian_dir)?;
     let slug = crate::slug::generate_slug(
         &parsed_file.front_matter.title,
         relative_path,
@@ -117,13 +114,11 @@ fn process_valid_category_file(parsed_file: ParsedObsidianFile) -> Result<Parsed
     })
 }
 
-/// OS 固有のパス区切り文字を `/` に統一する。
 fn normalize_path_for_url(path: &Path) -> String {
     path.to_string_lossy()
         .replace(std::path::MAIN_SEPARATOR, "/")
 }
 
-/// ベースディレクトリを除いた相対パスを取得する。
 fn get_relative_path<'a>(file_path: &'a Path, base_dir: &Path) -> Result<&'a Path> {
     file_path.strip_prefix(base_dir).map_err(|_| {
         ObsidianError::Path(format!(
@@ -133,7 +128,7 @@ fn get_relative_path<'a>(file_path: &'a Path, base_dir: &Path) -> Result<&'a Pat
     })
 }
 
-pub(crate) fn build_file_mapping(valid_files: &[ParsedArticleFile]) -> FileMapping {
+pub(super) fn build_file_mapping(valid_files: &[ParsedArticleFile]) -> FileMapping {
     let mut mapping = FileMapping::with_capacity(valid_files.len());
     for parsed_file in valid_files {
         mapping.insert(
@@ -164,7 +159,7 @@ fn derive_section_path(relative_path: &Path, category: Option<&str>) -> Vec<Stri
     path_components
 }
 
-pub(crate) fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<()> {
+pub(super) fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<()> {
     let mut seen = HashSet::with_capacity(valid_pages.len());
     for parsed_page in valid_pages {
         if !seen.insert(parsed_page.page.as_str()) {
@@ -177,7 +172,7 @@ pub(crate) fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<
     Ok(())
 }
 
-pub(crate) fn ensure_unique_category_landings(
+pub(super) fn ensure_unique_category_landings(
     valid_categories: &[ParsedCategoryFile],
 ) -> Result<()> {
     let mut seen = HashSet::with_capacity(valid_categories.len());
@@ -192,7 +187,7 @@ pub(crate) fn ensure_unique_category_landings(
     Ok(())
 }
 
-pub(crate) fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
+fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
     let category = front_matter
         .category
         .as_deref()
@@ -200,7 +195,7 @@ pub(crate) fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Categ
     category.parse().map_err(Into::into)
 }
 
-pub(crate) fn parse_page_key(front_matter: &ObsidianFrontMatter) -> Result<PageKey> {
+fn parse_page_key(front_matter: &ObsidianFrontMatter) -> Result<PageKey> {
     let page = front_matter
         .page
         .as_deref()

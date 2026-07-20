@@ -1,16 +1,45 @@
 mod support;
 
 use indoc::indoc;
-use publisher::{
-    Config, offline_bookmark_enricher, run_allowing_partial, run_main, run_with_enricher,
-};
-use std::fs;
-use std::path::PathBuf;
+use publisher::{BookmarkEnricher, ObsidianError, publish, publish_with_bookmark_enricher};
+use std::{fs, path::Path, sync::Arc};
 use support::{collect_html_files, write_about_page};
 use tempfile::TempDir;
 
+fn offline_bookmark_enricher() -> BookmarkEnricher {
+    Arc::new(|html: String| {
+        Box::pin(async move {
+            bookmark::convert_simple_bookmarks_with(&html, |url, original_title| async move {
+                bookmark::create_fallback_bookmark_data(&url, &original_title)
+            })
+            .await
+        })
+    })
+}
+
+fn write_required_article(obsidian_dir: &Path) {
+    fs::write(
+        obsidian_dir.join("required-article.md"),
+        indoc! {r#"
+            ---
+            title: "Required Article"
+            summary: "Required article for a deployable fixture"
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
+            is_completed: true
+            category: "tech"
+            ---
+
+            # Required Article
+
+            This article makes the fixture deployable.
+        "#},
+    )
+    .unwrap();
+}
+
 #[tokio::test]
-async fn test_run_main_with_empty_directory() {
+async fn test_publish_with_empty_directory() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
@@ -18,18 +47,13 @@ async fn test_run_main_with_empty_directory() {
     // Create an empty Obsidian directory.
     fs::create_dir_all(&obsidian_dir).unwrap();
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
     // A deployable artifact set must contain at least one article.
-    let result = run_main(&config).await;
+    let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_err());
 }
 
 #[tokio::test]
-async fn test_run_main_with_sample_file() {
+async fn test_publish_with_sample_file() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
@@ -58,13 +82,7 @@ async fn test_run_main_with_sample_file() {
     fs::write(&sample_file, sample_content).unwrap();
     write_about_page(&obsidian_dir);
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
-    // Run `run_main`.
-    let result = run_main(&config).await;
+    let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
     let site_root = output_dir.join("site");
@@ -91,7 +109,7 @@ async fn test_run_main_with_sample_file() {
 }
 
 #[tokio::test]
-async fn test_run_main_with_incomplete_file() {
+async fn test_publish_skips_incomplete_file() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
@@ -118,27 +136,20 @@ async fn test_run_main_with_incomplete_file() {
 
     let sample_file = obsidian_dir.join("incomplete.md");
     fs::write(&sample_file, incomplete_content).unwrap();
+    write_required_article(&obsidian_dir);
+    write_about_page(&obsidian_dir);
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
-    // Run `run_main`.
-    let result = run_allowing_partial(&config).await;
+    let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
-    // Verify that no HTML file is generated for incomplete content.
-    let html_file = output_dir
-        .join("site")
-        .join("articles")
-        .join("tech")
-        .join("incomplete.html");
-    assert!(!html_file.exists());
+    let article_index =
+        fs::read_to_string(output_dir.join("site").join("articles").join("index.json")).unwrap();
+    assert!(article_index.contains("Required Article"));
+    assert!(!article_index.contains("Incomplete Article"));
 }
 
 #[tokio::test]
-async fn test_run_main_with_static_page_file() {
+async fn test_publish_with_static_page_file() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
@@ -163,13 +174,9 @@ async fn test_run_main_with_static_page_file() {
 
     let page_file = obsidian_dir.join("about.md");
     fs::write(&page_file, page_content).unwrap();
+    write_required_article(&obsidian_dir);
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
-    let result = run_allowing_partial(&config).await;
+    let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
     let page_document =
@@ -181,7 +188,7 @@ async fn test_run_main_with_static_page_file() {
 }
 
 #[tokio::test]
-async fn test_run_main_with_home_fragment_file() {
+async fn test_publish_with_home_fragment_file() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
@@ -205,13 +212,10 @@ async fn test_run_main_with_home_fragment_file() {
 
     let page_file = obsidian_dir.join("home.md");
     fs::write(&page_file, page_content).unwrap();
+    write_required_article(&obsidian_dir);
+    write_about_page(&obsidian_dir);
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
-    let result = run_allowing_partial(&config).await;
+    let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
     let page_document =
@@ -223,7 +227,7 @@ async fn test_run_main_with_home_fragment_file() {
 }
 
 #[tokio::test]
-async fn test_run_main_with_category_landing_file() {
+async fn test_publish_with_category_landing_file() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
@@ -264,12 +268,7 @@ async fn test_run_main_with_category_landing_file() {
     fs::write(obsidian_dir.join("tech/index.md"), category_content).unwrap();
     write_about_page(&obsidian_dir);
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
-    let result = run_main(&config).await;
+    let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
     let category_index = fs::read_to_string(
@@ -295,31 +294,30 @@ async fn test_run_main_with_category_landing_file() {
     assert!(category_page.contains("Welcome to the category landing page."));
 }
 
-#[test]
-fn test_config_validation() {
-    // Verify config behavior with a non-existent directory.
+#[tokio::test]
+async fn test_publish_rejects_non_existent_obsidian_directory() {
     let temp_dir = TempDir::new().unwrap();
     let non_existent_dir = temp_dir.path().join("non_existent");
+    let output_dir = temp_dir.path().join("dist");
 
-    let config = Config {
-        obsidian_dir: non_existent_dir,
-        output_dir: PathBuf::from("test_output"),
-    };
+    let result = publish(&non_existent_dir, &output_dir).await;
 
-    // `validate` is not called directly here, so assert the missing-path behavior instead.
-    assert!(!config.obsidian_dir.exists());
+    assert!(matches!(
+        result,
+        Err(ObsidianError::InvalidSourceDirectory(_))
+    ));
+    assert!(!output_dir.exists());
 }
 
 #[tokio::test]
-async fn test_run_with_enricher_with_bookmark_article() {
+async fn test_publish_with_bookmark_enricher() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
 
     fs::create_dir_all(&obsidian_dir).unwrap();
 
-    // Use an offline enricher that converts bookmarks with fallback data only,
-    // so no network request is made and the test never waits for a timeout.
+    // Use an offline enricher that converts bookmarks with fallback data only.
     let sample_content = indoc! {r#"
         ---
         title: "Bookmark Article"
@@ -343,12 +341,9 @@ async fn test_run_with_enricher_with_bookmark_article() {
     fs::write(&sample_file, sample_content).unwrap();
     write_about_page(&obsidian_dir);
 
-    let config = Config {
-        obsidian_dir,
-        output_dir: output_dir.clone(),
-    };
-
-    let result = run_with_enricher(&config, offline_bookmark_enricher()).await;
+    let result =
+        publish_with_bookmark_enricher(&obsidian_dir, &output_dir, offline_bookmark_enricher())
+            .await;
     assert!(result.is_ok());
 
     let articles_dir = output_dir.join("site").join("articles");
@@ -365,7 +360,7 @@ async fn test_run_with_enricher_with_bookmark_article() {
     );
 
     // The bookmark should have been converted to the rich card format
-    // (fallback data is used when the OGP fetch fails).
+    // (fallback data is used without an OGP request).
     assert!(
         html_content.contains(r#"class="bookmark-link""#),
         "bookmark should be converted to rich format; got: {html_content}"

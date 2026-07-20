@@ -251,8 +251,11 @@ fn html_escape(text: &str) -> String {
         .replace('\'', "&#x27;")
 }
 
-/// Core substitution loop; calls `fetch_data(url, title)` per match to obtain `BookmarkData`.
-async fn convert_bookmarks_with<F, Fut>(html_content: &str, fetch_data: F) -> Result<String>
+/// Replaces simple bookmark markup using metadata supplied by `fetch_data`.
+pub async fn convert_simple_bookmarks_with<F, Fut>(
+    html_content: &str,
+    fetch_data: F,
+) -> Result<String>
 where
     F: Fn(String, String) -> Fut,
     Fut: Future<Output = BookmarkData>,
@@ -286,19 +289,11 @@ where
 
 /// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
 pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
-    convert_bookmarks_with(html_content, |url, original_title| async move {
+    convert_simple_bookmarks_with(html_content, |url, original_title| async move {
         fetch_ogp_metadata(&url).await.unwrap_or_else(|e| {
             log::warn!("Warning: Failed to fetch OGP metadata for '{url}': {e}");
             create_fallback_bookmark_data(&url, &original_title)
         })
-    })
-    .await
-}
-
-/// Like `convert_simple_bookmarks_to_rich` but uses fallback data only; no network requests.
-pub async fn convert_simple_bookmarks_to_rich_offline(html_content: &str) -> Result<String> {
-    convert_bookmarks_with(html_content, |url, original_title| async move {
-        create_fallback_bookmark_data(&url, &original_title)
     })
     .await
 }

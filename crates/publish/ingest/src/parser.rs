@@ -31,43 +31,35 @@ pub struct ParsedObsidianFile {
 enum FrontmatterSplit<'a> {
     NoFrontmatter,
     Complete { yaml: &'a str, body: &'a str },
-    Unterminated,
 }
 
 /// Parse Obsidian file and return the frontmatter plus markdown body.
 pub fn parse_obsidian_file(path: impl AsRef<Path>) -> Result<Option<ParsedObsidianFile>> {
     let content = fs::read_to_string(&path)?;
-    match split_frontmatter(&content) {
+    match split_frontmatter(&content)? {
         FrontmatterSplit::Complete { yaml, body } => {
             let front_matter = serde_yaml::from_str::<ObsidianFrontMatter>(yaml)?;
             Ok(Some(ParsedObsidianFile {
                 front_matter,
-                markdown_body: normalize_markdown_body(body),
+                markdown_body: body.to_owned(),
             }))
         }
         FrontmatterSplit::NoFrontmatter => Ok(None),
-        FrontmatterSplit::Unterminated => Err(unterminated_frontmatter_error()),
     }
 }
 
-fn split_frontmatter(content: &str) -> FrontmatterSplit<'_> {
+fn split_frontmatter(content: &str) -> Result<FrontmatterSplit<'_>> {
     let trimmed = content.trim_start();
     let Some(rest) = trimmed.strip_prefix("---\n") else {
-        return FrontmatterSplit::NoFrontmatter;
+        return Ok(FrontmatterSplit::NoFrontmatter);
     };
 
     match rest.split_once("\n---\n") {
-        Some((yaml, body)) => FrontmatterSplit::Complete { yaml, body },
-        None => FrontmatterSplit::Unterminated,
+        Some((yaml, body)) => Ok(FrontmatterSplit::Complete { yaml, body }),
+        None => Err(IngestError::Parse(
+            "unterminated front‑matter (closing `---` not found)".into(),
+        )),
     }
-}
-
-fn normalize_markdown_body(body: &str) -> String {
-    body.trim_end_matches(['\r', '\n']).to_string()
-}
-
-fn unterminated_frontmatter_error() -> IngestError {
-    IngestError::Parse("unterminated front‑matter (closing `---` not found)".into())
 }
 
 #[cfg(test)]
@@ -78,10 +70,9 @@ mod tests {
     use tempfile::TempDir;
 
     fn extract_yaml_frontmatter(text: &str) -> Result<Option<&str>> {
-        match split_frontmatter(text) {
+        match split_frontmatter(text)? {
             FrontmatterSplit::Complete { yaml, .. } => Ok(Some(yaml)),
             FrontmatterSplit::NoFrontmatter => Ok(None),
-            FrontmatterSplit::Unterminated => Err(unterminated_frontmatter_error()),
         }
     }
 
@@ -92,26 +83,28 @@ mod tests {
     }
 
     #[rstest]
-    #[case::full_frontmatter( indoc! {r#"
-        title: "Test Article"
-        tags: ["rust", "programming"]
-        summary: "This is a test article"
-        is_completed: true
-        priority: 1
-        created: "2025-01-01T00:00:00+09:00"
-        updated: "2025-01-02T00:00:00+09:00"
-        category: "tech"
+    #[case::full_frontmatter(
+        indoc! {r#"
+            title: "Test Article"
+            tags: ["rust", "programming"]
+            summary: "This is a test article"
+            is_completed: true
+            priority: 1
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-02T00:00:00+09:00"
+            category: "tech"
         "#},
         "Test Article",
         true,
         Some(1),
         Some("tech")
     )]
-    #[case::minimal_frontmatter(indoc! {r#"
-        title: "Minimal Article"
-        is_completed: false
-        created: "2025-01-01T00:00:00+09:00"
-        updated: "2025-01-01T00:00:00+09:00"
+    #[case::minimal_frontmatter(
+        indoc! {r#"
+            title: "Minimal Article"
+            is_completed: false
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
         "#},
         "Minimal Article",
         false,
@@ -139,8 +132,7 @@ mod tests {
 
     #[rstest]
     #[case::valid_frontmatter(
-        indoc! {
-            r#"
+        indoc! {r#"
             ---
             title: "Test Article"
             tags: ["rust", "test"]
@@ -149,38 +141,35 @@ mod tests {
             updated: "2025-01-02T00:00:00+09:00"
             ---
             # Content
-            "#},
+        "#},
         true,
         false
     )]
     #[case::no_frontmatter(
-        indoc! {
-            r#"
+        indoc! {r#"
             # Article Without Frontmatter
             This article has no frontmatter.
-            "#},
+        "#},
         false,
         false
     )]
     #[case::unterminated_frontmatter(
-        indoc! {
-            r#"
+        indoc! {r#"
             ---
             tite: "Test Article"
             is_completed: true
             # Article Content
-            "#},
+        "#},
         false,
         true
     )]
     #[case::invalid_yaml(
-        indoc! {
-            r#"
+        indoc! {r#"
             ---
             invalid: yaml: content:
             ---
             # Content
-            "#},
+        "#},
         false,
         true
     )]
@@ -207,8 +196,7 @@ mod tests {
 
     #[rstest]
     #[case::valid_file(
-        indoc! {
-            r#"
+        indoc! {r#"
             ---
             title: "File Test"
             is_completed: true
@@ -216,7 +204,7 @@ mod tests {
             updated: "2025-01-01T00:00:00+09:00"
             ---
             # Test Content
-            "#},
+        "#},
         true
     )]
     #[case::no_frontmatter_file("# Just content", false)]
@@ -236,7 +224,12 @@ mod tests {
             assert_eq!(parsed_file.front_matter.title, "File Test");
             assert_eq!(parsed_file.front_matter.kind, ContentKind::Article);
             assert!(parsed_file.front_matter.is_completed);
-            assert_eq!(parsed_file.markdown_body, "# Test Content");
+            assert_eq!(
+                parsed_file.markdown_body,
+                indoc! {r#"
+                    # Test Content
+                "#}
+            );
         }
 
         Ok(())
@@ -244,14 +237,13 @@ mod tests {
 
     #[rstest]
     fn test_extract_yaml_frontmatter() -> Result<()> {
-        let content = indoc! {
-        r#"
-        ---
-        title: Test
-        key: value
-        ---
+        let content = indoc! {r#"
+            ---
+            title: Test
+            key: value
+            ---
 
-        Content here
+            Content here
         "#};
 
         let result = extract_yaml_frontmatter(content)?;
@@ -265,39 +257,55 @@ mod tests {
     }
 
     #[rstest]
-    #[case::closing_at_eof(indoc! {r#"
-        ---
-        title: "File Test"
-        is_completed: true
-        created: "2025-01-01T00:00:00+09:00"
-        updated: "2025-01-01T00:00:00+09:00"
-        ---
-        "#}, true, false)]
-    #[case::no_newline_after_delim(indoc! {r#"
-        ---
-        title: "File Test"
-        is_completed: true
-        created: "2025-01-01T00:00:00+09:00"
-        updated: "2025-01-01T00:00:00+09:00"
-        ---# Heading
-        "#}, true, true)]
-    #[case::leading_blank_lines(indoc! {r#"
+    #[case::closing_at_eof(
+        indoc! {r#"
+            ---
+            title: "File Test"
+            is_completed: true
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
+            ---
+        "#},
+        true,
+        false
+    )]
+    #[case::no_newline_after_delim(
+        indoc! {r#"
+            ---
+            title: "File Test"
+            is_completed: true
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
+            ---# Heading
+        "#},
+        true,
+        true
+    )]
+    #[case::leading_blank_lines(
+        indoc! {r#"
 
 
-        ---
-        title: "File Test"
-        is_completed: true
-        created: "2025-01-01T00:00:00+09:00"
-        updated: "2025-01-01T00:00:00+09:00"
-        ---
+            ---
+            title: "File Test"
+            is_completed: true
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
+            ---
 
-        body
-        "#}, true, false)]
-    #[case::empty_frontmatter(indoc! {r#"
-        ---
-        ---
-        Body
-        "#}, true, true)]
+            body
+        "#},
+        true,
+        false
+    )]
+    #[case::empty_frontmatter(
+        indoc! {r#"
+            ---
+            ---
+            Body
+        "#},
+        true,
+        true
+    )]
     fn test_additional_cases(
         #[case] content: &str,
         #[case] should_have_frontmatter: bool,
@@ -313,8 +321,7 @@ mod tests {
 
     #[rstest]
     fn test_parse_explicit_kind() {
-        let content = indoc! {
-            r#"
+        let content = indoc! {r#"
             ---
             title: "About"
             kind: page
@@ -324,8 +331,7 @@ mod tests {
             updated: "2025-01-01T00:00:00+09:00"
             ---
             About body
-            "#
-        };
+        "#};
 
         let frontmatter = parse_frontmatter(content).unwrap().unwrap();
 
@@ -335,53 +341,140 @@ mod tests {
 
     #[rstest]
     #[case::with_frontmatter(
-        "---\ntitle: Test\n---\n# Content\n\nBody text",
-        FrontmatterSplit::Complete { yaml: "title: Test", body: "# Content\n\nBody text" }
+        indoc! {r#"
+            ---
+            title: Test
+            ---
+            # Content
+
+            Body text"#},
+        FrontmatterSplit::Complete {
+            yaml: "title: Test",
+            body: indoc! {r#"
+                # Content
+
+                Body text"#},
+        }
     )]
-    #[case::no_frontmatter("# Content\n\nBody text", FrontmatterSplit::NoFrontmatter)]
-    #[case::malformed_frontmatter(
-        "---\ntitle: Test\n# Content\n\nBody text",
-        FrontmatterSplit::Unterminated
+    #[case::no_frontmatter(
+        indoc! {r#"
+            # Content
+
+            Body text"#},
+        FrontmatterSplit::NoFrontmatter
     )]
     #[case::empty_body(
-        "---\ntitle: Test\n---\n",
+        indoc! {r#"
+            ---
+            title: Test
+            ---
+        "#},
         FrontmatterSplit::Complete { yaml: "title: Test", body: "" }
     )]
     #[case::whitespace_handling(
-        "   ---\ntitle: Test\n---\n\n# Content",
-        FrontmatterSplit::Complete { yaml: "title: Test", body: "\n# Content" }
+        indoc! {r#"
+               ---
+            title: Test
+            ---
+
+            # Content"#},
+        FrontmatterSplit::Complete {
+            yaml: "title: Test",
+            body: indoc! {r#"
+
+                # Content"#},
+        }
     )]
     #[case::multiple_frontmatter_separators(
-        "---\ntitle: Test\n---\n# Section\n---\nMore content",
-        FrontmatterSplit::Complete { yaml: "title: Test", body: "# Section\n---\nMore content" }
+        indoc! {r#"
+            ---
+            title: Test
+            ---
+            # Section
+            ---
+            More content"#},
+        FrontmatterSplit::Complete {
+            yaml: "title: Test",
+            body: indoc! {r#"
+                # Section
+                ---
+                More content"#},
+        }
     )]
     #[case::frontmatter_with_complex_yaml(
-        "---\ntitle: \"Complex: Title\"\ntags: [\"tag1\", \"tag2\"]\n---\n## Heading",
+        indoc! {r#"
+            ---
+            title: "Complex: Title"
+            tags: ["tag1", "tag2"]
+            ---
+            ## Heading"#},
         FrontmatterSplit::Complete {
-            yaml: "title: \"Complex: Title\"\ntags: [\"tag1\", \"tag2\"]",
+            yaml: indoc! {r#"
+                title: "Complex: Title"
+                tags: ["tag1", "tag2"]"#},
             body: "## Heading"
         }
     )]
     fn test_split_frontmatter(#[case] input: &str, #[case] expected: FrontmatterSplit<'_>) {
-        let result = split_frontmatter(input);
+        let result = split_frontmatter(input).unwrap();
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_split_frontmatter_rejects_unterminated_frontmatter() {
+        let content = indoc! {r#"
+            ---
+            title: Test
+            # Content
+
+            Body text
+        "#};
+
+        let result = split_frontmatter(content);
+
+        assert!(matches!(
+            result,
+            Err(IngestError::Parse(message)) if message.contains("unterminated front‑matter")
+        ));
     }
 
     #[rstest]
     #[case::body_with_trailing_newline(
-        "---\ntitle: Test\nis_completed: true\ncreated: \"2025-01-01T00:00:00+09:00\"\nupdated: \"2025-01-01T00:00:00+09:00\"\n---\n# Content\n",
-        "# Content"
+        indoc! {r#"
+            ---
+            title: Test
+            is_completed: true
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
+            ---
+            # Content
+        "#},
+        indoc! {r#"
+            # Content
+        "#}
     )]
     #[case::body_with_blank_line(
-        "---\ntitle: Test\nis_completed: true\ncreated: \"2025-01-01T00:00:00+09:00\"\nupdated: \"2025-01-01T00:00:00+09:00\"\n---\n# Content\n\nBody text",
-        "# Content\n\nBody text"
+        indoc! {r#"
+            ---
+            title: Test
+            is_completed: true
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
+            ---
+            # Content
+
+            Body text"#},
+        indoc! {r#"
+            # Content
+
+            Body text"#}
     )]
-    fn test_parse_obsidian_file_normalizes_markdown_body(
+    fn test_parse_obsidian_file_preserves_markdown_body(
         #[case] content: &str,
         #[case] expected_body: &str,
     ) -> Result<()> {
         let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("normalize.md");
+        let file_path = temp_dir.path().join("preserve.md");
         fs::write(&file_path, content)?;
 
         let parsed_file = parse_obsidian_file(&file_path)?.unwrap();
