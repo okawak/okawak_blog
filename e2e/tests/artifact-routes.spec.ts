@@ -83,13 +83,6 @@ test("runtime probes distinguish liveness and artifact readiness", async ({ requ
   expect(await readinessResponse.text()).toBe("READY");
 });
 
-test("frontend assets fall back to the previous release", async ({ request }) => {
-  const response = await request.get("/pkg/e2e-previous-release.txt");
-
-  expect(response.status()).toBe(200);
-  expect(await response.text()).toBe("previous release asset\n");
-});
-
 test("site declares and serves its favicon", async ({ page, request }) => {
   await page.goto("/");
 

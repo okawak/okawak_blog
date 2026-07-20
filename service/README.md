@@ -33,7 +33,7 @@ git status --short
 
 `command -v cargo-leptos`がmiseのinstall directoryではなく運用userのCargo bin directoryを示し、versionが`0.3.7`、Git差分が空であれば正常です。`mise run build-project`とproduction用のstaged buildは`web-install`にも依存するため、fresh checkoutでもBun依存を個別に導入する必要はありません。
 
-`mise run production-deploy`は稼働中の`target/site`を直接buildしません。`target/site-staged`にhash付きCSS / JavaScript / WebAssemblyを揃え、service停止後にsite、binary、binaryと同じdirectoryでLeptosが読む`bin/hash.txt`を同じreleaseへ切り替えます。直前のsiteは`target/site-previous`として1世代だけ保持し、切替直前のpageが参照する旧`/pkg` assetのfallbackに使います。起動後のhealth / readinessが失敗した場合は旧releaseを復元し、調査用の失敗siteを`target/site-failed`へ残します。
+`mise run production-deploy`は稼働中の`target/site`を直接buildしません。`target/site-staged`にhash付きCSS / JavaScript / WebAssemblyを揃え、service停止後にsite、binary、binaryと同じdirectoryでLeptosが読む`bin/hash.txt`を同じreleaseへ切り替えます。起動後のhealth / readinessが失敗した場合は旧releaseを復元し、調査用の失敗siteを`target/site-failed`へ残します。
 
 ## AWS credentials
 

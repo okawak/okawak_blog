@@ -12,8 +12,7 @@ target_hash_file="${TARGET_HASH_FILE:-./target/release/hash.txt}"
 bin_dir="${BIN_DIR:-./bin}"
 staged_site="${DEPLOY_STAGED_SITE:-./target/site-staged}"
 live_site="./target/site"
-previous_site="./target/site-previous"
-older_previous_site="./target/site-previous-rollback"
+rollback_site="./target/site-rollback"
 failed_site="./target/site-failed"
 installed_bin="$bin_dir/$service_name"
 rollback_bin="$bin_dir/$service_name.rollback"
@@ -22,7 +21,6 @@ rollback_hash_file="$bin_dir/hash.txt.rollback"
 
 service_was_active=false
 live_site_moved=false
-previous_site_moved=false
 site_swapped=false
 binary_change_started=false
 had_installed_bin=false
@@ -68,10 +66,7 @@ rollback() {
     fi
   fi
   if [[ "$live_site_moved" == true ]]; then
-    mv "$previous_site" "$live_site"
-  fi
-  if [[ "$previous_site_moved" == true ]]; then
-    mv "$older_previous_site" "$previous_site"
+    mv "$rollback_site" "$live_site"
   fi
 
   sudo systemctl daemon-reload
@@ -93,8 +88,7 @@ find "$staged_site/pkg" -maxdepth 1 -type f -name '*.js' -print -quit | grep -q 
 find "$staged_site/pkg" -maxdepth 1 -type f -name '*.wasm' -print -quit | grep -q . \
   || fail "staged WebAssembly bundle is missing"
 
-path_exists "$older_previous_site" \
-  && fail "older previous site already exists: $older_previous_site"
+path_exists "$rollback_site" && fail "rollback site already exists: $rollback_site"
 path_exists "$failed_site" && fail "failed site already exists: $failed_site"
 path_exists "$rollback_bin" && fail "rollback binary already exists: $rollback_bin"
 path_exists "$rollback_hash_file" && fail "rollback hash manifest already exists: $rollback_hash_file"
@@ -110,12 +104,8 @@ sudo install -o root -g root -m 0644 \
 sudo systemctl daemon-reload
 sudo systemctl stop "$service_name.service"
 
-if path_exists "$previous_site"; then
-  mv "$previous_site" "$older_previous_site"
-  previous_site_moved=true
-fi
 if path_exists "$live_site"; then
-  mv "$live_site" "$previous_site"
+  mv "$live_site" "$rollback_site"
   live_site_moved=true
 fi
 mv "$staged_site" "$live_site"
@@ -151,8 +141,8 @@ done
 [[ "$ready" == true ]] || fail "health/readiness checks did not pass"
 
 trap - ERR
-if [[ "$previous_site_moved" == true ]]; then
-  rm -rf -- "$older_previous_site"
+if [[ "$live_site_moved" == true ]]; then
+  rm -rf -- "$rollback_site"
 fi
 if [[ "$had_installed_bin" == true ]]; then
   sudo rm -f "$rollback_bin"
