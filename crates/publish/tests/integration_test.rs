@@ -7,12 +7,24 @@ use tempfile::TempDir;
 use test_fixtures::{collect_html_files, write_about_page};
 
 fn offline_bookmark_enricher() -> BookmarkEnricher {
-    Arc::new(|_html: String| {
+    Arc::new(|html: String| {
         Box::pin(async move {
-            Ok(
-                r#"<a class="bookmark-link"><span class="bookmark-domain">example.com</span></a>"#
-                    .to_string(),
-            )
+            const SIMPLE_BOOKMARK: &str = r#"<div class="bookmark">
+  <a href="https://example.com">Fallback Bookmark</a>
+</div>"#;
+            const RICH_BOOKMARK: &str =
+                r#"<a class="bookmark-link"><span class="bookmark-domain">example.com</span></a>"#;
+
+            if !html.contains("Fallback Bookmark") {
+                return Ok(html);
+            }
+
+            assert!(
+                html.contains(SIMPLE_BOOKMARK),
+                "enricher should receive simple bookmark markup; got: {html}"
+            );
+
+            Ok(html.replace(SIMPLE_BOOKMARK, RICH_BOOKMARK))
         })
     })
 }

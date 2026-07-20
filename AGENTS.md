@@ -30,7 +30,6 @@
 
 - `crates/domain`: publisher と reader が共有する純粋な型・契約・ルール。I/O、`async`、AWS SDK、Axum、Leptos を持ち込まない。WASM 互換を意識する
 - `crates/publish`: 単一のpublisher crate。vault走査、frontmatter、Markdown変換、Obsidian記法、bookmark enrichment、artifact生成、orchestrationを内部moduleへ分ける。publisher専用処理をcrate外へ公開しない
-- `ObsidianFrontMatter`と`ContentKind`はpublisherの入力形式であり、共有domain契約へ置かない
 - `crates/site/infra`: server が artifact を読む外部境界（local / S3、設定、将来のcache）。vault読取、Markdown変換、uploadを置かない
 - `crates/site/server`: Axum + Leptos SSR host、reader注入、API、health/readiness、release-aware conditional GET
 - `crates/site/web`: Leptos UI / route / metadata。SSR時もstorage実装へ直接依存しない
