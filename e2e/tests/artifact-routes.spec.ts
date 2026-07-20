@@ -75,9 +75,13 @@ test("site declares and serves its favicon", async ({ page, request }) => {
 
   const iconLink = page.locator('link[rel~="icon"]');
   await expect(iconLink).toHaveCount(1);
-  await expect(iconLink).toHaveAttribute("href", "/favicon.ico");
+  await expect(iconLink).toHaveAttribute(
+    "href",
+    "/favicon.ico?v=f544a69c",
+  );
+  await expect(iconLink).toHaveAttribute("sizes", "16x16 32x32 48x48");
 
-  const response = await request.get("/favicon.ico");
+  const response = await request.get("/favicon.ico?v=f544a69c");
   expect(response.status()).toBe(200);
   expect(response.headers()["content-type"]).toMatch(/^image\//);
   expect((await response.body()).byteLength).toBeGreaterThan(0);
