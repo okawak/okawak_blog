@@ -1,18 +1,30 @@
-mod support;
+mod test_fixtures;
 
 use indoc::indoc;
 use publisher::{BookmarkEnricher, ObsidianError, publish, publish_with_bookmark_enricher};
 use std::{fs, path::Path, sync::Arc};
-use support::{collect_html_files, write_about_page};
 use tempfile::TempDir;
+use test_fixtures::{collect_html_files, write_about_page};
 
 fn offline_bookmark_enricher() -> BookmarkEnricher {
     Arc::new(|html: String| {
         Box::pin(async move {
-            bookmark::convert_simple_bookmarks_with(&html, |url, original_title| async move {
-                bookmark::create_fallback_bookmark_data(&url, &original_title)
-            })
-            .await
+            const SIMPLE_BOOKMARK: &str = r#"<div class="bookmark">
+  <a href="https://example.com">Fallback Bookmark</a>
+</div>"#;
+            const RICH_BOOKMARK: &str =
+                r#"<a class="bookmark-link"><span class="bookmark-domain">example.com</span></a>"#;
+
+            if !html.contains("Fallback Bookmark") {
+                return Ok(html);
+            }
+
+            assert!(
+                html.contains(SIMPLE_BOOKMARK),
+                "enricher should receive simple bookmark markup; got: {html}"
+            );
+
+            Ok(html.replace(SIMPLE_BOOKMARK, RICH_BOOKMARK))
         })
     })
 }

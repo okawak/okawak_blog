@@ -2,8 +2,8 @@ use anyhow::Result;
 use publisher::publish;
 use std::path::Path;
 
-const OBSIDIAN_DIR: &str = "crates/publish/publisher/obsidian/Publish";
-const OUTPUT_DIR: &str = "crates/publish/publisher/dist";
+const OBSIDIAN_DIR: &str = "crates/publish/obsidian/Publish";
+const OUTPUT_DIR: &str = "crates/publish/dist";
 
 #[tokio::main]
 async fn main() -> Result<()> {

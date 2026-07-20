@@ -1,14 +1,14 @@
 use crate::BookmarkEnricher;
+use crate::artifacts::CategoryLandingMetadata;
 use crate::error::Result;
+use crate::ingest::{FileMapping, convert_markdown_to_html, convert_obsidian_links};
 use crate::types::{
     ParsedArticleFile, ParsedCategoryFile, ParsedPageFile, RenderedArticle,
     RenderedCategoryLanding, RenderedPage,
 };
-use artifacts::CategoryLandingMetadata;
 use domain::{
     ArticleBody, ArticleMeta, ArticleMetaInput, Category, PageArtifactDocument, Slug, Title,
 };
-use ingest::{FileMapping, convert_markdown_to_html, convert_obsidian_links};
 use log::warn;
 
 async fn render_html(

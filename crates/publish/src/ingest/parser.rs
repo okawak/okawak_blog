@@ -1,30 +1,39 @@
-use crate::error::{IngestError, Result};
-use domain::ContentKind;
+use super::error::{IngestError, Result};
 use serde::Deserialize;
 use std::{fs, path::Path};
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct ObsidianFrontMatter {
-    pub title: String,
+pub(crate) struct ObsidianFrontMatter {
+    pub(crate) title: String,
     #[serde(default)]
-    pub kind: ContentKind,
+    pub(crate) kind: ContentKind,
     #[serde(default)]
-    pub tags: Option<Vec<String>>,
-    pub summary: Option<String>,
-    pub is_completed: bool,
-    pub priority: Option<i32>,
-    pub created: String,
-    pub updated: String,
+    pub(crate) tags: Option<Vec<String>>,
+    pub(crate) summary: Option<String>,
+    pub(crate) is_completed: bool,
+    pub(crate) priority: Option<i32>,
+    pub(crate) created: String,
+    pub(crate) updated: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub category: Option<String>,
+    pub(crate) category: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub page: Option<String>,
+    pub(crate) page: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct ParsedObsidianFile {
-    pub front_matter: ObsidianFrontMatter,
-    pub markdown_body: String,
+pub(crate) struct ParsedObsidianFile {
+    pub(crate) front_matter: ObsidianFrontMatter,
+    pub(crate) markdown_body: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ContentKind {
+    #[default]
+    Article,
+    Category,
+    Page,
+    Home,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -34,7 +43,7 @@ enum FrontmatterSplit<'a> {
 }
 
 /// Parse Obsidian file and return the frontmatter plus markdown body.
-pub fn parse_obsidian_file(path: impl AsRef<Path>) -> Result<Option<ParsedObsidianFile>> {
+pub(crate) fn parse_obsidian_file(path: impl AsRef<Path>) -> Result<Option<ParsedObsidianFile>> {
     let content = fs::read_to_string(&path)?;
     match split_frontmatter(&content)? {
         FrontmatterSplit::Complete { yaml, body } => {

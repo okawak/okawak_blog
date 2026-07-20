@@ -1,4 +1,4 @@
-use crate::error::Result;
+use super::error::Result;
 use pulldown_cmark::{Event, Options, Parser, html};
 use regex::Regex;
 use std::{
@@ -543,15 +543,15 @@ fn escape_markdown_link_destination(destination: &str) -> String {
     destination.replace(')', "\\)")
 }
 
-pub fn generate_html_file(frontmatter_yaml: &str, html_body: &str) -> String {
-    format!("---\n{frontmatter_yaml}\n---\n{html_body}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use indoc::indoc;
     use rstest::*;
+
+    fn generate_html_file(frontmatter_yaml: &str, html_body: &str) -> String {
+        format!("---\n{frontmatter_yaml}\n---\n{html_body}")
+    }
 
     #[rstest]
     #[case::basic_markdown(

@@ -18,7 +18,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const DEFAULT_LOCAL_SITE_ROOT: &str = "crates/publish/publisher/dist/site";
+const DEFAULT_LOCAL_SITE_ROOT: &str = "crates/publish/dist/site";
 const ARTIFACT_SOURCE_ENV: &str = "OKAWAK_BLOG_ARTIFACT_SOURCE";
 const ARTIFACT_LOCAL_ROOT_ENV: &str = "OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT";
 const ARTIFACT_BUCKET_ENV: &str = "OKAWAK_BLOG_ARTIFACT_BUCKET";

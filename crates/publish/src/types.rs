@@ -1,6 +1,6 @@
-use artifacts::CategoryLandingMetadata;
+use crate::artifacts::CategoryLandingMetadata;
+use crate::ingest::ObsidianFrontMatter;
 use domain::{ArticleMeta, Category, PageArtifactDocument, PageKey};
-use ingest::ObsidianFrontMatter;
 
 pub(crate) struct RenderedArticle {
     pub(crate) meta: ArticleMeta,
