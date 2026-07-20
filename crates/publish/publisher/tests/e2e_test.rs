@@ -101,7 +101,7 @@ async fn test_end_to_end_obsidian_processing() {
         ```rust
         fn main() {
             let s1 = String::from("hello");
-            let s2 = s1; // s1はもう使えない
+            let s2 = s1; // s1 can no longer be used
 
             println!("{}", s2); // OK
             // println!("{}", s1); // Compile error
