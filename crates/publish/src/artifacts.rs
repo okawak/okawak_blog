@@ -14,39 +14,39 @@ use std::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ArtifactValidationSummary {
-    pub article_count: usize,
-    pub category_count: usize,
+pub(crate) struct ArtifactValidationSummary {
+    pub(crate) article_count: usize,
+    pub(crate) category_count: usize,
 }
 
 /// Complete artifact bundle produced from already-validated article metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SiteArtifacts {
-    pub article_index: Vec<domain::PublishedArticleSummary>,
-    pub category_indexes: Vec<domain::CategoryIndex>,
-    pub category_landings: Vec<CategoryLandingMetadata>,
-    pub site_metadata: SiteMetadata,
+pub(crate) struct SiteArtifacts {
+    pub(crate) article_index: Vec<domain::PublishedArticleSummary>,
+    category_indexes: Vec<domain::CategoryIndex>,
+    category_landings: Vec<CategoryLandingMetadata>,
+    site_metadata: SiteMetadata,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CategoryLandingMetadata {
-    pub category: Category,
-    pub title: String,
-    pub description: Option<String>,
-    pub updated_at: String,
+pub(crate) struct CategoryLandingMetadata {
+    pub(crate) category: Category,
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) updated_at: String,
 }
 
 /// Output directories for generated local site artifacts.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SiteDirectories {
-    pub articles_dir: PathBuf,
-    pub categories_dir: PathBuf,
-    pub metadata_dir: PathBuf,
-    pub pages_dir: PathBuf,
+pub(crate) struct SiteDirectories {
+    articles_dir: PathBuf,
+    categories_dir: PathBuf,
+    metadata_dir: PathBuf,
+    pages_dir: PathBuf,
 }
 
 impl SiteDirectories {
-    pub fn prepare(output_dir: impl AsRef<Path>) -> Result<Self> {
+    pub(crate) fn prepare(output_dir: impl AsRef<Path>) -> Result<Self> {
         let site_root = output_dir.as_ref().join("site");
         let site_directories = Self {
             articles_dir: site_root.join("articles"),
@@ -64,7 +64,7 @@ impl SiteDirectories {
     }
 }
 
-pub fn build_site_artifacts(
+pub(crate) fn build_site_artifacts(
     article_metas: Vec<ArticleMeta>,
     mut category_landings: Vec<CategoryLandingMetadata>,
 ) -> SiteArtifacts {
@@ -109,7 +109,7 @@ pub fn build_site_artifacts(
     }
 }
 
-pub fn write_article_page(
+pub(crate) fn write_article_page(
     site_directories: &SiteDirectories,
     category: Category,
     slug: &Slug,
@@ -122,7 +122,7 @@ pub fn write_article_page(
     Ok(output_file_path)
 }
 
-pub fn write_page_document(
+pub(crate) fn write_page_document(
     site_directories: &SiteDirectories,
     page_document: &PageArtifactDocument,
 ) -> Result<PathBuf> {
@@ -133,7 +133,7 @@ pub fn write_page_document(
     Ok(output_file_path)
 }
 
-pub fn write_category_page(
+pub(crate) fn write_category_page(
     site_directories: &SiteDirectories,
     category: Category,
     html: &str,
@@ -145,7 +145,7 @@ pub fn write_category_page(
     Ok(output_file_path)
 }
 
-pub fn write_site_artifacts(
+pub(crate) fn write_site_artifacts(
     site_directories: &SiteDirectories,
     site_artifacts: &SiteArtifacts,
 ) -> Result<()> {
@@ -199,7 +199,9 @@ pub fn write_site_artifacts(
 }
 
 /// Validates that a generated site is complete enough for destructive deployment.
-pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactValidationSummary> {
+pub(crate) fn validate_site_artifacts(
+    site_root: impl AsRef<Path>,
+) -> Result<ArtifactValidationSummary> {
     let site_root = site_root.as_ref();
     let article_index: ArticleIndexDocument =
         read_required_json(site_root, Path::new("articles/index.json"))?;

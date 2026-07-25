@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 
 /// Generates a SHA-256-based slug.
-pub fn generate_slug<P: AsRef<Path>>(
+pub(crate) fn generate_slug<P: AsRef<Path>>(
     title: &str,
     relative_path: P,
     created: &str,

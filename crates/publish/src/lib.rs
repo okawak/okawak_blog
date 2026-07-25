@@ -1,10 +1,12 @@
+#![warn(unreachable_pub)]
+
 mod artifacts;
 mod bookmark;
 mod classify;
 mod error;
 mod ingest;
 mod render;
-pub mod slug;
+mod slug;
 mod types;
 
 use crate::artifacts::{

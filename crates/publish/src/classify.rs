@@ -8,15 +8,15 @@ use log::{error, warn};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-pub(super) struct ClassifiedFiles {
-    pub(super) articles: Vec<ParsedArticleFile>,
-    pub(super) pages: Vec<ParsedPageFile>,
-    pub(super) categories: Vec<ParsedCategoryFile>,
-    pub(super) skipped: usize,
-    pub(super) errors: usize,
+pub(crate) struct ClassifiedFiles {
+    pub(crate) articles: Vec<ParsedArticleFile>,
+    pub(crate) pages: Vec<ParsedPageFile>,
+    pub(crate) categories: Vec<ParsedCategoryFile>,
+    pub(crate) skipped: usize,
+    pub(crate) errors: usize,
 }
 
-pub(super) fn classify_obsidian_files(
+pub(crate) fn classify_obsidian_files(
     markdown_files: Vec<PathBuf>,
     obsidian_dir: &Path,
 ) -> ClassifiedFiles {
@@ -130,7 +130,7 @@ fn get_relative_path<'a>(file_path: &'a Path, base_dir: &Path) -> Result<&'a Pat
     })
 }
 
-pub(super) fn build_file_mapping(valid_files: &[ParsedArticleFile]) -> FileMapping {
+pub(crate) fn build_file_mapping(valid_files: &[ParsedArticleFile]) -> FileMapping {
     let mut mapping = FileMapping::with_capacity(valid_files.len());
     for parsed_file in valid_files {
         mapping.insert(
@@ -161,7 +161,7 @@ fn derive_section_path(relative_path: &Path, category: Option<&str>) -> Vec<Stri
     path_components
 }
 
-pub(super) fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<()> {
+pub(crate) fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<()> {
     let mut seen = HashSet::with_capacity(valid_pages.len());
     for parsed_page in valid_pages {
         if !seen.insert(parsed_page.page.as_str()) {
@@ -174,7 +174,7 @@ pub(super) fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<
     Ok(())
 }
 
-pub(super) fn ensure_unique_category_landings(
+pub(crate) fn ensure_unique_category_landings(
     valid_categories: &[ParsedCategoryFile],
 ) -> Result<()> {
     let mut seen = HashSet::with_capacity(valid_categories.len());

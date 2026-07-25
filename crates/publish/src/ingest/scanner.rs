@@ -3,7 +3,7 @@ use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
 
 /// Scans the specified directory for Markdown files (.md) and returns their paths.
-pub fn scan_obsidian_files(publish_dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
+pub(crate) fn scan_obsidian_files(publish_dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
     let mut md_files: Vec<PathBuf> = WalkBuilder::new(publish_dir.as_ref())
         .hidden(true)
         .git_ignore(false)

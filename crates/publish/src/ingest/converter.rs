@@ -16,9 +16,9 @@ static HREF_ATTR_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"href="([^"]*)""#).expect("Invalid href regex"));
 
 /// Mapping from an Obsidian file path without extension to a published article href.
-pub type FileMapping = HashMap<String, String>;
+pub(crate) type FileMapping = HashMap<String, String>;
 
-pub fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
+pub(crate) fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     let (markdown_content, katex_placeholders) = extract_katex_placeholders(markdown_content);
 
     let mut options = Options::empty();
@@ -488,7 +488,7 @@ fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> 
 }
 
 /// Convert Obsidian wiki links to published HTML links.
-pub fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> String {
+pub(crate) fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> String {
     static OBSIDIAN_LINK_REGEX: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"\[\[([^\]]+)\]\]").expect("Invalid regex pattern"));
 

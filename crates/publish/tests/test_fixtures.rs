@@ -1,9 +1,11 @@
+#![allow(dead_code, reason = "shared by integration test crates")]
+
 use std::{
     fs,
     path::{Path, PathBuf},
 };
 
-pub fn collect_html_files(root: &Path) -> Vec<PathBuf> {
+pub(crate) fn collect_html_files(root: &Path) -> Vec<PathBuf> {
     let mut html_files = Vec::new();
 
     if let Ok(entries) = fs::read_dir(root) {
@@ -20,7 +22,7 @@ pub fn collect_html_files(root: &Path) -> Vec<PathBuf> {
     html_files
 }
 
-pub fn write_about_page(obsidian_dir: &Path) {
+pub(crate) fn write_about_page(obsidian_dir: &Path) {
     fs::write(
         obsidian_dir.join("about.md"),
         r#"---
