@@ -1,4 +1,4 @@
-use super::error::Result;
+use crate::error::Result;
 use pulldown_cmark::{Event, Options, Parser, html};
 use regex::Regex;
 use std::{

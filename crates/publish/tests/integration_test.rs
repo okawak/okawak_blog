@@ -1,7 +1,7 @@
 mod test_fixtures;
 
 use indoc::indoc;
-use publisher::{BookmarkEnricher, ObsidianError, publish, publish_with_bookmark_enricher};
+use publisher::{BookmarkEnricher, PublishError, publish, publish_with_bookmark_enricher};
 use std::{fs, path::Path, sync::Arc};
 use tempfile::TempDir;
 use test_fixtures::{collect_html_files, write_about_page};
@@ -316,7 +316,7 @@ async fn test_publish_rejects_non_existent_obsidian_directory() {
 
     assert!(matches!(
         result,
-        Err(ObsidianError::InvalidSourceDirectory(_))
+        Err(PublishError::InvalidSourceDirectory(_))
     ));
     assert!(!output_dir.exists());
 }

@@ -1,36 +1,39 @@
 use thiserror::Error;
 
-pub type Result<T> = std::result::Result<T, ObsidianError>;
+pub type Result<T> = std::result::Result<T, PublishError>;
 
 #[derive(Error, Debug)]
-pub enum ObsidianError {
-    #[error("File system operation failed")]
+pub enum PublishError {
+    #[error("file system operation failed: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("Obsidian publisher operation failed: {0}")]
-    Ingest(#[from] crate::ingest::IngestError),
+    #[error("failed to parse YAML frontmatter: {0}")]
+    Yaml(#[from] serde_yaml::Error),
 
-    #[error("Publisher artifact operation failed")]
-    Artifacts(#[from] crate::artifacts::ArtifactsError),
+    #[error("failed to serialize artifact JSON: {0}")]
+    Json(#[from] serde_json::Error),
 
-    #[error("Blocking task failed: {0}")]
+    #[error("bookmark network request failed: {0}")]
+    Network(#[from] reqwest::Error),
+
+    #[error("blocking task failed: {0}")]
     Join(#[from] tokio::task::JoinError),
 
-    #[error("Invalid file path: {0}")]
-    Path(String),
+    #[error("invalid file path: {0}")]
+    InvalidPath(String),
 
-    #[error("Invalid Obsidian source directory: {0}")]
+    #[error("invalid Obsidian source directory: {0}")]
     InvalidSourceDirectory(String),
 
-    #[error("Failed to parse file content: {0}")]
+    #[error("failed to parse file content: {0}")]
     Parse(String),
 
-    #[error("Environment variable not found or invalid")]
-    Env(#[from] std::env::VarError),
+    #[error("artifact validation failed: {0}")]
+    ArtifactValidation(String),
 
-    #[error("Domain validation failed: {0}")]
+    #[error("domain validation failed: {0}")]
     Domain(#[from] domain::DomainError),
 
-    #[error("Publisher rejected {count} invalid content file(s)")]
+    #[error("publisher rejected {count} invalid content file(s)")]
     ContentErrors { count: usize },
 }

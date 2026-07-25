@@ -1,4 +1,4 @@
-use crate::error::{ObsidianError, Result};
+use crate::error::{PublishError, Result};
 use crate::ingest::{
     ContentKind, FileMapping, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file,
 };
@@ -102,7 +102,7 @@ fn process_valid_page_file(parsed_file: ParsedObsidianFile) -> Result<ParsedPage
 fn process_valid_home_file(parsed_file: ParsedObsidianFile) -> Result<ParsedPageFile> {
     Ok(ParsedPageFile {
         page: PageKey::new("home".to_string())
-            .map_err(|error| ObsidianError::Parse(error.to_string()))?,
+            .map_err(|error| PublishError::Parse(error.to_string()))?,
         markdown_body: parsed_file.markdown_body,
         front_matter: parsed_file.front_matter,
     })
@@ -123,7 +123,7 @@ fn normalize_path_for_url(path: &Path) -> String {
 
 fn get_relative_path<'a>(file_path: &'a Path, base_dir: &Path) -> Result<&'a Path> {
     file_path.strip_prefix(base_dir).map_err(|_| {
-        ObsidianError::Path(format!(
+        PublishError::InvalidPath(format!(
             "Failed to strip prefix from {}",
             file_path.display()
         ))
@@ -165,7 +165,7 @@ pub(super) fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<
     let mut seen = HashSet::with_capacity(valid_pages.len());
     for parsed_page in valid_pages {
         if !seen.insert(parsed_page.page.as_str()) {
-            return Err(ObsidianError::Parse(format!(
+            return Err(PublishError::Parse(format!(
                 "Duplicate page key detected: {}",
                 parsed_page.page.as_str()
             )));
@@ -180,7 +180,7 @@ pub(super) fn ensure_unique_category_landings(
     let mut seen = HashSet::with_capacity(valid_categories.len());
     for parsed_category in valid_categories {
         if !seen.insert(parsed_category.category.as_str()) {
-            return Err(ObsidianError::Parse(format!(
+            return Err(PublishError::Parse(format!(
                 "Duplicate category landing detected: {}",
                 parsed_category.category.as_str()
             )));
@@ -193,7 +193,7 @@ fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
     let category = front_matter
         .category
         .as_deref()
-        .ok_or_else(|| ObsidianError::Parse("Completed content requires a category".to_string()))?;
+        .ok_or_else(|| PublishError::Parse("Completed content requires a category".to_string()))?;
     category.parse().map_err(Into::into)
 }
 
@@ -201,8 +201,8 @@ fn parse_page_key(front_matter: &ObsidianFrontMatter) -> Result<PageKey> {
     let page = front_matter
         .page
         .as_deref()
-        .ok_or_else(|| ObsidianError::Parse("Completed pages require a page key".to_string()))?;
-    PageKey::new(page.trim().to_string()).map_err(|error| ObsidianError::Parse(error.to_string()))
+        .ok_or_else(|| PublishError::Parse("Completed pages require a page key".to_string()))?;
+    PageKey::new(page.trim().to_string()).map_err(|error| PublishError::Parse(error.to_string()))
 }
 
 #[cfg(test)]
@@ -371,7 +371,7 @@ mod tests {
         let result = ensure_unique_category_landings(&valid_categories);
 
         assert!(
-            matches!(result, Err(ObsidianError::Parse(message)) if message.contains("Duplicate category landing"))
+            matches!(result, Err(PublishError::Parse(message)) if message.contains("Duplicate category landing"))
         );
     }
 
@@ -424,7 +424,7 @@ mod tests {
 
         assert!(matches!(
             parse_page_key(&front_matter),
-            Err(ObsidianError::Parse(_))
+            Err(PublishError::Parse(_))
         ));
     }
 
@@ -445,7 +445,7 @@ mod tests {
 
         assert!(matches!(
             parse_page_key(&front_matter),
-            Err(ObsidianError::Parse(_))
+            Err(PublishError::Parse(_))
         ));
     }
 
@@ -488,7 +488,7 @@ mod tests {
 
         assert!(matches!(
             ensure_unique_page_keys(&parsed_pages),
-            Err(ObsidianError::Parse(message)) if message.contains("Duplicate page key")
+            Err(PublishError::Parse(message)) if message.contains("Duplicate page key")
         ));
     }
 }

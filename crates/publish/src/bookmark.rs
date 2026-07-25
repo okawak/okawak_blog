@@ -1,6 +1,4 @@
-mod error;
-
-pub use error::{BookmarkError, Result};
+use crate::error::Result;
 
 use std::future::Future;
 
