@@ -7,7 +7,6 @@ mod error;
 mod ingest;
 mod render;
 mod slug;
-mod types;
 
 use crate::artifacts::{
     SiteDirectories, build_site_artifacts, validate_site_artifacts, write_article_page,

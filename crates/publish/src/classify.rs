@@ -2,11 +2,31 @@ use crate::error::{PublishError, Result};
 use crate::ingest::{
     ContentKind, FileMapping, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file,
 };
-use crate::types::{ParsedArticleFile, ParsedCategoryFile, ParsedPageFile};
 use domain::{Category, PageKey};
 use log::{error, warn};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+
+pub(crate) struct ParsedArticleFile {
+    pub(crate) category: Category,
+    pub(crate) slug: String,
+    pub(crate) mapping_key: String,
+    pub(crate) section_path: Vec<String>,
+    pub(crate) markdown_body: String,
+    pub(crate) front_matter: ObsidianFrontMatter,
+}
+
+pub(crate) struct ParsedPageFile {
+    pub(crate) page: PageKey,
+    pub(crate) markdown_body: String,
+    pub(crate) front_matter: ObsidianFrontMatter,
+}
+
+pub(crate) struct ParsedCategoryFile {
+    pub(crate) category: Category,
+    pub(crate) markdown_body: String,
+    pub(crate) front_matter: ObsidianFrontMatter,
+}
 
 pub(crate) struct ClassifiedFiles {
     pub(crate) articles: Vec<ParsedArticleFile>,
