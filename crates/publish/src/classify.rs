@@ -90,7 +90,7 @@ fn process_valid_article_file(
     parsed_file: ParsedObsidianFile,
     obsidian_dir: &Path,
 ) -> Result<ParsedArticleFile> {
-    let relative_path = get_relative_path(file_path, obsidian_dir)?;
+    let relative_path = file_path.strip_prefix(obsidian_dir)?;
     let slug = crate::slug::generate_slug(
         &parsed_file.front_matter.title,
         relative_path,
@@ -139,15 +139,6 @@ fn process_valid_category_file(parsed_file: ParsedObsidianFile) -> Result<Parsed
 fn normalize_path_for_url(path: &Path) -> String {
     path.to_string_lossy()
         .replace(std::path::MAIN_SEPARATOR, "/")
-}
-
-fn get_relative_path<'a>(file_path: &'a Path, base_dir: &Path) -> Result<&'a Path> {
-    file_path.strip_prefix(base_dir).map_err(|_| {
-        PublishError::InvalidPath(format!(
-            "Failed to strip prefix from {}",
-            file_path.display()
-        ))
-    })
 }
 
 pub(crate) fn build_file_mapping(valid_files: &[ParsedArticleFile]) -> FileMapping {
