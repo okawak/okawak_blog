@@ -84,7 +84,7 @@ okawak_blog/
 ### 各層の責務
 
 - `crates/domain`: 公開成果物契約、site page contract、純粋関数を中心にした共有ドメイン層
-- `crates/publish`: Obsidian 読み取り、Markdown 変換、成果物生成を担う単一publisher crate
+- `crates/publish`: Obsidian 読み取り、Markdown 変換、成果物生成を担う単一publisher crate。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
 - `crates/site/infra`: Leptos サーバーが公開成果物を読むための S3 / cache / runtime adapter。開発と本番はS3 readerを使い、local readerは自動test用に残す
 - `crates/site/server`: S3 上の成果物を読んで配信し、release-aware ETag / Last-Modifiedを扱う統合バックエンド
 - `crates/site/web`: Leptos SSR の公開 UI

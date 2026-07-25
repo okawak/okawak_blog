@@ -113,20 +113,24 @@ publisherはdeploy可能な完全なartifactだけを生成します。入力フ
 src/
 ├── main.rs
 ├── lib.rs
+├── artifacts.rs
+├── bookmark.rs
 ├── classify.rs
-├── render.rs
-├── types.rs
 ├── error.rs
-├── slug.rs
 ├── ingest.rs
 ├── ingest/
-├── bookmark.rs
-├── bookmark/
-├── artifacts.rs
-└── artifacts/
+│   ├── converter.rs
+│   ├── parser.rs
+│   └── scanner.rs
+├── render.rs
+└── slug.rs
 ```
 
-`ingest`、`bookmark`、`artifacts`はpublisher専用の内部moduleです。共有するartifactとsiteの契約だけを`crates/domain`に置きます。
+`lib.rs`はorchestrationとcrate外向けAPIを担います。公開するのは`publish`、
+`publish_with_bookmark_enricher`、`BookmarkEnricher`、`PublishError`、`Result`です。
+それ以外のmoduleはpublisher内部に閉じ、`error.rs`にpublisher全体のerrorを集約します。
+分類済み入力型は`classify.rs`、render済み出力型は`render.rs`が所有します。
+共有するartifactとsiteの契約だけを`crates/domain`に置きます。
 
 ### 処理フロー
 
