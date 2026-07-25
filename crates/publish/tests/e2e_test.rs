@@ -216,7 +216,7 @@ async fn test_end_to_end_obsidian_processing() {
         println!("Found HTML files in site/articles: {:?}", files);
 
         for file in &files {
-            if let Ok(content) = fs::read_to_string(&file) {
+            if let Ok(content) = fs::read_to_string(file) {
                 println!("Checking file: {:?}", file);
 
                 // Safe string slice.
