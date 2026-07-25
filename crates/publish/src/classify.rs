@@ -2,14 +2,14 @@ use crate::error::{PublishError, Result};
 use crate::ingest::{
     ContentKind, FileMapping, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file,
 };
-use domain::{Category, PageKey};
+use domain::{Category, PageKey, Slug};
 use log::{error, warn};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 pub(crate) struct ParsedArticleFile {
     pub(crate) category: Category,
-    pub(crate) slug: String,
+    pub(crate) slug: Slug,
     pub(crate) mapping_key: String,
     pub(crate) section_path: Vec<String>,
     pub(crate) markdown_body: String,
@@ -238,7 +238,7 @@ mod tests {
 
         let parsed_file = ParsedArticleFile {
             category: Category::Tech,
-            slug: "slug".to_string(),
+            slug: Slug::new("slug".to_string()).unwrap(),
             mapping_key: "test".to_string(),
             section_path: vec![],
             markdown_body: "# Test Content".to_string(),
@@ -290,7 +290,7 @@ mod tests {
 
         let parsed_file1 = ParsedArticleFile {
             category: Category::Tech,
-            slug: "slug1".to_string(),
+            slug: Slug::new("slug1".to_string()).unwrap(),
             mapping_key: "dir1/test".to_string(),
             section_path: vec!["dir1".to_string()],
             markdown_body: "# Test Content 1".to_string(),
@@ -298,7 +298,7 @@ mod tests {
         };
         let parsed_file2 = ParsedArticleFile {
             category: Category::Daily,
-            slug: "slug2".to_string(),
+            slug: Slug::new("slug2".to_string()).unwrap(),
             mapping_key: "dir2/test".to_string(),
             section_path: vec!["dir2".to_string()],
             markdown_body: "# Test Content 2".to_string(),
@@ -329,7 +329,7 @@ mod tests {
 
         let parsed_file = ParsedArticleFile {
             category: Category::Tech,
-            slug: "slug".to_string(),
+            slug: Slug::new("slug".to_string()).unwrap(),
             mapping_key: "sub/dir/test".to_string(),
             section_path: vec!["sub".to_string(), "dir".to_string()],
             markdown_body: "# URL Test Content".to_string(),
