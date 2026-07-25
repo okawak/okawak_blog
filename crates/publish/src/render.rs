@@ -1,15 +1,26 @@
 use crate::BookmarkEnricher;
 use crate::artifacts::CategoryLandingMetadata;
+use crate::classify::{ParsedArticleFile, ParsedCategoryFile, ParsedPageFile};
 use crate::error::Result;
 use crate::ingest::{FileMapping, convert_markdown_to_html, convert_obsidian_links};
-use crate::types::{
-    ParsedArticleFile, ParsedCategoryFile, ParsedPageFile, RenderedArticle,
-    RenderedCategoryLanding, RenderedPage,
-};
 use domain::{
     ArticleBody, ArticleMeta, ArticleMetaInput, Category, PageArtifactDocument, Slug, Title,
 };
 use log::warn;
+
+pub(crate) struct RenderedArticle {
+    pub(crate) meta: ArticleMeta,
+    pub(crate) html: String,
+}
+
+pub(crate) struct RenderedPage {
+    pub(crate) document: PageArtifactDocument,
+}
+
+pub(crate) struct RenderedCategoryLanding {
+    pub(crate) metadata: CategoryLandingMetadata,
+    pub(crate) html: String,
+}
 
 async fn render_html(
     markdown_body: &str,

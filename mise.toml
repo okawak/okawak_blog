@@ -260,7 +260,7 @@ run = "cargo test --workspace --release"
 
 [tasks.clippy]
 description = "Run clippy with warnings denied"
-run = "cargo clippy --workspace -- -D warnings"
+run = "cargo clippy --workspace --all-targets -- -D warnings"
 
 [tasks.check]
 description = "Run cargo check for the workspace"

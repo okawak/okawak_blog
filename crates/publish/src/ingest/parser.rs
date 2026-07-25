@@ -1,4 +1,4 @@
-use super::error::{IngestError, Result};
+use crate::error::{PublishError, Result};
 use serde::Deserialize;
 use std::{fs, path::Path};
 
@@ -65,7 +65,7 @@ fn split_frontmatter(content: &str) -> Result<FrontmatterSplit<'_>> {
 
     match rest.split_once("\n---\n") {
         Some((yaml, body)) => Ok(FrontmatterSplit::Complete { yaml, body }),
-        None => Err(IngestError::Parse(
+        None => Err(PublishError::Parse(
             "unterminated front‑matter (closing `---` not found)".into(),
         )),
     }
@@ -443,7 +443,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(IngestError::Parse(message)) if message.contains("unterminated front‑matter")
+            Err(PublishError::Parse(message)) if message.contains("unterminated front‑matter")
         ));
     }
 

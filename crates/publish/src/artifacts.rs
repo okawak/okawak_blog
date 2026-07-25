@@ -1,6 +1,4 @@
-mod error;
-
-pub use error::{ArtifactsError, Result};
+use crate::error::{PublishError, Result};
 
 use domain::{
     ArticleIndexDocument, ArticleMeta, Category, CategoryIndexDocument, PageArtifactDocument,
@@ -16,39 +14,39 @@ use std::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ArtifactValidationSummary {
-    pub article_count: usize,
-    pub category_count: usize,
+pub(crate) struct ArtifactValidationSummary {
+    pub(crate) article_count: usize,
+    pub(crate) category_count: usize,
 }
 
 /// Complete artifact bundle produced from already-validated article metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SiteArtifacts {
-    pub article_index: Vec<domain::PublishedArticleSummary>,
-    pub category_indexes: Vec<domain::CategoryIndex>,
-    pub category_landings: Vec<CategoryLandingMetadata>,
-    pub site_metadata: SiteMetadata,
+pub(crate) struct SiteArtifacts {
+    pub(crate) article_index: Vec<domain::PublishedArticleSummary>,
+    category_indexes: Vec<domain::CategoryIndex>,
+    category_landings: Vec<CategoryLandingMetadata>,
+    site_metadata: SiteMetadata,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CategoryLandingMetadata {
-    pub category: Category,
-    pub title: String,
-    pub description: Option<String>,
-    pub updated_at: String,
+pub(crate) struct CategoryLandingMetadata {
+    pub(crate) category: Category,
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) updated_at: String,
 }
 
 /// Output directories for generated local site artifacts.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SiteDirectories {
-    pub articles_dir: PathBuf,
-    pub categories_dir: PathBuf,
-    pub metadata_dir: PathBuf,
-    pub pages_dir: PathBuf,
+pub(crate) struct SiteDirectories {
+    articles_dir: PathBuf,
+    categories_dir: PathBuf,
+    metadata_dir: PathBuf,
+    pages_dir: PathBuf,
 }
 
 impl SiteDirectories {
-    pub fn prepare(output_dir: impl AsRef<Path>) -> Result<Self> {
+    pub(crate) fn prepare(output_dir: impl AsRef<Path>) -> Result<Self> {
         let site_root = output_dir.as_ref().join("site");
         let site_directories = Self {
             articles_dir: site_root.join("articles"),
@@ -66,7 +64,7 @@ impl SiteDirectories {
     }
 }
 
-pub fn build_site_artifacts(
+pub(crate) fn build_site_artifacts(
     article_metas: Vec<ArticleMeta>,
     mut category_landings: Vec<CategoryLandingMetadata>,
 ) -> SiteArtifacts {
@@ -111,7 +109,7 @@ pub fn build_site_artifacts(
     }
 }
 
-pub fn write_article_page(
+pub(crate) fn write_article_page(
     site_directories: &SiteDirectories,
     category: Category,
     slug: &Slug,
@@ -124,7 +122,7 @@ pub fn write_article_page(
     Ok(output_file_path)
 }
 
-pub fn write_page_document(
+pub(crate) fn write_page_document(
     site_directories: &SiteDirectories,
     page_document: &PageArtifactDocument,
 ) -> Result<PathBuf> {
@@ -135,7 +133,7 @@ pub fn write_page_document(
     Ok(output_file_path)
 }
 
-pub fn write_category_page(
+pub(crate) fn write_category_page(
     site_directories: &SiteDirectories,
     category: Category,
     html: &str,
@@ -147,7 +145,7 @@ pub fn write_category_page(
     Ok(output_file_path)
 }
 
-pub fn write_site_artifacts(
+pub(crate) fn write_site_artifacts(
     site_directories: &SiteDirectories,
     site_artifacts: &SiteArtifacts,
 ) -> Result<()> {
@@ -201,12 +199,14 @@ pub fn write_site_artifacts(
 }
 
 /// Validates that a generated site is complete enough for destructive deployment.
-pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactValidationSummary> {
+pub(crate) fn validate_site_artifacts(
+    site_root: impl AsRef<Path>,
+) -> Result<ArtifactValidationSummary> {
     let site_root = site_root.as_ref();
     let article_index: ArticleIndexDocument =
         read_required_json(site_root, Path::new("articles/index.json"))?;
     if article_index.articles.is_empty() {
-        return Err(ArtifactsError::Validation(
+        return Err(PublishError::ArtifactValidation(
             "articles/index.json must contain at least one article".to_string(),
         ));
     }
@@ -214,7 +214,7 @@ pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactVa
     let site_metadata: SiteMetadataDocument =
         read_required_json(site_root, Path::new("metadata/site.json"))?;
     if site_metadata.total_articles != article_index.articles.len() {
-        return Err(ArtifactsError::Validation(format!(
+        return Err(PublishError::ArtifactValidation(format!(
             "metadata/site.json total_articles={} does not match articles/index.json count={}",
             site_metadata.total_articles,
             article_index.articles.len(),
@@ -224,13 +224,13 @@ pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactVa
     let mut article_categories = HashSet::new();
     for article in &article_index.articles {
         let category = article.category.parse::<Category>().map_err(|error| {
-            ArtifactsError::Validation(format!(
+            PublishError::ArtifactValidation(format!(
                 "articles/index.json contains invalid category {}: {error}",
                 article.category
             ))
         })?;
         let slug = Slug::new(article.slug.clone()).map_err(|error| {
-            ArtifactsError::Validation(format!(
+            PublishError::ArtifactValidation(format!(
                 "articles/index.json contains invalid slug {}: {error}",
                 article.slug
             ))
@@ -254,7 +254,7 @@ pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactVa
         .collect();
     if !missing_article_categories.is_empty() {
         missing_article_categories.sort_unstable();
-        return Err(ArtifactsError::Validation(format!(
+        return Err(PublishError::ArtifactValidation(format!(
             "metadata/site.json is missing article categories: {}",
             missing_article_categories.join(", "),
         )));
@@ -265,7 +265,7 @@ pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactVa
             .category
             .parse::<Category>()
             .map_err(|error| {
-                ArtifactsError::Validation(format!(
+                PublishError::ArtifactValidation(format!(
                     "metadata/site.json contains invalid category {}: {error}",
                     category_metadata.category
                 ))
@@ -275,7 +275,7 @@ pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactVa
         let category_index: CategoryIndexDocument =
             read_required_json(site_root, &category_index_path)?;
         if category_index.category != category.as_str() {
-            return Err(ArtifactsError::Validation(format!(
+            return Err(PublishError::ArtifactValidation(format!(
                 "{} declares category {} instead of {}",
                 category_index_path.display(),
                 category_index.category,
@@ -290,13 +290,13 @@ pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactVa
             .cloned()
             .collect();
         if category_index.articles != expected_articles {
-            return Err(ArtifactsError::Validation(format!(
+            return Err(PublishError::ArtifactValidation(format!(
                 "{} does not match articles/index.json",
                 category_index_path.display(),
             )));
         }
         if category_metadata.article_count != category_index.articles.len() {
-            return Err(ArtifactsError::Validation(format!(
+            return Err(PublishError::ArtifactValidation(format!(
                 "metadata count for {} is {}, but category index contains {} articles",
                 category.as_str(),
                 category_metadata.article_count,
@@ -310,14 +310,14 @@ pub fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<ArtifactVa
     let about_path = Path::new("pages/about.json");
     let about: PageArtifactDocument = read_required_json(site_root, about_path)?;
     if about.page.as_str() != "about" {
-        return Err(ArtifactsError::Validation(format!(
+        return Err(PublishError::ArtifactValidation(format!(
             "{} declares page {} instead of about",
             about_path.display(),
             about.page,
         )));
     }
     if about.html.trim().is_empty() {
-        return Err(ArtifactsError::Validation(format!(
+        return Err(PublishError::ArtifactValidation(format!(
             "required artifact {} contains empty html",
             about_path.display(),
         )));
@@ -335,7 +335,7 @@ fn read_required_json<T: serde::de::DeserializeOwned>(
 ) -> Result<T> {
     let contents = read_required_nonempty(site_root, relative_path)?;
     serde_json::from_str(&contents).map_err(|error| {
-        ArtifactsError::Validation(format!(
+        PublishError::ArtifactValidation(format!(
             "{} is not valid artifact JSON: {error}",
             relative_path.display()
         ))
@@ -345,13 +345,13 @@ fn read_required_json<T: serde::de::DeserializeOwned>(
 fn read_required_nonempty(site_root: &Path, relative_path: &Path) -> Result<String> {
     let path = site_root.join(relative_path);
     let contents = fs::read_to_string(&path).map_err(|error| {
-        ArtifactsError::Validation(format!(
+        PublishError::ArtifactValidation(format!(
             "required artifact {} cannot be read: {error}",
             relative_path.display()
         ))
     })?;
     if contents.trim().is_empty() {
-        return Err(ArtifactsError::Validation(format!(
+        return Err(PublishError::ArtifactValidation(format!(
             "required artifact {} is empty",
             relative_path.display()
         )));

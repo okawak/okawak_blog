@@ -1,8 +1,9 @@
 mod test_fixtures;
 
+use domain::ArticleIndexDocument;
 use indoc::indoc;
-use publisher::{publish, slug};
-use std::{fs, path::Path};
+use publisher::publish;
+use std::fs;
 use tempfile::TempDir;
 use test_fixtures::collect_html_files;
 use test_fixtures::write_about_page;
@@ -196,65 +197,26 @@ async fn test_end_to_end_obsidian_processing() {
     // Validate the output directory.
     assert!(output_dir.exists(), "Output directory should exist");
 
-    // Validate the generated slug-based HTML files.
-    let tech_slug = slug::generate_slug(
-        "Rustでのパフォーマンス最適化",
-        Path::new("tech/rust-performance.md"),
-        "2025-01-15T10:00:00+09:00",
-    )
-    .unwrap();
-    let basic_slug = slug::generate_slug(
-        "基本的なRust概念",
-        Path::new("basic-rust-concepts.md"),
-        "2025-01-10T09:00:00+09:00",
-    )
-    .unwrap();
-    let memory_slug = slug::generate_slug(
-        "メモリ管理のベストプラクティス",
-        Path::new("tech/memory-best-practices.md"),
-        "2025-01-18T11:00:00+09:00",
-    )
-    .unwrap();
-
     let site_root = output_dir.join("site");
     let articles_dir = site_root.join("articles");
-    let _tech_html = articles_dir.join("tech").join(format!("{tech_slug}.html"));
-    let _basic_html = articles_dir.join("tech").join(format!("{basic_slug}.html"));
-    let _memory_html = articles_dir
-        .join("tech")
-        .join(format!("{memory_slug}.html"));
-
-    // Draft article slug. No HTML should be generated because `is_completed` is false.
-    let blog_slug = slug::generate_slug(
-        "開発日記: ブログシステムを作ってみた",
-        Path::new("blog/development-diary.md"),
-        "2025-01-20T20:00:00+09:00",
-    )
-    .unwrap();
-    let blog_html = articles_dir.join("blog").join(format!("{blog_slug}.html"));
+    let files = collect_html_files(&articles_dir);
 
     // Check that completed articles produced HTML by counting files.
-    let html_count = collect_html_files(&articles_dir).len();
+    let html_count = files.len();
 
     // Expected files: two technical articles plus one foundational article.
     assert_eq!(html_count, 3, "Should generate 3 published articles");
 
-    // Ensure the draft article was not generated.
-    assert!(
-        !blog_html.exists(),
-        "Draft blog HTML should not be generated"
-    );
-
     // Inspect generated HTML and look for specific content in the articles directory.
     let mut performance_file_found = false;
     let mut memory_file_found = false;
+    let mut draft_file_found = false;
 
-    let files = collect_html_files(&articles_dir);
     if !files.is_empty() {
         println!("Found HTML files in site/articles: {:?}", files);
 
-        for file in files {
-            if let Ok(content) = fs::read_to_string(&file) {
+        for file in &files {
+            if let Ok(content) = fs::read_to_string(file) {
                 println!("Checking file: {:?}", file);
 
                 // Safe string slice.
@@ -277,6 +239,9 @@ async fn test_end_to_end_obsidian_processing() {
                     memory_file_found = true;
                     println!("Found memory management file");
                 }
+                if content.contains("開発日記: ブログシステムを作ってみた") {
+                    draft_file_found = true;
+                }
             }
         }
     } else {
@@ -291,6 +256,7 @@ async fn test_end_to_end_obsidian_processing() {
         memory_file_found,
         "Memory management article should be present in site/articles"
     );
+    assert!(!draft_file_found, "Draft blog HTML should not be generated");
 
     // Verify KaTeX math rendering.
     let mut math_processing_verified = false;
@@ -309,10 +275,38 @@ async fn test_end_to_end_obsidian_processing() {
         "KaTeX math processing should work in tech files"
     );
 
-    let article_index = fs::read_to_string(articles_dir.join("index.json")).unwrap();
-    assert!(article_index.contains(&tech_slug));
-    assert!(article_index.contains(&basic_slug));
-    assert!(article_index.contains(&memory_slug));
+    let article_index: ArticleIndexDocument =
+        serde_json::from_str(&fs::read_to_string(articles_dir.join("index.json")).unwrap())
+            .unwrap();
+    for expected_title in [
+        "Rustでのパフォーマンス最適化",
+        "基本的なRust概念",
+        "メモリ管理のベストプラクティス",
+    ] {
+        assert!(
+            article_index
+                .articles
+                .iter()
+                .any(|article| article.title == expected_title),
+            "article index should contain {expected_title}"
+        );
+    }
+    assert!(
+        article_index
+            .articles
+            .iter()
+            .all(|article| article.title != "開発日記: ブログシステムを作ってみた"),
+        "article index should not contain the draft article"
+    );
+    for article in &article_index.articles {
+        assert!(
+            articles_dir
+                .join(&article.category)
+                .join(format!("{}.html", article.slug))
+                .is_file(),
+            "article index should reference an existing HTML file"
+        );
+    }
 
     let tech_category_index =
         fs::read_to_string(site_root.join("categories").join("tech").join("index.json")).unwrap();

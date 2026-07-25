@@ -1,6 +1,4 @@
-mod error;
-
-pub use error::{BookmarkError, Result};
+use crate::error::Result;
 
 use std::future::Future;
 
@@ -12,16 +10,16 @@ const HTML_INITIAL_CAPACITY: usize = 1024;
 const HTML_EXTENSION_CAPACITY: usize = 2048;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct BookmarkData {
-    pub url: String,
-    pub title: String,
-    pub description: Option<String>,
-    pub image_url: Option<String>,
-    pub favicon_url: Option<String>,
+struct BookmarkData {
+    url: String,
+    title: String,
+    description: Option<String>,
+    image_url: Option<String>,
+    favicon_url: Option<String>,
 }
 
 /// Fetches OGP metadata from a URL with a 10-second timeout.
-pub async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
+async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
     let client = create_http_client()?;
     let html_content = fetch_html_content(&client, url).await?;
     let document = Html::parse_document(&html_content);
@@ -155,7 +153,7 @@ fn extract_link_href(document: &Html, selector: &str) -> Option<String> {
 }
 
 /// Generates rich bookmark HTML using the `bookmark` class.
-pub fn generate_rich_bookmark(data: &BookmarkData) -> String {
+fn generate_rich_bookmark(data: &BookmarkData) -> String {
     let domain = extract_domain(&data.url);
 
     let mut html = String::with_capacity(HTML_INITIAL_CAPACITY);
@@ -252,10 +250,7 @@ fn html_escape(text: &str) -> String {
 }
 
 /// Replaces simple bookmark markup using metadata supplied by `fetch_data`.
-pub async fn convert_simple_bookmarks_with<F, Fut>(
-    html_content: &str,
-    fetch_data: F,
-) -> Result<String>
+async fn convert_simple_bookmarks_with<F, Fut>(html_content: &str, fetch_data: F) -> Result<String>
 where
     F: Fn(String, String) -> Fut,
     Fut: Future<Output = BookmarkData>,
@@ -288,7 +283,7 @@ where
 }
 
 /// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
-pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
+pub(crate) async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
     convert_simple_bookmarks_with(html_content, |url, original_title| async move {
         fetch_ogp_metadata(&url).await.unwrap_or_else(|e| {
             log::warn!("Warning: Failed to fetch OGP metadata for '{url}': {e}");
@@ -298,7 +293,7 @@ pub async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<Stri
     .await
 }
 
-pub fn create_fallback_bookmark_data(url: &str, original_title: &str) -> BookmarkData {
+fn create_fallback_bookmark_data(url: &str, original_title: &str) -> BookmarkData {
     BookmarkData {
         url: url.to_string(),
         title: if original_title.trim().is_empty() {

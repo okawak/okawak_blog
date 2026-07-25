@@ -61,11 +61,13 @@ okawak_blog/
   - site page contract
 - `crates/publish`
   - 単一のpublisher crate
+  - crate外向けAPIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
   - ingest moduleによるObsidian vault走査、frontmatter parse、Markdown変換、Obsidian link解決
   - bookmark moduleによる外部HTTPを伴うbookmark enrichment
   - content kindごとの公開物生成と`section_path`の導出
   - artifacts moduleによる`site/`配下のHTML / JSON書き出しとcategory fallback page生成
   - `ObsidianFrontMatter`と`ContentKind`はpublisher入力形式として内部に保持する
+  - publisher固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
 - `crates/site/infra`
   - `ArtifactReader` 境界
   - local reader

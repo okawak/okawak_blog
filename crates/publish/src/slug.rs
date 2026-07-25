@@ -1,9 +1,9 @@
-use crate::error::{ObsidianError, Result};
+use crate::error::{PublishError, Result};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
 /// Generates a SHA-256-based slug.
-pub fn generate_slug<P: AsRef<Path>>(
+pub(crate) fn generate_slug<P: AsRef<Path>>(
     title: &str,
     relative_path: P,
     created: &str,
@@ -11,7 +11,7 @@ pub fn generate_slug<P: AsRef<Path>>(
     let relative_path_str = relative_path
         .as_ref()
         .to_str()
-        .ok_or_else(|| ObsidianError::Path("Invalid path encoding".to_string()))?;
+        .ok_or_else(|| PublishError::InvalidPath("Invalid path encoding".to_string()))?;
 
     // Input string used to build the hash.
     let hash_input = format!("{title}/{relative_path_str}/{created}");
