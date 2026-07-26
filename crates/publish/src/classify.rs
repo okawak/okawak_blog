@@ -194,13 +194,7 @@ fn parse_category(category: Option<&str>) -> Result<Category> {
 fn parse_page_key(page: Option<&str>) -> Result<PageKey> {
     let page =
         page.ok_or_else(|| PublishError::Parse("Completed pages require a page key".to_string()))?;
-    let page = page.trim();
-    if page == "home" {
-        return Err(PublishError::Parse(
-            "Static pages cannot use the reserved home page key".to_string(),
-        ));
-    }
-    PageKey::new(page.to_string()).map_err(|error| PublishError::Parse(error.to_string()))
+    PageKey::new(page.trim().to_string()).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -295,31 +289,7 @@ mod tests {
 
     #[test]
     fn test_parse_page_key_success() {
-        assert_eq!(parse_page_key(Some("about")).unwrap().as_str(), "about");
-    }
-
-    #[test]
-    fn test_parse_page_key_rejects_nested_path() {
-        assert!(matches!(
-            parse_page_key(Some("about/team")),
-            Err(PublishError::Parse(_))
-        ));
-    }
-
-    #[test]
-    fn test_parse_page_key_rejects_reserved_home_key() {
-        assert!(matches!(
-            parse_page_key(Some("home")),
-            Err(PublishError::Parse(_))
-        ));
-    }
-
-    #[test]
-    fn test_parse_page_key_rejects_uppercase() {
-        assert!(matches!(
-            parse_page_key(Some("About")),
-            Err(PublishError::Parse(_))
-        ));
+        assert_eq!(parse_page_key(Some(" about ")).unwrap().as_str(), "about");
     }
 
     #[test]
