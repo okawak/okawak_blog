@@ -1,24 +1,27 @@
+use crate::classify::ParsedArticleFile;
 use regex::Regex;
 use std::{collections::HashMap, sync::LazyLock};
 
 /// Published article hrefs indexed by extensionless source paths.
-#[derive(Default)]
 pub(crate) struct Index {
     routes: HashMap<String, String>,
 }
 
 impl Index {
-    pub(crate) fn with_capacity(capacity: usize) -> Self {
-        Self {
-            routes: HashMap::with_capacity(capacity),
-        }
+    pub(crate) fn from_articles(articles: &[ParsedArticleFile]) -> Self {
+        let routes = articles
+            .iter()
+            .map(|article| {
+                (
+                    article.source_path.clone(),
+                    format!("/{}/{}", article.category.as_str(), article.slug),
+                )
+            })
+            .collect();
+        Self { routes }
     }
 
-    pub(crate) fn insert(&mut self, source_path: String, href: String) {
-        self.routes.insert(source_path, href);
-    }
-
-    pub(crate) fn resolve(&self, target: &str) -> Option<&str> {
+    fn resolve(&self, target: &str) -> Option<&str> {
         self.routes.get(target).map(String::as_str).or_else(|| {
             let suffix = format!("/{target}");
             self.routes.iter().find_map(|(source_path, href)| {
@@ -74,15 +77,75 @@ fn escape_markdown_link_destination(destination: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ingest::{ContentKind, ObsidianFrontMatter, convert_markdown_to_html};
+    use domain::{Category, Slug};
+
+    fn index(routes: &[(&str, &str)]) -> Index {
+        Index {
+            routes: routes
+                .iter()
+                .map(|(source_path, href)| ((*source_path).to_string(), (*href).to_string()))
+                .collect(),
+        }
+    }
+
+    fn article(source_path: &str, category: Category, slug: &str) -> ParsedArticleFile {
+        ParsedArticleFile {
+            category,
+            slug: Slug::new(slug.to_string()).unwrap(),
+            source_path: source_path.to_string(),
+            section_path: vec![],
+            markdown_body: "# Article".to_string(),
+            front_matter: ObsidianFrontMatter {
+                title: "Article".to_string(),
+                kind: ContentKind::Article,
+                tags: None,
+                summary: None,
+                priority: None,
+                created: "2025-01-01T00:00:00+09:00".to_string(),
+                updated: "2025-01-01T00:00:00+09:00".to_string(),
+                is_completed: true,
+                category: Some(category.as_str().to_string()),
+                page: None,
+            },
+        }
+    }
+
+    #[test]
+    fn index_is_built_from_articles() {
+        let articles = vec![article("sub/dir/test", Category::Tech, "slug")];
+
+        let index = Index::from_articles(&articles);
+
+        assert_eq!(index.resolve("sub/dir/test"), Some("/tech/slug"));
+    }
+
+    #[test]
+    fn index_is_empty_when_there_are_no_articles() {
+        let index = Index::from_articles(&[]);
+
+        assert_eq!(index.resolve("test"), None);
+    }
+
+    #[test]
+    fn index_preserves_distinct_source_paths() {
+        let articles = vec![
+            article("dir1/test", Category::Tech, "slug1"),
+            article("dir2/test", Category::Daily, "slug2"),
+        ];
+
+        let index = Index::from_articles(&articles);
+
+        assert_eq!(index.resolve("dir1/test"), Some("/tech/slug1"));
+        assert_eq!(index.resolve("dir2/test"), Some("/daily/slug2"));
+    }
 
     #[test]
     fn index_resolves_exact_and_path_suffix_targets() {
-        let mut index = Index::default();
-        index.insert(
-            "notes/another-note".to_string(),
-            "/tech/abc123def".to_string(),
-        );
-        index.insert("filename".to_string(), "/daily/xyz789abc".to_string());
+        let index = index(&[
+            ("notes/another-note", "/tech/abc123def"),
+            ("filename", "/daily/xyz789abc"),
+        ]);
 
         assert_eq!(index.resolve("notes/another-note"), Some("/tech/abc123def"));
         assert_eq!(index.resolve("another-note"), Some("/tech/abc123def"));
@@ -92,12 +155,10 @@ mod tests {
 
     #[test]
     fn convert_internal_links() {
-        let mut index = Index::default();
-        index.insert(
-            "notes/another-note".to_string(),
-            "/tech/abc123def".to_string(),
-        );
-        index.insert("filename".to_string(), "/daily/xyz789abc".to_string());
+        let index = index(&[
+            ("notes/another-note", "/tech/abc123def"),
+            ("filename", "/daily/xyz789abc"),
+        ]);
 
         assert_eq!(
             convert("Check out [[another-note]] for more info.", &index),
@@ -119,8 +180,7 @@ mod tests {
 
     #[test]
     fn convert_escapes_markdown_link_parts() {
-        let mut index = Index::default();
-        index.insert("File with <script>".to_string(), "/tech/abc123".to_string());
+        let index = index(&[("File with <script>", "/tech/abc123")]);
 
         assert_eq!(
             convert("[[File with <script>|Display & test]]", &index),
@@ -130,5 +190,30 @@ mod tests {
             convert("[[File \"quoted\"|Text with 'quotes']]", &index),
             "[Text with 'quotes'](/File \"quoted\")"
         );
+    }
+
+    #[test]
+    fn converted_links_are_rendered_as_html() {
+        let markdown = r#"# My Article
+
+This is a test with [[Another Article|link]] and **bold** text.
+
+## Section Two
+
+- Item with [[Reference Note]]
+- Regular item"#;
+        let index = index(&[
+            ("Another Article", "/tech/def456"),
+            ("Reference Note", "/daily/ghi789"),
+        ]);
+
+        let markdown = convert(markdown, &index);
+        let html = convert_markdown_to_html(&markdown).unwrap();
+
+        assert!(html.contains("<h1>My Article</h1>"));
+        assert!(html.contains("<a href=\"/tech/def456\">link</a>"));
+        assert!(html.contains("<a href=\"/daily/ghi789\">Reference Note</a>"));
+        assert!(html.contains("<strong>bold</strong>"));
+        assert!(html.contains("<ul>"));
     }
 }

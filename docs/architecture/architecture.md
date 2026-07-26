@@ -64,7 +64,7 @@ okawak_blog/
   - crate外向けAPIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
   - path処理の対応環境はmacOSとLinuxとし、Windows形式のpathは対象外とする
   - ingest moduleによるObsidian vault走査、frontmatter parse、Markdown変換
-  - links moduleによる内部リンク索引とObsidian link解決
+  - links moduleによる内部リンク索引の構築とObsidian link解決
   - bookmark moduleによる外部HTTPを伴うbookmark enrichment
   - content kindごとの公開物生成と`section_path`の導出
   - artifacts moduleによる`site/`配下のHTML / JSON書き出しとcategory fallback page生成

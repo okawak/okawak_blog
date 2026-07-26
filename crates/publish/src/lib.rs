@@ -14,8 +14,7 @@ use crate::artifacts::{
     write_category_page, write_home_fragment, write_page_document, write_site_artifacts,
 };
 use crate::classify::{
-    build_link_index, classify_obsidian_files, ensure_unique_category_landings,
-    ensure_unique_page_keys,
+    classify_obsidian_files, ensure_unique_category_landings, ensure_unique_page_keys,
 };
 use crate::ingest::scan_obsidian_files;
 use crate::render::{render_article, render_category, render_home, render_page};
@@ -73,7 +72,7 @@ pub async fn publish_with_bookmark_enricher(
     ensure_unique_page_keys(&pages)?;
     ensure_unique_category_landings(&categories)?;
 
-    let link_index = build_link_index(&articles);
+    let link_index = links::Index::from_articles(&articles);
     let site_directories = SiteDirectories::prepare(output_dir)?;
 
     const CONCURRENT_LIMIT: usize = 4;
