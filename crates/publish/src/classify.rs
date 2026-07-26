@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 pub(crate) struct ParsedArticleFile {
     pub(crate) category: Category,
     pub(crate) slug: Slug,
+    /// Extensionless relative path used to resolve Obsidian wiki links.
     pub(crate) mapping_key: String,
     pub(crate) section_path: Vec<String>,
     pub(crate) markdown_body: String,
@@ -97,7 +98,10 @@ fn process_valid_article_file(
         &parsed_file.front_matter.created,
     )?;
     let category = parse_category(parsed_file.front_matter.category.as_deref())?;
-    let mapping_key = normalize_path_for_url(&relative_path.with_extension(""));
+    let mapping_key = relative_path
+        .with_extension("")
+        .to_string_lossy()
+        .into_owned();
     let section_path =
         derive_section_path(relative_path, parsed_file.front_matter.category.as_deref());
 
@@ -134,11 +138,6 @@ fn process_valid_category_file(parsed_file: ParsedObsidianFile) -> Result<Parsed
         markdown_body: parsed_file.markdown_body,
         front_matter: parsed_file.front_matter,
     })
-}
-
-fn normalize_path_for_url(path: &Path) -> String {
-    path.to_string_lossy()
-        .replace(std::path::MAIN_SEPARATOR, "/")
 }
 
 pub(crate) fn build_file_mapping(valid_files: &[ParsedArticleFile]) -> FileMapping {

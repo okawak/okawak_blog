@@ -98,6 +98,8 @@ repository rootの`mise run dev-local`はprivate Obsidian submoduleをremoteの�
 - 入力ディレクトリ: `./crates/publish/obsidian/Publish` (固定)
 - 出力ディレクトリ: `./crates/publish/dist` (固定)
 
+publisherのpath処理はmacOSとLinuxを対象とし、Windows形式のpathには対応しません。
+
 ## GitHub Actions連携
 
 AWS S3 への同期は GitHub Actions workflow が担当します。
