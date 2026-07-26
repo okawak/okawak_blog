@@ -2,7 +2,7 @@ use crate::classify::ParsedArticleFile;
 use regex::Regex;
 use std::{collections::HashMap, sync::LazyLock};
 
-/// Published article hrefs indexed by extensionless source paths.
+/// Published article hrefs indexed by extensionless source keys.
 pub(crate) struct Index {
     routes: HashMap<String, String>,
 }
@@ -13,7 +13,7 @@ impl Index {
             .iter()
             .map(|article| {
                 (
-                    article.source_path.clone(),
+                    article.source_key.clone(),
                     format!("/{}/{}", article.category.as_str(), article.slug),
                 )
             })
@@ -24,8 +24,8 @@ impl Index {
     fn resolve(&self, target: &str) -> Option<&str> {
         self.routes.get(target).map(String::as_str).or_else(|| {
             let suffix = format!("/{target}");
-            self.routes.iter().find_map(|(source_path, href)| {
-                source_path.ends_with(&suffix).then_some(href.as_str())
+            self.routes.iter().find_map(|(source_key, href)| {
+                source_key.ends_with(&suffix).then_some(href.as_str())
             })
         })
     }
@@ -78,23 +78,23 @@ fn escape_markdown_link_destination(destination: &str) -> String {
 mod tests {
     use super::*;
     use crate::ingest::{ContentKind, ObsidianFrontMatter, convert_markdown_to_html};
-    use domain::{Category, Slug};
+    use domain::{Category, SectionPath, Slug};
 
     fn index(routes: &[(&str, &str)]) -> Index {
         Index {
             routes: routes
                 .iter()
-                .map(|(source_path, href)| ((*source_path).to_string(), (*href).to_string()))
+                .map(|(source_key, href)| ((*source_key).to_string(), (*href).to_string()))
                 .collect(),
         }
     }
 
-    fn article(source_path: &str, category: Category, slug: &str) -> ParsedArticleFile {
+    fn article(source_key: &str, category: Category, slug: &str) -> ParsedArticleFile {
         ParsedArticleFile {
             category,
             slug: Slug::new(slug.to_string()).unwrap(),
-            source_path: source_path.to_string(),
-            section_path: vec![],
+            source_key: source_key.to_string(),
+            section_path: SectionPath::default(),
             markdown_body: "# Article".to_string(),
             front_matter: ObsidianFrontMatter {
                 title: "Article".to_string(),
@@ -128,7 +128,7 @@ mod tests {
     }
 
     #[test]
-    fn index_preserves_distinct_source_paths() {
+    fn index_preserves_distinct_source_keys() {
         let articles = vec![
             article("dir1/test", Category::Tech, "slug1"),
             article("dir2/test", Category::Daily, "slug2"),

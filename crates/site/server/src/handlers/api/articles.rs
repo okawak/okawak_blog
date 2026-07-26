@@ -21,7 +21,7 @@ pub async fn list_articles(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::ArticleSummaryDocument;
+    use domain::{ArticleSummaryDocument, SectionPath};
     use infra::LocalArtifactReader;
     use std::{fs, sync::Arc};
     use tempfile::TempDir;
@@ -37,7 +37,7 @@ mod tests {
                     slug: "sample0000001".to_string(),
                     title: "Sample".to_string(),
                     category: "tech".to_string(),
-                    section_path: vec!["block".to_string()],
+                    section_path: SectionPath::new(vec!["block".to_string()]),
                     description: Some("summary".to_string()),
                     tags: vec!["rust".to_string()],
                     priority: Some(1),

@@ -2,8 +2,8 @@
 
 use crate::{
     ArticleIndexDocument, ArticleSummaryDocument, Category, CategoryIndexDocument, DomainError,
-    HomeFragmentArtifactDocument, PageArtifactDocument, PageKey, Result, SiteMetadataDocument,
-    Slug, Title,
+    HomeFragmentArtifactDocument, PageArtifactDocument, PageKey, Result, SectionPath,
+    SiteMetadataDocument, Slug, Title,
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -14,7 +14,7 @@ pub struct SiteArticleCard {
     pub title: Title,
     pub category: Category,
     pub category_display_name: String,
-    pub section_path: Vec<String>,
+    pub section_path: SectionPath,
     pub description: Option<String>,
     pub tags: Vec<String>,
     pub priority: Option<i32>,
@@ -92,7 +92,7 @@ pub struct StaticPageDocument {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CategorySectionGroup {
-    pub section_path: Vec<String>,
+    pub section_path: SectionPath,
     pub heading: String,
     pub articles: Vec<SiteArticleCard>,
 }
@@ -320,7 +320,7 @@ pub fn find_article_summary<'a>(
 fn build_category_section_groups(articles: &[SiteArticleCard]) -> Vec<CategorySectionGroup> {
     use std::collections::BTreeMap;
 
-    let mut grouped: BTreeMap<Vec<String>, Vec<SiteArticleCard>> = BTreeMap::new();
+    let mut grouped: BTreeMap<SectionPath, Vec<SiteArticleCard>> = BTreeMap::new();
     for article in articles {
         grouped
             .entry(article.section_path.clone())
@@ -338,11 +338,11 @@ fn build_category_section_groups(articles: &[SiteArticleCard]) -> Vec<CategorySe
         .collect()
 }
 
-fn build_section_heading(section_path: &[String]) -> String {
+fn build_section_heading(section_path: &SectionPath) -> String {
     if section_path.is_empty() {
         "全般".to_string()
     } else {
-        section_path.join(" / ")
+        section_path.segments().join(" / ")
     }
 }
 
@@ -356,7 +356,7 @@ mod tests {
             slug: "intro00000001".to_string(),
             title: "Intro".to_string(),
             category: "tech".to_string(),
-            section_path: vec!["block".to_string()],
+            section_path: SectionPath::new(vec!["block".to_string()]),
             description: Some("summary".to_string()),
             tags: vec!["rust".to_string()],
             priority: Some(10),
@@ -665,7 +665,7 @@ mod tests {
                         slug: "alpha0000001".to_string(),
                         title: "Alpha".to_string(),
                         category: "tech".to_string(),
-                        section_path: vec!["rust".to_string()],
+                        section_path: SectionPath::new(vec!["rust".to_string()]),
                         description: None,
                         tags: vec![],
                         priority: None,
@@ -676,7 +676,10 @@ mod tests {
                         slug: "beta00000001".to_string(),
                         title: "Beta".to_string(),
                         category: "tech".to_string(),
-                        section_path: vec!["rust".to_string(), "async".to_string()],
+                        section_path: SectionPath::new(vec![
+                            "rust".to_string(),
+                            "async".to_string(),
+                        ]),
                         description: None,
                         tags: vec![],
                         priority: None,
@@ -687,7 +690,7 @@ mod tests {
                         slug: "gamma0000001".to_string(),
                         title: "Gamma".to_string(),
                         category: "tech".to_string(),
-                        section_path: vec![],
+                        section_path: SectionPath::default(),
                         description: None,
                         tags: vec![],
                         priority: None,

@@ -1,6 +1,6 @@
 //! Shared artifact contract persisted by publisher and read by site/server.
 
-use crate::{CategoryIndex, PageKey, PublishedArticleSummary, SiteMetadata};
+use crate::{CategoryIndex, PageKey, PublishedArticleSummary, SectionPath, SiteMetadata};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
@@ -75,7 +75,7 @@ pub struct ArticleSummaryDocument {
     pub title: String,
     pub category: String,
     #[serde(default)]
-    pub section_path: Vec<String>,
+    pub section_path: SectionPath,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub tags: Vec<String>,
@@ -262,7 +262,7 @@ mod tests {
             slug: Slug::new("abc123def456".to_string()).unwrap(),
             title: Title::new("Test Output".to_string()).unwrap(),
             category: Category::Tech,
-            section_path: vec!["block".to_string()],
+            section_path: SectionPath::new(vec!["block".to_string()]),
             description: Some("Test description".to_string()),
             tags: vec!["test".to_string()],
             priority: Some(1),
@@ -284,7 +284,7 @@ mod tests {
             slug: Slug::new("emptytags001".to_string()).unwrap(),
             title: Title::new("Empty Tags".to_string()).unwrap(),
             category: Category::Daily,
-            section_path: vec![],
+            section_path: SectionPath::default(),
             description: None,
             tags: vec![],
             priority: None,
@@ -312,7 +312,7 @@ mod tests {
 
         let document: ArticleSummaryDocument = serde_json::from_str(json).unwrap();
 
-        assert_eq!(document.section_path, Vec::<String>::new());
+        assert_eq!(document.section_path, SectionPath::default());
     }
 
     #[test]

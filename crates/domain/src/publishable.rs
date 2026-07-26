@@ -1,6 +1,6 @@
 //! Domain models and pure functions for publishable site artifacts.
 
-use crate::{Category, DomainError, Result, Slug, Title};
+use crate::{Category, DomainError, Result, SectionPath, Slug, Title};
 use std::cmp::Ordering;
 
 /// Metadata for a publishable article.
@@ -9,7 +9,7 @@ pub struct ArticleMeta {
     pub slug: Slug,
     pub title: Title,
     pub category: Category,
-    pub section_path: Vec<String>,
+    pub section_path: SectionPath,
     pub description: Option<String>,
     pub tags: Vec<String>,
     pub priority: Option<i32>,
@@ -22,7 +22,7 @@ pub struct ArticleMetaInput {
     pub slug: Slug,
     pub title: Title,
     pub category: Category,
-    pub section_path: Vec<String>,
+    pub section_path: SectionPath,
     pub description: Option<String>,
     pub tags: Vec<String>,
     pub priority: Option<i32>,
@@ -88,7 +88,7 @@ pub struct PublishedArticleSummary {
     pub slug: Slug,
     pub title: Title,
     pub category: Category,
-    pub section_path: Vec<String>,
+    pub section_path: SectionPath,
     pub description: Option<String>,
     pub tags: Vec<String>,
     pub priority: Option<i32>,
@@ -211,7 +211,7 @@ mod tests {
             slug: Slug::new(slug.to_string()).unwrap(),
             title: Title::new(title.to_string()).unwrap(),
             category,
-            section_path: vec![],
+            section_path: SectionPath::default(),
             description: Some(format!("{title} summary")),
             tags: vec!["tag".to_string()],
             priority,
@@ -235,7 +235,7 @@ mod tests {
             slug: Slug::new("valid00000001".to_string()).unwrap(),
             title: Title::new("Valid".to_string()).unwrap(),
             category: Category::Tech,
-            section_path: vec!["block".to_string()],
+            section_path: SectionPath::new(vec!["block".to_string()]),
             description: Some("summary".to_string()),
             tags: vec!["tag".to_string()],
             priority: Some(1),

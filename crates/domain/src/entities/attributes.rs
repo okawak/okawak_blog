@@ -4,6 +4,25 @@ use crate::error::{DomainError, Result};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{fmt, str::FromStr};
 
+/// Ordered category-relative directory segments used for article grouping.
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SectionPath(Vec<String>);
+
+impl SectionPath {
+    pub fn new(segments: Vec<String>) -> Self {
+        Self(segments)
+    }
+
+    pub fn segments(&self) -> &[String] {
+        &self.0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 /// Article title with business-rule validation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Title(String);
@@ -117,7 +136,27 @@ impl<'de> Deserialize<'de> for Category {
 
 #[cfg(test)]
 mod tests {
-    use super::{Category, Title};
+    use super::{Category, SectionPath, Title};
+
+    #[test]
+    fn test_section_path_exposes_ordered_segments() {
+        let path = SectionPath::new(vec!["rust".to_string(), "async".to_string()]);
+
+        assert_eq!(path.segments(), ["rust", "async"]);
+        assert!(!path.is_empty());
+        assert!(SectionPath::default().is_empty());
+    }
+
+    #[test]
+    fn test_section_path_serialization_remains_an_array() {
+        let path = SectionPath::new(vec!["rust".to_string(), "async".to_string()]);
+
+        let json = serde_json::to_string(&path).unwrap();
+        let deserialized: SectionPath = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(json, r#"["rust","async"]"#);
+        assert_eq!(deserialized, path);
+    }
 
     #[test]
     fn test_title_deserializes_with_trimmed_value() {

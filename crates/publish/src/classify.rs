@@ -1,6 +1,6 @@
 use crate::error::{PublishError, Result};
 use crate::ingest::{ContentKind, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file};
-use domain::{Category, PageKey, Slug};
+use domain::{Category, PageKey, SectionPath, Slug};
 use log::{error, warn};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -8,10 +8,10 @@ use std::path::{Path, PathBuf};
 pub(crate) struct ParsedArticleFile {
     pub(crate) category: Category,
     pub(crate) slug: Slug,
-    /// Extensionless relative path used to resolve Obsidian internal links.
-    pub(crate) source_path: String,
+    /// Extensionless vault-relative key used to resolve Obsidian internal links.
+    pub(crate) source_key: String,
     /// Category-relative directories used to group articles in category navigation.
-    pub(crate) section_path: Vec<String>,
+    pub(crate) section_path: SectionPath,
     pub(crate) markdown_body: String,
     pub(crate) front_matter: ObsidianFrontMatter,
 }
@@ -130,7 +130,7 @@ fn process_article_file(
         relative_path,
         &parsed_file.front_matter.created,
     )?;
-    let source_path = relative_path
+    let source_key = relative_path
         .with_extension("")
         .to_string_lossy()
         .into_owned();
@@ -139,15 +139,15 @@ fn process_article_file(
     Ok(ParsedArticleFile {
         category,
         slug,
-        source_path,
+        source_key,
         section_path,
         markdown_body: parsed_file.markdown_body,
         front_matter: parsed_file.front_matter,
     })
 }
 
-fn derive_section_path(category_relative_path: &Path) -> Vec<String> {
-    category_relative_path
+fn derive_section_path(category_relative_path: &Path) -> SectionPath {
+    let segments = category_relative_path
         .parent()
         .map(|parent| {
             parent
@@ -155,7 +155,8 @@ fn derive_section_path(category_relative_path: &Path) -> Vec<String> {
                 .map(|component| component.to_string_lossy().into_owned())
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    SectionPath::new(segments)
 }
 
 pub(crate) fn ensure_unique_page_keys(pages: &[ParsedPageFile]) -> Result<()> {
@@ -282,14 +283,14 @@ mod tests {
     fn test_derive_section_path_from_category_relative_article() {
         let section_path = derive_section_path(Path::new("block1/hoge.md"));
 
-        assert_eq!(section_path, vec!["block1".to_string()]);
+        assert_eq!(section_path.segments(), ["block1"]);
     }
 
     #[test]
     fn test_derive_section_path_keeps_nested_sections() {
         let section_path = derive_section_path(Path::new("rust/async/hoge.md"));
 
-        assert_eq!(section_path, vec!["rust".to_string(), "async".to_string()]);
+        assert_eq!(section_path.segments(), ["rust", "async"]);
     }
 
     #[test]
