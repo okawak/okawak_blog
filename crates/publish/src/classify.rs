@@ -1,6 +1,5 @@
 use crate::error::{PublishError, Result};
 use crate::ingest::{ContentKind, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file};
-use crate::links;
 use domain::{Category, PageKey, Slug};
 use log::{error, warn};
 use std::collections::HashSet;
@@ -147,17 +146,6 @@ fn process_article_file(
     })
 }
 
-pub(crate) fn build_link_index(article_files: &[ParsedArticleFile]) -> links::Index {
-    let mut index = links::Index::with_capacity(article_files.len());
-    for parsed_file in article_files {
-        index.insert(
-            parsed_file.source_path.clone(),
-            format!("/{}/{}", parsed_file.category.as_str(), parsed_file.slug),
-        );
-    }
-    index
-}
-
 fn derive_section_path(category_relative_path: &Path) -> Vec<String> {
     category_relative_path
         .parent()
@@ -217,124 +205,6 @@ fn parse_page_key(page: Option<&str>) -> Result<PageKey> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::*;
-
-    #[rstest]
-    fn test_build_link_index_success() {
-        let front_matter = ObsidianFrontMatter {
-            title: "Test Article".to_string(),
-            kind: ContentKind::Article,
-            tags: Some(vec!["test".to_string()]),
-            summary: Some("Test summary".to_string()),
-            priority: Some(1),
-            created: "2025-01-01T00:00:00+09:00".to_string(),
-            updated: "2025-01-02T00:00:00+09:00".to_string(),
-            is_completed: true,
-            category: Some("tech".to_string()),
-            page: None,
-        };
-
-        let parsed_file = ParsedArticleFile {
-            category: Category::Tech,
-            slug: Slug::new("slug".to_string()).unwrap(),
-            source_path: "test".to_string(),
-            section_path: vec![],
-            markdown_body: "# Test Content".to_string(),
-            front_matter,
-        };
-        let article_files = vec![parsed_file];
-        let index = build_link_index(&article_files);
-
-        assert_eq!(index.resolve("test"), Some("/tech/slug"));
-    }
-
-    #[rstest]
-    fn test_build_link_index_empty() {
-        let article_files: Vec<ParsedArticleFile> = vec![];
-        let index = build_link_index(&article_files);
-
-        assert_eq!(index.resolve("test"), None);
-    }
-
-    #[rstest]
-    fn test_build_link_index_path_collision() {
-        let front_matter1 = ObsidianFrontMatter {
-            title: "Test Article 1".to_string(),
-            kind: ContentKind::Article,
-            tags: Some(vec!["test1".to_string()]),
-            summary: Some("Test summary 1".to_string()),
-            priority: Some(1),
-            created: "2025-01-01T00:00:00+09:00".to_string(),
-            updated: "2025-01-02T00:00:00+09:00".to_string(),
-            is_completed: true,
-            category: Some("tech".to_string()),
-            page: None,
-        };
-
-        let front_matter2 = ObsidianFrontMatter {
-            title: "Test Article 2".to_string(),
-            kind: ContentKind::Article,
-            tags: Some(vec!["test2".to_string()]),
-            summary: Some("Test summary 2".to_string()),
-            priority: Some(2),
-            created: "2025-01-03T00:00:00+09:00".to_string(),
-            updated: "2025-01-04T00:00:00+09:00".to_string(),
-            is_completed: true,
-            category: Some("daily".to_string()),
-            page: None,
-        };
-
-        let parsed_file1 = ParsedArticleFile {
-            category: Category::Tech,
-            slug: Slug::new("slug1".to_string()).unwrap(),
-            source_path: "dir1/test".to_string(),
-            section_path: vec!["dir1".to_string()],
-            markdown_body: "# Test Content 1".to_string(),
-            front_matter: front_matter1,
-        };
-        let parsed_file2 = ParsedArticleFile {
-            category: Category::Daily,
-            slug: Slug::new("slug2".to_string()).unwrap(),
-            source_path: "dir2/test".to_string(),
-            section_path: vec!["dir2".to_string()],
-            markdown_body: "# Test Content 2".to_string(),
-            front_matter: front_matter2,
-        };
-        let article_files = vec![parsed_file1, parsed_file2];
-        let index = build_link_index(&article_files);
-
-        assert_eq!(index.resolve("dir1/test"), Some("/tech/slug1"));
-        assert_eq!(index.resolve("dir2/test"), Some("/daily/slug2"));
-    }
-
-    #[rstest]
-    fn test_build_link_index_url_normalization() {
-        let front_matter = ObsidianFrontMatter {
-            title: "URL Test".to_string(),
-            kind: ContentKind::Article,
-            tags: None,
-            summary: None,
-            priority: None,
-            created: "2025-01-01T00:00:00+09:00".to_string(),
-            updated: "2025-01-01T00:00:00+09:00".to_string(),
-            is_completed: true,
-            category: Some("tech".to_string()),
-            page: None,
-        };
-
-        let parsed_file = ParsedArticleFile {
-            category: Category::Tech,
-            slug: Slug::new("slug".to_string()).unwrap(),
-            source_path: "sub/dir/test".to_string(),
-            section_path: vec!["sub".to_string(), "dir".to_string()],
-            markdown_body: "# URL Test Content".to_string(),
-            front_matter,
-        };
-        let article_files = vec![parsed_file];
-        let index = build_link_index(&article_files);
-
-        assert_eq!(index.resolve("sub/dir/test"), Some("/tech/slug"));
-    }
 
     #[test]
     fn test_ensure_unique_category_landings_rejects_duplicates() {

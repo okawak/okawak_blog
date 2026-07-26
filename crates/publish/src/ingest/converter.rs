@@ -487,7 +487,6 @@ fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::links;
     use indoc::indoc;
     use rstest::*;
 
@@ -539,31 +538,6 @@ mod tests {
     ) {
         let result = generate_html_file(frontmatter, html_body);
         assert_eq!(result, expected);
-    }
-
-    #[rstest]
-    fn test_combined_conversion() {
-        let markdown_with_obsidian_links = r#"# My Article
-
-This is a test with [[Another Article|link]] and **bold** text.
-
-## Section Two
-
-- Item with [[Reference Note]]
-- Regular item"#;
-
-        let mut link_index = links::Index::default();
-        link_index.insert("Another Article".to_string(), "/tech/def456".to_string());
-        link_index.insert("Reference Note".to_string(), "/daily/ghi789".to_string());
-
-        let with_html_links = links::convert(markdown_with_obsidian_links, &link_index);
-        let html = convert_markdown_to_html(&with_html_links).unwrap();
-
-        assert!(html.contains("<h1>My Article</h1>"));
-        assert!(html.contains("<a href=\"/tech/def456\">link</a>"));
-        assert!(html.contains("<a href=\"/daily/ghi789\">Reference Note</a>"));
-        assert!(html.contains("<strong>bold</strong>"));
-        assert!(html.contains("<ul>"));
     }
 
     #[rstest]

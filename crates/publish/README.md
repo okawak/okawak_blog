@@ -134,7 +134,7 @@ src/
 `lib.rs`はorchestrationとcrate外向けAPIを担います。公開するのは`publish`、
 `publish_with_bookmark_enricher`、`BookmarkEnricher`、`PublishError`、`Result`です。
 それ以外のmoduleはpublisher内部に閉じ、`error.rs`にpublisher全体のerrorを集約します。
-分類済み入力型は`classify.rs`、内部リンクの索引と解決規則は`links.rs`、
+分類済み入力型は`classify.rs`、内部リンク索引の構築と解決規則は`links.rs`、
 render済み出力型は`render.rs`が所有します。
 共有するartifactとsiteの契約だけを`crates/domain`に置きます。
 
