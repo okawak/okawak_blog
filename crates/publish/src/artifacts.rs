@@ -1,9 +1,9 @@
 use crate::error::{PublishError, Result};
 
 use domain::{
-    ArticleIndexDocument, ArticleMeta, Category, CategoryIndexDocument, PageArtifactDocument,
-    SiteMetadata, SiteMetadataDocument, Slug, build_article_index, build_category_indexes,
-    build_site_metadata,
+    ArticleIndexDocument, ArticleMeta, Category, CategoryIndexDocument,
+    HomeFragmentArtifactDocument, PageArtifactDocument, SiteMetadata, SiteMetadataDocument, Slug,
+    build_article_index, build_category_indexes, build_site_metadata,
 };
 use serde::Serialize;
 use std::{
@@ -36,17 +36,10 @@ pub(crate) struct CategoryLandingMetadata {
     pub(crate) updated_at: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct HomeFragmentArtifact {
-    pub(crate) title: String,
-    pub(crate) description: Option<String>,
-    pub(crate) html: String,
-    pub(crate) updated_at: String,
-}
-
 /// Output directories for generated local site artifacts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SiteDirectories {
+    home_fragment_path: PathBuf,
     articles_dir: PathBuf,
     categories_dir: PathBuf,
     metadata_dir: PathBuf,
@@ -57,6 +50,7 @@ impl SiteDirectories {
     pub(crate) fn prepare(output_dir: impl AsRef<Path>) -> Result<Self> {
         let site_root = output_dir.as_ref().join("site");
         let site_directories = Self {
+            home_fragment_path: site_root.join("home.json"),
             articles_dir: site_root.join("articles"),
             categories_dir: site_root.join("categories"),
             metadata_dir: site_root.join("metadata"),
@@ -143,16 +137,10 @@ pub(crate) fn write_page_document(
 
 pub(crate) fn write_home_fragment(
     site_directories: &SiteDirectories,
-    home_fragment: HomeFragmentArtifact,
+    home_fragment: &HomeFragmentArtifactDocument,
 ) -> Result<PathBuf> {
-    let document = PageArtifactDocument {
-        page: domain::PageKey::new("home".to_string())?,
-        title: home_fragment.title,
-        description: home_fragment.description,
-        html: home_fragment.html,
-        updated_at: home_fragment.updated_at,
-    };
-    write_page_document(site_directories, &document)
+    write_json_pretty(&site_directories.home_fragment_path, home_fragment)?;
+    Ok(site_directories.home_fragment_path.clone())
 }
 
 pub(crate) fn write_category_page(
@@ -540,6 +528,27 @@ mod tests {
 
         assert_eq!(output_path, site_directories.pages_dir.join("about.json"));
         assert!(output_path.exists());
+    }
+
+    #[test]
+    fn test_write_home_fragment() {
+        let temp_dir = TempDir::new().unwrap();
+        let site_directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+
+        let output_path = write_home_fragment(
+            &site_directories,
+            &HomeFragmentArtifactDocument {
+                title: "Home".to_string(),
+                description: Some("Home introduction".to_string()),
+                html: "<p>Welcome</p>".to_string(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(output_path, temp_dir.path().join("site/home.json"));
+        assert!(output_path.exists());
+        assert!(!site_directories.pages_dir.join("home.json").exists());
     }
 
     #[test]

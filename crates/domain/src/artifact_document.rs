@@ -164,6 +164,15 @@ pub struct PageArtifactDocument {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HomeFragmentArtifactDocument {
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub html: String,
+    pub updated_at: String,
+}
+
 impl From<&SiteMetadata> for SiteMetadataDocument {
     fn from(metadata: &SiteMetadata) -> Self {
         Self {
@@ -321,6 +330,22 @@ mod tests {
         assert!(json.contains("\"page\":\"about\""));
         assert!(json.contains("\"title\":\"About\""));
         assert!(json.contains("\"html\":\"<h1>About</h1>\""));
+    }
+
+    #[test]
+    fn test_home_fragment_artifact_document_serialization() {
+        let document = HomeFragmentArtifactDocument {
+            title: "Home".to_string(),
+            description: Some("Home introduction".to_string()),
+            html: "<p>Welcome</p>".to_string(),
+            updated_at: "2025-01-02T00:00:00+09:00".to_string(),
+        };
+
+        let json = serde_json::to_string(&document).unwrap();
+
+        assert!(!json.contains("\"page\""));
+        assert!(json.contains("\"title\":\"Home\""));
+        assert!(json.contains("\"html\":\"<p>Welcome</p>\""));
     }
 
     #[test]

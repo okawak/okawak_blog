@@ -140,7 +140,7 @@ pub async fn publish_with_bookmark_enricher(
     if let Some(rendered_home) = rendered_home {
         let site_directories = site_directories.clone();
         let output_file_path = tokio::task::spawn_blocking(move || {
-            write_home_fragment(&site_directories, rendered_home)
+            write_home_fragment(&site_directories, &rendered_home)
         })
         .await??;
         info!("...processed {}", output_file_path.display());

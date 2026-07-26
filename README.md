@@ -105,8 +105,8 @@ site/
 │   └── ...
 ├── pages/
 │   ├── about.json
-│   ├── home.json
 │   └── ...
+├── home.json
 └── metadata/
     └── site.json
 ```

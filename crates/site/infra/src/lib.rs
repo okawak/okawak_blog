@@ -9,7 +9,7 @@ use aws_config::BehaviorVersion;
 use aws_sdk_s3::Client;
 use domain::{
     ArticleIndexDocument, ArtifactReleasePointerDocument, Category, CategoryIndexDocument,
-    PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
+    HomeFragmentArtifactDocument, PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
 };
 use std::{
     env,
@@ -49,6 +49,7 @@ pub trait ArtifactSnapshot: Send + Sync {
     async fn read_category_html(&self, category: &Category) -> Result<String>;
     async fn read_site_metadata(&self) -> Result<SiteMetadataDocument>;
     async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<String>;
+    async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument>;
     async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument>;
 }
 
@@ -117,6 +118,10 @@ impl ArtifactSnapshot for LocalArtifactReader {
             slug.as_str()
         )))
         .await?)
+    }
+
+    async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+        self.read_json("home.json").await
     }
 
     async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
@@ -319,6 +324,10 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
         .await
     }
 
+    async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+        self.read_json("home.json").await
+    }
+
     async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
         let text = self
             .read_text(&format!("pages/{}.json", page.as_str()))
@@ -491,6 +500,17 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
+        fs::write(
+            root.join("home.json"),
+            serde_json::to_string_pretty(&HomeFragmentArtifactDocument {
+                title: "Home".to_string(),
+                description: Some("Home introduction".to_string()),
+                html: "<p>Welcome</p>".to_string(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
     }
 
     #[tokio::test]
@@ -515,6 +535,7 @@ mod tests {
             .read_page_document(&PageKey::new("about".to_string()).unwrap())
             .await
             .unwrap();
+        let home_fragment = snapshot.read_home_fragment().await.unwrap();
 
         assert_eq!(document.articles.len(), 1);
         assert_eq!(document.articles[0].slug, "intro00000001");
@@ -525,6 +546,8 @@ mod tests {
         assert_eq!(html, "<h1>Intro</h1>");
         assert_eq!(page.page.as_str(), "about");
         assert_eq!(page.title, "About");
+        assert_eq!(home_fragment.title, "Home");
+        assert_eq!(home_fragment.html, "<p>Welcome</p>");
     }
 
     #[test]

@@ -5,8 +5,6 @@ use crate::{SITE_NAME, build_site_url};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
 #[cfg(feature = "ssr")]
-use domain::PageKey;
-#[cfg(feature = "ssr")]
 use domain::build_home_page_document;
 use domain::{
     HomePageDocument, build_category_path, build_home_page_canonical_path,
@@ -30,9 +28,7 @@ pub async fn get_home_page_document() -> Result<HomePageDocument, ServerFnError>
         let snapshot = artifact_reader.snapshot().await?;
         let article_index = snapshot.read_article_index().await?;
         let site_metadata = snapshot.read_site_metadata().await?;
-        let home_page_key = PageKey::new("home".to_string())
-            .map_err(|error| ServerFnError::new(format!("invalid home page key: {error}")))?;
-        let home_fragment = match snapshot.read_page_document(&home_page_key).await {
+        let home_fragment = match snapshot.read_home_fragment().await {
             Ok(fragment) => Some(fragment),
             Err(error) if error.is_not_found() => None,
             Err(error) => return Err(error.into()),

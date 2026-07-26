@@ -1,8 +1,8 @@
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactReader, DynArtifactSnapshot, Result};
 use async_trait::async_trait;
 use domain::{
-    ArticleIndexDocument, Category, CategoryIndexDocument, PageArtifactDocument, PageKey,
-    SiteMetadataDocument, Slug,
+    ArticleIndexDocument, Category, CategoryIndexDocument, HomeFragmentArtifactDocument,
+    PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
 };
 use std::{
     collections::HashMap,
@@ -110,6 +110,7 @@ struct CachingArtifactSnapshot {
     inner: DynArtifactSnapshot,
     article_index: OnceCell<ArticleIndexDocument>,
     site_metadata: OnceCell<SiteMetadataDocument>,
+    home_fragment: OnceCell<HomeFragmentArtifactDocument>,
     category_indexes: KeyedCache<CategoryIndexDocument>,
     category_html: KeyedCache<String>,
     article_html: KeyedCache<String>,
@@ -122,6 +123,7 @@ impl CachingArtifactSnapshot {
             inner,
             article_index: OnceCell::new(),
             site_metadata: OnceCell::new(),
+            home_fragment: OnceCell::new(),
             category_indexes: KeyedCache::new(),
             category_html: KeyedCache::new(),
             article_html: KeyedCache::new(),
@@ -176,6 +178,13 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
                 self.inner.read_article_html(category, slug)
             })
             .await
+    }
+
+    async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+        self.home_fragment
+            .get_or_try_init(|| self.inner.read_home_fragment())
+            .await
+            .cloned()
     }
 
     async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
@@ -337,6 +346,15 @@ mod tests {
 
         async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<String> {
             Ok(format!("{}/{}", category.as_str(), slug.as_str()))
+        }
+
+        async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+            Ok(HomeFragmentArtifactDocument {
+                title: "Home".to_string(),
+                description: None,
+                html: String::new(),
+                updated_at: String::new(),
+            })
         }
 
         async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
