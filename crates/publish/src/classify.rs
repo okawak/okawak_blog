@@ -1,7 +1,6 @@
 use crate::error::{PublishError, Result};
-use crate::ingest::{
-    ContentKind, FileMapping, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file,
-};
+use crate::ingest::{ContentKind, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file};
+use crate::links;
 use domain::{Category, PageKey, Slug};
 use log::{error, warn};
 use std::collections::HashSet;
@@ -10,8 +9,8 @@ use std::path::{Path, PathBuf};
 pub(crate) struct ParsedArticleFile {
     pub(crate) category: Category,
     pub(crate) slug: Slug,
-    /// Extensionless relative path used to resolve Obsidian wiki links.
-    pub(crate) mapping_key: String,
+    /// Extensionless relative path used to resolve Obsidian internal links.
+    pub(crate) source_path: String,
     /// Category-relative directories used to group articles in category navigation.
     pub(crate) section_path: Vec<String>,
     pub(crate) markdown_body: String,
@@ -132,7 +131,7 @@ fn process_article_file(
         relative_path,
         &parsed_file.front_matter.created,
     )?;
-    let mapping_key = relative_path
+    let source_path = relative_path
         .with_extension("")
         .to_string_lossy()
         .into_owned();
@@ -141,22 +140,22 @@ fn process_article_file(
     Ok(ParsedArticleFile {
         category,
         slug,
-        mapping_key,
+        source_path,
         section_path,
         markdown_body: parsed_file.markdown_body,
         front_matter: parsed_file.front_matter,
     })
 }
 
-pub(crate) fn build_file_mapping(article_files: &[ParsedArticleFile]) -> FileMapping {
-    let mut mapping = FileMapping::with_capacity(article_files.len());
+pub(crate) fn build_link_index(article_files: &[ParsedArticleFile]) -> links::Index {
+    let mut index = links::Index::with_capacity(article_files.len());
     for parsed_file in article_files {
-        mapping.insert(
-            parsed_file.mapping_key.clone(),
+        index.insert(
+            parsed_file.source_path.clone(),
             format!("/{}/{}", parsed_file.category.as_str(), parsed_file.slug),
         );
     }
-    mapping
+    index
 }
 
 fn derive_section_path(category_relative_path: &Path) -> Vec<String> {
@@ -221,7 +220,7 @@ mod tests {
     use rstest::*;
 
     #[rstest]
-    fn test_build_file_mapping_success() {
+    fn test_build_link_index_success() {
         let front_matter = ObsidianFrontMatter {
             title: "Test Article".to_string(),
             kind: ContentKind::Article,
@@ -238,29 +237,27 @@ mod tests {
         let parsed_file = ParsedArticleFile {
             category: Category::Tech,
             slug: Slug::new("slug".to_string()).unwrap(),
-            mapping_key: "test".to_string(),
+            source_path: "test".to_string(),
             section_path: vec![],
             markdown_body: "# Test Content".to_string(),
             front_matter,
         };
         let article_files = vec![parsed_file];
-        let mapping = build_file_mapping(&article_files);
+        let index = build_link_index(&article_files);
 
-        assert_eq!(mapping.len(), 1);
-        assert!(mapping.contains_key("test"));
-        assert_eq!(mapping.get("test").unwrap(), "/tech/slug");
+        assert_eq!(index.resolve("test"), Some("/tech/slug"));
     }
 
     #[rstest]
-    fn test_build_file_mapping_empty() {
+    fn test_build_link_index_empty() {
         let article_files: Vec<ParsedArticleFile> = vec![];
-        let mapping = build_file_mapping(&article_files);
+        let index = build_link_index(&article_files);
 
-        assert_eq!(mapping.len(), 0);
+        assert_eq!(index.resolve("test"), None);
     }
 
     #[rstest]
-    fn test_build_file_mapping_path_collision() {
+    fn test_build_link_index_path_collision() {
         let front_matter1 = ObsidianFrontMatter {
             title: "Test Article 1".to_string(),
             kind: ContentKind::Article,
@@ -290,7 +287,7 @@ mod tests {
         let parsed_file1 = ParsedArticleFile {
             category: Category::Tech,
             slug: Slug::new("slug1".to_string()).unwrap(),
-            mapping_key: "dir1/test".to_string(),
+            source_path: "dir1/test".to_string(),
             section_path: vec!["dir1".to_string()],
             markdown_body: "# Test Content 1".to_string(),
             front_matter: front_matter1,
@@ -298,21 +295,20 @@ mod tests {
         let parsed_file2 = ParsedArticleFile {
             category: Category::Daily,
             slug: Slug::new("slug2".to_string()).unwrap(),
-            mapping_key: "dir2/test".to_string(),
+            source_path: "dir2/test".to_string(),
             section_path: vec!["dir2".to_string()],
             markdown_body: "# Test Content 2".to_string(),
             front_matter: front_matter2,
         };
         let article_files = vec![parsed_file1, parsed_file2];
-        let mapping = build_file_mapping(&article_files);
+        let index = build_link_index(&article_files);
 
-        assert_eq!(mapping.len(), 2);
-        assert!(mapping.contains_key("dir1/test"));
-        assert!(mapping.contains_key("dir2/test"));
+        assert_eq!(index.resolve("dir1/test"), Some("/tech/slug1"));
+        assert_eq!(index.resolve("dir2/test"), Some("/daily/slug2"));
     }
 
     #[rstest]
-    fn test_build_file_mapping_url_normalization() {
+    fn test_build_link_index_url_normalization() {
         let front_matter = ObsidianFrontMatter {
             title: "URL Test".to_string(),
             kind: ContentKind::Article,
@@ -329,16 +325,15 @@ mod tests {
         let parsed_file = ParsedArticleFile {
             category: Category::Tech,
             slug: Slug::new("slug".to_string()).unwrap(),
-            mapping_key: "sub/dir/test".to_string(),
+            source_path: "sub/dir/test".to_string(),
             section_path: vec!["sub".to_string(), "dir".to_string()],
             markdown_body: "# URL Test Content".to_string(),
             front_matter,
         };
         let article_files = vec![parsed_file];
-        let mapping = build_file_mapping(&article_files);
+        let index = build_link_index(&article_files);
 
-        let href = mapping.get("sub/dir/test").unwrap();
-        assert_eq!(href, "/tech/slug");
+        assert_eq!(index.resolve("sub/dir/test"), Some("/tech/slug"));
     }
 
     #[test]
