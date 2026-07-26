@@ -287,6 +287,7 @@ releases/
         ├── articles/
         ├── categories/
         ├── pages/
+        ├── home.json
         └── metadata/
 ```
 
@@ -338,6 +339,8 @@ flowchart LR
   - 最近の記事一覧
   - カテゴリ集計
   - optional な `fragment`
+- `HomeFragmentDocument`
+  - home pageへ組み込むtitle、description、HTML、updated_at
 - `ArticlePageDocument`
   - 記事メタデータ
   - 本文 HTML
@@ -346,7 +349,7 @@ flowchart LR
   - 記事一覧
   - `section_path` ごとの grouped section
 - `StaticPageDocument`
-  - `about` や `home` fragment の共通 page contract
+  - `about` などの固定ページ用contract
 
 `site/web` はこの page contract をもとに metadata と UI を組み立てる。SSR feature では Leptos context から `DynArtifactReader` を受け取り、server function の開始時にsnapshotを1回取得してpage documentを組み立てる。local / S3 などの storage 実装詳細には依存しない。hydrate build は `infra` に依存しない。
 
