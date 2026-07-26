@@ -73,6 +73,12 @@ impl PageKey {
             });
         }
 
+        if value == "home" {
+            return Err(DomainError::InvalidPath {
+                path: "home is reserved for the home page".to_string(),
+            });
+        }
+
         if !value
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
@@ -103,7 +109,21 @@ impl_display_and_deserialize!(PageKey);
 
 #[cfg(test)]
 mod tests {
-    use super::Slug;
+    use super::{PageKey, Slug};
+
+    #[test]
+    fn test_page_key_rejects_reserved_home_key() {
+        let error = PageKey::new("home".to_string()).unwrap_err();
+
+        assert!(error.to_string().contains("reserved"));
+    }
+
+    #[test]
+    fn test_page_key_rejects_invalid_characters() {
+        for value in ["about/team", "About"] {
+            assert!(PageKey::new(value.to_string()).is_err());
+        }
+    }
 
     #[test]
     fn test_slug_deserializes_with_validation() {
