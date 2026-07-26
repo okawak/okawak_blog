@@ -1,9 +1,12 @@
 use crate::BookmarkEnricher;
-use crate::artifacts::{CategoryLandingMetadata, HomeFragmentArtifact};
+use crate::artifacts::CategoryLandingMetadata;
 use crate::classify::{ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, ParsedPageFile};
 use crate::error::Result;
 use crate::ingest::{FileMapping, convert_markdown_to_html, convert_obsidian_links};
-use domain::{ArticleBody, ArticleMeta, ArticleMetaInput, Category, PageArtifactDocument, Title};
+use domain::{
+    ArticleBody, ArticleMeta, ArticleMetaInput, Category, HomeFragmentArtifactDocument,
+    PageArtifactDocument, Title,
+};
 use log::warn;
 
 pub(crate) struct RenderedArticle {
@@ -80,9 +83,9 @@ pub(crate) async fn render_home(
     parsed_file: ParsedHomeFile,
     file_mapping: &FileMapping,
     enrich: BookmarkEnricher,
-) -> Result<HomeFragmentArtifact> {
+) -> Result<HomeFragmentArtifactDocument> {
     let html = render_html(&parsed_file.markdown_body, file_mapping, &enrich).await?;
-    Ok(HomeFragmentArtifact {
+    Ok(HomeFragmentArtifactDocument {
         title: parsed_file.front_matter.title,
         description: parsed_file.front_matter.summary,
         html,

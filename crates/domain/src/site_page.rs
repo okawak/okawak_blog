@@ -2,7 +2,8 @@
 
 use crate::{
     ArticleIndexDocument, ArticleSummaryDocument, Category, CategoryIndexDocument, DomainError,
-    PageArtifactDocument, PageKey, Result, SiteMetadataDocument, Slug, Title,
+    HomeFragmentArtifactDocument, PageArtifactDocument, PageKey, Result, SiteMetadataDocument,
+    Slug, Title,
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -54,7 +55,14 @@ pub struct HomePageDocument {
     pub total_articles: usize,
     pub categories: Vec<SiteCategorySummary>,
     pub articles: Vec<SiteArticleCard>,
-    pub fragment: Option<StaticPageDocument>,
+    pub fragment: Option<HomeFragmentDocument>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HomeFragmentDocument {
+    pub title: String,
+    pub description: Option<String>,
+    pub html: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -179,7 +187,7 @@ pub fn build_static_page_canonical_path(document: &StaticPageDocument) -> String
 pub fn build_home_page_document(
     article_index: &ArticleIndexDocument,
     site_metadata: &SiteMetadataDocument,
-    home_fragment: Option<&PageArtifactDocument>,
+    home_fragment: Option<&HomeFragmentArtifactDocument>,
 ) -> Result<HomePageDocument> {
     let articles = article_index
         .articles
@@ -203,7 +211,30 @@ pub fn build_home_page_document(
         total_articles: site_metadata.total_articles,
         categories,
         articles,
-        fragment: home_fragment.map(build_static_page_document).transpose()?,
+        fragment: home_fragment
+            .map(build_home_fragment_document)
+            .transpose()?,
+    })
+}
+
+pub fn build_home_fragment_document(
+    artifact: &HomeFragmentArtifactDocument,
+) -> Result<HomeFragmentDocument> {
+    let title = artifact.title.trim();
+    let html = artifact.html.trim();
+
+    if title.is_empty() {
+        return Err(DomainError::validation("title"));
+    }
+
+    if html.is_empty() {
+        return Err(DomainError::validation("html"));
+    }
+
+    Ok(HomeFragmentDocument {
+        title: title.to_string(),
+        description: artifact.description.clone(),
+        html: artifact.html.clone(),
     })
 }
 
@@ -370,8 +401,7 @@ mod tests {
 
     #[test]
     fn test_build_home_page_document_with_fragment() {
-        let fragment = PageArtifactDocument {
-            page: PageKey::new("home".to_string()).unwrap(),
+        let fragment = HomeFragmentArtifactDocument {
             title: "Home".to_string(),
             description: Some("Home fragment".to_string()),
             html: "<p>Welcome</p>".to_string(),
@@ -392,13 +422,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(
-            document
-                .fragment
-                .as_ref()
-                .map(|fragment| fragment.page.as_str()),
-            Some("home")
-        );
+        assert_eq!(document.fragment.as_ref().unwrap().title, "Home");
         assert!(document.fragment.as_ref().unwrap().html.contains("Welcome"));
     }
 

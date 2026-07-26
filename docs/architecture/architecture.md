@@ -245,8 +245,8 @@ site/
 │   └── ...
 ├── pages/
 │   ├── about.json
-│   ├── home.json
 │   └── ...
+├── home.json
 └── metadata/
     └── site.json
 ```
@@ -264,12 +264,15 @@ artifact の意味は次の通り。
   - カテゴリ landing page 本文
   - landing Markdown が無い場合は fallback HTML を生成する
 - `pages/<page>.json`
-  - 固定ページまたは home fragment
+  - 固定ページ
+  - HTML 本文と title / description / updated_at を含む
+- `home.json`
+  - home pageへ実行時に組み込む任意のfragment
   - HTML 本文と title / description / updated_at を含む
 - `metadata/site.json`
   - 総記事数とカテゴリ集計
 
-`PageArtifactDocument` は HTML を JSON に包んで保持する。`about` と `home` は reader 側で同じページ artifact 契約を共有する。
+`PageArtifactDocument` は固定ページを保持する。homeは完成したpageではなく実行時に記事一覧やmetadataと合成する一部分なので、`HomeFragmentArtifactDocument` として独立させる。
 
 ### S3 release 契約
 
@@ -284,6 +287,7 @@ releases/
         ├── articles/
         ├── categories/
         ├── pages/
+        ├── home.json
         └── metadata/
 ```
 
@@ -297,7 +301,7 @@ flowchart TB
         C1["categories/<category>/index.json"]
         C2["categories/<category>/page.html"]
         P1["pages/about.json"]
-        P2["pages/home.json"]
+        H1["home.json"]
         M1["metadata/site.json"]
     end
 ```
@@ -335,6 +339,8 @@ flowchart LR
   - 最近の記事一覧
   - カテゴリ集計
   - optional な `fragment`
+- `HomeFragmentDocument`
+  - home pageへ組み込むtitle、description、HTML、updated_at
 - `ArticlePageDocument`
   - 記事メタデータ
   - 本文 HTML
@@ -343,7 +349,7 @@ flowchart LR
   - 記事一覧
   - `section_path` ごとの grouped section
 - `StaticPageDocument`
-  - `about` や `home` fragment の共通 page contract
+  - `about` などの固定ページ用contract
 
 `site/web` はこの page contract をもとに metadata と UI を組み立てる。SSR feature では Leptos context から `DynArtifactReader` を受け取り、server function の開始時にsnapshotを1回取得してpage documentを組み立てる。local / S3 などの storage 実装詳細には依存しない。hydrate build は `infra` に依存しない。
 

@@ -232,12 +232,12 @@ async fn test_publish_with_home_fragment_file() {
     let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
-    let page_document =
-        fs::read_to_string(output_dir.join("site").join("pages").join("home.json")).unwrap();
+    let page_document = fs::read_to_string(output_dir.join("site").join("home.json")).unwrap();
 
-    assert!(page_document.contains("\"page\": \"home\""));
+    assert!(!page_document.contains("\"page\""));
     assert!(page_document.contains("\"title\": \"Home\""));
     assert!(page_document.contains("This fragment is generated from markdown."));
+    assert!(!output_dir.join("site/pages/home.json").exists());
 }
 
 #[tokio::test]

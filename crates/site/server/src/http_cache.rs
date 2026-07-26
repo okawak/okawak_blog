@@ -220,8 +220,8 @@ mod tests {
     use async_trait::async_trait;
     use axum::{Router, body::Body, routing::get};
     use domain::{
-        ArticleIndexDocument, Category, CategoryIndexDocument, PageArtifactDocument, PageKey,
-        SiteMetadataDocument, Slug,
+        ArticleIndexDocument, Category, CategoryIndexDocument, HomeFragmentArtifactDocument,
+        PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
     };
     use infra::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, Result};
     use std::sync::{
@@ -281,6 +281,10 @@ mod tests {
         }
 
         async fn read_article_html(&self, _category: &Category, _slug: &Slug) -> Result<String> {
+            unreachable!()
+        }
+
+        async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
             unreachable!()
         }
 

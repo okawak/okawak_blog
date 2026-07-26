@@ -182,7 +182,7 @@ updated: "2026-04-12T10:00:00+09:00"
 メモ:
 
 - home 全体を Markdown に置き換えるのではなく、intro 部分の fragment として扱う
-- 対応する artifact は `site/pages/home.json`
+- 対応する artifact は `site/home.json`
 
 ## 必須フィールドの目安
 

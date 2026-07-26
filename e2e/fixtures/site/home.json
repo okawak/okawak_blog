@@ -1,5 +1,4 @@
 {
-  "page": "home",
   "title": "Fixture Home",
   "description": "Home fixture description",
   "html": "<p>Fixture home content</p>",
