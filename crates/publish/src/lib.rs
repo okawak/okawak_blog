@@ -1,13 +1,12 @@
 #![warn(unreachable_pub)]
 
 mod artifacts;
-mod bookmark;
 mod classify;
 mod error;
-mod ingest;
 mod links;
 mod render;
 mod slug;
+mod vault;
 
 use crate::artifacts::{
     SiteDirectories, build_site_artifacts, validate_site_artifacts, write_article_page,
@@ -16,21 +15,16 @@ use crate::artifacts::{
 use crate::classify::{
     classify_obsidian_files, ensure_unique_category_landings, ensure_unique_page_keys,
 };
-use crate::ingest::scan_obsidian_files;
-use crate::render::{render_article, render_category, render_home, render_page};
+use crate::render::{
+    render_article, render_category, render_home, render_page, rich_bookmark_enricher,
+};
+use crate::vault::scan_markdown_files;
 pub use error::{PublishError, Result};
-use futures::{StreamExt, TryStreamExt, future::BoxFuture, stream};
+use futures::{StreamExt, TryStreamExt, stream};
 use log::info;
 use std::{path::Path, sync::Arc};
 
-/// Async function that enriches page HTML with rich bookmark cards.
-pub type BookmarkEnricher = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String>> + Send + Sync>;
-
-fn rich_bookmark_enricher() -> BookmarkEnricher {
-    Arc::new(|html: String| {
-        Box::pin(async move { crate::bookmark::convert_simple_bookmarks_to_rich(&html).await })
-    })
-}
+pub use render::BookmarkEnricher;
 
 pub async fn publish(obsidian_dir: &Path, output_dir: &Path) -> Result<()> {
     publish_with_bookmark_enricher(obsidian_dir, output_dir, rich_bookmark_enricher()).await
@@ -48,7 +42,7 @@ pub async fn publish_with_bookmark_enricher(
     info!("Input directory: {}", obsidian_dir.display());
     info!("Output directory: {}", output_dir.display());
 
-    let markdown_files = scan_obsidian_files(obsidian_dir)?;
+    let markdown_files = scan_markdown_files(obsidian_dir)?;
     info!("Found {} markdown files", markdown_files.len());
 
     let classify::ClassifiedFiles {

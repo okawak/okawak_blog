@@ -77,7 +77,8 @@ fn escape_markdown_link_destination(destination: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ingest::{ContentKind, ObsidianFrontMatter, convert_markdown_to_html};
+    use crate::render::convert_markdown_to_html;
+    use crate::vault::{ContentKind, ObsidianFrontMatter};
     use domain::{Category, SectionPath, Slug};
 
     fn index(routes: &[(&str, &str)]) -> Index {

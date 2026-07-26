@@ -1,6 +1,8 @@
 use crate::error::Result;
 
+use futures::future::BoxFuture;
 use std::future::Future;
+use std::sync::Arc;
 
 use regex::Regex;
 use scraper::{Html, Selector};
@@ -8,6 +10,13 @@ use std::sync::LazyLock;
 
 const HTML_INITIAL_CAPACITY: usize = 1024;
 const HTML_EXTENSION_CAPACITY: usize = 2048;
+
+/// Async function that enriches page HTML with rich bookmark cards.
+pub type BookmarkEnricher = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String>> + Send + Sync>;
+
+pub(crate) fn rich_bookmark_enricher() -> BookmarkEnricher {
+    Arc::new(|html: String| Box::pin(async move { convert_simple_bookmarks_to_rich(&html).await }))
+}
 
 #[derive(Debug, Clone, PartialEq)]
 struct BookmarkData {
@@ -283,7 +292,7 @@ where
 }
 
 /// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
-pub(crate) async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
+async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
     convert_simple_bookmarks_with(html_content, |url, original_title| async move {
         fetch_ogp_metadata(&url).await.unwrap_or_else(|e| {
             log::warn!("Warning: Failed to fetch OGP metadata for '{url}': {e}");

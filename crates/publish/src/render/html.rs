@@ -15,6 +15,7 @@ static SAFE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
 static HREF_ATTR_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"href="([^"]*)""#).expect("Invalid href regex"));
 
+/// Converts Markdown to sanitized HTML.
 pub(crate) fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     let (markdown_content, katex_placeholders) = extract_katex_placeholders(markdown_content);
 

@@ -1,5 +1,5 @@
 use crate::error::{PublishError, Result};
-use crate::ingest::{ContentKind, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file};
+use crate::vault::{ContentKind, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file};
 use domain::{Category, PageKey, SectionPath, Slug};
 use log::{error, warn};
 use std::collections::HashSet;
