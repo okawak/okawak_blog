@@ -415,6 +415,7 @@ mod tests {
     use super::*;
     use domain::{
         ARTIFACT_RELEASE_SCHEMA_VERSION, ArticleSummaryDocument, CategoryMetadataDocument,
+        SectionPath,
     };
     use std::fs;
     use tempfile::TempDir;
@@ -432,7 +433,7 @@ mod tests {
                     slug: "intro00000001".to_string(),
                     title: "Intro".to_string(),
                     category: "tech".to_string(),
-                    section_path: vec!["block".to_string()],
+                    section_path: SectionPath::new(vec!["block".to_string()]),
                     description: Some("intro".to_string()),
                     tags: vec!["rust".to_string()],
                     priority: Some(1),
@@ -454,7 +455,7 @@ mod tests {
                     slug: "intro00000001".to_string(),
                     title: "Intro".to_string(),
                     category: "tech".to_string(),
-                    section_path: vec!["block".to_string()],
+                    section_path: SectionPath::new(vec!["block".to_string()]),
                     description: Some("intro".to_string()),
                     tags: vec!["rust".to_string()],
                     priority: Some(1),

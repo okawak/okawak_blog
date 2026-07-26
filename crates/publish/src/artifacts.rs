@@ -387,7 +387,7 @@ fn build_fallback_category_page_html(category_index: &domain::CategoryIndex) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{ArticleMeta, ArticleMetaInput, Category, PageKey, Title};
+    use domain::{ArticleMeta, ArticleMetaInput, Category, PageKey, SectionPath, Title};
     use tempfile::TempDir;
 
     fn build_article_meta(
@@ -401,7 +401,7 @@ mod tests {
             slug: Slug::new(slug.to_string()).unwrap(),
             title: Title::new(title.to_string()).unwrap(),
             category,
-            section_path: vec![],
+            section_path: SectionPath::default(),
             description: Some(format!("{title} summary")),
             tags: vec!["rust".to_string()],
             priority,

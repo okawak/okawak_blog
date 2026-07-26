@@ -56,7 +56,7 @@ okawak_blog/
 
 - `crates/domain`
   - publisher と reader が共有する純粋契約
-  - `Category`、`Slug`、`PageKey`
+  - `Category`、`Slug`、`PageKey`、`SectionPath`
   - artifact contract
   - site page contract
 - `crates/publish`
@@ -226,6 +226,7 @@ Publish/
   - `section_path=["web"]`
 
 `section_path` は category page 上の grouped navigation に使う。Phase 3 では URL には含めない。
+Rust内では順序付きの階層であることを`SectionPath`型で表し、artifact JSONでは従来どおり文字列配列として保存する。
 
 Obsidian 側で実際に書く frontmatter とディレクトリ構造のテンプレートは [docs/content/obsidian-template.md](../content/obsidian-template.md) を参照する。
 
