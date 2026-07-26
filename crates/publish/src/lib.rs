@@ -5,6 +5,7 @@ mod bookmark;
 mod classify;
 mod error;
 mod ingest;
+mod links;
 mod render;
 mod slug;
 
@@ -13,7 +14,7 @@ use crate::artifacts::{
     write_category_page, write_home_fragment, write_page_document, write_site_artifacts,
 };
 use crate::classify::{
-    build_file_mapping, classify_obsidian_files, ensure_unique_category_landings,
+    build_link_index, classify_obsidian_files, ensure_unique_category_landings,
     ensure_unique_page_keys,
 };
 use crate::ingest::scan_obsidian_files;
@@ -72,7 +73,7 @@ pub async fn publish_with_bookmark_enricher(
     ensure_unique_page_keys(&pages)?;
     ensure_unique_category_landings(&categories)?;
 
-    let file_mapping = build_file_mapping(&articles);
+    let link_index = build_link_index(&articles);
     let site_directories = SiteDirectories::prepare(output_dir)?;
 
     const CONCURRENT_LIMIT: usize = 4;
@@ -80,7 +81,7 @@ pub async fn publish_with_bookmark_enricher(
     let article_metas = stream::iter(articles)
         .map(|parsed_file| {
             let enrich = Arc::clone(&enrich);
-            render_article(parsed_file, &file_mapping, enrich)
+            render_article(parsed_file, &link_index, enrich)
         })
         .buffer_unordered(CONCURRENT_LIMIT)
         .try_fold(Vec::new(), |mut article_metas, rendered| {
@@ -106,7 +107,7 @@ pub async fn publish_with_bookmark_enricher(
     let rendered_pages = stream::iter(pages)
         .map(|parsed_file| {
             let enrich = Arc::clone(&enrich);
-            render_page(parsed_file, &file_mapping, enrich)
+            render_page(parsed_file, &link_index, enrich)
         })
         .buffer_unordered(CONCURRENT_LIMIT)
         .try_collect::<Vec<_>>()
@@ -114,7 +115,7 @@ pub async fn publish_with_bookmark_enricher(
 
     let rendered_home = match home {
         Some(parsed_file) => {
-            Some(render_home(parsed_file, &file_mapping, Arc::clone(&enrich)).await?)
+            Some(render_home(parsed_file, &link_index, Arc::clone(&enrich)).await?)
         }
         None => None,
     };
@@ -122,7 +123,7 @@ pub async fn publish_with_bookmark_enricher(
     let rendered_categories = stream::iter(categories)
         .map(|parsed_file| {
             let enrich = Arc::clone(&enrich);
-            render_category(parsed_file, &file_mapping, enrich)
+            render_category(parsed_file, &link_index, enrich)
         })
         .buffer_unordered(CONCURRENT_LIMIT)
         .try_collect::<Vec<_>>()

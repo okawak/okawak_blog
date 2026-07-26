@@ -2,7 +2,8 @@ use crate::BookmarkEnricher;
 use crate::artifacts::CategoryLandingMetadata;
 use crate::classify::{ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, ParsedPageFile};
 use crate::error::Result;
-use crate::ingest::{FileMapping, convert_markdown_to_html, convert_obsidian_links};
+use crate::ingest::convert_markdown_to_html;
+use crate::links;
 use domain::{
     ArticleBody, ArticleMeta, ArticleMetaInput, Category, HomeFragmentArtifactDocument,
     PageArtifactDocument, Title,
@@ -25,10 +26,10 @@ pub(crate) struct RenderedCategoryLanding {
 
 async fn render_html(
     markdown_body: &str,
-    file_mapping: &FileMapping,
+    link_index: &links::Index,
     enrich: &BookmarkEnricher,
 ) -> Result<String> {
-    let markdown_with_links = convert_obsidian_links(markdown_body, file_mapping);
+    let markdown_with_links = links::convert(markdown_body, link_index);
     let html_body = convert_markdown_to_html(&markdown_with_links)?;
     let fallback = html_body.clone();
     let html = enrich(html_body).await.unwrap_or_else(|e| {
@@ -40,10 +41,10 @@ async fn render_html(
 
 pub(crate) async fn render_article(
     parsed_file: ParsedArticleFile,
-    file_mapping: &FileMapping,
+    link_index: &links::Index,
     enrich: BookmarkEnricher,
 ) -> Result<RenderedArticle> {
-    let html = render_html(&parsed_file.markdown_body, file_mapping, &enrich).await?;
+    let html = render_html(&parsed_file.markdown_body, link_index, &enrich).await?;
     let meta = ArticleMeta::new(ArticleMetaInput {
         slug: parsed_file.slug,
         title: Title::new(parsed_file.front_matter.title)?,
@@ -64,10 +65,10 @@ pub(crate) async fn render_article(
 
 pub(crate) async fn render_page(
     parsed_file: ParsedPageFile,
-    file_mapping: &FileMapping,
+    link_index: &links::Index,
     enrich: BookmarkEnricher,
 ) -> Result<RenderedPage> {
-    let html = render_html(&parsed_file.markdown_body, file_mapping, &enrich).await?;
+    let html = render_html(&parsed_file.markdown_body, link_index, &enrich).await?;
     Ok(RenderedPage {
         document: PageArtifactDocument {
             page: parsed_file.page,
@@ -81,10 +82,10 @@ pub(crate) async fn render_page(
 
 pub(crate) async fn render_home(
     parsed_file: ParsedHomeFile,
-    file_mapping: &FileMapping,
+    link_index: &links::Index,
     enrich: BookmarkEnricher,
 ) -> Result<HomeFragmentArtifactDocument> {
-    let html = render_html(&parsed_file.markdown_body, file_mapping, &enrich).await?;
+    let html = render_html(&parsed_file.markdown_body, link_index, &enrich).await?;
     Ok(HomeFragmentArtifactDocument {
         title: parsed_file.front_matter.title,
         description: parsed_file.front_matter.summary,
@@ -95,10 +96,10 @@ pub(crate) async fn render_home(
 
 pub(crate) async fn render_category(
     parsed_file: ParsedCategoryFile,
-    file_mapping: &FileMapping,
+    link_index: &links::Index,
     enrich: BookmarkEnricher,
 ) -> Result<RenderedCategoryLanding> {
-    let html = render_html(&parsed_file.markdown_body, file_mapping, &enrich).await?;
+    let html = render_html(&parsed_file.markdown_body, link_index, &enrich).await?;
     let title = normalize_category_title(parsed_file.category, &parsed_file.front_matter.title);
     let description = normalize_category_description(parsed_file.front_matter.summary.as_deref());
     let html = if html.trim().is_empty() {

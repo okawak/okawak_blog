@@ -126,6 +126,7 @@ src/
 │   ├── converter.rs
 │   ├── parser.rs
 │   └── scanner.rs
+├── links.rs
 ├── render.rs
 └── slug.rs
 ```
@@ -133,7 +134,8 @@ src/
 `lib.rs`はorchestrationとcrate外向けAPIを担います。公開するのは`publish`、
 `publish_with_bookmark_enricher`、`BookmarkEnricher`、`PublishError`、`Result`です。
 それ以外のmoduleはpublisher内部に閉じ、`error.rs`にpublisher全体のerrorを集約します。
-分類済み入力型は`classify.rs`、render済み出力型は`render.rs`が所有します。
+分類済み入力型は`classify.rs`、内部リンクの索引と解決規則は`links.rs`、
+render済み出力型は`render.rs`が所有します。
 共有するartifactとsiteの契約だけを`crates/domain`に置きます。
 
 ### 処理フロー
@@ -141,7 +143,7 @@ src/
 1. **スキャン**: 指定ディレクトリ内のMarkdownファイルを検索
 2. **解析**: 各ファイルのフロントマターを解析
 3. **フィルタリング**: `is_completed: true` のファイルのみを処理対象とする
-4. **リンクマッピング**: ファイル間のリンク関係を構築
+4. **リンク索引**: 公開対象の記事から内部リンク索引を構築
 5. **変換**: Markdown→HTML変換とリッチブックマーク処理
 6. **出力**: HTMLファイルの生成
 

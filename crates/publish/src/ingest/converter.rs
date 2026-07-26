@@ -15,9 +15,6 @@ static SAFE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
 static HREF_ATTR_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"href="([^"]*)""#).expect("Invalid href regex"));
 
-/// Mapping from an Obsidian file path without extension to a published article href.
-pub(crate) type FileMapping = HashMap<String, String>;
-
 pub(crate) fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
     let (markdown_content, katex_placeholders) = extract_katex_placeholders(markdown_content);
 
@@ -487,65 +484,10 @@ fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> 
     result
 }
 
-/// Convert Obsidian wiki links to published HTML links.
-pub(crate) fn convert_obsidian_links(content: &str, file_mapping: &FileMapping) -> String {
-    static OBSIDIAN_LINK_REGEX: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\[\[([^\]]+)\]\]").expect("Invalid regex pattern"));
-
-    OBSIDIAN_LINK_REGEX
-        .replace_all(content, |caps: &regex::Captures| {
-            let link_content = &caps[1];
-
-            let (link_target, display_text) = if let Some(pipe_pos) = link_content.find('|') {
-                let (link, display) = link_content.split_at(pipe_pos);
-                (link.trim(), display[1..].trim())
-            } else {
-                (link_content.trim(), link_content.trim())
-            };
-
-            let href = if let Some(href) = file_mapping.get(link_target) {
-                href.clone()
-            } else {
-                let mut found = false;
-                let mut result_href = format!("/{link_target}");
-
-                for (key, href) in file_mapping {
-                    if key.ends_with(&format!("/{link_target}")) || key == link_target {
-                        result_href = href.clone();
-                        found = true;
-                        break;
-                    }
-                }
-
-                if !found {
-                    log::warn!("Warning: Link target '{link_target}' not found in file mapping");
-                }
-
-                result_href
-            };
-
-            format!(
-                "[{}]({})",
-                escape_markdown_link_text(display_text),
-                escape_markdown_link_destination(&href)
-            )
-        })
-        .to_string()
-}
-
-fn escape_markdown_link_text(text: &str) -> String {
-    text.replace('\\', "\\\\")
-        .replace('[', "\\[")
-        .replace(']', "\\]")
-}
-
-fn escape_markdown_link_destination(destination: &str) -> String {
-    destination.replace(')', "\\)")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::links;
     use indoc::indoc;
     use rstest::*;
 
@@ -580,36 +522,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_obsidian_links_conversion() {
-        let mut file_mapping = FileMapping::new();
-        file_mapping.insert(
-            "notes/another-note".to_string(),
-            "/tech/abc123def".to_string(),
-        );
-        file_mapping.insert("docs/filename".to_string(), "/daily/xyz789abc".to_string());
-        file_mapping.insert("Another Note".to_string(), "/tech/abc123def".to_string());
-        file_mapping.insert("filename".to_string(), "/daily/xyz789abc".to_string());
-
-        let result =
-            convert_obsidian_links("Check out [[Another Note]] for more info.", &file_mapping);
-        assert_eq!(
-            result,
-            "Check out [Another Note](/tech/abc123def) for more info."
-        );
-
-        let result =
-            convert_obsidian_links("See [[filename|Custom Display Text]] here.", &file_mapping);
-        assert_eq!(result, "See [Custom Display Text](/daily/xyz789abc) here.");
-
-        let result = convert_obsidian_links("Link to [[nonexistent]] file.", &file_mapping);
-        assert_eq!(result, "Link to [nonexistent](/nonexistent) file.");
-
-        let result =
-            convert_obsidian_links("This is normal text with no special links.", &file_mapping);
-        assert_eq!(result, "This is normal text with no special links.");
-    }
-
-    #[rstest]
     #[case::basic_html_file(
         "title: Test Article\nslug: test123",
         "<h1>Test Content</h1>\n<p>This is a paragraph.</p>",
@@ -640,11 +552,11 @@ This is a test with [[Another Article|link]] and **bold** text.
 - Item with [[Reference Note]]
 - Regular item"#;
 
-        let mut file_mapping = FileMapping::new();
-        file_mapping.insert("Another Article".to_string(), "/tech/def456".to_string());
-        file_mapping.insert("Reference Note".to_string(), "/daily/ghi789".to_string());
+        let mut link_index = links::Index::default();
+        link_index.insert("Another Article".to_string(), "/tech/def456".to_string());
+        link_index.insert("Reference Note".to_string(), "/daily/ghi789".to_string());
 
-        let with_html_links = convert_obsidian_links(markdown_with_obsidian_links, &file_mapping);
+        let with_html_links = links::convert(markdown_with_obsidian_links, &link_index);
         let html = convert_markdown_to_html(&with_html_links).unwrap();
 
         assert!(html.contains("<h1>My Article</h1>"));
@@ -735,19 +647,6 @@ This is a test with [[Another Article|link]] and **bold** text.
         );
         assert!(result.contains(r#"<span class="okawak-katex-inline">y</span>"#));
         assert!(!result.contains(r#"<span class="okawak-katex-inline">x</span>"#));
-    }
-
-    #[rstest]
-    fn test_markdown_link_escaping() {
-        let mut file_mapping = FileMapping::new();
-        file_mapping.insert("File with <script>".to_string(), "/tech/abc123".to_string());
-
-        let result = convert_obsidian_links("[[File with <script>|Display & test]]", &file_mapping);
-        assert_eq!(result, "[Display & test](/tech/abc123)");
-
-        let result =
-            convert_obsidian_links("[[File \"quoted\"|Text with 'quotes']]", &file_mapping);
-        assert_eq!(result, "[Text with 'quotes'](/File \"quoted\")");
     }
 
     #[rstest]

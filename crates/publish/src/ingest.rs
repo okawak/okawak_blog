@@ -2,7 +2,7 @@ mod converter;
 mod parser;
 mod scanner;
 
-pub(crate) use converter::{FileMapping, convert_markdown_to_html, convert_obsidian_links};
+pub(crate) use converter::convert_markdown_to_html;
 pub(crate) use parser::{
     ContentKind, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file,
 };
