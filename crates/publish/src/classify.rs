@@ -12,6 +12,7 @@ pub(crate) struct ParsedArticleFile {
     pub(crate) slug: Slug,
     /// Extensionless relative path used to resolve Obsidian wiki links.
     pub(crate) mapping_key: String,
+    /// Category-relative directories used to group articles in category navigation.
     pub(crate) section_path: Vec<String>,
     pub(crate) markdown_body: String,
     pub(crate) front_matter: ObsidianFrontMatter,
@@ -92,18 +93,18 @@ fn process_valid_article_file(
     obsidian_dir: &Path,
 ) -> Result<ParsedArticleFile> {
     let relative_path = file_path.strip_prefix(obsidian_dir)?;
+    let category = parse_category(parsed_file.front_matter.category.as_deref())?;
+    let category_relative_path = relative_path.strip_prefix(category.as_str())?;
     let slug = crate::slug::generate_slug(
         &parsed_file.front_matter.title,
         relative_path,
         &parsed_file.front_matter.created,
     )?;
-    let category = parse_category(parsed_file.front_matter.category.as_deref())?;
     let mapping_key = relative_path
         .with_extension("")
         .to_string_lossy()
         .into_owned();
-    let section_path =
-        derive_section_path(relative_path, parsed_file.front_matter.category.as_deref());
+    let section_path = derive_section_path(category_relative_path);
 
     Ok(ParsedArticleFile {
         category,
@@ -151,8 +152,8 @@ pub(crate) fn build_file_mapping(valid_files: &[ParsedArticleFile]) -> FileMappi
     mapping
 }
 
-fn derive_section_path(relative_path: &Path, category: Option<&str>) -> Vec<String> {
-    let mut path_components: Vec<String> = relative_path
+fn derive_section_path(category_relative_path: &Path) -> Vec<String> {
+    category_relative_path
         .parent()
         .map(|parent| {
             parent
@@ -160,15 +161,7 @@ fn derive_section_path(relative_path: &Path, category: Option<&str>) -> Vec<Stri
                 .map(|component| component.to_string_lossy().into_owned())
                 .collect()
         })
-        .unwrap_or_default();
-
-    if let (Some(category), Some(first_component)) = (category, path_components.first())
-        && first_component == category
-    {
-        path_components.remove(0);
-    }
-
-    path_components
+        .unwrap_or_default()
 }
 
 pub(crate) fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<()> {
@@ -382,15 +375,43 @@ mod tests {
     }
 
     #[test]
-    fn test_derive_section_path_drops_category_root() {
-        let section_path = derive_section_path(Path::new("tech/block1/hoge.md"), Some("tech"));
+    fn test_process_valid_article_file_rejects_category_path_mismatch() {
+        let obsidian_dir = Path::new("/vault");
+        let parsed_file = ParsedObsidianFile {
+            front_matter: ObsidianFrontMatter {
+                title: "Test Article".to_string(),
+                kind: ContentKind::Article,
+                tags: None,
+                summary: None,
+                priority: None,
+                created: "2025-01-01T00:00:00+09:00".to_string(),
+                updated: "2025-01-01T00:00:00+09:00".to_string(),
+                is_completed: true,
+                category: Some("tech".to_string()),
+                page: None,
+            },
+            markdown_body: "# Test Article".to_string(),
+        };
+
+        let result = process_valid_article_file(
+            Path::new("/vault/daily/article.md"),
+            parsed_file,
+            obsidian_dir,
+        );
+
+        assert!(matches!(result, Err(PublishError::StripPrefix(_))));
+    }
+
+    #[test]
+    fn test_derive_section_path_from_category_relative_article() {
+        let section_path = derive_section_path(Path::new("block1/hoge.md"));
 
         assert_eq!(section_path, vec!["block1".to_string()]);
     }
 
     #[test]
     fn test_derive_section_path_keeps_nested_sections() {
-        let section_path = derive_section_path(Path::new("tech/rust/async/hoge.md"), Some("tech"));
+        let section_path = derive_section_path(Path::new("rust/async/hoge.md"));
 
         assert_eq!(section_path, vec!["rust".to_string(), "async".to_string()]);
     }
