@@ -96,7 +96,7 @@ fn process_valid_article_file(
         relative_path,
         &parsed_file.front_matter.created,
     )?;
-    let category = parse_category(&parsed_file.front_matter)?;
+    let category = parse_category(parsed_file.front_matter.category.as_deref())?;
     let mapping_key = normalize_path_for_url(&relative_path.with_extension(""));
     let section_path =
         derive_section_path(relative_path, parsed_file.front_matter.category.as_deref());
@@ -113,7 +113,7 @@ fn process_valid_article_file(
 
 fn process_valid_page_file(parsed_file: ParsedObsidianFile) -> Result<ParsedPageFile> {
     Ok(ParsedPageFile {
-        page: parse_page_key(&parsed_file.front_matter)?,
+        page: parse_page_key(parsed_file.front_matter.page.as_deref())?,
         markdown_body: parsed_file.markdown_body,
         front_matter: parsed_file.front_matter,
     })
@@ -130,7 +130,7 @@ fn process_valid_home_file(parsed_file: ParsedObsidianFile) -> Result<ParsedPage
 
 fn process_valid_category_file(parsed_file: ParsedObsidianFile) -> Result<ParsedCategoryFile> {
     Ok(ParsedCategoryFile {
-        category: parse_category(&parsed_file.front_matter)?,
+        category: parse_category(parsed_file.front_matter.category.as_deref())?,
         markdown_body: parsed_file.markdown_body,
         front_matter: parsed_file.front_matter,
     })
@@ -200,19 +200,15 @@ pub(crate) fn ensure_unique_category_landings(
     Ok(())
 }
 
-fn parse_category(front_matter: &ObsidianFrontMatter) -> Result<Category> {
-    let category = front_matter
-        .category
-        .as_deref()
+fn parse_category(category: Option<&str>) -> Result<Category> {
+    let category = category
         .ok_or_else(|| PublishError::Parse("Completed content requires a category".to_string()))?;
     category.parse().map_err(Into::into)
 }
 
-fn parse_page_key(front_matter: &ObsidianFrontMatter) -> Result<PageKey> {
-    let page = front_matter
-        .page
-        .as_deref()
-        .ok_or_else(|| PublishError::Parse("Completed pages require a page key".to_string()))?;
+fn parse_page_key(page: Option<&str>) -> Result<PageKey> {
+    let page =
+        page.ok_or_else(|| PublishError::Parse("Completed pages require a page key".to_string()))?;
     PageKey::new(page.trim().to_string()).map_err(|error| PublishError::Parse(error.to_string()))
 }
 
@@ -402,61 +398,43 @@ mod tests {
 
     #[test]
     fn test_parse_page_key_success() {
-        let front_matter = ObsidianFrontMatter {
-            title: "About".to_string(),
-            kind: ContentKind::Page,
-            tags: None,
-            summary: Some("About this site".to_string()),
-            priority: None,
-            created: "2025-01-01T00:00:00+09:00".to_string(),
-            updated: "2025-01-01T00:00:00+09:00".to_string(),
-            is_completed: true,
-            category: None,
-            page: Some("about".to_string()),
-        };
-
-        assert_eq!(parse_page_key(&front_matter).unwrap().as_str(), "about");
+        assert_eq!(parse_page_key(Some("about")).unwrap().as_str(), "about");
     }
 
     #[test]
     fn test_parse_page_key_rejects_nested_path() {
-        let front_matter = ObsidianFrontMatter {
-            title: "About".to_string(),
-            kind: ContentKind::Page,
-            tags: None,
-            summary: None,
-            priority: None,
-            created: "2025-01-01T00:00:00+09:00".to_string(),
-            updated: "2025-01-01T00:00:00+09:00".to_string(),
-            is_completed: true,
-            category: None,
-            page: Some("about/team".to_string()),
-        };
-
         assert!(matches!(
-            parse_page_key(&front_matter),
+            parse_page_key(Some("about/team")),
             Err(PublishError::Parse(_))
         ));
     }
 
     #[test]
     fn test_parse_page_key_rejects_uppercase() {
-        let front_matter = ObsidianFrontMatter {
-            title: "About".to_string(),
-            kind: ContentKind::Page,
-            tags: None,
-            summary: None,
-            priority: None,
-            created: "2025-01-01T00:00:00+09:00".to_string(),
-            updated: "2025-01-01T00:00:00+09:00".to_string(),
-            is_completed: true,
-            category: None,
-            page: Some("About".to_string()),
-        };
-
         assert!(matches!(
-            parse_page_key(&front_matter),
+            parse_page_key(Some("About")),
             Err(PublishError::Parse(_))
+        ));
+    }
+
+    #[test]
+    fn test_parse_page_key_rejects_missing_value() {
+        assert!(matches!(
+            parse_page_key(None),
+            Err(PublishError::Parse(message)) if message.contains("require a page key")
+        ));
+    }
+
+    #[test]
+    fn test_parse_category_success() {
+        assert_eq!(parse_category(Some("tech")).unwrap(), Category::Tech);
+    }
+
+    #[test]
+    fn test_parse_category_rejects_missing_value() {
+        assert!(matches!(
+            parse_category(None),
+            Err(PublishError::Parse(message)) if message.contains("requires a category")
         ));
     }
 
