@@ -36,6 +36,14 @@ pub(crate) struct CategoryLandingMetadata {
     pub(crate) updated_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct HomeFragmentArtifact {
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) html: String,
+    pub(crate) updated_at: String,
+}
+
 /// Output directories for generated local site artifacts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SiteDirectories {
@@ -131,6 +139,20 @@ pub(crate) fn write_page_document(
         .join(format!("{}.json", page_document.page));
     write_json_pretty(&output_file_path, page_document)?;
     Ok(output_file_path)
+}
+
+pub(crate) fn write_home_fragment(
+    site_directories: &SiteDirectories,
+    home_fragment: HomeFragmentArtifact,
+) -> Result<PathBuf> {
+    let document = PageArtifactDocument {
+        page: domain::PageKey::new("home".to_string())?,
+        title: home_fragment.title,
+        description: home_fragment.description,
+        html: home_fragment.html,
+        updated_at: home_fragment.updated_at,
+    };
+    write_page_document(site_directories, &document)
 }
 
 pub(crate) fn write_category_page(

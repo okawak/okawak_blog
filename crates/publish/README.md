@@ -39,6 +39,8 @@ category: "tech"
 ---
 ```
 
+article は frontmatter の `category` と同名のディレクトリ配下に置いてください。たとえば `category: tech` の記事は `tech/` 配下に配置し、不一致の場合は publish に失敗します。
+
 #### リンク形式
 - 内部リンク: `[[記事名]]`
 - 表示テキスト付きリンク: `[[記事名|表示テキスト]]`
@@ -97,6 +99,8 @@ repository rootの`mise run dev-local`はprivate Obsidian submoduleをremoteの�
 
 - 入力ディレクトリ: `./crates/publish/obsidian/Publish` (固定)
 - 出力ディレクトリ: `./crates/publish/dist` (固定)
+
+publisherのpath処理はmacOSとLinuxを対象とし、Windows形式のpathには対応しません。
 
 ## GitHub Actions連携
 

@@ -1,4 +1,5 @@
 use crate::error::{PublishError, Result};
+use domain::Slug;
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
@@ -7,7 +8,7 @@ pub(crate) fn generate_slug<P: AsRef<Path>>(
     title: &str,
     relative_path: P,
     created: &str,
-) -> Result<String> {
+) -> Result<Slug> {
     let relative_path_str = relative_path
         .as_ref()
         .to_str()
@@ -29,7 +30,7 @@ pub(crate) fn generate_slug<P: AsRef<Path>>(
             acc
         });
 
-    Ok(slug)
+    Slug::new(slug).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -48,8 +49,8 @@ mod tests {
 
         let slug = generate_slug(title, &relative_path, created)?;
 
-        assert_eq!(slug.len(), 12);
-        assert!(slug.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(slug.as_str().len(), 12);
+        assert!(slug.as_str().chars().all(|c| c.is_ascii_hexdigit()));
 
         Ok(())
     }

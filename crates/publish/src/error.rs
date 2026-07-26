@@ -19,6 +19,9 @@ pub enum PublishError {
     #[error("blocking task failed: {0}")]
     Join(#[from] tokio::task::JoinError),
 
+    #[error(transparent)]
+    StripPrefix(#[from] std::path::StripPrefixError),
+
     #[error("invalid file path: {0}")]
     InvalidPath(String),
 

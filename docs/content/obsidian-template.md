@@ -9,9 +9,10 @@
 - Markdown は LF 改行の frontmatter を前提にする
 - `is_completed: true` のものだけを公開対象として扱う
 - `kind` によって `article` / `category` / `page` / `home` を判定する
+- article は frontmatter の `category` と同名のディレクトリ配下に置く
 - category 配下のディレクトリ構造は `section_path` として path から導出する
 
-## 推奨ディレクトリ構造
+## ディレクトリ構造
 
 ```text
 Publish/
@@ -81,6 +82,7 @@ Obsidian link や bookmark 埋め込みを含めてよい。
 
 - `kind` を省略した場合は `article` として扱う
 - `category` は必須
+- article の path の先頭ディレクトリは `category` と一致させる。不一致の場合は publish に失敗する
 - `Publish/tech/rust/async.md` のような path なら `section_path=["rust"]` が自動で付く
 
 ## 2. カテゴリトップページ

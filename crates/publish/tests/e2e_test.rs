@@ -112,7 +112,7 @@ async fn test_end_to_end_obsidian_processing() {
         次は[[Rustでのパフォーマンス最適化]]について学んでみましょう。
     "#};
 
-    let basic_file = obsidian_dir.join("basic-rust-concepts.md");
+    let basic_file = obsidian_dir.join("tech").join("basic-rust-concepts.md");
     fs::write(&basic_file, basic_concepts).unwrap();
 
     // Draft blog article.
@@ -328,7 +328,8 @@ async fn test_large_volume_processing() {
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
 
-    fs::create_dir_all(&obsidian_dir).unwrap();
+    let tech_dir = obsidian_dir.join("tech");
+    fs::create_dir_all(&tech_dir).unwrap();
     write_about_page(&obsidian_dir);
 
     // Generate 100 test files.
@@ -379,7 +380,7 @@ async fn test_large_volume_processing() {
             (i + 1) % 100
         );
 
-        let file_path = obsidian_dir.join(format!("test-article-{i:03}.md"));
+        let file_path = tech_dir.join(format!("test-article-{i:03}.md"));
         fs::write(&file_path, content).unwrap();
     }
 
@@ -411,7 +412,8 @@ async fn test_publish_rejects_content_errors_without_writing_artifacts() {
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
 
-    fs::create_dir_all(&obsidian_dir).unwrap();
+    let tech_dir = obsidian_dir.join("tech");
+    fs::create_dir_all(&tech_dir).unwrap();
 
     // Valid file.
     let valid_file = indoc! {r#"
@@ -467,9 +469,9 @@ async fn test_publish_rejects_content_errors_without_writing_artifacts() {
         This should be skipped.
     "#};
 
-    fs::write(obsidian_dir.join("valid.md"), valid_file).unwrap();
-    fs::write(obsidian_dir.join("invalid.md"), invalid_yaml).unwrap();
-    fs::write(obsidian_dir.join("incomplete.md"), incomplete_file).unwrap();
+    fs::write(tech_dir.join("valid.md"), valid_file).unwrap();
+    fs::write(tech_dir.join("invalid.md"), invalid_yaml).unwrap();
+    fs::write(tech_dir.join("incomplete.md"), incomplete_file).unwrap();
 
     let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_err(), "Publishing must reject content errors");

@@ -30,8 +30,10 @@ fn offline_bookmark_enricher() -> BookmarkEnricher {
 }
 
 fn write_required_article(obsidian_dir: &Path) {
+    let category_dir = obsidian_dir.join("tech");
+    fs::create_dir_all(&category_dir).unwrap();
     fs::write(
-        obsidian_dir.join("required-article.md"),
+        category_dir.join("required-article.md"),
         indoc! {r#"
             ---
             title: "Required Article"
@@ -71,7 +73,7 @@ async fn test_publish_with_sample_file() {
     let output_dir = temp_dir.path().join("dist");
 
     // Create the Obsidian directory and a sample file.
-    fs::create_dir_all(&obsidian_dir).unwrap();
+    fs::create_dir_all(obsidian_dir.join("tech")).unwrap();
 
     let sample_content = indoc! {r#"
         ---
@@ -90,7 +92,7 @@ async fn test_publish_with_sample_file() {
         This is a test article.
     "#};
 
-    let sample_file = obsidian_dir.join("test.md");
+    let sample_file = obsidian_dir.join("tech/test.md");
     fs::write(&sample_file, sample_content).unwrap();
     write_about_page(&obsidian_dir);
 
@@ -127,7 +129,7 @@ async fn test_publish_skips_incomplete_file() {
     let output_dir = temp_dir.path().join("dist");
 
     // Create the Obsidian directory and a file with `is_completed: false`.
-    fs::create_dir_all(&obsidian_dir).unwrap();
+    fs::create_dir_all(obsidian_dir.join("tech")).unwrap();
 
     let incomplete_content = indoc! {r#"
         ---
@@ -146,7 +148,7 @@ async fn test_publish_skips_incomplete_file() {
         This article is not completed.
     "#};
 
-    let sample_file = obsidian_dir.join("incomplete.md");
+    let sample_file = obsidian_dir.join("tech/incomplete.md");
     fs::write(&sample_file, incomplete_content).unwrap();
     write_required_article(&obsidian_dir);
     write_about_page(&obsidian_dir);
@@ -239,6 +241,40 @@ async fn test_publish_with_home_fragment_file() {
 }
 
 #[tokio::test]
+async fn test_publish_rejects_duplicate_home_files() {
+    let temp_dir = TempDir::new().unwrap();
+    let obsidian_dir = temp_dir.path().join("obsidian");
+    let output_dir = temp_dir.path().join("dist");
+
+    fs::create_dir_all(&obsidian_dir).unwrap();
+    let home_content = indoc! {r#"
+        ---
+        title: "Home"
+        kind: home
+        summary: "Home intro"
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        is_completed: true
+        ---
+
+        # Welcome
+    "#};
+
+    fs::write(obsidian_dir.join("home.md"), home_content).unwrap();
+    fs::write(obsidian_dir.join("another-home.md"), home_content).unwrap();
+    write_required_article(&obsidian_dir);
+    write_about_page(&obsidian_dir);
+
+    let result = publish(&obsidian_dir, &output_dir).await;
+
+    assert!(matches!(
+        result,
+        Err(PublishError::ContentErrors { count: 1 })
+    ));
+    assert!(!output_dir.exists());
+}
+
+#[tokio::test]
 async fn test_publish_with_category_landing_file() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
@@ -327,7 +363,7 @@ async fn test_publish_with_bookmark_enricher() {
     let obsidian_dir = temp_dir.path().join("obsidian");
     let output_dir = temp_dir.path().join("dist");
 
-    fs::create_dir_all(&obsidian_dir).unwrap();
+    fs::create_dir_all(obsidian_dir.join("tech")).unwrap();
 
     // Use an offline enricher that converts bookmarks with fallback data only.
     let sample_content = indoc! {r#"
@@ -349,7 +385,7 @@ async fn test_publish_with_bookmark_enricher() {
         </div>
     "#};
 
-    let sample_file = obsidian_dir.join("bookmark.md");
+    let sample_file = obsidian_dir.join("tech/bookmark.md");
     fs::write(&sample_file, sample_content).unwrap();
     write_about_page(&obsidian_dir);
 

@@ -165,7 +165,7 @@ category: "tech"
 - `category`: `article` と `category` で使うカテゴリキーです。
 - `page`: `kind: page` のときに使う固定ページキーです。
 
-本文は closing `---` の次の行から始まり、Obsidian link や bookmark 埋め込みを含められます。front matter がない Markdown は publisher からはスキップされます。category 配下のディレクトリ構造は path から `section_path` として導出され、category page 上の grouped navigation に使われます。
+本文は closing `---` の次の行から始まり、Obsidian link や bookmark 埋め込みを含められます。front matter がない Markdown は publisher からはスキップされます。article は frontmatter の `category` と同名のディレクトリ配下に置く必要があります。category 配下のディレクトリ構造は path から `section_path` として導出され、category page 上の grouped navigation に使われます。
 
 ## 運用モデル
 
