@@ -10,14 +10,14 @@ mod slug;
 
 use crate::artifacts::{
     SiteDirectories, build_site_artifacts, validate_site_artifacts, write_article_page,
-    write_category_page, write_page_document, write_site_artifacts,
+    write_category_page, write_home_fragment, write_page_document, write_site_artifacts,
 };
 use crate::classify::{
     build_file_mapping, classify_obsidian_files, ensure_unique_category_landings,
     ensure_unique_page_keys,
 };
 use crate::ingest::scan_obsidian_files;
-use crate::render::{render_article, render_category, render_page};
+use crate::render::{render_article, render_category, render_home, render_page};
 pub use error::{PublishError, Result};
 use futures::{StreamExt, TryStreamExt, future::BoxFuture, stream};
 use log::info;
@@ -54,6 +54,7 @@ pub async fn publish_with_bookmark_enricher(
     let classify::ClassifiedFiles {
         articles,
         pages,
+        home,
         categories,
         skipped,
         errors,
@@ -61,6 +62,7 @@ pub async fn publish_with_bookmark_enricher(
 
     info!("Valid article files: {}", articles.len());
     info!("Valid page files: {}", pages.len());
+    info!("Valid home file: {}", usize::from(home.is_some()));
     info!("Valid category files: {}", categories.len());
     info!("Skipped files: {skipped}");
     if errors > 0 {
@@ -110,6 +112,13 @@ pub async fn publish_with_bookmark_enricher(
         .try_collect::<Vec<_>>()
         .await?;
 
+    let rendered_home = match home {
+        Some(parsed_file) => {
+            Some(render_home(parsed_file, &file_mapping, Arc::clone(&enrich)).await?)
+        }
+        None => None,
+    };
+
     let rendered_categories = stream::iter(categories)
         .map(|parsed_file| {
             let enrich = Arc::clone(&enrich);
@@ -123,6 +132,15 @@ pub async fn publish_with_bookmark_enricher(
         let site_directories = site_directories.clone();
         let output_file_path = tokio::task::spawn_blocking(move || {
             write_page_document(&site_directories, &rendered_page.document)
+        })
+        .await??;
+        info!("...processed {}", output_file_path.display());
+    }
+
+    if let Some(rendered_home) = rendered_home {
+        let site_directories = site_directories.clone();
+        let output_file_path = tokio::task::spawn_blocking(move || {
+            write_home_fragment(&site_directories, rendered_home)
         })
         .await??;
         info!("...processed {}", output_file_path.display());

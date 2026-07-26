@@ -24,6 +24,11 @@ pub(crate) struct ParsedPageFile {
     pub(crate) front_matter: ObsidianFrontMatter,
 }
 
+pub(crate) struct ParsedHomeFile {
+    pub(crate) markdown_body: String,
+    pub(crate) front_matter: ObsidianFrontMatter,
+}
+
 pub(crate) struct ParsedCategoryFile {
     pub(crate) category: Category,
     pub(crate) markdown_body: String,
@@ -33,6 +38,7 @@ pub(crate) struct ParsedCategoryFile {
 pub(crate) struct ClassifiedFiles {
     pub(crate) articles: Vec<ParsedArticleFile>,
     pub(crate) pages: Vec<ParsedPageFile>,
+    pub(crate) home: Option<ParsedHomeFile>,
     pub(crate) categories: Vec<ParsedCategoryFile>,
     pub(crate) skipped: usize,
     pub(crate) errors: usize,
@@ -44,6 +50,7 @@ pub(crate) fn classify_obsidian_files(
 ) -> ClassifiedFiles {
     let mut articles = Vec::new();
     let mut pages = Vec::new();
+    let mut home = None;
     let mut categories = Vec::new();
     let mut skipped = 0usize;
     let mut errors = 0usize;
@@ -52,14 +59,38 @@ pub(crate) fn classify_obsidian_files(
         match parse_obsidian_file(&file_path) {
             Ok(Some(parsed)) if parsed.front_matter.is_completed => {
                 let result: Result<()> = match parsed.front_matter.kind {
-                    ContentKind::Article => {
-                        process_valid_article_file(&file_path, parsed, obsidian_dir)
-                            .map(|f| articles.push(f))
+                    ContentKind::Article => process_article_file(&file_path, parsed, obsidian_dir)
+                        .map(|f| articles.push(f)),
+                    ContentKind::Page => {
+                        parse_page_key(parsed.front_matter.page.as_deref()).map(|page| {
+                            pages.push(ParsedPageFile {
+                                page,
+                                markdown_body: parsed.markdown_body,
+                                front_matter: parsed.front_matter,
+                            });
+                        })
                     }
-                    ContentKind::Page => process_valid_page_file(parsed).map(|f| pages.push(f)),
-                    ContentKind::Home => process_valid_home_file(parsed).map(|f| pages.push(f)),
+                    ContentKind::Home => {
+                        if home.is_some() {
+                            Err(PublishError::Parse(
+                                "Duplicate home content detected".to_string(),
+                            ))
+                        } else {
+                            home = Some(ParsedHomeFile {
+                                markdown_body: parsed.markdown_body,
+                                front_matter: parsed.front_matter,
+                            });
+                            Ok(())
+                        }
+                    }
                     ContentKind::Category => {
-                        process_valid_category_file(parsed).map(|f| categories.push(f))
+                        parse_category(parsed.front_matter.category.as_deref()).map(|category| {
+                            categories.push(ParsedCategoryFile {
+                                category,
+                                markdown_body: parsed.markdown_body,
+                                front_matter: parsed.front_matter,
+                            });
+                        })
                     }
                 };
                 if let Err(e) = result {
@@ -81,13 +112,14 @@ pub(crate) fn classify_obsidian_files(
     ClassifiedFiles {
         articles,
         pages,
+        home,
         categories,
         skipped,
         errors,
     }
 }
 
-fn process_valid_article_file(
+fn process_article_file(
     file_path: &Path,
     parsed_file: ParsedObsidianFile,
     obsidian_dir: &Path,
@@ -116,34 +148,9 @@ fn process_valid_article_file(
     })
 }
 
-fn process_valid_page_file(parsed_file: ParsedObsidianFile) -> Result<ParsedPageFile> {
-    Ok(ParsedPageFile {
-        page: parse_page_key(parsed_file.front_matter.page.as_deref())?,
-        markdown_body: parsed_file.markdown_body,
-        front_matter: parsed_file.front_matter,
-    })
-}
-
-fn process_valid_home_file(parsed_file: ParsedObsidianFile) -> Result<ParsedPageFile> {
-    Ok(ParsedPageFile {
-        page: PageKey::new("home".to_string())
-            .map_err(|error| PublishError::Parse(error.to_string()))?,
-        markdown_body: parsed_file.markdown_body,
-        front_matter: parsed_file.front_matter,
-    })
-}
-
-fn process_valid_category_file(parsed_file: ParsedObsidianFile) -> Result<ParsedCategoryFile> {
-    Ok(ParsedCategoryFile {
-        category: parse_category(parsed_file.front_matter.category.as_deref())?,
-        markdown_body: parsed_file.markdown_body,
-        front_matter: parsed_file.front_matter,
-    })
-}
-
-pub(crate) fn build_file_mapping(valid_files: &[ParsedArticleFile]) -> FileMapping {
-    let mut mapping = FileMapping::with_capacity(valid_files.len());
-    for parsed_file in valid_files {
+pub(crate) fn build_file_mapping(article_files: &[ParsedArticleFile]) -> FileMapping {
+    let mut mapping = FileMapping::with_capacity(article_files.len());
+    for parsed_file in article_files {
         mapping.insert(
             parsed_file.mapping_key.clone(),
             format!("/{}/{}", parsed_file.category.as_str(), parsed_file.slug),
@@ -164,9 +171,9 @@ fn derive_section_path(category_relative_path: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
-pub(crate) fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<()> {
-    let mut seen = HashSet::with_capacity(valid_pages.len());
-    for parsed_page in valid_pages {
+pub(crate) fn ensure_unique_page_keys(pages: &[ParsedPageFile]) -> Result<()> {
+    let mut seen = HashSet::with_capacity(pages.len());
+    for parsed_page in pages {
         if !seen.insert(parsed_page.page.as_str()) {
             return Err(PublishError::Parse(format!(
                 "Duplicate page key detected: {}",
@@ -177,11 +184,9 @@ pub(crate) fn ensure_unique_page_keys(valid_pages: &[ParsedPageFile]) -> Result<
     Ok(())
 }
 
-pub(crate) fn ensure_unique_category_landings(
-    valid_categories: &[ParsedCategoryFile],
-) -> Result<()> {
-    let mut seen = HashSet::with_capacity(valid_categories.len());
-    for parsed_category in valid_categories {
+pub(crate) fn ensure_unique_category_landings(categories: &[ParsedCategoryFile]) -> Result<()> {
+    let mut seen = HashSet::with_capacity(categories.len());
+    for parsed_category in categories {
         if !seen.insert(parsed_category.category.as_str()) {
             return Err(PublishError::Parse(format!(
                 "Duplicate category landing detected: {}",
@@ -201,7 +206,13 @@ fn parse_category(category: Option<&str>) -> Result<Category> {
 fn parse_page_key(page: Option<&str>) -> Result<PageKey> {
     let page =
         page.ok_or_else(|| PublishError::Parse("Completed pages require a page key".to_string()))?;
-    PageKey::new(page.trim().to_string()).map_err(|error| PublishError::Parse(error.to_string()))
+    let page = page.trim();
+    if page == "home" {
+        return Err(PublishError::Parse(
+            "Static pages cannot use the reserved home page key".to_string(),
+        ));
+    }
+    PageKey::new(page.to_string()).map_err(|error| PublishError::Parse(error.to_string()))
 }
 
 #[cfg(test)]
@@ -232,8 +243,8 @@ mod tests {
             markdown_body: "# Test Content".to_string(),
             front_matter,
         };
-        let valid_files = vec![parsed_file];
-        let mapping = build_file_mapping(&valid_files);
+        let article_files = vec![parsed_file];
+        let mapping = build_file_mapping(&article_files);
 
         assert_eq!(mapping.len(), 1);
         assert!(mapping.contains_key("test"));
@@ -242,8 +253,8 @@ mod tests {
 
     #[rstest]
     fn test_build_file_mapping_empty() {
-        let valid_files: Vec<ParsedArticleFile> = vec![];
-        let mapping = build_file_mapping(&valid_files);
+        let article_files: Vec<ParsedArticleFile> = vec![];
+        let mapping = build_file_mapping(&article_files);
 
         assert_eq!(mapping.len(), 0);
     }
@@ -292,8 +303,8 @@ mod tests {
             markdown_body: "# Test Content 2".to_string(),
             front_matter: front_matter2,
         };
-        let valid_files = vec![parsed_file1, parsed_file2];
-        let mapping = build_file_mapping(&valid_files);
+        let article_files = vec![parsed_file1, parsed_file2];
+        let mapping = build_file_mapping(&article_files);
 
         assert_eq!(mapping.len(), 2);
         assert!(mapping.contains_key("dir1/test"));
@@ -323,8 +334,8 @@ mod tests {
             markdown_body: "# URL Test Content".to_string(),
             front_matter,
         };
-        let valid_files = vec![parsed_file];
-        let mapping = build_file_mapping(&valid_files);
+        let article_files = vec![parsed_file];
+        let mapping = build_file_mapping(&article_files);
 
         let href = mapping.get("sub/dir/test").unwrap();
         assert_eq!(href, "/tech/slug");
@@ -332,7 +343,7 @@ mod tests {
 
     #[test]
     fn test_ensure_unique_category_landings_rejects_duplicates() {
-        let valid_categories = vec![
+        let categories = vec![
             ParsedCategoryFile {
                 category: Category::Tech,
                 markdown_body: "# Tech".to_string(),
@@ -367,7 +378,7 @@ mod tests {
             },
         ];
 
-        let result = ensure_unique_category_landings(&valid_categories);
+        let result = ensure_unique_category_landings(&categories);
 
         assert!(
             matches!(result, Err(PublishError::Parse(message)) if message.contains("Duplicate category landing"))
@@ -375,7 +386,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_valid_article_file_rejects_category_path_mismatch() {
+    fn test_process_article_file_rejects_category_path_mismatch() {
         let obsidian_dir = Path::new("/vault");
         let parsed_file = ParsedObsidianFile {
             front_matter: ObsidianFrontMatter {
@@ -393,7 +404,7 @@ mod tests {
             markdown_body: "# Test Article".to_string(),
         };
 
-        let result = process_valid_article_file(
+        let result = process_article_file(
             Path::new("/vault/daily/article.md"),
             parsed_file,
             obsidian_dir,
@@ -425,6 +436,14 @@ mod tests {
     fn test_parse_page_key_rejects_nested_path() {
         assert!(matches!(
             parse_page_key(Some("about/team")),
+            Err(PublishError::Parse(_))
+        ));
+    }
+
+    #[test]
+    fn test_parse_page_key_rejects_reserved_home_key() {
+        assert!(matches!(
+            parse_page_key(Some("home")),
             Err(PublishError::Parse(_))
         ));
     }

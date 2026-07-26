@@ -241,6 +241,40 @@ async fn test_publish_with_home_fragment_file() {
 }
 
 #[tokio::test]
+async fn test_publish_rejects_duplicate_home_files() {
+    let temp_dir = TempDir::new().unwrap();
+    let obsidian_dir = temp_dir.path().join("obsidian");
+    let output_dir = temp_dir.path().join("dist");
+
+    fs::create_dir_all(&obsidian_dir).unwrap();
+    let home_content = indoc! {r#"
+        ---
+        title: "Home"
+        kind: home
+        summary: "Home intro"
+        created: "2025-01-01T00:00:00+09:00"
+        updated: "2025-01-01T00:00:00+09:00"
+        is_completed: true
+        ---
+
+        # Welcome
+    "#};
+
+    fs::write(obsidian_dir.join("home.md"), home_content).unwrap();
+    fs::write(obsidian_dir.join("another-home.md"), home_content).unwrap();
+    write_required_article(&obsidian_dir);
+    write_about_page(&obsidian_dir);
+
+    let result = publish(&obsidian_dir, &output_dir).await;
+
+    assert!(matches!(
+        result,
+        Err(PublishError::ContentErrors { count: 1 })
+    ));
+    assert!(!output_dir.exists());
+}
+
+#[tokio::test]
 async fn test_publish_with_category_landing_file() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");
