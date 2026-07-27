@@ -11,27 +11,29 @@
 公開フローは次の通り。
 
 1. private な Obsidian リポジトリを git submodule として取得する
-2. `crates/publish` の ingest module が Markdown と frontmatter を解釈する
-3. publisher orchestration が記事、カテゴリ、固定ページ、home fragment を artifact に変換する
-4. artifacts module が `site/` 配下の HTML / JSON を組み立てる
-5. GitHub Actions が artifact を immutable release として S3 に配置し、`current.json` を最後に切り替える
-6. `crates/site/server` と `crates/site/web` が `crates/site/infra` 経由で release snapshot を読んで SSR する
+2. `crates/publish` の vault module が Markdown を走査し、frontmatter と本文を読み取る
+3. classify / links module が公開種別を確定し、Obsidian link を解決する
+4. render module が Markdown の HTML 変換と bookmark enrichment を行う
+5. artifacts module が `site/` 配下の HTML / JSON を組み立てる
+6. GitHub Actions が artifact を immutable release として S3 に配置し、`current.json` を最後に切り替える
+7. `crates/site/server` と `crates/site/web` が `crates/site/infra` 経由で release snapshot を読んで SSR する
 
 Markdown から HTML への変換はビルド時に完了させる。ランタイムは artifact の読取、ルーティング、メタ情報の付与に集中する。
 
 ```mermaid
 flowchart LR
     A[Private Obsidian Repo] --> B[git submodule]
-    B --> C[crates/publish ingest module]
-    C --> D[publisher orchestration]
-    D --> E[artifacts module]
-    E --> F[site artifact directory]
-    F --> G[GitHub Actions upload]
-    G --> H[S3]
-    H --> I[crates/site/infra]
-    I --> K[crates/site/web SSR]
-    J[crates/site/server] --> K
-    K --> L[Browser]
+    B --> C[vault module]
+    C --> D[classify and links modules]
+    D --> E[render module]
+    E --> F[artifacts module]
+    F --> G[site artifact directory]
+    G --> H[GitHub Actions upload]
+    H --> I[S3]
+    I --> J[crates/site/infra]
+    J --> L[crates/site/web SSR]
+    K[crates/site/server] --> L
+    L --> M[Browser]
 ```
 
 ## ワークスペース構成
@@ -61,13 +63,14 @@ okawak_blog/
   - site page contract
 - `crates/publish`
   - 単一のpublisher crate
+  - `lib.rs`は内部module宣言とcrate外向けAPIのre-exportに限定し、pipeline moduleが公開処理全体をorchestrationする
   - crate外向けAPIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
   - path処理の対応環境はmacOSとLinuxとし、Windows形式のpathは対象外とする
-  - ingest moduleによるObsidian vault走査、frontmatter parse、Markdown変換
+  - vault moduleによるObsidian vault走査、Markdown読込、frontmatter parse
   - links moduleによる内部リンク索引の構築とObsidian link解決
-  - bookmark moduleによる外部HTTPを伴うbookmark enrichment
-  - content kindごとの公開物生成と`section_path`の導出
-  - artifacts moduleによる`site/`配下のHTML / JSON書き出しとcategory fallback page生成
+  - render moduleによるcontent kindごとの描画、MarkdownからHTMLへの変換、外部HTTPを伴うbookmark enrichment
+  - classify moduleによる公開種別の確定と`section_path`の導出
+  - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
   - `ObsidianFrontMatter`と`ContentKind`はpublisher入力形式として内部に保持する
   - publisher固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
 - `crates/site/infra`
@@ -103,9 +106,9 @@ flowchart TB
     end
 
     subgraph Publish["crates/publish (publisher crate)"]
-        P1[ingest]
-        P2[bookmark]
-        P3[orchestration]
+        P1[vault]
+        P2[classify and links]
+        P3[render]
         P4[artifacts]
     end
 
@@ -117,7 +120,7 @@ flowchart TB
 
     Publish --> Domain
     Site --> Domain
-    P1 --> P3
+    P1 --> P2
     P2 --> P3
     P3 --> P4
     S2 --> S1

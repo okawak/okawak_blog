@@ -42,7 +42,7 @@ enum FrontmatterSplit<'a> {
     Complete { yaml: &'a str, body: &'a str },
 }
 
-/// Parse Obsidian file and return the frontmatter plus markdown body.
+/// Reads an Obsidian file and returns its frontmatter and Markdown body.
 pub(crate) fn parse_obsidian_file(path: impl AsRef<Path>) -> Result<Option<ParsedObsidianFile>> {
     let content = fs::read_to_string(&path)?;
     match split_frontmatter(&content)? {

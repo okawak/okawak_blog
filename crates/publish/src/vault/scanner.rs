@@ -1,10 +1,10 @@
-use crate::error::Result;
+use crate::error::{PublishError, Result};
 use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
 
 /// Scans the specified directory for Markdown files (.md) and returns their paths.
-pub(crate) fn scan_obsidian_files(publish_dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
-    let mut md_files: Vec<PathBuf> = WalkBuilder::new(publish_dir.as_ref())
+pub(crate) fn scan_markdown_files(vault_dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
+    let mut md_files: Vec<PathBuf> = WalkBuilder::new(vault_dir.as_ref())
         .hidden(true)
         .git_ignore(false)
         .build()
@@ -22,6 +22,24 @@ pub(crate) fn scan_obsidian_files(publish_dir: impl AsRef<Path>) -> Result<Vec<P
 
     md_files.sort_unstable();
     Ok(md_files)
+}
+
+pub(crate) fn validate_obsidian_dir(obsidian_dir: &Path) -> Result<()> {
+    if !obsidian_dir.exists() {
+        return Err(PublishError::InvalidSourceDirectory(format!(
+            "directory does not exist: {}",
+            obsidian_dir.display()
+        )));
+    }
+
+    if !obsidian_dir.is_dir() {
+        return Err(PublishError::InvalidSourceDirectory(format!(
+            "path is not a directory: {}",
+            obsidian_dir.display()
+        )));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -55,7 +73,7 @@ mod tests {
             fs::write(base_path.join(file_path), "Other content")?;
         }
 
-        let files = scan_obsidian_files(base_path)?;
+        let files = scan_markdown_files(base_path)?;
         assert_eq!(files.len(), expected_count);
 
         Ok(())
@@ -75,7 +93,7 @@ mod tests {
         fs::write(base_path.join(filename), content)?;
         fs::write(base_path.join("not_markdown.txt"), "Not markdown")?;
 
-        let files = scan_obsidian_files(base_path)?;
+        let files = scan_markdown_files(base_path)?;
 
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap().to_string_lossy(), filename);
