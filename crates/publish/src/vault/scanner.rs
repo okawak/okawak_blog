@@ -1,4 +1,4 @@
-use crate::error::Result;
+use crate::error::{PublishError, Result};
 use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
 
@@ -22,6 +22,24 @@ pub(crate) fn scan_markdown_files(vault_dir: impl AsRef<Path>) -> Result<Vec<Pat
 
     md_files.sort_unstable();
     Ok(md_files)
+}
+
+pub(crate) fn validate_obsidian_dir(obsidian_dir: &Path) -> Result<()> {
+    if !obsidian_dir.exists() {
+        return Err(PublishError::InvalidSourceDirectory(format!(
+            "directory does not exist: {}",
+            obsidian_dir.display()
+        )));
+    }
+
+    if !obsidian_dir.is_dir() {
+        return Err(PublishError::InvalidSourceDirectory(format!(
+            "path is not a directory: {}",
+            obsidian_dir.display()
+        )));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

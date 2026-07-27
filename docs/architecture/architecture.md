@@ -63,13 +63,14 @@ okawak_blog/
   - site page contract
 - `crates/publish`
   - 単一のpublisher crate
+  - `lib.rs`は内部module宣言とcrate外向けAPIのre-exportに限定し、pipeline moduleが公開処理全体をorchestrationする
   - crate外向けAPIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
   - path処理の対応環境はmacOSとLinuxとし、Windows形式のpathは対象外とする
   - vault moduleによるObsidian vault走査、Markdown読込、frontmatter parse
   - links moduleによる内部リンク索引の構築とObsidian link解決
   - render moduleによるcontent kindごとの描画、MarkdownからHTMLへの変換、外部HTTPを伴うbookmark enrichment
   - classify moduleによる公開種別の確定と`section_path`の導出
-  - artifacts moduleによる`site/`配下のHTML / JSON書き出しとcategory fallback page生成
+  - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
   - `ObsidianFrontMatter`と`ContentKind`はpublisher入力形式として内部に保持する
   - publisher固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
 - `crates/site/infra`
