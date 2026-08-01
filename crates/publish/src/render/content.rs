@@ -1,11 +1,10 @@
 use super::{bookmark::BookmarkEnricher, html::convert_markdown_to_html};
-use crate::artifacts::CategoryLandingMetadata;
 use crate::classify::{ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, ParsedPageFile};
 use crate::error::Result;
 use crate::links;
 use domain::{
-    ArticleBody, ArticleMeta, ArticleMetaInput, Category, HomeFragmentArtifactDocument,
-    PageArtifactDocument, Title,
+    ArticleBody, ArticleMeta, ArticleMetaInput, Category, CategoryLandingMeta,
+    HomeFragmentArtifactDocument, PageArtifactDocument, Title,
 };
 use log::warn;
 
@@ -19,7 +18,7 @@ pub(crate) struct RenderedPage {
 }
 
 pub(crate) struct RenderedCategoryLanding {
-    pub(crate) metadata: CategoryLandingMetadata,
+    pub(crate) metadata: CategoryLandingMeta,
     pub(crate) html: String,
 }
 
@@ -107,7 +106,7 @@ pub(crate) async fn render_category(
         html
     };
     Ok(RenderedCategoryLanding {
-        metadata: CategoryLandingMetadata {
+        metadata: CategoryLandingMeta {
             category: parsed_file.category,
             title,
             description,
