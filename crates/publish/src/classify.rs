@@ -200,42 +200,59 @@ fn parse_page_key(page: Option<&str>) -> Result<PageKey> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
+
+    const TEST_TIMESTAMP: &str = "2025-01-01T00:00:00+09:00";
+
+    fn front_matter(kind: ContentKind) -> ObsidianFrontMatter {
+        ObsidianFrontMatter {
+            title: "Test".to_string(),
+            kind,
+            tags: None,
+            summary: None,
+            is_completed: true,
+            priority: None,
+            created: TEST_TIMESTAMP.to_string(),
+            updated: TEST_TIMESTAMP.to_string(),
+            category: None,
+            page: None,
+        }
+    }
+
+    fn parsed_article(category: Category) -> ParsedObsidianFile {
+        let mut front_matter = front_matter(ContentKind::Article);
+        front_matter.category = Some(category.as_str().to_string());
+        ParsedObsidianFile {
+            front_matter,
+            markdown_body: String::new(),
+        }
+    }
+
+    fn parsed_category(category: Category) -> ParsedCategoryFile {
+        let mut front_matter = front_matter(ContentKind::Category);
+        front_matter.category = Some(category.as_str().to_string());
+        ParsedCategoryFile {
+            category,
+            markdown_body: String::new(),
+            front_matter,
+        }
+    }
+
+    fn parsed_page(page: &str) -> ParsedPageFile {
+        let mut front_matter = front_matter(ContentKind::Page);
+        front_matter.page = Some(page.to_string());
+        ParsedPageFile {
+            page: PageKey::new(page.to_string()).unwrap(),
+            markdown_body: String::new(),
+            front_matter,
+        }
+    }
 
     #[test]
     fn test_ensure_unique_category_landings_rejects_duplicates() {
         let categories = vec![
-            ParsedCategoryFile {
-                category: Category::Tech,
-                markdown_body: "# Tech".to_string(),
-                front_matter: ObsidianFrontMatter {
-                    title: "Tech".to_string(),
-                    kind: ContentKind::Category,
-                    tags: None,
-                    summary: None,
-                    is_completed: true,
-                    priority: None,
-                    created: "2025-01-01T00:00:00+09:00".to_string(),
-                    updated: "2025-01-01T00:00:00+09:00".to_string(),
-                    category: Some("tech".to_string()),
-                    page: None,
-                },
-            },
-            ParsedCategoryFile {
-                category: Category::Tech,
-                markdown_body: "# Tech again".to_string(),
-                front_matter: ObsidianFrontMatter {
-                    title: "Tech Again".to_string(),
-                    kind: ContentKind::Category,
-                    tags: None,
-                    summary: None,
-                    is_completed: true,
-                    priority: None,
-                    created: "2025-01-01T00:00:00+09:00".to_string(),
-                    updated: "2025-01-01T00:00:00+09:00".to_string(),
-                    category: Some("tech".to_string()),
-                    page: None,
-                },
-            },
+            parsed_category(Category::Tech),
+            parsed_category(Category::Tech),
         ];
 
         let result = ensure_unique_category_landings(&categories);
@@ -248,21 +265,7 @@ mod tests {
     #[test]
     fn test_process_article_file_rejects_category_path_mismatch() {
         let obsidian_dir = Path::new("/vault");
-        let parsed_file = ParsedObsidianFile {
-            front_matter: ObsidianFrontMatter {
-                title: "Test Article".to_string(),
-                kind: ContentKind::Article,
-                tags: None,
-                summary: None,
-                priority: None,
-                created: "2025-01-01T00:00:00+09:00".to_string(),
-                updated: "2025-01-01T00:00:00+09:00".to_string(),
-                is_completed: true,
-                category: Some("tech".to_string()),
-                page: None,
-            },
-            markdown_body: "# Test Article".to_string(),
-        };
+        let parsed_file = parsed_article(Category::Tech);
 
         let result = process_article_file(
             Path::new("/vault/daily/article.md"),
@@ -273,18 +276,14 @@ mod tests {
         assert!(matches!(result, Err(PublishError::StripPrefix(_))));
     }
 
-    #[test]
-    fn test_derive_section_path_from_category_relative_article() {
-        let section_path = derive_section_path(Path::new("block1/hoge.md"));
+    #[rstest]
+    #[case::single_section("block1/hoge.md", &["block1"])]
+    #[case::nested_sections("rust/async/hoge.md", &["rust", "async"])]
+    #[case::root_article("hoge.md", &[])]
+    fn test_derive_section_path(#[case] path: &str, #[case] expected: &[&str]) {
+        let section_path = derive_section_path(Path::new(path));
 
-        assert_eq!(section_path.segments(), ["block1"]);
-    }
-
-    #[test]
-    fn test_derive_section_path_keeps_nested_sections() {
-        let section_path = derive_section_path(Path::new("rust/async/hoge.md"));
-
-        assert_eq!(section_path.segments(), ["rust", "async"]);
+        assert_eq!(section_path.segments(), expected);
     }
 
     #[test]
@@ -315,40 +314,7 @@ mod tests {
 
     #[test]
     fn test_ensure_unique_page_keys_rejects_duplicates() {
-        let parsed_pages = vec![
-            ParsedPageFile {
-                page: PageKey::new("about".to_string()).unwrap(),
-                markdown_body: "# About".to_string(),
-                front_matter: ObsidianFrontMatter {
-                    title: "About".to_string(),
-                    kind: ContentKind::Page,
-                    tags: None,
-                    summary: None,
-                    priority: None,
-                    created: "2025-01-01T00:00:00+09:00".to_string(),
-                    updated: "2025-01-01T00:00:00+09:00".to_string(),
-                    is_completed: true,
-                    category: None,
-                    page: Some("about".to_string()),
-                },
-            },
-            ParsedPageFile {
-                page: PageKey::new("about".to_string()).unwrap(),
-                markdown_body: "# About 2".to_string(),
-                front_matter: ObsidianFrontMatter {
-                    title: "About 2".to_string(),
-                    kind: ContentKind::Page,
-                    tags: None,
-                    summary: None,
-                    priority: None,
-                    created: "2025-01-01T00:00:00+09:00".to_string(),
-                    updated: "2025-01-01T00:00:00+09:00".to_string(),
-                    is_completed: true,
-                    category: None,
-                    page: Some("about".to_string()),
-                },
-            },
-        ];
+        let parsed_pages = vec![parsed_page("about"), parsed_page("about")];
 
         assert!(matches!(
             ensure_unique_page_keys(&parsed_pages),
