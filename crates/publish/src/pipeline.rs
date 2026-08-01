@@ -1,6 +1,7 @@
 use crate::artifacts::{
-    SiteDirectories, build_site_artifacts, validate_site_artifacts, write_article_page,
-    write_category_page, write_home_fragment, write_page_document, write_site_artifacts,
+    CategoryLandingMeta, SiteDirectories, build_site_artifacts, validate_site_artifacts,
+    write_article_page, write_category_page, write_home_fragment, write_page_document,
+    write_site_artifacts,
 };
 use crate::classify::{
     ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, ParsedPageFile, classify_obsidian_files,
@@ -202,15 +203,18 @@ async fn process_category(
     link_index: &links::Index,
     enrich: BookmarkEnricher,
     site_directories: SiteDirectories,
-) -> Result<domain::CategoryLandingMeta> {
+) -> Result<CategoryLandingMeta> {
     let rendered = render_category(parsed_file, link_index, enrich).await?;
     run_artifact_write(move || {
-        let output_file_path = write_category_page(
-            &site_directories,
-            rendered.metadata.category,
-            &rendered.html,
-        )?;
-        Ok((rendered.metadata, output_file_path))
+        let output_file_path =
+            write_category_page(&site_directories, rendered.category, &rendered.html)?;
+        let metadata = CategoryLandingMeta {
+            category: rendered.category,
+            title: rendered.title,
+            description: rendered.description,
+            updated_at: rendered.updated_at,
+        };
+        Ok((metadata, output_file_path))
     })
     .await
 }

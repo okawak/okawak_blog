@@ -157,12 +157,10 @@ fn build_fallback_category_page_html(category_index: &domain::CategoryIndex) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::super::builder::build_site_artifacts;
+    use super::super::builder::{CategoryLandingMeta, build_site_artifacts};
     use super::super::validator::validate_site_artifacts;
     use super::*;
-    use domain::{
-        ArticleMeta, ArticleMetaInput, Category, CategoryLandingMeta, PageKey, SectionPath, Title,
-    };
+    use domain::{ArticleMeta, ArticleMetaInput, Category, PageKey, SectionPath, Title};
     use tempfile::TempDir;
 
     fn build_article_meta(

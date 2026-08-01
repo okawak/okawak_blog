@@ -53,15 +53,6 @@ impl ArticleMeta {
     }
 }
 
-/// Metadata for a publishable category landing page.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CategoryLandingMeta {
-    pub category: Category,
-    pub title: String,
-    pub description: Option<String>,
-    pub updated_at: String,
-}
-
 /// Rendered HTML body for a publishable article.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArticleBody {

@@ -1,5 +1,5 @@
 use domain::{
-    ArticleMeta, CategoryLandingMeta, SiteMetadata, build_article_index, build_category_indexes,
+    ArticleMeta, Category, SiteMetadata, build_article_index, build_category_indexes,
     build_site_metadata,
 };
 
@@ -10,6 +10,14 @@ pub(crate) struct SiteArtifacts {
     pub(super) category_indexes: Vec<domain::CategoryIndex>,
     pub(super) category_landings: Vec<CategoryLandingMeta>,
     pub(super) site_metadata: SiteMetadata,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CategoryLandingMeta {
+    pub(crate) category: Category,
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) updated_at: String,
 }
 
 pub(crate) fn build_site_artifacts(
