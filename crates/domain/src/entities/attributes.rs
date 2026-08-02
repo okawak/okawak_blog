@@ -37,7 +37,7 @@ impl Title {
             });
         }
 
-        if trimmed.len() > 200 {
+        if trimmed.chars().count() > 200 {
             return Err(DomainError::InvalidTitle {
                 reason: "タイトルは200文字以内である必要があります".to_string(),
             });
@@ -162,6 +162,12 @@ mod tests {
     fn test_title_deserializes_with_trimmed_value() {
         let title: Title = serde_json::from_str(r#""  Intro  ""#).unwrap();
         assert_eq!(title.as_str(), "Intro");
+    }
+
+    #[test]
+    fn test_title_validates_unicode_character_count() {
+        assert!(Title::new("あ".repeat(200)).is_ok());
+        assert!(Title::new("あ".repeat(201)).is_err());
     }
 
     #[test]
