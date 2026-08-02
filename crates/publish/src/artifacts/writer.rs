@@ -157,7 +157,7 @@ fn build_fallback_category_page_html(category_index: &domain::CategoryIndex) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::super::builder::{CategoryLandingMetadata, build_site_artifacts};
+    use super::super::builder::{CategoryLandingMeta, build_site_artifacts};
     use super::super::validator::validate_site_artifacts;
     use super::*;
     use domain::{ArticleMeta, ArticleMetaInput, Category, PageKey, SectionPath, Title};
@@ -226,7 +226,7 @@ mod tests {
         );
         let site_artifacts = build_site_artifacts(
             vec![article_meta.clone()],
-            vec![CategoryLandingMetadata {
+            vec![CategoryLandingMeta {
                 category: Category::Tech,
                 title: "Tech".to_string(),
                 description: Some("Tech landing".to_string()),
@@ -328,7 +328,7 @@ mod tests {
     fn test_build_site_artifacts_includes_landing_only_category_in_indexes_and_metadata() {
         let artifacts = build_site_artifacts(
             vec![],
-            vec![CategoryLandingMetadata {
+            vec![CategoryLandingMeta {
                 category: Category::Physics,
                 title: "Physics".to_string(),
                 description: None,

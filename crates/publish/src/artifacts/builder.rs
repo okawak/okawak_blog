@@ -8,12 +8,12 @@ use domain::{
 pub(crate) struct SiteArtifacts {
     pub(crate) article_index: Vec<domain::PublishedArticleSummary>,
     pub(super) category_indexes: Vec<domain::CategoryIndex>,
-    pub(super) category_landings: Vec<CategoryLandingMetadata>,
+    pub(super) category_landings: Vec<CategoryLandingMeta>,
     pub(super) site_metadata: SiteMetadata,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CategoryLandingMetadata {
+pub(crate) struct CategoryLandingMeta {
     pub(crate) category: Category,
     pub(crate) title: String,
     pub(crate) description: Option<String>,
@@ -22,7 +22,7 @@ pub(crate) struct CategoryLandingMetadata {
 
 pub(crate) fn build_site_artifacts(
     article_metas: Vec<ArticleMeta>,
-    mut category_landings: Vec<CategoryLandingMetadata>,
+    mut category_landings: Vec<CategoryLandingMeta>,
 ) -> SiteArtifacts {
     let article_index = build_article_index(&article_metas);
     let mut category_indexes = build_category_indexes(&article_metas);

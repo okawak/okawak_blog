@@ -1,5 +1,4 @@
 use super::{bookmark::BookmarkEnricher, html::convert_markdown_to_html};
-use crate::artifacts::CategoryLandingMetadata;
 use crate::classify::{ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, ParsedPageFile};
 use crate::error::Result;
 use crate::links;
@@ -19,7 +18,10 @@ pub(crate) struct RenderedPage {
 }
 
 pub(crate) struct RenderedCategoryLanding {
-    pub(crate) metadata: CategoryLandingMetadata,
+    pub(crate) category: Category,
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) updated_at: String,
     pub(crate) html: String,
 }
 
@@ -107,12 +109,10 @@ pub(crate) async fn render_category(
         html
     };
     Ok(RenderedCategoryLanding {
-        metadata: CategoryLandingMetadata {
-            category: parsed_file.category,
-            title,
-            description,
-            updated_at: parsed_file.front_matter.updated,
-        },
+        category: parsed_file.category,
+        title,
+        description,
+        updated_at: parsed_file.front_matter.updated,
         html,
     })
 }
