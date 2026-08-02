@@ -7,7 +7,6 @@ use domain::{
 };
 use serde::Serialize;
 use std::{
-    collections::HashMap,
     fs::{self, File},
     io::BufWriter,
     path::{Path, PathBuf},
@@ -95,36 +94,17 @@ pub(crate) fn write_site_artifacts(
         &site_directories.articles_dir.join("index.json"),
         &ArticleIndexDocument::from(site_artifacts.article_index.as_slice()),
     )?;
-    let category_landings_by_category: HashMap<_, _> = site_artifacts
-        .category_landings
-        .iter()
-        .map(|landing| (landing.category, landing))
-        .collect();
-
     for category_index in &site_artifacts.category_indexes {
         let category_dir = site_directories
             .categories_dir
             .join(category_index.category.as_str());
         fs::create_dir_all(&category_dir)?;
-        let landing = category_landings_by_category
-            .get(&category_index.category)
-            .copied();
         write_json_pretty(
             &category_dir.join("index.json"),
-            &CategoryIndexDocument {
-                category: category_index.category.as_str().to_string(),
-                title: landing.map(|landing| landing.title.clone()),
-                description: landing.and_then(|landing| landing.description.clone()),
-                updated_at: landing.map(|landing| landing.updated_at.clone()),
-                articles: category_index
-                    .articles
-                    .iter()
-                    .map(domain::ArticleSummaryDocument::from)
-                    .collect(),
-            },
+            &CategoryIndexDocument::from(category_index),
         )?;
 
-        if landing.is_none() {
+        if category_index.landing.is_none() {
             fs::write(
                 category_dir.join("page.html"),
                 build_fallback_category_page_html(category_index),
@@ -157,10 +137,13 @@ fn build_fallback_category_page_html(category_index: &domain::CategoryIndex) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::super::builder::{CategoryLandingMeta, build_site_artifacts};
+    use super::super::builder::build_site_artifacts;
     use super::super::validator::validate_site_artifacts;
     use super::*;
-    use domain::{ArticleMeta, ArticleMetaInput, Category, PageKey, SectionPath, Title};
+    use domain::{
+        ArticleMeta, ArticleMetaInput, Category, CategoryLandingMeta, CategoryLandingMetaInput,
+        PageKey, SectionPath, Title,
+    };
     use tempfile::TempDir;
 
     fn build_article_meta(
@@ -180,6 +163,20 @@ mod tests {
             priority,
             created_at: created_at.to_string(),
             updated_at: created_at.to_string(),
+        })
+        .unwrap()
+    }
+
+    fn build_category_landing(
+        category: Category,
+        title: &str,
+        description: Option<&str>,
+    ) -> CategoryLandingMeta {
+        CategoryLandingMeta::new(CategoryLandingMetaInput {
+            category,
+            title: Title::new(title.to_string()).unwrap(),
+            description: description.map(str::to_string),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
         })
         .unwrap()
     }
@@ -208,7 +205,12 @@ mod tests {
 
         assert_eq!(artifacts.article_index.len(), 2);
         assert_eq!(artifacts.category_indexes.len(), 2);
-        assert!(artifacts.category_landings.is_empty());
+        assert!(
+            artifacts
+                .category_indexes
+                .iter()
+                .all(|index| index.landing.is_none())
+        );
         assert_eq!(artifacts.site_metadata.total_articles, 2);
         assert_eq!(artifacts.article_index[0].slug.as_str(), "second000002");
     }
@@ -226,12 +228,11 @@ mod tests {
         );
         let site_artifacts = build_site_artifacts(
             vec![article_meta.clone()],
-            vec![CategoryLandingMeta {
-                category: Category::Tech,
-                title: "Tech".to_string(),
-                description: Some("Tech landing".to_string()),
-                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
-            }],
+            vec![build_category_landing(
+                Category::Tech,
+                "Tech",
+                Some("Tech landing"),
+            )],
         );
 
         let article_path = write_article_page(
@@ -328,12 +329,7 @@ mod tests {
     fn test_build_site_artifacts_includes_landing_only_category_in_indexes_and_metadata() {
         let artifacts = build_site_artifacts(
             vec![],
-            vec![CategoryLandingMeta {
-                category: Category::Physics,
-                title: "Physics".to_string(),
-                description: None,
-                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
-            }],
+            vec![build_category_landing(Category::Physics, "Physics", None)],
         );
 
         assert_eq!(artifacts.category_indexes.len(), 1);

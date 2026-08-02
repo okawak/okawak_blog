@@ -128,11 +128,12 @@ pub struct CategoryIndexDocument {
 
 impl From<&CategoryIndex> for CategoryIndexDocument {
     fn from(index: &CategoryIndex) -> Self {
+        let landing = index.landing.as_ref();
         Self {
             category: index.category.as_str().to_string(),
-            title: None,
-            description: None,
-            updated_at: None,
+            title: landing.map(|landing| landing.title.as_str().to_string()),
+            description: landing.and_then(|landing| landing.description.clone()),
+            updated_at: landing.map(|landing| landing.updated_at.clone()),
             articles: index
                 .articles
                 .iter()
@@ -192,7 +193,7 @@ impl From<&SiteMetadata> for SiteMetadataDocument {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Category, PageKey, Slug, Title};
+    use crate::{Category, CategoryLandingMeta, CategoryLandingMetaInput, PageKey, Slug, Title};
 
     fn release_pointer(prefix: &str) -> ArtifactReleasePointerDocument {
         ArtifactReleasePointerDocument {
@@ -360,5 +361,30 @@ mod tests {
         assert_eq!(document.title, None);
         assert_eq!(document.description, None);
         assert_eq!(document.updated_at, None);
+    }
+
+    #[test]
+    fn test_category_index_document_uses_landing_metadata() {
+        let landing = CategoryLandingMeta::new(CategoryLandingMetaInput {
+            category: Category::Tech,
+            title: Title::new("Technology".to_string()).unwrap(),
+            description: Some("Technology landing".to_string()),
+            updated_at: "2025-01-02T00:00:00+09:00".to_string(),
+        })
+        .unwrap();
+        let index = CategoryIndex {
+            category: Category::Tech,
+            landing: Some(landing),
+            articles: vec![],
+        };
+
+        let document = CategoryIndexDocument::from(&index);
+
+        assert_eq!(document.title.as_deref(), Some("Technology"));
+        assert_eq!(document.description.as_deref(), Some("Technology landing"));
+        assert_eq!(
+            document.updated_at.as_deref(),
+            Some("2025-01-02T00:00:00+09:00")
+        );
     }
 }

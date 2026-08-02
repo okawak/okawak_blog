@@ -3,8 +3,8 @@ use crate::classify::{ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, Par
 use crate::error::Result;
 use crate::links;
 use domain::{
-    ArticleBody, ArticleMeta, ArticleMetaInput, Category, HomeFragmentArtifactDocument,
-    PageArtifactDocument, Title,
+    ArticleBody, ArticleMeta, ArticleMetaInput, Category, CategoryLandingMeta,
+    CategoryLandingMetaInput, HomeFragmentArtifactDocument, PageArtifactDocument, Title,
 };
 use log::warn;
 
@@ -18,10 +18,7 @@ pub(crate) struct RenderedPage {
 }
 
 pub(crate) struct RenderedCategoryLanding {
-    pub(crate) category: Category,
-    pub(crate) title: String,
-    pub(crate) description: Option<String>,
-    pub(crate) updated_at: String,
+    pub(crate) meta: CategoryLandingMeta,
     pub(crate) html: String,
 }
 
@@ -108,13 +105,13 @@ pub(crate) async fn render_category(
     } else {
         html
     };
-    Ok(RenderedCategoryLanding {
+    let meta = CategoryLandingMeta::new(CategoryLandingMetaInput {
         category: parsed_file.category,
-        title,
+        title: Title::new(title)?,
         description,
         updated_at: parsed_file.front_matter.updated,
-        html,
-    })
+    })?;
+    Ok(RenderedCategoryLanding { meta, html })
 }
 
 fn normalize_category_title(category: Category, title: &str) -> String {
