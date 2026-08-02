@@ -1,10 +1,12 @@
+mod body;
 mod bookmark;
-mod content;
+mod document;
 mod html;
+mod katex;
 
 pub use bookmark::BookmarkEnricher;
 pub(crate) use bookmark::rich_bookmark_enricher;
-pub(crate) use content::{render_article, render_category, render_home, render_page};
+pub(crate) use document::{render_article, render_category, render_home, render_page};
 
 #[cfg(test)]
 pub(crate) use html::convert_markdown_to_html;

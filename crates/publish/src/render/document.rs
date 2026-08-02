@@ -1,12 +1,13 @@
-use super::{bookmark::BookmarkEnricher, html::convert_markdown_to_html};
-use crate::classify::{ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, ParsedPageFile};
-use crate::error::Result;
-use crate::links;
+use super::{body, bookmark::BookmarkEnricher};
+use crate::{
+    classify::{ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, ParsedPageFile},
+    error::Result,
+    links,
+};
 use domain::{
     ArticleBody, ArticleMeta, ArticleMetaInput, Category, CategoryLandingMeta,
     CategoryLandingMetaInput, HomeFragmentArtifactDocument, PageArtifactDocument, Title,
 };
-use log::warn;
 
 pub(crate) struct RenderedArticle {
     pub(crate) meta: ArticleMeta,
@@ -22,27 +23,12 @@ pub(crate) struct RenderedCategoryLanding {
     pub(crate) html: String,
 }
 
-async fn render_html(
-    markdown_body: &str,
-    link_index: &links::Index,
-    enrich: &BookmarkEnricher,
-) -> Result<String> {
-    let markdown_with_links = links::convert(markdown_body, link_index);
-    let html_body = convert_markdown_to_html(&markdown_with_links)?;
-    let fallback = html_body.clone();
-    let html = enrich(html_body).await.unwrap_or_else(|e| {
-        warn!("Warning: Failed to convert simple bookmarks to rich bookmarks: {e}");
-        fallback
-    });
-    Ok(html)
-}
-
 pub(crate) async fn render_article(
     parsed_file: ParsedArticleFile,
     link_index: &links::Index,
     enrich: BookmarkEnricher,
 ) -> Result<RenderedArticle> {
-    let html = render_html(&parsed_file.markdown_body, link_index, &enrich).await?;
+    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await?;
     let meta = ArticleMeta::new(ArticleMetaInput {
         slug: parsed_file.slug,
         title: Title::new(parsed_file.front_matter.title)?,
@@ -61,47 +47,16 @@ pub(crate) async fn render_article(
     })
 }
 
-pub(crate) async fn render_page(
-    parsed_file: ParsedPageFile,
-    link_index: &links::Index,
-    enrich: BookmarkEnricher,
-) -> Result<RenderedPage> {
-    let html = render_html(&parsed_file.markdown_body, link_index, &enrich).await?;
-    Ok(RenderedPage {
-        document: PageArtifactDocument {
-            page: parsed_file.page,
-            title: parsed_file.front_matter.title,
-            description: parsed_file.front_matter.summary,
-            html,
-            updated_at: parsed_file.front_matter.updated,
-        },
-    })
-}
-
-pub(crate) async fn render_home(
-    parsed_file: ParsedHomeFile,
-    link_index: &links::Index,
-    enrich: BookmarkEnricher,
-) -> Result<HomeFragmentArtifactDocument> {
-    let html = render_html(&parsed_file.markdown_body, link_index, &enrich).await?;
-    Ok(HomeFragmentArtifactDocument {
-        title: parsed_file.front_matter.title,
-        description: parsed_file.front_matter.summary,
-        html,
-        updated_at: parsed_file.front_matter.updated,
-    })
-}
-
 pub(crate) async fn render_category(
     parsed_file: ParsedCategoryFile,
     link_index: &links::Index,
     enrich: BookmarkEnricher,
 ) -> Result<RenderedCategoryLanding> {
-    let html = render_html(&parsed_file.markdown_body, link_index, &enrich).await?;
+    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await?;
     let title = normalize_category_title(parsed_file.category, &parsed_file.front_matter.title);
     let description = normalize_category_description(parsed_file.front_matter.summary.as_deref());
     let html = if html.trim().is_empty() {
-        build_fallback_category_landing_html(parsed_file.category, &title, description.as_deref())
+        build_fallback_category_html(parsed_file.category, &title, description.as_deref())
     } else {
         html
     };
@@ -112,6 +67,37 @@ pub(crate) async fn render_category(
         updated_at: parsed_file.front_matter.updated,
     })?;
     Ok(RenderedCategoryLanding { meta, html })
+}
+
+pub(crate) async fn render_home(
+    parsed_file: ParsedHomeFile,
+    link_index: &links::Index,
+    enrich: BookmarkEnricher,
+) -> Result<HomeFragmentArtifactDocument> {
+    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await?;
+    Ok(HomeFragmentArtifactDocument {
+        title: parsed_file.front_matter.title,
+        description: parsed_file.front_matter.summary,
+        html,
+        updated_at: parsed_file.front_matter.updated,
+    })
+}
+
+pub(crate) async fn render_page(
+    parsed_file: ParsedPageFile,
+    link_index: &links::Index,
+    enrich: BookmarkEnricher,
+) -> Result<RenderedPage> {
+    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await?;
+    Ok(RenderedPage {
+        document: PageArtifactDocument {
+            page: parsed_file.page,
+            title: parsed_file.front_matter.title,
+            description: parsed_file.front_matter.summary,
+            html,
+            updated_at: parsed_file.front_matter.updated,
+        },
+    })
 }
 
 fn normalize_category_title(category: Category, title: &str) -> String {
@@ -130,7 +116,7 @@ fn normalize_category_description(description: Option<&str>) -> Option<String> {
         .map(str::to_owned)
 }
 
-fn build_fallback_category_landing_html(
+fn build_fallback_category_html(
     category: Category,
     title: &str,
     description: Option<&str>,
@@ -142,7 +128,7 @@ fn build_fallback_category_landing_html(
     };
 
     let body = description
-        .filter(|d| !d.trim().is_empty())
+        .filter(|description| !description.trim().is_empty())
         .map(str::trim)
         .map(str::to_owned)
         .unwrap_or_else(|| format!("{}カテゴリの記事一覧です。", category.display_name()));
@@ -164,28 +150,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_build_fallback_category_landing_html_uses_title_and_summary() {
-        let html = build_fallback_category_landing_html(
-            Category::Tech,
-            "Tech",
-            Some("Technology landing"),
-        );
+    fn test_build_fallback_category_html_uses_title_and_summary() {
+        let html = build_fallback_category_html(Category::Tech, "Tech", Some("Technology landing"));
 
         assert!(html.contains("<h1>Tech</h1>"));
         assert!(html.contains("<p>Technology landing</p>"));
     }
 
     #[test]
-    fn test_build_fallback_category_landing_html_falls_back_to_category_display_name() {
-        let html = build_fallback_category_landing_html(Category::Physics, "   ", None);
+    fn test_build_fallback_category_html_falls_back_to_category_display_name() {
+        let html = build_fallback_category_html(Category::Physics, "   ", None);
 
         assert!(html.contains("<h1>物理学</h1>"));
         assert!(html.contains("物理学カテゴリの記事一覧です。"));
     }
 
     #[test]
-    fn test_build_fallback_category_landing_html_escapes_frontmatter_text() {
-        let html = build_fallback_category_landing_html(
+    fn test_build_fallback_category_html_escapes_frontmatter_text() {
+        let html = build_fallback_category_html(
             Category::Tech,
             "<script>alert(1)</script>",
             Some("\"quoted\" & <tag>"),

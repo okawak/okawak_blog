@@ -69,7 +69,7 @@ okawak_blog/
   - path処理の対応環境はmacOSとLinuxとし、Windows形式のpathは対象外とする
   - vault moduleによるObsidian vault走査、Markdown読込、frontmatter parse
   - links moduleによる内部リンク索引の構築とObsidian link解決
-  - render moduleによるcontent kindごとの描画、MarkdownからHTMLへの変換、外部HTTPを伴うbookmark enrichment
+  - render moduleによるcontent kindごとの組み立て、共通本文処理、MarkdownからHTMLへの変換、KaTeX処理、外部HTTPを伴うbookmark enrichment
   - classify moduleによる公開種別の確定と`section_path`の導出
   - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
   - `ObsidianFrontMatter`と`ContentKind`はpublisher入力形式として内部に保持する
