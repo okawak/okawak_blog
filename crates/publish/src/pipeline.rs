@@ -14,7 +14,7 @@ use crate::render::{
 };
 use crate::vault::{scan_markdown_files, validate_obsidian_dir};
 use crate::{classify, links};
-use futures::{StreamExt, TryStreamExt, stream};
+use futures::{StreamExt, stream};
 use log::info;
 use std::{
     path::{Path, PathBuf},
@@ -66,7 +66,8 @@ pub async fn publish_with_bookmark_enricher(
 
     const CONCURRENT_LIMIT: usize = 4;
 
-    let article_metas = stream::iter(articles)
+    // Drain each batch before propagating errors so started blocking writes can finish.
+    let article_results = stream::iter(articles)
         .map(|parsed_file| {
             process_article(
                 parsed_file,
@@ -76,10 +77,11 @@ pub async fn publish_with_bookmark_enricher(
             )
         })
         .buffer_unordered(CONCURRENT_LIMIT)
-        .try_collect::<Vec<_>>()
-        .await?;
+        .collect::<Vec<_>>()
+        .await;
+    let article_metas = article_results.into_iter().collect::<Result<Vec<_>>>()?;
 
-    stream::iter(pages)
+    let page_results = stream::iter(pages)
         .map(|parsed_file| {
             process_page(
                 parsed_file,
@@ -89,8 +91,9 @@ pub async fn publish_with_bookmark_enricher(
             )
         })
         .buffer_unordered(CONCURRENT_LIMIT)
-        .try_for_each(|()| async { Ok(()) })
-        .await?;
+        .collect::<Vec<_>>()
+        .await;
+    page_results.into_iter().collect::<Result<Vec<_>>>()?;
 
     if let Some(parsed_file) = home {
         process_home(
@@ -102,7 +105,7 @@ pub async fn publish_with_bookmark_enricher(
         .await?;
     }
 
-    let category_landings = stream::iter(categories)
+    let category_results = stream::iter(categories)
         .map(|parsed_file| {
             process_category(
                 parsed_file,
@@ -112,8 +115,9 @@ pub async fn publish_with_bookmark_enricher(
             )
         })
         .buffer_unordered(CONCURRENT_LIMIT)
-        .try_collect::<Vec<_>>()
-        .await?;
+        .collect::<Vec<_>>()
+        .await;
+    let category_landings = category_results.into_iter().collect::<Result<Vec<_>>>()?;
 
     let site_artifacts = build_site_artifacts(article_metas, category_landings);
     let site_directories_for_write = site_directories.clone();
