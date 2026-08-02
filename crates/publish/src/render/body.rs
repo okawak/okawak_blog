@@ -7,7 +7,7 @@ pub(super) async fn render(
     link_index: &links::Index,
     enrich: &BookmarkEnricher,
 ) -> Result<String> {
-    let markdown = links::convert(markdown, link_index);
+    let markdown = links::resolve_internal_links(markdown, link_index);
     let html = convert_markdown_to_html(&markdown)?;
     let fallback = html.clone();
     Ok(enrich(html).await.unwrap_or_else(|error| {

@@ -1,6 +1,6 @@
 use crate::classify::ParsedArticleFile;
-use regex::Regex;
-use std::{collections::HashMap, sync::LazyLock};
+use pulldown_cmark::{Event, LinkType, Options, Parser, Tag};
+use std::collections::HashMap;
 
 /// Published article hrefs indexed by extensionless source keys.
 pub(crate) struct Index {
@@ -31,37 +31,54 @@ impl Index {
     }
 }
 
-/// Convert Obsidian internal links to published Markdown links.
-pub(crate) fn convert(content: &str, index: &Index) -> String {
-    static OBSIDIAN_LINK_REGEX: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\[\[([^\]]+)\]\]").expect("Invalid regex pattern"));
+/// Resolve Obsidian internal links to published Markdown links outside code.
+/// The vault is expected to contain valid Obsidian syntax; malformed links remain unchanged.
+pub(crate) fn resolve_internal_links(content: &str, index: &Index) -> String {
+    let mut resolved = String::with_capacity(content.len());
+    let mut copied_until = 0;
 
-    OBSIDIAN_LINK_REGEX
-        .replace_all(content, |captures: &regex::Captures| {
-            let link_content = &captures[1];
+    for (event, range) in Parser::new_ext(content, Options::ENABLE_WIKILINKS).into_offset_iter() {
+        if !matches!(
+            event,
+            Event::Start(Tag::Link {
+                link_type: LinkType::WikiLink { .. },
+                ..
+            })
+        ) {
+            continue;
+        }
 
-            let (link_target, display_text) = if let Some(pipe_position) = link_content.find('|') {
-                let (link, display) = link_content.split_at(pipe_position);
-                (link.trim(), display[1..].trim())
-            } else {
-                (link_content.trim(), link_content.trim())
-            };
+        resolved.push_str(&content[copied_until..range.start]);
+        resolved.push_str(&resolve_internal_link(&content[range.clone()], index));
+        copied_until = range.end;
+    }
 
-            let href = index
-                .resolve(link_target)
-                .map(str::to_owned)
-                .unwrap_or_else(|| {
-                    log::warn!("Internal link target '{link_target}' was not found");
-                    format!("/{link_target}")
-                });
+    resolved.push_str(&content[copied_until..]);
+    resolved
+}
 
-            format!(
-                "[{}]({})",
-                escape_markdown_link_text(display_text),
-                escape_markdown_link_destination(&href)
-            )
-        })
-        .to_string()
+fn resolve_internal_link(link: &str, index: &Index) -> String {
+    let link_content = link
+        .strip_prefix("[[")
+        .and_then(|link| link.strip_suffix("]]"))
+        .expect("pulldown-cmark should return the complete internal link range");
+    let (link_target, display_text) = link_content.split_once('|').map_or(
+        (link_content.trim(), link_content.trim()),
+        |(target, display)| (target.trim(), display.trim()),
+    );
+    let href = index
+        .resolve(link_target)
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            log::warn!("Internal link target '{link_target}' was not found");
+            format!("/{link_target}")
+        });
+
+    format!(
+        "[{}]({})",
+        escape_markdown_link_text(display_text),
+        escape_markdown_link_destination(&href)
+    )
 }
 
 fn escape_markdown_link_text(text: &str) -> String {
@@ -80,6 +97,7 @@ mod tests {
     use crate::render::convert_markdown_to_html;
     use crate::vault::{ContentKind, ObsidianFrontMatter};
     use domain::{Category, SectionPath, Slug};
+    use rstest::rstest;
 
     fn index(routes: &[(&str, &str)]) -> Index {
         Index {
@@ -155,42 +173,68 @@ mod tests {
     }
 
     #[test]
-    fn convert_internal_links() {
+    fn resolve_internal_links_to_markdown() {
         let index = index(&[
             ("notes/another-note", "/tech/abc123def"),
             ("filename", "/daily/xyz789abc"),
         ]);
 
         assert_eq!(
-            convert("Check out [[another-note]] for more info.", &index),
+            resolve_internal_links("Check out [[another-note]] for more info.", &index),
             "Check out [another-note](/tech/abc123def) for more info."
         );
         assert_eq!(
-            convert("See [[filename|Custom Display Text]] here.", &index),
+            resolve_internal_links("See [[filename|Custom Display Text]] here.", &index),
             "See [Custom Display Text](/daily/xyz789abc) here."
         );
         assert_eq!(
-            convert("Link to [[nonexistent]] file.", &index),
+            resolve_internal_links("Link to [[nonexistent]] file.", &index),
             "Link to [nonexistent](/nonexistent) file."
         );
         assert_eq!(
-            convert("This is normal text with no special links.", &index),
+            resolve_internal_links("This is normal text with no special links.", &index),
             "This is normal text with no special links."
         );
     }
 
     #[test]
-    fn convert_escapes_markdown_link_parts() {
+    fn resolve_internal_links_escapes_markdown_link_parts() {
         let index = index(&[("File with <script>", "/tech/abc123")]);
 
         assert_eq!(
-            convert("[[File with <script>|Display & test]]", &index),
+            resolve_internal_links("[[File with <script>|Display & test]]", &index),
             "[Display & test](/tech/abc123)"
         );
         assert_eq!(
-            convert("[[File \"quoted\"|Text with 'quotes']]", &index),
+            resolve_internal_links("[[File \"quoted\"|Text with 'quotes']]", &index),
             "[Text with 'quotes'](/File \"quoted\")"
         );
+    }
+
+    #[rstest]
+    #[case::inline_code(
+        "`[[article]]` and [[article]]",
+        "`[[article]]` and [article](/tech/slug)"
+    )]
+    #[case::fenced_code_block(
+        "```markdown\n[[article]]\n```\n\n[[article]]",
+        "```markdown\n[[article]]\n```\n\n[article](/tech/slug)"
+    )]
+    #[case::tilde_fenced_code_block(
+        "~~~markdown\n[[article]]\n~~~\n\n[[article]]",
+        "~~~markdown\n[[article]]\n~~~\n\n[article](/tech/slug)"
+    )]
+    #[case::indented_code_block(
+        "    [[article]]\n\n[[article]]",
+        "    [[article]]\n\n[article](/tech/slug)"
+    )]
+    fn resolve_internal_links_preserves_syntax_in_code(
+        #[case] markdown: &str,
+        #[case] expected: &str,
+    ) {
+        let index = index(&[("article", "/tech/slug")]);
+
+        assert_eq!(resolve_internal_links(markdown, &index), expected);
     }
 
     #[test]
@@ -208,7 +252,7 @@ This is a test with [[Another Article|link]] and **bold** text.
             ("Reference Note", "/daily/ghi789"),
         ]);
 
-        let markdown = convert(markdown, &index);
+        let markdown = resolve_internal_links(markdown, &index);
         let html = convert_markdown_to_html(&markdown).unwrap();
 
         assert!(html.contains("<h1>My Article</h1>"));
