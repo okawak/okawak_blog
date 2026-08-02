@@ -57,8 +57,9 @@ okawak_blog/
 各 crate の責務は次の通り。
 
 - `crates/domain`
-  - publisher と reader が共有する純粋契約
+  - 公開コンテンツの純粋なdomain model・ルールと、publisher / readerが共有する契約
   - `Category`、`Slug`、`PageKey`、`SectionPath`
+  - `ArticleMeta`、`CategoryLandingMeta`と記事・カテゴリ索引を構築する純粋ルール
   - artifact contract
   - site page contract
 - `crates/publish`
@@ -264,7 +265,8 @@ artifact の意味は次の通り。
   - 全記事の一覧
 - `categories/<category>/index.json`
   - そのカテゴリ配下の記事一覧
-  - `section_path` を含む
+  - landingがある場合はtitle / description / updated_atを含む
+  - 各記事に`section_path`を含む
 - `categories/<category>/page.html`
   - カテゴリ landing page 本文
   - landing Markdown が無い場合は fallback HTML を生成する
@@ -278,6 +280,8 @@ artifact の意味は次の通り。
   - 総記事数とカテゴリ集計
 
 `PageArtifactDocument` は固定ページを保持する。homeは完成したpageではなく実行時に記事一覧やmetadataと合成する一部分なので、`HomeFragmentArtifactDocument` として独立させる。
+
+publisherは描画済みカテゴリのmetadataを`CategoryLandingMeta`としてdomainへ渡す。domainはlandingだけが存在するカテゴリも含めて`CategoryIndex`へ統合し、カテゴリ順、記事順、`SiteMetadata`の集計を確定する。Markdown変換、HTML生成、filesystemへの書込みはpublisherに残す。
 
 ### S3 release 契約
 
