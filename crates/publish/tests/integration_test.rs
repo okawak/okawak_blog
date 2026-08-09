@@ -123,6 +123,72 @@ async fn test_publish_with_sample_file() {
 }
 
 #[tokio::test]
+async fn test_publish_resolves_links_to_all_content_kinds() {
+    let temp_dir = TempDir::new().unwrap();
+    let obsidian_dir = temp_dir.path().join("obsidian");
+    let output_dir = temp_dir.path().join("dist");
+
+    fs::create_dir_all(obsidian_dir.join("tech")).unwrap();
+    fs::write(
+        obsidian_dir.join("tech/links.md"),
+        indoc! {r#"
+            ---
+            title: "Links"
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
+            is_completed: true
+            category: "tech"
+            ---
+
+            [[about|About]]
+            [[home|Home]]
+            [[tech/index|Tech]]
+        "#},
+    )
+    .unwrap();
+    fs::write(
+        obsidian_dir.join("home.md"),
+        indoc! {r#"
+            ---
+            title: "Home"
+            kind: home
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
+            is_completed: true
+            ---
+
+            # Home
+        "#},
+    )
+    .unwrap();
+    fs::write(
+        obsidian_dir.join("tech/index.md"),
+        indoc! {r#"
+            ---
+            title: "Tech"
+            kind: category
+            category: tech
+            created: "2025-01-01T00:00:00+09:00"
+            updated: "2025-01-01T00:00:00+09:00"
+            is_completed: true
+            ---
+
+            # Tech
+        "#},
+    )
+    .unwrap();
+    write_about_page(&obsidian_dir);
+
+    publish(&obsidian_dir, &output_dir).await.unwrap();
+
+    let html_files = collect_html_files(&output_dir.join("site/articles"));
+    let html = fs::read_to_string(&html_files[0]).unwrap();
+    assert!(html.contains(r#"href="/about">About</a>"#));
+    assert!(html.contains(r#"href="/">Home</a>"#));
+    assert!(html.contains(r#"href="/tech">Tech</a>"#));
+}
+
+#[tokio::test]
 async fn test_publish_skips_incomplete_file() {
     let temp_dir = TempDir::new().unwrap();
     let obsidian_dir = temp_dir.path().join("obsidian");

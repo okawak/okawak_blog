@@ -18,17 +18,23 @@ pub(crate) struct ParsedArticleFile {
 
 pub(crate) struct ParsedPageFile {
     pub(crate) page: PageKey,
+    /// Extensionless vault-relative key used to resolve Obsidian internal links.
+    pub(crate) source_key: String,
     pub(crate) markdown_body: String,
     pub(crate) front_matter: ObsidianFrontMatter,
 }
 
 pub(crate) struct ParsedHomeFile {
+    /// Extensionless vault-relative key used to resolve Obsidian internal links.
+    pub(crate) source_key: String,
     pub(crate) markdown_body: String,
     pub(crate) front_matter: ObsidianFrontMatter,
 }
 
 pub(crate) struct ParsedCategoryFile {
     pub(crate) category: Category,
+    /// Extensionless vault-relative key used to resolve Obsidian internal links.
+    pub(crate) source_key: String,
     pub(crate) markdown_body: String,
     pub(crate) front_matter: ObsidianFrontMatter,
 }
@@ -56,41 +62,50 @@ pub(crate) fn classify_obsidian_files(
     for file_path in markdown_files {
         match parse_obsidian_file(&file_path) {
             Ok(Some(parsed)) if parsed.front_matter.is_completed => {
-                let result: Result<()> = match parsed.front_matter.kind {
-                    ContentKind::Article => process_article_file(&file_path, parsed, obsidian_dir)
-                        .map(|f| articles.push(f)),
-                    ContentKind::Page => {
-                        parse_page_key(parsed.front_matter.page.as_deref()).map(|page| {
-                            pages.push(ParsedPageFile {
-                                page,
-                                markdown_body: parsed.markdown_body,
-                                front_matter: parsed.front_matter,
-                            });
-                        })
-                    }
-                    ContentKind::Home => {
-                        if home.is_some() {
-                            Err(PublishError::Parse(
-                                "Duplicate home content detected".to_string(),
-                            ))
-                        } else {
-                            home = Some(ParsedHomeFile {
-                                markdown_body: parsed.markdown_body,
-                                front_matter: parsed.front_matter,
-                            });
-                            Ok(())
+                let result =
+                    derive_source_key(&file_path, obsidian_dir).and_then(|source_key| match parsed
+                        .front_matter
+                        .kind
+                    {
+                        ContentKind::Article => {
+                            process_article_file(&file_path, parsed, obsidian_dir, source_key)
+                                .map(|file| articles.push(file))
                         }
-                    }
-                    ContentKind::Category => {
-                        parse_category(parsed.front_matter.category.as_deref()).map(|category| {
+                        ContentKind::Page => parse_page_key(parsed.front_matter.page.as_deref())
+                            .map(|page| {
+                                pages.push(ParsedPageFile {
+                                    page,
+                                    source_key,
+                                    markdown_body: parsed.markdown_body,
+                                    front_matter: parsed.front_matter,
+                                });
+                            }),
+                        ContentKind::Home => {
+                            if home.is_some() {
+                                Err(PublishError::Parse(
+                                    "Duplicate home content detected".to_string(),
+                                ))
+                            } else {
+                                home = Some(ParsedHomeFile {
+                                    source_key,
+                                    markdown_body: parsed.markdown_body,
+                                    front_matter: parsed.front_matter,
+                                });
+                                Ok(())
+                            }
+                        }
+                        ContentKind::Category => parse_category(
+                            parsed.front_matter.category.as_deref(),
+                        )
+                        .map(|category| {
                             categories.push(ParsedCategoryFile {
                                 category,
+                                source_key,
                                 markdown_body: parsed.markdown_body,
                                 front_matter: parsed.front_matter,
                             });
-                        })
-                    }
-                };
+                        }),
+                    });
                 if let Err(e) = result {
                     errors += 1;
                     error!("Error processing {}: {}", file_path.display(), e);
@@ -121,6 +136,7 @@ fn process_article_file(
     file_path: &Path,
     parsed_file: ParsedObsidianFile,
     obsidian_dir: &Path,
+    source_key: String,
 ) -> Result<ParsedArticleFile> {
     let relative_path = file_path.strip_prefix(obsidian_dir)?;
     let category = parse_category(parsed_file.front_matter.category.as_deref())?;
@@ -130,10 +146,6 @@ fn process_article_file(
         relative_path,
         &parsed_file.front_matter.created,
     )?;
-    let source_key = relative_path
-        .with_extension("")
-        .to_string_lossy()
-        .into_owned();
     let section_path = derive_section_path(category_relative_path);
 
     Ok(ParsedArticleFile {
@@ -144,6 +156,14 @@ fn process_article_file(
         markdown_body: parsed_file.markdown_body,
         front_matter: parsed_file.front_matter,
     })
+}
+
+fn derive_source_key(file_path: &Path, obsidian_dir: &Path) -> Result<String> {
+    Ok(file_path
+        .strip_prefix(obsidian_dir)?
+        .with_extension("")
+        .to_string_lossy()
+        .into_owned())
 }
 
 fn derive_section_path(category_relative_path: &Path) -> SectionPath {
@@ -233,6 +253,7 @@ mod tests {
         front_matter.category = Some(category.as_str().to_string());
         ParsedCategoryFile {
             category,
+            source_key: format!("{}/index", category.as_str()),
             markdown_body: String::new(),
             front_matter,
         }
@@ -243,6 +264,7 @@ mod tests {
         front_matter.page = Some(page.to_string());
         ParsedPageFile {
             page: PageKey::new(page.to_string()).unwrap(),
+            source_key: format!("pages/{page}"),
             markdown_body: String::new(),
             front_matter,
         }
@@ -271,9 +293,18 @@ mod tests {
             Path::new("/vault/daily/article.md"),
             parsed_file,
             obsidian_dir,
+            "daily/article".to_string(),
         );
 
         assert!(matches!(result, Err(PublishError::StripPrefix(_))));
+    }
+
+    #[test]
+    fn test_derive_source_key_uses_extensionless_vault_relative_path() {
+        let source_key =
+            derive_source_key(Path::new("/vault/pages/about.md"), Path::new("/vault")).unwrap();
+
+        assert_eq!(source_key, "pages/about");
     }
 
     #[rstest]

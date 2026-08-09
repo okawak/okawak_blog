@@ -1,23 +1,46 @@
-use crate::classify::ParsedArticleFile;
+use crate::classify::ClassifiedFiles;
 use pulldown_cmark::{Event, LinkType, Options, Parser, Tag};
 use std::collections::HashMap;
 
-/// Published article hrefs indexed by extensionless source keys.
+/// Published content hrefs indexed by extensionless source keys.
+#[derive(Default)]
 pub(crate) struct Index {
     routes: HashMap<String, String>,
 }
 
 impl Index {
-    pub(crate) fn from_articles(articles: &[ParsedArticleFile]) -> Self {
-        let routes = articles
-            .iter()
-            .map(|article| {
-                (
-                    article.source_key.clone(),
-                    format!("/{}/{}", article.category.as_str(), article.slug),
-                )
-            })
-            .collect();
+    pub(crate) fn from_classified_files(files: &ClassifiedFiles) -> Self {
+        let capacity = files.articles.len()
+            + files.pages.len()
+            + usize::from(files.home.is_some())
+            + files.categories.len();
+        let mut routes = HashMap::with_capacity(capacity);
+
+        routes.extend(files.articles.iter().map(|article| {
+            (
+                article.source_key.clone(),
+                format!("/{}/{}", article.category.as_str(), article.slug),
+            )
+        }));
+        routes.extend(
+            files
+                .pages
+                .iter()
+                .map(|page| (page.source_key.clone(), format!("/{}", page.page.as_str()))),
+        );
+        routes.extend(
+            files
+                .home
+                .iter()
+                .map(|home| (home.source_key.clone(), "/".to_string())),
+        );
+        routes.extend(files.categories.iter().map(|category| {
+            (
+                category.source_key.clone(),
+                format!("/{}", category.category.as_str()),
+            )
+        }));
+
         Self { routes }
     }
 
@@ -94,6 +117,9 @@ fn escape_markdown_link_destination(destination: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::classify::{
+        ClassifiedFiles, ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, ParsedPageFile,
+    };
     use crate::render::convert_markdown_to_html;
     use crate::vault::{ContentKind, ObsidianFrontMatter};
     use domain::{Category, SectionPath, Slug};
@@ -130,30 +156,92 @@ mod tests {
         }
     }
 
-    #[test]
-    fn index_is_built_from_articles() {
-        let articles = vec![article("sub/dir/test", Category::Tech, "slug")];
+    fn page(source_key: &str, page: &str) -> ParsedPageFile {
+        ParsedPageFile {
+            page: domain::PageKey::new(page.to_string()).unwrap(),
+            source_key: source_key.to_string(),
+            markdown_body: "# Page".to_string(),
+            front_matter: front_matter(ContentKind::Page),
+        }
+    }
 
-        let index = Index::from_articles(&articles);
+    fn home(source_key: &str) -> ParsedHomeFile {
+        ParsedHomeFile {
+            source_key: source_key.to_string(),
+            markdown_body: "# Home".to_string(),
+            front_matter: front_matter(ContentKind::Home),
+        }
+    }
 
-        assert_eq!(index.resolve("sub/dir/test"), Some("/tech/slug"));
+    fn category(source_key: &str, category: Category) -> ParsedCategoryFile {
+        ParsedCategoryFile {
+            category,
+            source_key: source_key.to_string(),
+            markdown_body: "# Category".to_string(),
+            front_matter: front_matter(ContentKind::Category),
+        }
+    }
+
+    fn front_matter(kind: ContentKind) -> ObsidianFrontMatter {
+        ObsidianFrontMatter {
+            title: "Content".to_string(),
+            kind,
+            tags: None,
+            summary: None,
+            priority: None,
+            created: "2025-01-01T00:00:00+09:00".to_string(),
+            updated: "2025-01-01T00:00:00+09:00".to_string(),
+            is_completed: true,
+            category: None,
+            page: None,
+        }
+    }
+
+    fn classified_files(articles: Vec<ParsedArticleFile>) -> ClassifiedFiles {
+        ClassifiedFiles {
+            articles,
+            pages: Vec::new(),
+            home: None,
+            categories: Vec::new(),
+            skipped: 0,
+            errors: 0,
+        }
     }
 
     #[test]
-    fn index_is_empty_when_there_are_no_articles() {
-        let index = Index::from_articles(&[]);
+    fn index_is_built_from_all_published_content() {
+        let files = ClassifiedFiles {
+            articles: vec![article("tech/article", Category::Tech, "slug")],
+            pages: vec![page("pages/about", "about")],
+            home: Some(home("home")),
+            categories: vec![category("tech/index", Category::Tech)],
+            skipped: 0,
+            errors: 0,
+        };
+
+        let index = Index::from_classified_files(&files);
+
+        assert_eq!(index.resolve("tech/article"), Some("/tech/slug"));
+        assert_eq!(index.resolve("pages/about"), Some("/about"));
+        assert_eq!(index.resolve("home"), Some("/"));
+        assert_eq!(index.resolve("tech/index"), Some("/tech"));
+    }
+
+    #[test]
+    fn index_is_empty_when_there_is_no_published_content() {
+        let index = Index::from_classified_files(&classified_files(Vec::new()));
 
         assert_eq!(index.resolve("test"), None);
     }
 
     #[test]
     fn index_preserves_distinct_source_keys() {
-        let articles = vec![
+        let files = classified_files(vec![
             article("dir1/test", Category::Tech, "slug1"),
             article("dir2/test", Category::Daily, "slug2"),
-        ];
+        ]);
 
-        let index = Index::from_articles(&articles);
+        let index = Index::from_classified_files(&files);
 
         assert_eq!(index.resolve("dir1/test"), Some("/tech/slug1"));
         assert_eq!(index.resolve("dir2/test"), Some("/daily/slug2"));

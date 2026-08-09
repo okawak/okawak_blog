@@ -24,7 +24,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_render_falls_back_to_html_when_bookmark_enrichment_fails() {
-        let link_index = links::Index::from_articles(&[]);
+        let link_index = links::Index::default();
         let enrich: BookmarkEnricher = Arc::new(|_html| {
             Box::pin(async { Err(PublishError::Parse("enrichment failed".to_string())) })
         });
