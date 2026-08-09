@@ -14,16 +14,22 @@ use crate::render::{
 use crate::vault::{scan_markdown_files, validate_obsidian_dir};
 use crate::{classify, links};
 use futures::{StreamExt, stream};
-use log::info;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+use tracing::info;
 
 pub async fn publish(obsidian_dir: &Path, output_dir: &Path) -> Result<()> {
     publish_with_bookmark_enricher(obsidian_dir, output_dir, rich_bookmark_enricher()).await
 }
 
+#[tracing::instrument(
+    name = "publish",
+    skip_all,
+    fields(input_dir = %obsidian_dir.display(), output_dir = %output_dir.display()),
+    err
+)]
 pub async fn publish_with_bookmark_enricher(
     obsidian_dir: &Path,
     output_dir: &Path,
@@ -32,26 +38,22 @@ pub async fn publish_with_bookmark_enricher(
     validate_obsidian_dir(obsidian_dir)?;
 
     let start_time = std::time::Instant::now();
-    info!("=== Publisher Started ===");
-    info!("Input directory: {}", obsidian_dir.display());
-    info!("Output directory: {}", output_dir.display());
+    info!("publisher started");
 
     let markdown_files = scan_markdown_files(obsidian_dir)?;
-    info!("Found {} markdown files", markdown_files.len());
+    info!(file_count = markdown_files.len(), "scanned markdown files");
 
     let classified_files = classify_obsidian_files(markdown_files, obsidian_dir);
 
-    info!("Valid article files: {}", classified_files.articles.len());
-    info!("Valid page files: {}", classified_files.pages.len());
     info!(
-        "Valid home file: {}",
-        usize::from(classified_files.home.is_some())
+        article_count = classified_files.articles.len(),
+        page_count = classified_files.pages.len(),
+        home_count = usize::from(classified_files.home.is_some()),
+        category_count = classified_files.categories.len(),
+        skipped_count = classified_files.skipped,
+        error_count = classified_files.errors,
+        "classified markdown files"
     );
-    info!(
-        "Valid category files: {}",
-        classified_files.categories.len()
-    );
-    info!("Skipped files: {}", classified_files.skipped);
     if classified_files.errors > 0 {
         return Err(PublishError::ContentErrors {
             count: classified_files.errors,
@@ -140,30 +142,35 @@ pub async fn publish_with_bookmark_enricher(
     let validation =
         tokio::task::spawn_blocking(move || validate_site_artifacts(site_root)).await??;
     info!(
-        "Validated {} articles across {} categories",
-        validation.article_count, validation.category_count
+        article_count = validation.article_count,
+        category_count = validation.category_count,
+        "validated site artifacts"
     );
 
     let processed_count = site_artifacts.article_index.len();
     let duration = start_time.elapsed();
 
-    info!("=== Processing Summary ===");
-    info!("Successfully processed: {processed_count} files");
-    info!("  Skipped: {skipped} files");
-    info!("  Processing time: {duration:.2?}");
-    info!("Output directory: {}", output_dir.display());
+    info!(
+        processed_count,
+        skipped_count = skipped,
+        processing_time_ms = duration.as_millis(),
+        "publisher completed"
+    );
 
     if !site_artifacts.article_index.is_empty() {
-        info!("Processed files:");
         for article in &site_artifacts.article_index {
-            info!("  • {} ({})", article.title.as_str(), article.slug.as_str());
+            info!(
+                title = article.title.as_str(),
+                slug = article.slug.as_str(),
+                "processed article"
+            );
         }
     }
 
-    info!("=== Publisher Completed ===");
     Ok(())
 }
 
+#[tracing::instrument(skip_all, fields(source_key = %parsed_file.source_key), err)]
 async fn process_article(
     parsed_file: ParsedArticleFile,
     link_index: &links::Index,
@@ -183,6 +190,7 @@ async fn process_article(
     .await
 }
 
+#[tracing::instrument(skip_all, fields(source_key = %parsed_file.source_key), err)]
 async fn process_page(
     parsed_file: ParsedPageFile,
     link_index: &links::Index,
@@ -197,6 +205,7 @@ async fn process_page(
     .await
 }
 
+#[tracing::instrument(skip_all, fields(source_key = %parsed_file.source_key), err)]
 async fn process_home(
     parsed_file: ParsedHomeFile,
     link_index: &links::Index,
@@ -211,6 +220,7 @@ async fn process_home(
     .await
 }
 
+#[tracing::instrument(skip_all, fields(source_key = %parsed_file.source_key), err)]
 async fn process_category(
     parsed_file: ParsedCategoryFile,
     link_index: &links::Index,
@@ -233,6 +243,6 @@ where
     T: Send + 'static,
 {
     let (result, output_file_path) = tokio::task::spawn_blocking(write).await??;
-    info!("...processed {}", output_file_path.display());
+    info!(output_file = %output_file_path.display(), "wrote artifact");
     Ok(result)
 }

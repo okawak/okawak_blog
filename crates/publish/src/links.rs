@@ -105,7 +105,7 @@ fn resolve_internal_link(link: &str, index: &Index) -> String {
         .resolve(link_target)
         .map(str::to_owned)
         .unwrap_or_else(|| {
-            log::warn!("Internal link target '{link_target}' was not found");
+            tracing::warn!(%link_target, "internal link target was not found");
             format!("/{link_target}")
         });
 
