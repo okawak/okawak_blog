@@ -39,28 +39,38 @@ pub async fn publish_with_bookmark_enricher(
     let markdown_files = scan_markdown_files(obsidian_dir)?;
     info!("Found {} markdown files", markdown_files.len());
 
+    let classified_files = classify_obsidian_files(markdown_files, obsidian_dir);
+
+    info!("Valid article files: {}", classified_files.articles.len());
+    info!("Valid page files: {}", classified_files.pages.len());
+    info!(
+        "Valid home file: {}",
+        usize::from(classified_files.home.is_some())
+    );
+    info!(
+        "Valid category files: {}",
+        classified_files.categories.len()
+    );
+    info!("Skipped files: {}", classified_files.skipped);
+    if classified_files.errors > 0 {
+        return Err(PublishError::ContentErrors {
+            count: classified_files.errors,
+        });
+    }
+
+    ensure_unique_page_keys(&classified_files.pages)?;
+    ensure_unique_category_landings(&classified_files.categories)?;
+
+    let link_index = links::Index::from_classified_files(&classified_files);
     let classify::ClassifiedFiles {
         articles,
         pages,
         home,
         categories,
         skipped,
-        errors,
-    } = classify_obsidian_files(markdown_files, obsidian_dir);
+        ..
+    } = classified_files;
 
-    info!("Valid article files: {}", articles.len());
-    info!("Valid page files: {}", pages.len());
-    info!("Valid home file: {}", usize::from(home.is_some()));
-    info!("Valid category files: {}", categories.len());
-    info!("Skipped files: {skipped}");
-    if errors > 0 {
-        return Err(PublishError::ContentErrors { count: errors });
-    }
-
-    ensure_unique_page_keys(&pages)?;
-    ensure_unique_category_landings(&categories)?;
-
-    let link_index = links::Index::from_articles(&articles);
     let site_directories = SiteDirectories::prepare(output_dir)?;
 
     const CONCURRENT_LIMIT: usize = 4;
