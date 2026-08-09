@@ -11,7 +11,7 @@ BIN_DIR = "./bin"
 TARGET_BIN = "./target/release/server"
 TARGET_HASH_FILE = "./target/release/hash.txt"
 DEPLOY_STAGED_SITE = "./target/site-staged"
-LEPTOS_TAILWIND_VERSION = "v4.3.2"
+LEPTOS_TAILWIND_VERSION = "v4.3.3"
 
 [tasks.check-deps]
 description = "Check if required tools are installed"
