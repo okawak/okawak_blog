@@ -2,6 +2,8 @@ use crate::classify::ClassifiedFiles;
 use pulldown_cmark::{Event, LinkType, Options, Parser, Tag};
 use std::collections::HashMap;
 
+const ROUTED_PAGE_KEYS: &[&str] = &["about"];
+
 /// Published content hrefs indexed by extensionless source keys.
 #[derive(Default)]
 pub(crate) struct Index {
@@ -10,8 +12,13 @@ pub(crate) struct Index {
 
 impl Index {
     pub(crate) fn from_classified_files(files: &ClassifiedFiles) -> Self {
+        let routed_page_count = files
+            .pages
+            .iter()
+            .filter(|page| is_routed_page(page.page.as_str()))
+            .count();
         let capacity = files.articles.len()
-            + files.pages.len()
+            + routed_page_count
             + usize::from(files.home.is_some())
             + files.categories.len();
         let mut routes = HashMap::with_capacity(capacity);
@@ -26,6 +33,7 @@ impl Index {
             files
                 .pages
                 .iter()
+                .filter(|page| is_routed_page(page.page.as_str()))
                 .map(|page| (page.source_key.clone(), format!("/{}", page.page.as_str()))),
         );
         routes.extend(
@@ -52,6 +60,10 @@ impl Index {
             })
         })
     }
+}
+
+fn is_routed_page(page_key: &str) -> bool {
+    ROUTED_PAGE_KEYS.contains(&page_key)
 }
 
 /// Resolve Obsidian internal links to published Markdown links outside code.
@@ -225,6 +237,23 @@ mod tests {
         assert_eq!(index.resolve("pages/about"), Some("/about"));
         assert_eq!(index.resolve("home"), Some("/"));
         assert_eq!(index.resolve("tech/index"), Some("/tech"));
+    }
+
+    #[test]
+    fn index_excludes_pages_without_a_published_route() {
+        let files = ClassifiedFiles {
+            articles: Vec::new(),
+            pages: vec![page("pages/contact", "contact")],
+            home: None,
+            categories: Vec::new(),
+            skipped: 0,
+            errors: 0,
+        };
+
+        let index = Index::from_classified_files(&files);
+
+        assert_eq!(index.resolve("pages/contact"), None);
+        assert_eq!(index.resolve("contact"), None);
     }
 
     #[test]
