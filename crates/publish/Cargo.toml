@@ -9,10 +9,8 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 domain = { path = "../domain" }
-env_logger.workspace = true
 futures.workspace = true
 ignore.workspace = true
-log.workspace = true
 pulldown-cmark.workspace = true
 regex.workspace = true
 reqwest = { workspace = true, features = ["json"] }
@@ -23,6 +21,8 @@ serde_yaml.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
 url.workspace = true
 
 [dev-dependencies]

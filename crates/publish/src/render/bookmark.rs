@@ -294,8 +294,8 @@ where
 /// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
 async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
     convert_simple_bookmarks_with(html_content, |url, original_title| async move {
-        fetch_ogp_metadata(&url).await.unwrap_or_else(|e| {
-            log::warn!("Warning: Failed to fetch OGP metadata for '{url}': {e}");
+        fetch_ogp_metadata(&url).await.unwrap_or_else(|error| {
+            tracing::warn!(%url, %error, "failed to fetch OGP metadata");
             create_fallback_bookmark_data(&url, &original_title)
         })
     })

@@ -7,10 +7,10 @@ const OUTPUT_DIR: &str = "crates/publish/dist";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let env = env_logger::Env::default()
-        .filter_or("RUST_LOG", "info")
-        .write_style_or("LOG_STYLE", "auto");
-    env_logger::init_from_env(env);
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .try_init()
+        .map_err(anyhow::Error::from_boxed)?;
 
     publish(Path::new(OBSIDIAN_DIR), Path::new(OUTPUT_DIR)).await?;
 

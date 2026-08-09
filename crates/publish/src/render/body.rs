@@ -1,6 +1,6 @@
 use super::{bookmark::BookmarkEnricher, html::convert_markdown_to_html};
 use crate::{error::Result, links};
-use log::warn;
+use tracing::warn;
 
 pub(super) async fn render(
     markdown: &str,
@@ -11,7 +11,7 @@ pub(super) async fn render(
     let html = convert_markdown_to_html(&markdown)?;
     let fallback = html.clone();
     Ok(enrich(html).await.unwrap_or_else(|error| {
-        warn!("Warning: Failed to convert simple bookmarks to rich bookmarks: {error}");
+        warn!(%error, "failed to enrich bookmarks");
         fallback
     }))
 }

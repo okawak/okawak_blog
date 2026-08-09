@@ -1,9 +1,9 @@
 use crate::error::{PublishError, Result};
 use crate::vault::{ContentKind, ObsidianFrontMatter, ParsedObsidianFile, parse_obsidian_file};
 use domain::{Category, PageKey, SectionPath, Slug};
-use log::{error, warn};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use tracing::{error, warn};
 
 pub(crate) struct ParsedArticleFile {
     pub(crate) category: Category,
@@ -106,18 +106,18 @@ pub(crate) fn classify_obsidian_files(
                             });
                         }),
                     });
-                if let Err(e) = result {
+                if let Err(error) = result {
                     errors += 1;
-                    error!("Error processing {}: {}", file_path.display(), e);
+                    error!(file_path = %file_path.display(), %error, "failed to process file");
                 }
             }
             Ok(_) => {
                 skipped += 1;
-                warn!("Skipped (not completed): {}", file_path.display());
+                warn!(file_path = %file_path.display(), "skipped incomplete file");
             }
-            Err(e) => {
+            Err(error) => {
                 errors += 1;
-                error!("Error processing {}: {}", file_path.display(), e);
+                error!(file_path = %file_path.display(), %error, "failed to process file");
             }
         }
     }
