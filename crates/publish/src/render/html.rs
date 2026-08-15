@@ -1,5 +1,8 @@
-use crate::error::Result;
-use pulldown_cmark::{Event, Options, Parser, Tag, html};
+use crate::{
+    error::Result,
+    links::{self, Index},
+};
+use pulldown_cmark::{CowStr, Event, LinkType, Options, Parser, Tag, html};
 use regex::Regex;
 use std::{borrow::Cow, ops::Range, sync::LazyLock};
 
@@ -12,8 +15,11 @@ static HREF_ATTR_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"href="([^"]*)""#).expect("Invalid href regex"));
 
 /// Converts Markdown to sanitized HTML.
-pub(crate) fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
-    let markdown_content = escape_math_pipes_for_table_parser(markdown_content);
+pub(crate) fn convert_markdown_to_html(
+    markdown_content: &str,
+    link_index: &Index,
+) -> Result<String> {
+    let markdown_content = escape_pipes_for_table_parser(markdown_content);
 
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -22,11 +28,12 @@ pub(crate) fn convert_markdown_to_html(markdown_content: &str) -> Result<String>
     options.insert(Options::ENABLE_TASKLISTS);
     options.insert(Options::ENABLE_SMART_PUNCTUATION);
     options.insert(Options::ENABLE_MATH);
+    options.insert(Options::ENABLE_WIKILINKS);
 
     let parser = Parser::new_ext(&markdown_content, options);
+    let parser = links::resolve_wikilinks(parser, link_index);
     let mut html_output = String::with_capacity(markdown_content.len() * 2);
-    html::push_html(&mut html_output, sanitize_html(parser).into_iter());
-    let html_output = sanitize_anchor_hrefs(&html_output);
+    html::push_html(&mut html_output, sanitize_events(parser).into_iter());
     let html_output = repair_unparsed_strong_markers(&html_output);
 
     Ok(add_legacy_math_classes(&html_output))
@@ -44,8 +51,48 @@ fn add_legacy_math_classes(html: &str) -> String {
     )
 }
 
-fn escape_math_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
-    let math_ranges = Parser::new_ext(markdown, Options::ENABLE_MATH)
+fn escape_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
+    let protected_ranges = pipe_sensitive_ranges(markdown);
+
+    if protected_ranges.is_empty() {
+        return Cow::Borrowed(markdown);
+    }
+
+    // A one-byte replacement keeps parser offsets aligned with the original Markdown.
+    let table_probe = replace_pipes_in_ranges(markdown, &protected_ranges, "/");
+    let table_ranges = Parser::new_ext(
+        &table_probe,
+        Options::ENABLE_TABLES | Options::ENABLE_MATH | Options::ENABLE_WIKILINKS,
+    )
+    .into_offset_iter()
+    .filter_map(|(event, range)| match event {
+        Event::Start(Tag::Table(_)) => Some(range),
+        _ => None,
+    })
+    .collect::<Vec<_>>();
+
+    let table_ranges_to_escape = protected_ranges
+        .into_iter()
+        .filter(|range| {
+            table_ranges
+                .iter()
+                .any(|table_range| table_range.start <= range.start && range.end <= table_range.end)
+        })
+        .collect::<Vec<_>>();
+
+    if table_ranges_to_escape.is_empty() {
+        return Cow::Borrowed(markdown);
+    }
+
+    Cow::Owned(replace_pipes_in_ranges(
+        markdown,
+        &table_ranges_to_escape,
+        r"\|",
+    ))
+}
+
+fn pipe_sensitive_ranges(markdown: &str) -> Vec<Range<usize>> {
+    let mut ranges = Parser::new_ext(markdown, Options::ENABLE_MATH)
         .into_offset_iter()
         .filter_map(|(event, range)| match event {
             Event::InlineMath(_) | Event::DisplayMath(_)
@@ -57,34 +104,38 @@ fn escape_math_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
         })
         .collect::<Vec<_>>();
 
-    if math_ranges.is_empty() {
-        return Cow::Borrowed(markdown);
+    ranges.extend(
+        Parser::new_ext(markdown, Options::ENABLE_WIKILINKS)
+            .into_offset_iter()
+            .filter_map(|(event, range)| match event {
+                Event::Start(
+                    Tag::Link {
+                        link_type: LinkType::WikiLink { has_pothole: true },
+                        ..
+                    }
+                    | Tag::Image {
+                        link_type: LinkType::WikiLink { has_pothole: true },
+                        ..
+                    },
+                ) => Some(range),
+                _ => None,
+            }),
+    );
+
+    ranges.sort_unstable_by_key(|range| range.start);
+    let mut merged_ranges: Vec<Range<usize>> = Vec::with_capacity(ranges.len());
+
+    for range in ranges {
+        if let Some(previous) = merged_ranges.last_mut()
+            && range.start <= previous.end
+        {
+            previous.end = previous.end.max(range.end);
+            continue;
+        }
+        merged_ranges.push(range);
     }
 
-    // A one-byte replacement keeps parser offsets aligned with the original Markdown.
-    let table_probe = replace_pipes_in_ranges(markdown, &math_ranges, "/");
-    let table_ranges = Parser::new_ext(&table_probe, Options::ENABLE_TABLES | Options::ENABLE_MATH)
-        .into_offset_iter()
-        .filter_map(|(event, range)| match event {
-            Event::Start(Tag::Table(_)) => Some(range),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    let table_math_ranges = math_ranges
-        .into_iter()
-        .filter(|range| {
-            table_ranges
-                .iter()
-                .any(|table_range| table_range.start <= range.start && range.end <= table_range.end)
-        })
-        .collect::<Vec<_>>();
-
-    if table_math_ranges.is_empty() {
-        return Cow::Borrowed(markdown);
-    }
-
-    Cow::Owned(replace_pipes_in_ranges(markdown, &table_math_ranges, r"\|"))
+    merged_ranges
 }
 
 fn replace_pipes_in_ranges(markdown: &str, ranges: &[Range<usize>], replacement: &str) -> String {
@@ -101,41 +152,79 @@ fn replace_pipes_in_ranges(markdown: &str, ranges: &[Range<usize>], replacement:
     replaced
 }
 
-fn sanitize_anchor_hrefs(html: &str) -> String {
+fn sanitize_bookmark_href(html: &str) -> String {
     HREF_ATTR_RE
         .replace_all(html, |caps: &regex::Captures| {
             let href = &caps[1];
-            let sanitized_href = if is_safe_href(href) { href } else { "#" };
+            let sanitized_href = if is_safe_destination(href) { href } else { "#" };
             format!("href=\"{sanitized_href}\"")
         })
         .to_string()
 }
 
-fn is_safe_href(href: &str) -> bool {
-    let href = href.trim();
+fn sanitize_destination(destination: CowStr<'_>) -> CowStr<'_> {
+    if is_safe_destination(&destination) {
+        destination
+    } else {
+        CowStr::Borrowed("#")
+    }
+}
 
-    if href.is_empty() {
+fn is_safe_destination(destination: &str) -> bool {
+    let destination = destination.trim();
+
+    if destination.is_empty() {
         return false;
     }
 
-    if href.starts_with('#') {
+    if destination.starts_with('#') {
         return true;
     }
 
-    if href.starts_with('/') {
-        return !href.starts_with("//");
+    if destination.starts_with('/') {
+        return !destination.starts_with("//");
     }
 
-    if href.starts_with("http://") || href.starts_with("https://") || href.starts_with("mailto:") {
+    if destination.starts_with("http://")
+        || destination.starts_with("https://")
+        || destination.starts_with("mailto:")
+    {
         return true;
     }
 
-    !href.contains(':') && !href.contains('\\') && !href.starts_with('.')
+    !destination.contains(':') && !destination.contains('\\') && !destination.starts_with('.')
 }
 
-/// Escapes all raw HTML events except valid `<div class="bookmark">` blocks.
-/// Accumulates each potential bookmark block and validates with SAFE_BOOKMARK_RE before passing through.
-fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> {
+fn sanitize_destination_event(event: Event<'_>) -> Event<'_> {
+    match event {
+        Event::Start(Tag::Link {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => Event::Start(Tag::Link {
+            link_type,
+            dest_url: sanitize_destination(dest_url),
+            title,
+            id,
+        }),
+        Event::Start(Tag::Image {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => Event::Start(Tag::Image {
+            link_type,
+            dest_url: sanitize_destination(dest_url),
+            title,
+            id,
+        }),
+        event => event,
+    }
+}
+
+/// Sanitizes link destinations and raw HTML before HTML generation.
+fn sanitize_events<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> {
     let mut result: Vec<Event<'a>> = Vec::new();
     let mut in_bookmark = false;
     let mut bookmark_buffer = String::new();
@@ -159,7 +248,7 @@ fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> 
                         bookmark_buffer.clear();
 
                         if SAFE_BOOKMARK_RE.is_match(&bookmark_part) {
-                            result.push(Event::Html(bookmark_part.into()));
+                            result.push(Event::Html(sanitize_bookmark_href(&bookmark_part).into()));
                         } else {
                             result.push(Event::Text(bookmark_part.into()));
                         }
@@ -178,7 +267,7 @@ fn sanitize_html<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> 
                         result.push(Event::Text(buffer.into()));
                     }
                 }
-                result.push(other);
+                result.push(sanitize_destination_event(other));
             }
         }
     }
@@ -268,6 +357,10 @@ mod tests {
     use super::*;
     use indoc::indoc;
     use rstest::*;
+
+    fn convert_markdown_to_html(markdown: &str) -> Result<String> {
+        super::convert_markdown_to_html(markdown, &Index::default())
+    }
 
     #[rstest]
     #[case::basic_markdown(
@@ -463,6 +556,16 @@ mod tests {
             result.contains("href=\"#\""),
             "unsafe href should be neutralized"
         );
+        assert!(!result.contains("javascript:alert"));
+    }
+
+    #[test]
+    fn test_markdown_to_html_sanitizes_javascript_image_source() {
+        let markdown = "![image](javascript:alert('xss'))";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(result.contains("src=\"#\""));
         assert!(!result.contains("javascript:alert"));
     }
 

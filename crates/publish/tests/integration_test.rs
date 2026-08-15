@@ -143,6 +143,7 @@ async fn test_publish_resolves_links_to_all_content_kinds() {
             [[about|About]]
             [[home|Home]]
             [[tech/index|Tech]]
+            ![[about|About image]]
         "#},
     )
     .unwrap();
@@ -186,6 +187,7 @@ async fn test_publish_resolves_links_to_all_content_kinds() {
     assert!(html.contains(r#"href="/about">About</a>"#));
     assert!(html.contains(r#"href="/">Home</a>"#));
     assert!(html.contains(r#"href="/tech">Tech</a>"#));
+    assert!(html.contains(r#"src="/about" alt="About image""#));
 }
 
 #[tokio::test]

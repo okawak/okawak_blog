@@ -12,8 +12,8 @@
 
 1. private な Obsidian リポジトリを git submodule として取得する
 2. `crates/publish` の vault module が Markdown を走査し、frontmatter と本文を読み取る
-3. classify / links module が公開種別を確定し、Obsidian link を解決する
-4. render module が Markdown の HTML 変換と bookmark enrichment を行う
+3. classify module が公開種別を確定し、links module が公開URLの索引を構築する
+4. render module が単一の`pulldown-cmark` event pipeline内でObsidian link / embedを解決し、MarkdownのHTML変換とbookmark enrichmentを行う
 5. artifacts module が `site/` 配下の HTML / JSON を組み立てる
 6. GitHub Actions が artifact を immutable release として S3 に配置し、`current.json` を最後に切り替える
 7. `crates/site/server` と `crates/site/web` が `crates/site/infra` 経由で release snapshot を読んで SSR する
@@ -68,8 +68,8 @@ okawak_blog/
   - crate外向けAPIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
   - path処理の対応環境はmacOSとLinuxとし、Windows形式のpathは対象外とする
   - vault moduleによるObsidian vault走査、Markdown読込、frontmatter parse
-  - links moduleによる全公開contentのvault相対source keyと公開URLの索引構築、およびObsidian link解決
-  - render moduleによるcontent kindごとの組み立て、共通本文処理、`pulldown-cmark`の数式eventを含むMarkdownからHTMLへの変換、外部HTTPを伴うbookmark enrichment。数式spanはruntime移行中の互換性のため`.math-*`と`.okawak-katex-*`を併記する
+  - links moduleによる全公開contentのvault相対source keyと公開URLの索引構築、およびWikiLink link / image eventの公開URL解決
+  - render moduleによるcontent kindごとの組み立て、共通本文処理、WikiLinkと数式を含む単一の`pulldown-cmark` event pipelineによるMarkdownからHTMLへの変換、外部HTTPを伴うbookmark enrichment。数式spanはruntime移行中の互換性のため`.math-*`と`.okawak-katex-*`を併記する
   - classify moduleによる公開種別の確定と`section_path`の導出
   - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
   - `ObsidianFrontMatter`と`ContentKind`はpublisher入力形式として内部に保持する
