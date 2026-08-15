@@ -39,6 +39,14 @@ pub(crate) struct ParsedCategoryFile {
     pub(crate) front_matter: ObsidianFrontMatter,
 }
 
+enum ClassifiedFile {
+    Article(ParsedArticleFile),
+    Page(ParsedPageFile),
+    Home(ParsedHomeFile),
+    Category(ParsedCategoryFile),
+}
+
+#[derive(Default)]
 pub(crate) struct ClassifiedFiles {
     pub(crate) articles: Vec<ParsedArticleFile>,
     pub(crate) pages: Vec<ParsedPageFile>,
@@ -48,88 +56,95 @@ pub(crate) struct ClassifiedFiles {
     pub(crate) errors: usize,
 }
 
+impl ClassifiedFiles {
+    fn add(&mut self, file: ClassifiedFile) -> Result<()> {
+        match file {
+            ClassifiedFile::Article(file) => self.articles.push(file),
+            ClassifiedFile::Page(file) => self.pages.push(file),
+            ClassifiedFile::Home(file) => {
+                if self.home.is_some() {
+                    return Err(PublishError::Parse(
+                        "Duplicate home content detected".to_string(),
+                    ));
+                }
+                self.home = Some(file);
+            }
+            ClassifiedFile::Category(file) => self.categories.push(file),
+        }
+        Ok(())
+    }
+}
+
 pub(crate) fn classify_obsidian_files(
     markdown_files: Vec<PathBuf>,
     obsidian_dir: &Path,
 ) -> ClassifiedFiles {
-    let mut articles = Vec::new();
-    let mut pages = Vec::new();
-    let mut home = None;
-    let mut categories = Vec::new();
-    let mut skipped = 0usize;
-    let mut errors = 0usize;
+    let mut classified_files = ClassifiedFiles::default();
 
     for file_path in markdown_files {
-        match parse_obsidian_file(&file_path) {
-            Ok(Some(parsed)) if parsed.front_matter.is_completed => {
-                let result =
-                    derive_source_key(&file_path, obsidian_dir).and_then(|source_key| match parsed
-                        .front_matter
-                        .kind
-                    {
-                        ContentKind::Article => {
-                            process_article_file(&file_path, parsed, obsidian_dir, source_key)
-                                .map(|file| articles.push(file))
-                        }
-                        ContentKind::Page => parse_page_key(parsed.front_matter.page.as_deref())
-                            .map(|page| {
-                                pages.push(ParsedPageFile {
-                                    page,
-                                    source_key,
-                                    markdown_body: parsed.markdown_body,
-                                    front_matter: parsed.front_matter,
-                                });
-                            }),
-                        ContentKind::Home => {
-                            if home.is_some() {
-                                Err(PublishError::Parse(
-                                    "Duplicate home content detected".to_string(),
-                                ))
-                            } else {
-                                home = Some(ParsedHomeFile {
-                                    source_key,
-                                    markdown_body: parsed.markdown_body,
-                                    front_matter: parsed.front_matter,
-                                });
-                                Ok(())
-                            }
-                        }
-                        ContentKind::Category => parse_category(
-                            parsed.front_matter.category.as_deref(),
-                        )
-                        .map(|category| {
-                            categories.push(ParsedCategoryFile {
-                                category,
-                                source_key,
-                                markdown_body: parsed.markdown_body,
-                                front_matter: parsed.front_matter,
-                            });
-                        }),
-                    });
-                if let Err(error) = result {
-                    errors += 1;
+        match classify_file(&file_path, obsidian_dir) {
+            Ok(Some(file)) => {
+                if let Err(error) = classified_files.add(file) {
+                    classified_files.errors += 1;
                     error!(file_path = %file_path.display(), %error, "failed to process file");
                 }
             }
-            Ok(_) => {
-                skipped += 1;
+            Ok(None) => {
+                classified_files.skipped += 1;
                 warn!(file_path = %file_path.display(), "skipped incomplete file");
             }
             Err(error) => {
-                errors += 1;
+                classified_files.errors += 1;
                 error!(file_path = %file_path.display(), %error, "failed to process file");
             }
         }
     }
 
-    ClassifiedFiles {
-        articles,
-        pages,
-        home,
-        categories,
-        skipped,
-        errors,
+    classified_files
+}
+
+fn classify_file(file_path: &Path, obsidian_dir: &Path) -> Result<Option<ClassifiedFile>> {
+    let Some(parsed_file) = parse_obsidian_file(file_path)? else {
+        return Ok(None);
+    };
+    if !parsed_file.front_matter.is_completed {
+        return Ok(None);
     }
+
+    let source_key = derive_source_key(file_path, obsidian_dir)?;
+    let classified_file = match parsed_file.front_matter.kind {
+        ContentKind::Article => ClassifiedFile::Article(process_article_file(
+            file_path,
+            parsed_file,
+            obsidian_dir,
+            source_key,
+        )?),
+        ContentKind::Page => {
+            let page = parse_page_key(parsed_file.front_matter.page.as_deref())?;
+            ClassifiedFile::Page(ParsedPageFile {
+                page,
+                source_key,
+                markdown_body: parsed_file.markdown_body,
+                front_matter: parsed_file.front_matter,
+            })
+        }
+        ContentKind::Home => ClassifiedFile::Home(ParsedHomeFile {
+            source_key,
+            markdown_body: parsed_file.markdown_body,
+            front_matter: parsed_file.front_matter,
+        }),
+        ContentKind::Category => {
+            let category = parse_category(parsed_file.front_matter.category.as_deref())?;
+            ClassifiedFile::Category(ParsedCategoryFile {
+                category,
+                source_key,
+                markdown_body: parsed_file.markdown_body,
+                front_matter: parsed_file.front_matter,
+            })
+        }
+    };
+
+    Ok(Some(classified_file))
 }
 
 fn process_article_file(
@@ -268,6 +283,26 @@ mod tests {
             markdown_body: String::new(),
             front_matter,
         }
+    }
+
+    fn parsed_home() -> ParsedHomeFile {
+        ParsedHomeFile {
+            source_key: "home".to_string(),
+            markdown_body: String::new(),
+            front_matter: front_matter(ContentKind::Home),
+        }
+    }
+
+    #[test]
+    fn test_add_rejects_duplicate_home_files() {
+        let mut files = ClassifiedFiles::default();
+        files.add(ClassifiedFile::Home(parsed_home())).unwrap();
+
+        let result = files.add(ClassifiedFile::Home(parsed_home()));
+
+        assert!(
+            matches!(result, Err(PublishError::Parse(message)) if message.contains("Duplicate home content"))
+        );
     }
 
     #[test]
