@@ -19,7 +19,7 @@ pub(crate) fn convert_markdown_to_html(
     markdown_content: &str,
     link_index: &Index,
 ) -> Result<String> {
-    let markdown_content = escape_pipes_for_table_parser(markdown_content);
+    let markdown_content = escape_wikilink_pipes_for_table_parser(markdown_content);
 
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -51,8 +51,8 @@ fn add_legacy_math_classes(html: &str) -> String {
     )
 }
 
-fn escape_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
-    let protected_ranges = pipe_sensitive_ranges(markdown);
+fn escape_wikilink_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
+    let protected_ranges = wikilink_ranges(markdown);
 
     if protected_ranges.is_empty() {
         return Cow::Borrowed(markdown);
@@ -62,7 +62,7 @@ fn escape_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
     let table_probe = replace_pipes_in_ranges(markdown, &protected_ranges, "/");
     let table_ranges = Parser::new_ext(
         &table_probe,
-        Options::ENABLE_TABLES | Options::ENABLE_MATH | Options::ENABLE_WIKILINKS,
+        Options::ENABLE_TABLES | Options::ENABLE_WIKILINKS,
     )
     .into_offset_iter()
     .filter_map(|(event, range)| match event {
@@ -91,36 +91,23 @@ fn escape_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
     ))
 }
 
-fn pipe_sensitive_ranges(markdown: &str) -> Vec<Range<usize>> {
-    let mut ranges = Parser::new_ext(markdown, Options::ENABLE_MATH)
+fn wikilink_ranges(markdown: &str) -> Vec<Range<usize>> {
+    let mut ranges = Parser::new_ext(markdown, Options::ENABLE_WIKILINKS)
         .into_offset_iter()
         .filter_map(|(event, range)| match event {
-            Event::InlineMath(_) | Event::DisplayMath(_)
-                if markdown[range.clone()].contains('|') =>
-            {
-                Some(range)
-            }
+            Event::Start(
+                Tag::Link {
+                    link_type: LinkType::WikiLink { has_pothole: true },
+                    ..
+                }
+                | Tag::Image {
+                    link_type: LinkType::WikiLink { has_pothole: true },
+                    ..
+                },
+            ) => Some(range),
             _ => None,
         })
         .collect::<Vec<_>>();
-
-    ranges.extend(
-        Parser::new_ext(markdown, Options::ENABLE_WIKILINKS)
-            .into_offset_iter()
-            .filter_map(|(event, range)| match event {
-                Event::Start(
-                    Tag::Link {
-                        link_type: LinkType::WikiLink { has_pothole: true },
-                        ..
-                    }
-                    | Tag::Image {
-                        link_type: LinkType::WikiLink { has_pothole: true },
-                        ..
-                    },
-                ) => Some(range),
-                _ => None,
-            }),
-    );
 
     ranges.sort_unstable_by_key(|range| range.start);
     let mut merged_ranges: Vec<Range<usize>> = Vec::with_capacity(ranges.len());
@@ -422,34 +409,23 @@ mod tests {
         assert!(result.contains(r#"class="math math-display okawak-katex-display">c+d</span>"#));
     }
 
-    #[rstest]
-    #[case::unescaped("$a|b$", "a|b")]
-    #[case::escaped(r"$a\|b$", r"a\|b")]
-    fn test_math_pipe_inside_table_cell_is_preserved(
-        #[case] expression: &str,
-        #[case] expected_expression: &str,
-    ) {
-        let markdown = format!(
-            "Outside $x\\|y$.\n\n| Type | Expression |\n| --- | --- |\n| math | {expression} |"
-        );
+    #[test]
+    fn test_escaped_math_pipe_inside_table_cell_is_preserved() {
+        let markdown = "| Type | Expression |\n| --- | --- |\n| math | $a\\|b$ |";
 
-        let result = convert_markdown_to_html(&markdown).unwrap();
-        let expected = format!(
-            r#"<td><span class="math math-inline okawak-katex-inline">{expected_expression}</span></td>"#
-        );
+        let result = convert_markdown_to_html(markdown).unwrap();
 
-        assert!(result.contains(&expected), "unexpected html:\n{result}");
         assert!(
             result.contains(
-                r#"<p>Outside <span class="math math-inline okawak-katex-inline">x\|y</span>.</p>"#
+                r#"<td><span class="math math-inline okawak-katex-inline">a|b</span></td>"#
             ),
             "unexpected html:\n{result}"
         );
     }
 
     #[test]
-    fn test_math_pipe_inside_table_header_is_preserved() {
-        let markdown = "| $a|b$ | Value |\n| --- | --- |\n| math | result |";
+    fn test_escaped_math_pipe_inside_table_header_is_preserved() {
+        let markdown = "| $a\\|b$ | Value |\n| --- | --- |\n| math | result |";
 
         let result = convert_markdown_to_html(markdown).unwrap();
 
