@@ -257,7 +257,7 @@
   object-fit: cover;
 }
 
-.content-prose :where(.okawak-katex-display, .katex-display) {
+.content-prose :where(.okawak-katex-display, .math-display, .katex-display) {
   display: block;
   max-width: 100%;
   overflow-x: auto;
@@ -267,7 +267,7 @@
   overscroll-behavior-inline: contain;
 }
 
-.content-prose :where(pre, table, .okawak-katex-display, .katex-display) {
+.content-prose :where(pre, table, .okawak-katex-display, .math-display, .katex-display) {
   scrollbar-color: color-mix(in srgb, var(--primary) 55%, transparent) transparent;
   scrollbar-width: thin;
 }
