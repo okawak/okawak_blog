@@ -1,7 +1,7 @@
 use crate::error::Result;
-use pulldown_cmark::{Event, Options, Parser, html};
+use pulldown_cmark::{Event, Options, Parser, Tag, html};
 use regex::Regex;
-use std::sync::LazyLock;
+use std::{borrow::Cow, sync::LazyLock};
 
 /// Allow-list regex for bookmark blocks; anything beyond `<a href="URL">TITLE</a>` is escaped.
 static SAFE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -13,6 +13,8 @@ static HREF_ATTR_RE: LazyLock<Regex> =
 
 /// Converts Markdown to sanitized HTML.
 pub(crate) fn convert_markdown_to_html(markdown_content: &str) -> Result<String> {
+    let markdown_content = escape_math_pipes_for_table_parser(markdown_content);
+
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_FOOTNOTES);
@@ -21,12 +23,64 @@ pub(crate) fn convert_markdown_to_html(markdown_content: &str) -> Result<String>
     options.insert(Options::ENABLE_SMART_PUNCTUATION);
     options.insert(Options::ENABLE_MATH);
 
-    let parser = Parser::new_ext(markdown_content, options);
+    let parser = Parser::new_ext(&markdown_content, options);
     let mut html_output = String::with_capacity(markdown_content.len() * 2);
     html::push_html(&mut html_output, sanitize_html(parser).into_iter());
     let html_output = sanitize_anchor_hrefs(&html_output);
 
     Ok(repair_unparsed_strong_markers(&html_output))
+}
+
+fn escape_math_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
+    let table_ranges = Parser::new_ext(markdown, Options::ENABLE_TABLES)
+        .into_offset_iter()
+        .filter_map(|(event, range)| match event {
+            Event::Start(Tag::Table(_)) => Some(range),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    if table_ranges.is_empty() {
+        return Cow::Borrowed(markdown);
+    }
+
+    let math_ranges = Parser::new_ext(markdown, Options::ENABLE_MATH)
+        .into_offset_iter()
+        .filter_map(|(event, range)| match event {
+            Event::InlineMath(_) | Event::DisplayMath(_)
+                if markdown[range.clone()].contains('|')
+                    && table_ranges.iter().any(|table_range| {
+                        table_range.start <= range.start && range.end <= table_range.end
+                    }) =>
+            {
+                Some(range)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    if math_ranges.is_empty() {
+        return Cow::Borrowed(markdown);
+    }
+
+    let mut escaped = String::with_capacity(markdown.len() + math_ranges.len());
+    let mut previous_end = 0;
+
+    for range in math_ranges {
+        escaped.push_str(&markdown[previous_end..range.start]);
+
+        for character in markdown[range.clone()].chars() {
+            if character == '|' {
+                escaped.push('\\');
+            }
+            escaped.push(character);
+        }
+
+        previous_end = range.end;
+    }
+
+    escaped.push_str(&markdown[previous_end..]);
+    Cow::Owned(escaped)
 }
 
 fn sanitize_anchor_hrefs(html: &str) -> String {
@@ -236,9 +290,35 @@ mod tests {
         "Inline $a+b$ and display $$c+d$$ math.",
         "<p>Inline <span class=\"math math-inline\">a+b</span> and display <span class=\"math math-display\">c+d</span> math.</p>\n"
     )]
+    #[case::pipe_in_inline_math(
+        r"Inline $a\|b$ math.",
+        "<p>Inline <span class=\"math math-inline\">a\\|b</span> math.</p>\n"
+    )]
     fn test_math_processing(#[case] input: &str, #[case] expected: &str) {
         let result = convert_markdown_to_html(input).unwrap();
         assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::unescaped("$a|b$", "a|b")]
+    #[case::escaped(r"$a\|b$", r"a\|b")]
+    fn test_math_pipe_inside_table_cell_is_preserved(
+        #[case] expression: &str,
+        #[case] expected_expression: &str,
+    ) {
+        let markdown = format!(
+            "Outside $x\\|y$.\n\n| Type | Expression |\n| --- | --- |\n| math | {expression} |"
+        );
+
+        let result = convert_markdown_to_html(&markdown).unwrap();
+        let expected =
+            format!(r#"<td><span class="math math-inline">{expected_expression}</span></td>"#);
+
+        assert!(result.contains(&expected), "unexpected html:\n{result}");
+        assert!(
+            result.contains(r#"<p>Outside <span class="math math-inline">x\|y</span>.</p>"#),
+            "unexpected html:\n{result}"
+        );
     }
 
     #[rstest]
