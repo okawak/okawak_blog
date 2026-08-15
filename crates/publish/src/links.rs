@@ -12,46 +12,38 @@ pub(crate) struct Index {
 
 impl Index {
     pub(crate) fn from_classified_files(files: &ClassifiedFiles) -> Self {
-        let routed_page_count = files
-            .pages
-            .iter()
-            .filter(|page| is_routed_page(page.page.as_str()))
-            .count();
-        let capacity = files.articles.len()
-            + routed_page_count
-            + usize::from(files.home.is_some())
-            + files.categories.len();
-        let mut routes = HashMap::with_capacity(capacity);
-
-        routes.extend(files.articles.iter().map(|article| {
+        let article_routes = files.articles.iter().map(|article| {
             (
                 article.source_key.clone(),
                 format!("/{}/{}", article.category.as_str(), article.slug),
             )
-        }));
-        routes.extend(
-            files
-                .pages
-                .iter()
-                .filter(|page| is_routed_page(page.page.as_str()))
-                .map(|page| (page.source_key.clone(), format!("/{}", page.page.as_str()))),
-        );
-        routes.extend(
-            files
-                .home
-                .iter()
-                .map(|home| (home.source_key.clone(), "/".to_string())),
-        );
-        routes.extend(files.categories.iter().map(|category| {
+        });
+        let page_routes = files
+            .pages
+            .iter()
+            .filter(|page| ROUTED_PAGE_KEYS.contains(&page.page.as_str()))
+            .map(|page| (page.source_key.clone(), format!("/{}", page.page.as_str())));
+        let home_routes = files
+            .home
+            .iter()
+            .map(|home| (home.source_key.clone(), "/".to_string()));
+        let category_routes = files.categories.iter().map(|category| {
             (
                 category.source_key.clone(),
                 format!("/{}", category.category.as_str()),
             )
-        }));
+        });
+
+        let routes = article_routes
+            .chain(page_routes)
+            .chain(home_routes)
+            .chain(category_routes)
+            .collect();
 
         Self { routes }
     }
 
+    /// Resolve an exact vault-relative key or an Obsidian-style filename reference.
     fn resolve(&self, target: &str) -> Option<&str> {
         self.routes.get(target).map(String::as_str).or_else(|| {
             let suffix = format!("/{target}");
@@ -60,10 +52,6 @@ impl Index {
             })
         })
     }
-}
-
-fn is_routed_page(page_key: &str) -> bool {
-    ROUTED_PAGE_KEYS.contains(&page_key)
 }
 
 /// Resolve Obsidian internal links to published Markdown links outside code.
@@ -101,18 +89,17 @@ fn resolve_internal_link(link: &str, index: &Index) -> String {
         (link_content.trim(), link_content.trim()),
         |(target, display)| (target.trim(), display.trim()),
     );
-    let href = index
-        .resolve(link_target)
-        .map(str::to_owned)
-        .unwrap_or_else(|| {
+    let escaped_href = match index.resolve(link_target) {
+        Some(href) => escape_markdown_link_destination(href),
+        None => {
             tracing::warn!(%link_target, "internal link target was not found");
-            format!("/{link_target}")
-        });
+            escape_markdown_link_destination(&format!("/{link_target}"))
+        }
+    };
 
     format!(
-        "[{}]({})",
+        "[{}]({escaped_href})",
         escape_markdown_link_text(display_text),
-        escape_markdown_link_destination(&href)
     )
 }
 
