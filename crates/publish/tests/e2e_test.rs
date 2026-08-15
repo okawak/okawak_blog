@@ -263,8 +263,8 @@ async fn test_end_to_end_obsidian_processing() {
 
     for path in collect_html_files(&articles_dir) {
         if let Ok(content) = fs::read_to_string(path)
-            && content.contains("<span class=\"math math-display okawak-katex-display\">")
-            && content.contains("<span class=\"math math-inline okawak-katex-inline\">")
+            && content.contains("<span class=\"math math-display\">")
+            && content.contains("<span class=\"math math-inline\">")
         {
             math_processing_verified = true;
         }

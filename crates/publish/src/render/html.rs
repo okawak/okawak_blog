@@ -34,21 +34,8 @@ pub(crate) fn convert_markdown_to_html(
     let parser = links::resolve_wikilinks(parser, link_index);
     let mut html_output = String::with_capacity(markdown_content.len() * 2);
     html::push_html(&mut html_output, sanitize_events(parser).into_iter());
-    let html_output = repair_unparsed_strong_markers(&html_output);
 
-    Ok(add_legacy_math_classes(&html_output))
-}
-
-fn add_legacy_math_classes(html: &str) -> String {
-    // Keep new artifacts renderable by runtimes deployed before the math class migration.
-    html.replace(
-        r#"class="math math-inline""#,
-        r#"class="math math-inline okawak-katex-inline""#,
-    )
-    .replace(
-        r#"class="math math-display""#,
-        r#"class="math math-display okawak-katex-display""#,
-    )
+    Ok(repair_unparsed_strong_markers(&html_output))
 }
 
 fn escape_wikilink_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
@@ -378,23 +365,23 @@ mod tests {
     #[rstest]
     #[case::inline_math(
         "Here is some inline math: $x^2 + y^2 = z^2$ and more text.",
-        "<p>Here is some inline math: <span class=\"math math-inline okawak-katex-inline\">x^2 + y^2 = z^2</span> and more text.</p>\n"
+        "<p>Here is some inline math: <span class=\"math math-inline\">x^2 + y^2 = z^2</span> and more text.</p>\n"
     )]
     #[case::display_math(
         "Here is display math:\n$$\\int_0^1 x^2 dx = \\frac{1}{3}$$\nEnd of math.",
-        "<p>Here is display math:\n<span class=\"math math-display okawak-katex-display\">\\int_0^1 x^2 dx = \\frac{1}{3}</span>\nEnd of math.</p>\n"
+        "<p>Here is display math:\n<span class=\"math math-display\">\\int_0^1 x^2 dx = \\frac{1}{3}</span>\nEnd of math.</p>\n"
     )]
     #[case::mixed_math(
         "Inline $a+b$ and display $$c+d$$ math.",
-        "<p>Inline <span class=\"math math-inline okawak-katex-inline\">a+b</span> and display <span class=\"math math-display okawak-katex-display\">c+d</span> math.</p>\n"
+        "<p>Inline <span class=\"math math-inline\">a+b</span> and display <span class=\"math math-display\">c+d</span> math.</p>\n"
     )]
     #[case::pipe_in_inline_math(
         r"Inline $a\|b$ math.",
-        "<p>Inline <span class=\"math math-inline okawak-katex-inline\">a\\|b</span> math.</p>\n"
+        "<p>Inline <span class=\"math math-inline\">a\\|b</span> math.</p>\n"
     )]
     #[case::unescaped_pipe_outside_table(
         "Inline $a|b$ math.",
-        "<p>Inline <span class=\"math math-inline okawak-katex-inline\">a|b</span> math.</p>\n"
+        "<p>Inline <span class=\"math math-inline\">a|b</span> math.</p>\n"
     )]
     fn test_math_processing(#[case] input: &str, #[case] expected: &str) {
         let result = convert_markdown_to_html(input).unwrap();
@@ -402,11 +389,11 @@ mod tests {
     }
 
     #[test]
-    fn test_math_markup_supports_current_and_legacy_runtimes() {
+    fn test_math_markup_uses_semantic_classes() {
         let result = convert_markdown_to_html("Inline $a+b$ and display $$c+d$$.").unwrap();
 
-        assert!(result.contains(r#"class="math math-inline okawak-katex-inline">a+b</span>"#));
-        assert!(result.contains(r#"class="math math-display okawak-katex-display">c+d</span>"#));
+        assert!(result.contains(r#"class="math math-inline">a+b</span>"#));
+        assert!(result.contains(r#"class="math math-display">c+d</span>"#));
     }
 
     #[test]
@@ -416,9 +403,7 @@ mod tests {
         let result = convert_markdown_to_html(markdown).unwrap();
 
         assert!(
-            result.contains(
-                r#"<td><span class="math math-inline okawak-katex-inline">a|b</span></td>"#
-            ),
+            result.contains(r#"<td><span class="math math-inline">a|b</span></td>"#),
             "unexpected html:\n{result}"
         );
     }
@@ -430,9 +415,7 @@ mod tests {
         let result = convert_markdown_to_html(markdown).unwrap();
 
         assert!(
-            result.contains(
-                r#"<th><span class="math math-inline okawak-katex-inline">a|b</span></th>"#
-            ),
+            result.contains(r#"<th><span class="math math-inline">a|b</span></th>"#),
             "unexpected html:\n{result}"
         );
         assert!(result.starts_with("<table>"), "unexpected html:\n{result}");
@@ -453,7 +436,7 @@ mod tests {
 
         assert_eq!(
             result,
-            "<p><span class=\"math math-inline okawak-katex-inline\">x &lt; y &amp; &quot;quoted&quot;</span></p>\n"
+            "<p><span class=\"math math-inline\">x &lt; y &amp; &quot;quoted&quot;</span></p>\n"
         );
     }
 
@@ -469,7 +452,7 @@ mod tests {
         );
         assert!(
             result.contains(
-                "<strong><span class=\"math math-inline okawak-katex-inline\">x = (x_1, x_2)</span></strong>"
+                "<strong><span class=\"math math-inline\">x = (x_1, x_2)</span></strong>"
             )
         );
         assert!(!result.contains("**"));
@@ -492,8 +475,8 @@ mod tests {
         let result = convert_markdown_to_html(markdown).unwrap();
 
         assert!(result.contains("<code>code with `$x$` inside</code>"));
-        assert!(result.contains(r#"<span class="math math-inline okawak-katex-inline">y</span>"#));
-        assert!(!result.contains(r#"<span class="math math-inline okawak-katex-inline">x</span>"#));
+        assert!(result.contains(r#"<span class="math math-inline">y</span>"#));
+        assert!(!result.contains(r#"<span class="math math-inline">x</span>"#));
     }
 
     #[test]
@@ -506,8 +489,8 @@ mod tests {
             result
                 .contains("<pre><code class=\"language-text\">literal ``` and $x$\n</code></pre>")
         );
-        assert!(result.contains(r#"<span class="math math-inline okawak-katex-inline">y</span>"#));
-        assert!(!result.contains(r#"<span class="math math-inline okawak-katex-inline">x</span>"#));
+        assert!(result.contains(r#"<span class="math math-inline">y</span>"#));
+        assert!(!result.contains(r#"<span class="math math-inline">x</span>"#));
     }
 
     #[rstest]
@@ -572,7 +555,7 @@ mod tests {
 
         let result = convert_markdown_to_html(markdown).unwrap();
 
-        assert!(result.contains(r#"<span class="math math-inline okawak-katex-inline">z</span>"#));
+        assert!(result.contains(r#"<span class="math math-inline">z</span>"#));
     }
 
     #[test]
@@ -874,7 +857,7 @@ mod tests {
         let result = convert_markdown_to_html(markdown).unwrap();
 
         assert!(
-            result.contains(r#"<span class="math math-inline okawak-katex-inline">a+b</span>"#),
+            result.contains(r#"<span class="math math-inline">a+b</span>"#),
             "math outside code should be converted to math span; got:\n{result}"
         );
         assert!(
@@ -899,9 +882,6 @@ mod tests {
 
         assert!(result.contains("math math-inline"));
         assert!(result.contains("$not_math$"));
-        assert!(
-            !result
-                .contains("<span class=\"math math-inline okawak-katex-inline\">not_math</span>")
-        );
+        assert!(!result.contains("<span class=\"math math-inline\">not_math</span>"));
     }
 }
