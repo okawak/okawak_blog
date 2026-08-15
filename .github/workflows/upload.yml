@@ -113,7 +113,7 @@ jobs:
       - name: Generate and validate artifacts
         run: |
           set -euo pipefail
-          RUST_LOG=info cargo run --release -p publisher
+          RUST_LOG=info cargo run --release -p publish
 
           if [ ! -d "${{ env.UPLOAD_PATH }}" ]; then
             echo "❌ Output directory not found"
