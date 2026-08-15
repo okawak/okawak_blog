@@ -5,6 +5,7 @@
 - 常に日本語で簡潔に会話する
 - commit は署名付きで作る。commit 前に署名設定を確認する
 - ユーザーの既存差分を無断で破棄・上書きしない
+- GitHub PRのreview threadへ対応した場合は、修正をpushした後に該当threadをresolveする
 
 ## リポジトリの位置付け
 
