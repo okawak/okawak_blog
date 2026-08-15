@@ -94,7 +94,7 @@ fn HomePageContent(document: HomePageDocument) -> impl IntoView {
                 {home_fragment_html
                     .map(|html| {
                         view! {
-                            // Publisher artifacts escape raw HTML and neutralize unsafe links before persistence.
+                            // Publish artifacts escape raw HTML and neutralize unsafe links before persistence.
                             <div class="content-prose text-muted-foreground" inner_html=html></div>
                         }
                             .into_any()

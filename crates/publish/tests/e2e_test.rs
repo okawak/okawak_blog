@@ -2,7 +2,7 @@ mod test_fixtures;
 
 use domain::ArticleIndexDocument;
 use indoc::indoc;
-use publisher::publish;
+use publish::publish;
 use std::fs;
 use tempfile::TempDir;
 use test_fixtures::collect_html_files;

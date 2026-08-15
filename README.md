@@ -4,7 +4,7 @@
 
 https://www.okawak.net
 
-`okawak_blog` は、Obsidian で書いた Markdown を Rust 製の publisher が公開成果物へ変換して S3 に配置し、それを VPS 上の単一バイナリ Leptos SSR サーバーと Cloudflare Tunnel で公開する、静的コンテンツ公開基盤 + SSR 表示基盤です。
+`okawak_blog` は、Obsidian で書いた Markdown を Rust 製のpublish pipelineが公開成果物へ変換して S3 に配置し、それを VPS 上の単一バイナリ Leptos SSR サーバーと Cloudflare Tunnel で公開する、静的コンテンツ公開基盤 + SSR 表示基盤です。
 
 ## 関連文書
 
@@ -17,7 +17,7 @@ https://www.okawak.net
 - 記事は Obsidian で執筆する
 - 記事ソースは private な Obsidian リポジトリで管理する
 - 記事ソースはこの public リポジトリへ直接 commit せず、git submodule として参照する
-- GitHub Actions またはローカル実行の publisher が公開成果物を生成する
+- GitHub Actions またはローカル実行のpublishが公開成果物を生成する
 - 生成した HTML / index JSON を S3 に配置する
 - Leptos SSR サーバーが S3 上の成果物を読んで配信する
 - VPS + `systemd` + Cloudflare Tunnel で単純に運用できる構成を保つ
@@ -49,7 +49,7 @@ https://www.okawak.net
 6. 成果物を S3 にアップロードする
 7. Leptos SSR サーバーがそれを読んで公開する
 
-この境界に合わせて、publisher 側の実装は `crates/publish/` に、公開成果物を読む blog 側の実装は `crates/site/` に寄せます。`crates/domain/` は両者で共有する契約と純粋ルールを置く場所として扱います。
+この境界に合わせて、publish側の実装は `crates/publish/` に、公開成果物を読む blog 側の実装は `crates/site/` に寄せます。`crates/domain/` は両者で共有する契約と純粋ルールを置く場所として扱います。
 
 ### ビルド時変換
 
@@ -69,7 +69,7 @@ Markdown から HTML への変換はランタイムではなくビルド時に�
 okawak_blog/
 ├── crates/
 │   ├── domain/               # 公開成果物契約と純粋ルール
-│   ├── publish/              # publisher CLIと内部module
+│   ├── publish/              # publish CLIと内部module
 │   └── site/
 │       ├── infra/            # Leptos サーバー側の S3 / cache / runtime adapter
 │       ├── server/           # 公開成果物を読む統合バックエンド
@@ -84,7 +84,7 @@ okawak_blog/
 ### 各層の責務
 
 - `crates/domain`: 公開成果物契約、site page contract、純粋関数を中心にした共有ドメイン層
-- `crates/publish`: `pipeline` moduleが、`vault`によるObsidian入力、`render`によるMarkdown変換とbookmark enrichment、`artifacts`による成果物生成を統括する単一publisher crate。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
+- `crates/publish`: `pipeline` moduleが、`vault`によるObsidian入力、`render`によるMarkdown変換とbookmark enrichment、`artifacts`による成果物生成を統括する単一publish crate。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
 - `crates/site/infra`: Leptos サーバーが公開成果物を読むための S3 / cache / runtime adapter。開発と本番はS3 readerを使い、local readerは自動test用に残す
 - `crates/site/server`: S3 上の成果物を読んで配信し、release-aware ETag / Last-Modifiedを扱う統合バックエンド
 - `crates/site/web`: Leptos SSR の公開 UI
@@ -111,25 +111,25 @@ site/
     └── site.json
 ```
 
-publisher はこれらの成果物を生成し、SSR サーバーはそれらを読んでページを返します。
+publishはこれらの成果物を生成し、SSR サーバーはそれらを読んでページを返します。
 
 ## データフロー
 
 ```text
 Obsidian repo
   -> git submodule
-  -> publisher
+  -> publish
   -> HTML / index JSON を生成
   -> AWS S3
   -> Leptos SSR server
   -> Browser
 ```
 
-publisher が読む `obsidian` の Markdown は、この public repo へ通常ファイルとして同梱しない。source of truth は private な別リポジトリであり、ローカル開発と GitHub Actions の両方で git submodule として取得する。
+publishが読む `obsidian` の Markdown は、この public repo へ通常ファイルとして同梱しない。source of truth は private な別リポジトリであり、ローカル開発と GitHub Actions の両方で git submodule として取得する。
 
 ## Obsidian Front Matter
 
-Publisher が扱う Markdown には、YAML front matter が必要です。現在の parser は LF 区切りの front matter を前提にしており、`is_completed: true` のものだけを公開対象として扱います。役割判定には `kind` を使います。
+Publishが扱う Markdown には、YAML front matter が必要です。現在の parser は LF 区切りの front matter を前提にしており、`is_completed: true` のものだけを公開対象として扱います。役割判定には `kind` を使います。
 
 ```yaml
 ---
@@ -165,7 +165,7 @@ category: "tech"
 - `category`: `article` と `category` で使うカテゴリキーです。
 - `page`: `kind: page` のときに使う固定ページキーです。
 
-本文は closing `---` の次の行から始まり、Obsidian link や bookmark 埋め込みを含められます。front matter がない Markdown は publisher からはスキップされます。article は frontmatter の `category` と同名のディレクトリ配下に置く必要があります。category 配下のディレクトリ構造は path から `section_path` として導出され、category page 上の grouped navigation に使われます。
+本文は closing `---` の次の行から始まり、Obsidian link や bookmark 埋め込みを含められます。front matter がない Markdown はpublishからはスキップされます。article は frontmatter の `category` と同名のディレクトリ配下に置く必要があります。category 配下のディレクトリ構造は path から `section_path` として導出され、category page 上の grouped navigation に使われます。
 
 ## 運用モデル
 
@@ -205,7 +205,7 @@ mise run versions-check
 
 web UIはRust/UI由来のprimitiveとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/site/web/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
 
-private Obsidian repoを使うpublisher側の開発では、`mise run dev-local`がsubmoduleをremoteの最新commitへ同期してからpublisherを実行します。生成先の`crates/publish/dist/site`を既存のlocal readerでそのまま配信し、未公開content、Markdown変換、UIを一続きで確認します。`mise run dev`はGitHub Actionsが公開したS3 artifactを読み、本番相当のreader経路を確認します。同期だけを行う場合は`mise run sync-obsidian`を使います。自動同期はsubmodule内に未commit差分がある場合は停止し、merge commitを作らずremote revisionをcheckoutします。
+private Obsidian repoを使うpublish側の開発では、`mise run dev-local`がsubmoduleをremoteの最新commitへ同期してからpublishを実行します。生成先の`crates/publish/dist/site`を既存のlocal readerでそのまま配信し、未公開content、Markdown変換、UIを一続きで確認します。`mise run dev`はGitHub Actionsが公開したS3 artifactを読み、本番相当のreader経路を確認します。同期だけを行う場合は`mise run sync-obsidian`を使います。自動同期はsubmodule内に未commit差分がある場合は停止し、merge commitを作らずremote revisionをcheckoutします。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
 `crates/site/web/package.json` の依存のインストール/更新確認は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` で行えます。
 
@@ -216,10 +216,10 @@ browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-
 
 開発端末では、local previewに`mise run dev-local`、S3 readerの本番相当確認に`mise run dev`または`mise run test-e2e-s3`を使います。S3用taskはAWS CLIを実行せず、AWS SDKが設定済みprofileまたは環境変数credentialを読みます。bucketやcredentialは保存せず、`AWS_PROFILE`、region、`OKAWAK_BLOG_ARTIFACT_BUCKET`、必要な場合だけ`OKAWAK_BLOG_ARTIFACT_PREFIX`を実行時に渡します。詳細は[e2e/README.md](./e2e/README.md)を参照してください。
 
-`mise run dev-local`は次を順に行います。submoduleの同期またはpublisherが失敗した場合、Leptos開発サーバーは起動しません。
+`mise run dev-local`は次を順に行います。submoduleの同期またはpublishが失敗した場合、Leptos開発サーバーは起動しません。
 
 - private Obsidian submoduleをremoteの最新状態へ同期する
-- publisherを通常の厳格モードで実行する
+- publishを通常の厳格モードで実行する
 - `crates/publish/dist/site`へartifactを生成する
 - `OKAWAK_BLOG_ARTIFACT_SOURCE=local`でLeptos開発サーバーを起動する
 

@@ -8,14 +8,11 @@ use domain::{
     ArticleBody, ArticleMeta, ArticleMetaInput, Category, CategoryLandingMeta,
     CategoryLandingMetaInput, HomeFragmentArtifactDocument, PageArtifactDocument, Title,
 };
+use html_escape::encode_text;
 
 pub(crate) struct RenderedArticle {
     pub(crate) meta: ArticleMeta,
     pub(crate) html: String,
-}
-
-pub(crate) struct RenderedPage {
-    pub(crate) document: PageArtifactDocument,
 }
 
 pub(crate) struct RenderedCategoryLanding {
@@ -87,16 +84,14 @@ pub(crate) async fn render_page(
     parsed_file: ParsedPageFile,
     link_index: &links::Index,
     enrich: BookmarkEnricher,
-) -> RenderedPage {
+) -> PageArtifactDocument {
     let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await;
-    RenderedPage {
-        document: PageArtifactDocument {
-            page: parsed_file.page,
-            title: parsed_file.front_matter.title,
-            description: parsed_file.front_matter.summary,
-            html,
-            updated_at: parsed_file.front_matter.updated,
-        },
+    PageArtifactDocument {
+        page: parsed_file.page,
+        title: parsed_file.front_matter.title,
+        description: parsed_file.front_matter.summary,
+        html,
+        updated_at: parsed_file.front_matter.updated,
     }
 }
 
@@ -132,17 +127,9 @@ fn build_fallback_category_html(
         .map(str::trim)
         .map(str::to_owned)
         .unwrap_or_else(|| format!("{}カテゴリの記事一覧です。", category.display_name()));
-    let heading = html_escape(heading);
-    let body = html_escape(&body);
+    let heading = encode_text(heading);
+    let body = encode_text(&body);
     format!("<article><h1>{heading}</h1><p>{body}</p></article>")
-}
-
-fn html_escape(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
 }
 
 #[cfg(test)]
@@ -174,7 +161,7 @@ mod tests {
         );
 
         assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
-        assert!(html.contains("&quot;quoted&quot; &amp; &lt;tag&gt;"));
+        assert!(html.contains("\"quoted\" &amp; &lt;tag&gt;"));
         assert!(!html.contains("<script>alert(1)</script>"));
     }
 

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use publisher::publish;
+use publish::publish;
 use std::path::Path;
 
 const OBSIDIAN_DIR: &str = "crates/publish/obsidian/Publish";

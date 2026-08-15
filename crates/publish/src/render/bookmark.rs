@@ -1,21 +1,87 @@
 use crate::error::Result;
 
 use futures::future::BoxFuture;
-use std::future::Future;
-use std::sync::Arc;
-
+use html_escape::{encode_double_quoted_attribute, encode_text};
 use regex::Regex;
 use scraper::{Html, Selector};
+use std::future::Future;
+use std::ops::Range;
+use std::sync::Arc;
 use std::sync::LazyLock;
 
 const HTML_INITIAL_CAPACITY: usize = 1024;
 const HTML_EXTENSION_CAPACITY: usize = 2048;
+static SIMPLE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]*)</a>\s*</div>"#)
+        .expect("Invalid bookmark regex pattern")
+});
 
 /// Async function that enriches page HTML with rich bookmark cards.
 pub type BookmarkEnricher = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String>> + Send + Sync>;
 
 pub(crate) fn rich_bookmark_enricher() -> BookmarkEnricher {
-    Arc::new(|html: String| Box::pin(async move { convert_simple_bookmarks_to_rich(&html).await }))
+    Arc::new(|html: String| {
+        Box::pin(async move { Ok(convert_simple_bookmarks_to_rich(&html).await) })
+    })
+}
+
+pub(super) struct SimpleBookmark<'a> {
+    source: &'a str,
+    range: Range<usize>,
+    href_range: Range<usize>,
+    href: &'a str,
+    title: &'a str,
+}
+
+impl SimpleBookmark<'_> {
+    fn range(&self) -> Range<usize> {
+        self.range.clone()
+    }
+
+    pub(super) fn href(&self) -> &str {
+        self.href
+    }
+
+    fn title(&self) -> &str {
+        self.title
+    }
+
+    pub(super) fn with_href(&self, href: &str) -> String {
+        let mut output = String::with_capacity(self.source.len());
+        output.push_str(&self.source[..self.href_range.start]);
+        output.push_str(href);
+        output.push_str(&self.source[self.href_range.end..]);
+        output
+    }
+}
+
+pub(super) fn parse_simple_bookmark(html: &str) -> Option<SimpleBookmark<'_>> {
+    let bookmark = simple_bookmarks(html).next()?;
+    let range = bookmark.range();
+    (html[..range.start].trim().is_empty() && html[range.end..].trim().is_empty())
+        .then_some(bookmark)
+}
+
+fn simple_bookmarks(html: &str) -> impl Iterator<Item = SimpleBookmark<'_>> {
+    SIMPLE_BOOKMARK_RE.captures_iter(html).map(|captures| {
+        let full_match = captures
+            .get(0)
+            .expect("Bookmark regex must capture a match");
+        let href = captures
+            .get(1)
+            .expect("Bookmark regex must capture an href");
+        let title = captures
+            .get(2)
+            .expect("Bookmark regex must capture a title");
+
+        SimpleBookmark {
+            source: html,
+            range: full_match.range(),
+            href_range: href.range(),
+            href: href.as_str(),
+            title: title.as_str(),
+        }
+    })
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,7 +110,7 @@ async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
 
 fn create_http_client() -> Result<reqwest::Client> {
     // Use a standard User-Agent format without exposing internal package details.
-    let user_agent = "publisher-bookmark/1.0 (+https://github.com/okawak/okawak_blog)";
+    let user_agent = "publish-bookmark/1.0 (+https://github.com/okawak/okawak_blog)";
 
     reqwest::Client::builder()
         .user_agent(user_agent)
@@ -189,7 +255,7 @@ fn extract_domain(url: &str) -> String {
 fn write_bookmark_link(html: &mut String, url: &str) {
     html.push_str(&format!(
         "  <a href=\"{}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"bookmark-link\">\n",
-        html_escape(url)
+        encode_double_quoted_attribute(url)
     ));
 }
 
@@ -206,13 +272,13 @@ fn write_bookmark_info(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("      <div class=\"bookmark-info\">\n");
     html.push_str(&format!(
         "        <div class=\"bookmark-title\">{}</div>\n",
-        html_escape(&data.title)
+        encode_text(&data.title)
     ));
 
     if let Some(description) = &data.description {
         html.push_str(&format!(
             "        <div class=\"bookmark-description\">{}</div>\n",
-            html_escape(description)
+            encode_text(description)
         ));
     }
 
@@ -226,13 +292,13 @@ fn write_bookmark_link_info(html: &mut String, data: &BookmarkData, domain: &str
     if let Some(favicon) = &data.favicon_url {
         html.push_str(&format!(
             "          <img class=\"bookmark-favicon\" src=\"{}\" alt=\"favicon\">\n",
-            html_escape(favicon)
+            encode_double_quoted_attribute(favicon)
         ));
     }
 
     html.push_str(&format!(
         "          <span class=\"bookmark-domain\">{}</span>\n",
-        html_escape(domain)
+        encode_text(domain)
     ));
     html.push_str("        </div>\n");
 }
@@ -242,57 +308,43 @@ fn write_bookmark_image(html: &mut String, data: &BookmarkData) {
         html.push_str("      <div class=\"bookmark-image\">\n");
         html.push_str(&format!(
             "        <img src=\"{}\" alt=\"{}\" loading=\"lazy\">\n",
-            html_escape(image_url),
-            html_escape(&data.title)
+            encode_double_quoted_attribute(image_url),
+            encode_double_quoted_attribute(&data.title)
         ));
         html.push_str("      </div>\n");
     }
 }
 
-/// Escapes HTML for basic XSS protection.
-fn html_escape(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#x27;")
-}
-
 /// Replaces simple bookmark markup using metadata supplied by `fetch_data`.
-async fn convert_simple_bookmarks_with<F, Fut>(html_content: &str, fetch_data: F) -> Result<String>
+async fn convert_simple_bookmarks_with<F, Fut>(html_content: &str, fetch_data: F) -> String
 where
     F: Fn(String, String) -> Fut,
     Fut: Future<Output = BookmarkData>,
 {
-    static BOOKMARK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]*)</a>\s*</div>"#)
-            .expect("Invalid bookmark regex pattern")
-    });
-
     let mut result = String::with_capacity(html_content.len() + HTML_EXTENSION_CAPACITY);
     let mut last_end = 0;
 
-    for capture in BOOKMARK_REGEX.captures_iter(html_content) {
-        let full_match = capture.get(0).unwrap();
-        let url = capture[1].to_string();
-        let original_title = capture[2].to_string();
+    for bookmark in simple_bookmarks(html_content) {
+        let range = bookmark.range();
+        let url = bookmark.href().to_string();
+        let original_title = bookmark.title().to_string();
 
-        result.push_str(&html_content[last_end..full_match.start()]);
+        result.push_str(&html_content[last_end..range.start]);
 
         let bookmark_data = fetch_data(url, original_title).await;
         let rich_bookmark_html = generate_rich_bookmark(&bookmark_data);
         result.push_str(&rich_bookmark_html);
 
-        last_end = full_match.end();
+        last_end = range.end;
     }
 
     result.push_str(&html_content[last_end..]);
 
-    Ok(result)
+    result
 }
 
 /// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
-async fn convert_simple_bookmarks_to_rich(html_content: &str) -> Result<String> {
+async fn convert_simple_bookmarks_to_rich(html_content: &str) -> String {
     convert_simple_bookmarks_with(html_content, |url, original_title| async move {
         fetch_ogp_metadata(&url).await.unwrap_or_else(|error| {
             tracing::warn!(%url, %error, "failed to fetch OGP metadata");
@@ -319,11 +371,33 @@ fn create_fallback_bookmark_data(url: &str, original_title: &str) -> BookmarkDat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Result;
     use indoc::indoc;
-    use regex::Regex;
     use rstest::*;
-    use std::sync::LazyLock;
+
+    #[rstest]
+    #[case::single_line(
+        r#"<div class="bookmark"><a href="https://example.com">Example</a></div>"#,
+        true
+    )]
+    #[case::multiline(
+        indoc! {r#"
+            <div class="bookmark">
+              <a href="https://example.com">Example</a>
+            </div>
+        "#},
+        true
+    )]
+    #[case::extra_anchor_attribute(
+        r#"<div class="bookmark"><a href="https://example.com" target="_blank">Example</a></div>"#,
+        false
+    )]
+    #[case::nested_content(
+        r#"<div class="bookmark"><a href="https://example.com"><strong>Example</strong></a></div>"#,
+        false
+    )]
+    fn test_parse_simple_bookmark(#[case] html: &str, #[case] expected: bool) {
+        assert_eq!(parse_simple_bookmark(html).is_some(), expected);
+    }
 
     #[rstest]
     #[case::full_metadata(
@@ -453,37 +527,11 @@ mod tests {
     )]
     #[tokio::test]
     async fn test_convert_simple_bookmarks_to_rich(#[case] input: &str, #[case] expected: &str) {
-        // Mock implementation that avoids real HTTP requests and uses fallback data.
-        let result = convert_simple_bookmarks_to_rich_mock(input).await.unwrap();
+        let result = convert_simple_bookmarks_with(input, |url, title| async move {
+            create_fallback_bookmark_data(&url, &title)
+        })
+        .await;
+
         assert_eq!(result, expected);
-    }
-
-    /// Test-only mock conversion helper.
-    async fn convert_simple_bookmarks_to_rich_mock(html_content: &str) -> Result<String> {
-        static BOOKMARK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]*)</a>\s*</div>"#)
-                .expect("Invalid bookmark regex pattern")
-        });
-
-        let mut result = String::with_capacity(html_content.len() + 2048);
-        let mut last_end = 0;
-
-        for capture in BOOKMARK_REGEX.captures_iter(html_content) {
-            let full_match = capture.get(0).unwrap();
-            let url = &capture[1];
-            let original_title = &capture[2];
-
-            result.push_str(&html_content[last_end..full_match.start()]);
-
-            let bookmark_data = create_fallback_bookmark_data(url, original_title);
-            let rich_bookmark_html = generate_rich_bookmark(&bookmark_data);
-            result.push_str(&rich_bookmark_html);
-
-            last_end = full_match.end();
-        }
-
-        result.push_str(&html_content[last_end..]);
-
-        Ok(result)
     }
 }
