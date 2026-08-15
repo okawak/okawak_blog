@@ -1,7 +1,7 @@
 use crate::error::Result;
 use pulldown_cmark::{Event, Options, Parser, Tag, html};
 use regex::Regex;
-use std::{borrow::Cow, sync::LazyLock};
+use std::{borrow::Cow, ops::Range, sync::LazyLock};
 
 /// Allow-list regex for bookmark blocks; anything beyond `<a href="URL">TITLE</a>` is escaped.
 static SAFE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -45,26 +45,11 @@ fn add_legacy_math_classes(html: &str) -> String {
 }
 
 fn escape_math_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
-    let table_ranges = Parser::new_ext(markdown, Options::ENABLE_TABLES)
-        .into_offset_iter()
-        .filter_map(|(event, range)| match event {
-            Event::Start(Tag::Table(_)) => Some(range),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    if table_ranges.is_empty() {
-        return Cow::Borrowed(markdown);
-    }
-
     let math_ranges = Parser::new_ext(markdown, Options::ENABLE_MATH)
         .into_offset_iter()
         .filter_map(|(event, range)| match event {
             Event::InlineMath(_) | Event::DisplayMath(_)
-                if markdown[range.clone()].contains('|')
-                    && table_ranges.iter().any(|table_range| {
-                        table_range.start <= range.start && range.end <= table_range.end
-                    }) =>
+                if markdown[range.clone()].contains('|') =>
             {
                 Some(range)
             }
@@ -76,24 +61,44 @@ fn escape_math_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
         return Cow::Borrowed(markdown);
     }
 
-    let mut escaped = String::with_capacity(markdown.len() + math_ranges.len());
+    // A one-byte replacement keeps parser offsets aligned with the original Markdown.
+    let table_probe = replace_pipes_in_ranges(markdown, &math_ranges, "/");
+    let table_ranges = Parser::new_ext(&table_probe, Options::ENABLE_TABLES | Options::ENABLE_MATH)
+        .into_offset_iter()
+        .filter_map(|(event, range)| match event {
+            Event::Start(Tag::Table(_)) => Some(range),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    let table_math_ranges = math_ranges
+        .into_iter()
+        .filter(|range| {
+            table_ranges
+                .iter()
+                .any(|table_range| table_range.start <= range.start && range.end <= table_range.end)
+        })
+        .collect::<Vec<_>>();
+
+    if table_math_ranges.is_empty() {
+        return Cow::Borrowed(markdown);
+    }
+
+    Cow::Owned(replace_pipes_in_ranges(markdown, &table_math_ranges, r"\|"))
+}
+
+fn replace_pipes_in_ranges(markdown: &str, ranges: &[Range<usize>], replacement: &str) -> String {
+    let mut replaced = String::with_capacity(markdown.len());
     let mut previous_end = 0;
 
-    for range in math_ranges {
-        escaped.push_str(&markdown[previous_end..range.start]);
-
-        for character in markdown[range.clone()].chars() {
-            if character == '|' {
-                escaped.push('\\');
-            }
-            escaped.push(character);
-        }
-
+    for range in ranges {
+        replaced.push_str(&markdown[previous_end..range.start]);
+        replaced.push_str(&markdown[range.clone()].replace('|', replacement));
         previous_end = range.end;
     }
 
-    escaped.push_str(&markdown[previous_end..]);
-    Cow::Owned(escaped)
+    replaced.push_str(&markdown[previous_end..]);
+    replaced
 }
 
 fn sanitize_anchor_hrefs(html: &str) -> String {
@@ -307,6 +312,10 @@ mod tests {
         r"Inline $a\|b$ math.",
         "<p>Inline <span class=\"math math-inline okawak-katex-inline\">a\\|b</span> math.</p>\n"
     )]
+    #[case::unescaped_pipe_outside_table(
+        "Inline $a|b$ math.",
+        "<p>Inline <span class=\"math math-inline okawak-katex-inline\">a|b</span> math.</p>\n"
+    )]
     fn test_math_processing(#[case] input: &str, #[case] expected: &str) {
         let result = convert_markdown_to_html(input).unwrap();
         assert_eq!(result, expected);
@@ -343,6 +352,21 @@ mod tests {
             ),
             "unexpected html:\n{result}"
         );
+    }
+
+    #[test]
+    fn test_math_pipe_inside_table_header_is_preserved() {
+        let markdown = "| $a|b$ | Value |\n| --- | --- |\n| math | result |";
+
+        let result = convert_markdown_to_html(markdown).unwrap();
+
+        assert!(
+            result.contains(
+                r#"<th><span class="math math-inline okawak-katex-inline">a|b</span></th>"#
+            ),
+            "unexpected html:\n{result}"
+        );
+        assert!(result.starts_with("<table>"), "unexpected html:\n{result}");
     }
 
     #[rstest]
