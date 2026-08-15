@@ -2,6 +2,7 @@ mod body;
 mod bookmark;
 mod document;
 mod html;
+mod sanitize;
 
 pub use bookmark::BookmarkEnricher;
 pub(crate) use bookmark::rich_bookmark_enricher;

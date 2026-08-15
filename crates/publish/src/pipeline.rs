@@ -38,7 +38,7 @@ pub async fn publish_with_bookmark_enricher(
     validate_obsidian_dir(obsidian_dir)?;
 
     let start_time = std::time::Instant::now();
-    info!("publisher started");
+    info!("publish started");
 
     let markdown_files = scan_markdown_files(obsidian_dir)?;
     info!(file_count = markdown_files.len(), "scanned markdown files");
@@ -154,7 +154,7 @@ pub async fn publish_with_bookmark_enricher(
         processed_count,
         skipped_count = skipped,
         processing_time_ms = duration.as_millis(),
-        "publisher completed"
+        "publish completed"
     );
 
     if !site_artifacts.article_index.is_empty() {
@@ -199,7 +199,7 @@ async fn process_page(
 ) -> Result<()> {
     let rendered = render_page(parsed_file, link_index, enrich).await;
     run_artifact_write(move || {
-        let output_file_path = write_page_document(&site_directories, &rendered.document)?;
+        let output_file_path = write_page_document(&site_directories, &rendered)?;
         Ok(((), output_file_path))
     })
     .await

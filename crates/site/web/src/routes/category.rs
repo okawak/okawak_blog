@@ -93,7 +93,7 @@ fn CategoryPageContent(document: CategoryPageDocument) -> impl IntoView {
                 <p class="m-0 leading-7 text-muted-foreground">{page_description}</p>
             </Card>
 
-            // Publisher artifacts escape raw HTML and neutralize unsafe links before persistence.
+            // Publish artifacts escape raw HTML and neutralize unsafe links before persistence.
             <section
                 class="content-prose min-w-0 max-w-full rounded-xl border border-border/80 bg-card p-6 sm:p-8"
                 inner_html=landing_html

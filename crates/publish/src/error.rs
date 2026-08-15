@@ -37,6 +37,6 @@ pub enum PublishError {
     #[error("domain validation failed: {0}")]
     Domain(#[from] domain::DomainError),
 
-    #[error("publisher rejected {count} invalid content file(s)")]
+    #[error("publish rejected {count} invalid content file(s)")]
     ContentErrors { count: usize },
 }

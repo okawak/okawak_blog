@@ -118,7 +118,7 @@ depends = ["web-install"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
 run = '''
 mise run sync-obsidian
-cargo run -p publisher
+cargo run -p publish
 cargo leptos serve -p server
 '''
 

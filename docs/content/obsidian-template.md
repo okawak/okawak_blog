@@ -2,7 +2,7 @@
 
 ## 目的
 
-この文書は、publisher が処理できる Obsidian Markdown の最小テンプレートをまとめたものである。source of truth は private な Obsidian リポジトリ側にあり、この public リポジトリには通常ファイルとして commit しない。
+この文書は、`publish`が処理できる Obsidian Markdown の最小テンプレートをまとめたものである。source of truth は private な Obsidian リポジトリ側にあり、この public リポジトリには通常ファイルとして commit しない。
 
 ## 前提
 
@@ -78,7 +78,7 @@ updated: "2026-04-12T10:00:00+09:00"
 Obsidian link や bookmark 埋め込みを含めてよい。
 ```
 
-本文の基本的な Markdown 記法は CommonMark に従う。Obsidian 固有の解釈だけで成立する強調記法などは publisher では補正しない。
+本文の基本的な Markdown 記法は CommonMark に従う。Obsidian 固有の解釈だけで成立する強調記法などは`publish`では補正しない。
 
 メモ:
 

@@ -1,4 +1,4 @@
-//! Shared artifact contract persisted by publisher and read by site/server.
+//! Shared artifact contract persisted by publish and read by site/server.
 
 use crate::{CategoryIndex, PageKey, PublishedArticleSummary, SectionPath, SiteMetadata};
 use serde::{Deserialize, Serialize};

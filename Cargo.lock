@@ -2729,12 +2729,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "publisher"
+name = "publish"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "domain",
  "futures",
+ "html-escape",
  "ignore",
  "indoc",
  "pulldown-cmark",
@@ -3058,8 +3059,6 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "rustls-platform-verifier",
- "serde",
- "serde_json",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",

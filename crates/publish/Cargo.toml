@@ -1,5 +1,5 @@
 [package]
-name = "publisher"
+name = "publish"
 version.workspace = true
 authors.workspace = true
 description.workspace = true
@@ -10,10 +10,11 @@ license.workspace = true
 anyhow.workspace = true
 domain = { path = "../domain" }
 futures.workspace = true
+html-escape.workspace = true
 ignore.workspace = true
 pulldown-cmark.workspace = true
 regex.workspace = true
-reqwest = { workspace = true, features = ["json"] }
+reqwest.workspace = true
 scraper.workspace = true
 serde.workspace = true
 serde_json.workspace = true

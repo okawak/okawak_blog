@@ -1,7 +1,7 @@
 mod test_fixtures;
 
 use indoc::indoc;
-use publisher::{BookmarkEnricher, PublishError, publish, publish_with_bookmark_enricher};
+use publish::{BookmarkEnricher, PublishError, publish, publish_with_bookmark_enricher};
 use std::{fs, path::Path, sync::Arc};
 use tempfile::TempDir;
 use test_fixtures::{collect_html_files, write_about_page};

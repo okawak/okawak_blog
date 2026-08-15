@@ -4,7 +4,7 @@
 
 `okawak_blog` は、Obsidian で書いた Markdown を公開成果物へ変換し、それを Leptos SSR で配信するための静的コンテンツ公開基盤 + SSR 表示基盤である。
 
-このリポジトリは一般的なブログ CMS ではない。主役は常駐 API サーバーではなく、publisher による公開成果物生成パイプラインである。
+このリポジトリは一般的なブログ CMS ではない。主役は常駐 API サーバーではなく、`publish`による公開成果物生成パイプラインである。
 
 ## システム概要
 
@@ -13,7 +13,7 @@
 1. private な Obsidian リポジトリを git submodule として取得する
 2. `crates/publish` の vault module が Markdown を走査し、frontmatter と本文を読み取る
 3. classify module が公開種別を確定し、links module が公開URLの索引を構築する
-4. render module が単一の`pulldown-cmark` event pipeline内でObsidian link / embedを解決し、MarkdownのHTML変換とbookmark enrichmentを行う
+4. render module が単一の`pulldown-cmark` event pipeline内でWikiLinkを解決・安全化し、MarkdownのHTML変換とbookmark enrichmentを行う
 5. artifacts module が `site/` 配下の HTML / JSON を組み立てる
 6. GitHub Actions が artifact を immutable release として S3 に配置し、`current.json` を最後に切り替える
 7. `crates/site/server` と `crates/site/web` が `crates/site/infra` 経由で release snapshot を読んで SSR する
@@ -57,23 +57,26 @@ okawak_blog/
 各 crate の責務は次の通り。
 
 - `crates/domain`
-  - 公開コンテンツの純粋なdomain model・ルールと、publisher / readerが共有する契約
+  - 公開コンテンツの純粋なdomain model・ルールと、`publish` / readerが共有する契約
   - `Category`、`Slug`、`PageKey`、`SectionPath`
   - `ArticleMeta`、`CategoryLandingMeta`と記事・カテゴリ索引を構築する純粋ルール
   - artifact contract
   - site page contract
 - `crates/publish`
-  - 単一のpublisher crate
+  - 単一の`publish` crate
   - `lib.rs`は内部module宣言とcrate外向けAPIのre-exportに限定し、pipeline moduleが公開処理全体をorchestrationする
   - crate外向けAPIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
   - path処理の対応環境はmacOSとLinuxとし、Windows形式のpathは対象外とする
   - vault moduleによるObsidian vault走査、Markdown読込、frontmatter parse
   - links moduleによる全公開contentのvault相対source keyと公開URLの索引構築、およびWikiLink link / image eventの公開URL解決
-  - render moduleによるcontent kindごとの組み立て、共通本文処理、WikiLinkと数式を含む単一の`pulldown-cmark` event pipelineによるMarkdownからHTMLへの変換、外部HTTPを伴うbookmark enrichment。数式spanには`.math-inline` / `.math-display`を使用する
+  - render moduleによるcontent kindごとのdocument組み立てと共通本文処理
+  - render/htmlによるWikiLinkと数式を含む`pulldown-cmark` event生成とHTML変換。数式spanには`.math-inline` / `.math-display`を使用する
+  - render/sanitizeによるlink・image URLとraw HTMLの安全化
+  - render/bookmarkによるsimple bookmark構文の判定、外部HTTPを伴うmetadata取得、rich bookmark HTML生成
   - classify moduleによる公開種別の確定と`section_path`の導出
   - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
-  - `ObsidianFrontMatter`と`ContentKind`はpublisher入力形式として内部に保持する
-  - publisher固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
+  - `ObsidianFrontMatter`と`ContentKind`は`publish`入力形式として内部に保持する
+  - `publish`固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
 - `crates/site/infra`
   - `ArtifactReader` 境界
   - local reader
@@ -90,7 +93,7 @@ okawak_blog/
   - Leptos server function による page document の組み立て
   - SSR feature 時のみ `ArtifactReader` 境界を利用
   - metadata / canonical / Open Graph 生成
-  - publisherが生成する`.math-inline` / `.math-display`に対するclient-side KaTeX描画
+  - `publish`が生成する`.math-inline` / `.math-display`に対するclient-side KaTeX描画
 - `e2e`
   - `crates/site/server`、`crates/site/web`、`crates/site/infra` をまたぐ browser E2E
   - 通常CIではprivate Obsidian submoduleやS3に依存しない固定artifact fixture
@@ -107,7 +110,7 @@ flowchart TB
         D3[Site page contract]
     end
 
-    subgraph Publish["crates/publish (publisher crate)"]
+    subgraph Publish["crates/publish (publish crate)"]
         P1[vault]
         P2[classify and links]
         P3[render]
@@ -134,7 +137,7 @@ flowchart TB
 
 ### frontmatter
 
-publisher が扱う Markdown は YAML frontmatter を持つ。役割判定には `kind` を使う。
+`publish`が扱う Markdown は YAML frontmatter を持つ。役割判定には `kind` を使う。
 
 採用している `kind` は次の 4 種類。
 
@@ -201,7 +204,7 @@ updated: "2025-01-16T09:30:00+09:00"
 
 ### ディレクトリ構造と `section_path`
 
-article は frontmatter の `category` と同名のディレクトリ配下に置く。publisher はこの一致を検証し、category 相対 path から `section_path` を導出する。
+article は frontmatter の `category` と同名のディレクトリ配下に置く。`publish`はこの一致を検証し、category 相対 path から `section_path` を導出する。
 
 例:
 
@@ -237,7 +240,7 @@ Obsidian 側で実際に書く frontmatter とディレクトリ構造のテン�
 
 ## Artifact 契約
 
-publisher は次の構造で `site/` を生成する。
+`publish`は次の構造で `site/` を生成する。
 
 ```text
 site/
@@ -282,7 +285,7 @@ artifact の意味は次の通り。
 
 `PageArtifactDocument` は固定ページを保持する。homeは完成したpageではなく実行時に記事一覧やmetadataと合成する一部分なので、`HomeFragmentArtifactDocument` として独立させる。
 
-publisherは描画済みカテゴリのmetadataを`CategoryLandingMeta`としてdomainへ渡す。domainはlandingだけが存在するカテゴリも含めて`CategoryIndex`へ統合し、カテゴリ順、記事順、`SiteMetadata`の集計を確定する。Markdown変換、HTML生成、filesystemへの書込みはpublisherに残す。
+`publish`は描画済みカテゴリのmetadataを`CategoryLandingMeta`としてdomainへ渡す。domainはlandingだけが存在するカテゴリも含めて`CategoryIndex`へ統合し、カテゴリ順、記事順、`SiteMetadata`の集計を確定する。Markdown変換、HTML生成、filesystemへの書込みは`publish`に残す。
 
 ### S3 release 契約
 
@@ -380,7 +383,7 @@ home、about、category、articleの公開routeは`SsrMode::Async`で描画す�
   - semantic color、radius、typography、site layout tokenとbase styleのsource of truth
 - `style/content.css`
   - article、about、category landing、home fragmentの生成HTMLだけを`.content-prose`配下で整形するplain CSS
-  - heading、code、table、image、bookmark、math spanとKaTeX描画結果などpublisher artifactの表現を担当する
+  - heading、code、table、image、bookmark、math spanとKaTeX描画結果など`publish` artifactの表現を担当する
 
 `cargo-leptos`は`tailwind-input-file`からCSSを生成する。Sass、Stylance、routeごとのCSS module生成工程は持たない。これによりRust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
 
@@ -441,22 +444,22 @@ runtime probeは次のように分ける。
 
 ## ローカル開発と本番運用
 
-ローカル開発は目的に応じてlocal artifactとS3 artifactを使い分ける。publisher、artifact契約、UIを一続きで確認する場合は、private Obsidian submoduleからlocal artifactを生成する。
+ローカル開発は目的に応じてlocal artifactとS3 artifactを使い分ける。`publish`、artifact契約、UIを一続きで確認する場合は、private Obsidian submoduleからlocal artifactを生成する。
 
 ```text
 Obsidian submodule
   -> mise run dev-local
-  -> local publisher
+  -> local publish process
   -> crates/publish/dist/site
   -> local reader
 ```
 
-`dev-local`はprivate Obsidian submoduleに未commit差分がないことを確認してremoteの最新commitをcheckoutし、publisherの通常の厳格モードが成功した場合だけLeptos serverを起動する。同期時にlocal merge commitは作らない。同期またはpublishに失敗した場合はserverを起動しない。local readerにはmemory cacheを適用しないため、生成済みartifactの更新を即時に読める。ただし起動中にsource Markdownを変更した場合、publisherの再実行は明示的に行う。
+`dev-local`はprivate Obsidian submoduleに未commit差分がないことを確認してremoteの最新commitをcheckoutし、`publish`の通常の厳格モードが成功した場合だけLeptos serverを起動する。同期時にlocal merge commitは作らない。同期または`publish`に失敗した場合はserverを起動しない。local readerにはmemory cacheを適用しないため、生成済みartifactの更新を即時に読める。ただし起動中にsource Markdownを変更した場合、`publish`の再実行は明示的に行う。
 
 AWS認証、immutable release pointer、S3 cacheを含む本番相当のreader境界はS3用taskで確認する。
 
 ```text
-GitHub Actions publisher
+GitHub Actions publish job
   -> S3 releases/<release-id>/site
   -> current.json pointer
   -> mise run dev / test-e2e-s3
@@ -468,7 +471,7 @@ GitHub Actions publisher
 
 ```text
 Obsidian submodule
-  -> GitHub Actions publisher
+  -> GitHub Actions publish job
   -> S3 releases/<release-id>/site
   -> current.json pointer switch
   -> okawak_blog.service (127.0.0.1:8008)
