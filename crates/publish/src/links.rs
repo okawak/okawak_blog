@@ -1,5 +1,5 @@
 use crate::classify::ClassifiedFiles;
-use pulldown_cmark::{Event, LinkType, Options, Parser, Tag};
+use pulldown_cmark::{CowStr, Event, LinkType, Tag};
 use std::collections::HashMap;
 
 const ROUTED_PAGE_KEYS: &[&str] = &["about"];
@@ -54,63 +54,46 @@ impl Index {
     }
 }
 
-/// Resolve Obsidian internal links to published Markdown links outside code.
-/// The vault is expected to contain valid Obsidian syntax; malformed links remain unchanged.
-pub(crate) fn resolve_internal_links(content: &str, index: &Index) -> String {
-    let mut resolved = String::with_capacity(content.len());
-    let mut copied_until = 0;
-
-    for (event, range) in Parser::new_ext(content, Options::ENABLE_WIKILINKS).into_offset_iter() {
-        if !matches!(
-            event,
-            Event::Start(Tag::Link {
-                link_type: LinkType::WikiLink { .. },
-                ..
-            })
-        ) {
-            continue;
-        }
-
-        resolved.push_str(&content[copied_until..range.start]);
-        resolved.push_str(&resolve_internal_link(&content[range.clone()], index));
-        copied_until = range.end;
-    }
-
-    resolved.push_str(&content[copied_until..]);
-    resolved
+/// Resolve Obsidian WikiLink events to published URLs.
+pub(crate) fn resolve_wikilinks<'a>(
+    events: impl Iterator<Item = Event<'a>> + 'a,
+    index: &'a Index,
+) -> impl Iterator<Item = Event<'a>> + 'a {
+    events.map(move |event| match event {
+        Event::Start(Tag::Link {
+            link_type: link_type @ LinkType::WikiLink { .. },
+            dest_url,
+            title,
+            id,
+        }) => Event::Start(Tag::Link {
+            link_type,
+            dest_url: resolve_wikilink_destination(dest_url.trim(), index),
+            title,
+            id,
+        }),
+        Event::Start(Tag::Image {
+            link_type: link_type @ LinkType::WikiLink { .. },
+            dest_url,
+            title,
+            id,
+        }) => Event::Start(Tag::Image {
+            link_type,
+            dest_url: resolve_wikilink_destination(dest_url.trim(), index),
+            title,
+            id,
+        }),
+        event => event,
+    })
 }
 
-fn resolve_internal_link(link: &str, index: &Index) -> String {
-    let link_content = link
-        .strip_prefix("[[")
-        .and_then(|link| link.strip_suffix("]]"))
-        .expect("pulldown-cmark should return the complete internal link range");
-    let (link_target, display_text) = link_content.split_once('|').map_or(
-        (link_content.trim(), link_content.trim()),
-        |(target, display)| (target.trim(), display.trim()),
-    );
-    let escaped_href = match index.resolve(link_target) {
-        Some(href) => escape_markdown_link_destination(href),
+fn resolve_wikilink_destination<'a>(target: &str, index: &'a Index) -> CowStr<'a> {
+    match index.resolve(target) {
+        Some(href) => href.into(),
         None => {
-            tracing::warn!(%link_target, "internal link target was not found");
-            escape_markdown_link_destination(&format!("/{link_target}"))
+            tracing::warn!(%target, "internal link target was not found");
+            format!("/{target}").into()
         }
-    };
-
-    format!(
-        "[{}]({escaped_href})",
-        escape_markdown_link_text(display_text),
-    )
-}
-
-fn escape_markdown_link_text(text: &str) -> String {
-    text.replace('\\', "\\\\")
-        .replace('[', "\\[")
-        .replace(']', "\\]")
-}
-
-fn escape_markdown_link_destination(destination: &str) -> String {
-    destination.replace(')', "\\)")
+    }
 }
 
 #[cfg(test)]
@@ -121,6 +104,7 @@ mod tests {
     };
     use crate::vault::{ContentKind, ObsidianFrontMatter};
     use domain::{Category, SectionPath, Slug};
+    use pulldown_cmark::{Options, Parser};
     use rstest::rstest;
 
     fn index(routes: &[(&str, &str)]) -> Index {
@@ -206,6 +190,25 @@ mod tests {
         }
     }
 
+    fn resolved_destinations(markdown: &str, index: &Index) -> Vec<(&'static str, String)> {
+        let parser = Parser::new_ext(markdown, Options::ENABLE_WIKILINKS);
+        resolve_wikilinks(parser, index)
+            .filter_map(|event| match event {
+                Event::Start(Tag::Link {
+                    link_type: LinkType::WikiLink { .. },
+                    dest_url,
+                    ..
+                }) => Some(("link", dest_url.to_string())),
+                Event::Start(Tag::Image {
+                    link_type: LinkType::WikiLink { .. },
+                    dest_url,
+                    ..
+                }) => Some(("image", dest_url.to_string())),
+                _ => None,
+            })
+            .collect()
+    }
+
     #[test]
     fn index_is_built_from_all_published_content() {
         let files = ClassifiedFiles {
@@ -276,67 +279,38 @@ mod tests {
     }
 
     #[test]
-    fn resolve_internal_links_to_markdown() {
+    fn resolve_wikilinks_to_published_urls() {
         let index = index(&[
             ("notes/another-note", "/tech/abc123def"),
             ("filename", "/daily/xyz789abc"),
         ]);
 
         assert_eq!(
-            resolve_internal_links("Check out [[another-note]] for more info.", &index),
-            "Check out [another-note](/tech/abc123def) for more info."
-        );
-        assert_eq!(
-            resolve_internal_links("See [[filename|Custom Display Text]] here.", &index),
-            "See [Custom Display Text](/daily/xyz789abc) here."
-        );
-        assert_eq!(
-            resolve_internal_links("Link to [[nonexistent]] file.", &index),
-            "Link to [nonexistent](/nonexistent) file."
-        );
-        assert_eq!(
-            resolve_internal_links("This is normal text with no special links.", &index),
-            "This is normal text with no special links."
-        );
-    }
-
-    #[test]
-    fn resolve_internal_links_escapes_markdown_link_parts() {
-        let index = index(&[("File with <script>", "/tech/abc123")]);
-
-        assert_eq!(
-            resolve_internal_links("[[File with <script>|Display & test]]", &index),
-            "[Display & test](/tech/abc123)"
-        );
-        assert_eq!(
-            resolve_internal_links("[[File \"quoted\"|Text with 'quotes']]", &index),
-            "[Text with 'quotes'](/File \"quoted\")"
+            resolved_destinations(
+                "[[another-note]] [[filename|Label]] ![[filename]] ![[filename|Alt]] [[missing]]",
+                &index,
+            ),
+            vec![
+                ("link", "/tech/abc123def".to_string()),
+                ("link", "/daily/xyz789abc".to_string()),
+                ("image", "/daily/xyz789abc".to_string()),
+                ("image", "/daily/xyz789abc".to_string()),
+                ("link", "/missing".to_string()),
+            ]
         );
     }
 
     #[rstest]
-    #[case::inline_code(
-        "`[[article]]` and [[article]]",
-        "`[[article]]` and [article](/tech/slug)"
-    )]
-    #[case::fenced_code_block(
-        "```markdown\n[[article]]\n```\n\n[[article]]",
-        "```markdown\n[[article]]\n```\n\n[article](/tech/slug)"
-    )]
-    #[case::tilde_fenced_code_block(
-        "~~~markdown\n[[article]]\n~~~\n\n[[article]]",
-        "~~~markdown\n[[article]]\n~~~\n\n[article](/tech/slug)"
-    )]
-    #[case::indented_code_block(
-        "    [[article]]\n\n[[article]]",
-        "    [[article]]\n\n[article](/tech/slug)"
-    )]
-    fn resolve_internal_links_preserves_syntax_in_code(
-        #[case] markdown: &str,
-        #[case] expected: &str,
-    ) {
+    #[case::inline_code("`[[ignored]]` and [[article]]")]
+    #[case::fenced_code_block("```markdown\n[[ignored]]\n```\n\n[[article]]")]
+    #[case::tilde_fenced_code_block("~~~markdown\n[[ignored]]\n~~~\n\n[[article]]")]
+    #[case::indented_code_block("    [[ignored]]\n\n[[article]]")]
+    fn resolve_wikilinks_ignores_syntax_in_code(#[case] markdown: &str) {
         let index = index(&[("article", "/tech/slug")]);
 
-        assert_eq!(resolve_internal_links(markdown, &index), expected);
+        assert_eq!(
+            resolved_destinations(markdown, &index),
+            vec![("link", "/tech/slug".to_string())]
+        );
     }
 }

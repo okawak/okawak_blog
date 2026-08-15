@@ -7,8 +7,7 @@ pub(super) async fn render(
     link_index: &links::Index,
     enrich: &BookmarkEnricher,
 ) -> Result<String> {
-    let markdown = links::resolve_internal_links(markdown, link_index);
-    let html = convert_markdown_to_html(&markdown)?;
+    let html = convert_markdown_to_html(markdown, link_index)?;
     let fallback = html.clone();
     Ok(enrich(html).await.unwrap_or_else(|error| {
         warn!(%error, "failed to enrich bookmarks");
@@ -57,6 +56,48 @@ mod tests {
         assert!(html.contains("<a href=\"/daily/ghi789\">reference</a>"));
         assert!(html.contains("<strong>bold</strong>"));
         assert!(html.contains("<ul>"));
+    }
+
+    #[tokio::test]
+    async fn test_render_converts_internal_embeds_to_images() {
+        let files = ClassifiedFiles {
+            articles: vec![parsed_article("notes/article", Category::Tech, "def456")],
+            ..Default::default()
+        };
+        let link_index = links::Index::from_classified_files(&files);
+        let enrich: BookmarkEnricher = Arc::new(|html| Box::pin(async move { Ok(html) }));
+
+        let html = render(
+            "Embed ![[article]] and ![[article|Alt text]].",
+            &link_index,
+            &enrich,
+        )
+        .await
+        .unwrap();
+
+        assert!(html.contains(r#"<img src="/tech/def456" alt="article" />"#));
+        assert!(html.contains(r#"<img src="/tech/def456" alt="Alt text" />"#));
+    }
+
+    #[tokio::test]
+    async fn test_render_escapes_wikilink_text_and_destination() {
+        let files = ClassifiedFiles {
+            articles: vec![parsed_article("notes/article", Category::Tech, "def456")],
+            ..Default::default()
+        };
+        let link_index = links::Index::from_classified_files(&files);
+        let enrich: BookmarkEnricher = Arc::new(|html| Box::pin(async move { Ok(html) }));
+
+        let html = render(
+            "[[article|Display & <script>]] and [[File \"quoted\"|missing]]",
+            &link_index,
+            &enrich,
+        )
+        .await
+        .unwrap();
+
+        assert!(html.contains(r#"<a href="/tech/def456">Display &amp; &lt;script&gt;</a>"#));
+        assert!(html.contains(r#"<a href="/File%20%22quoted%22">missing</a>"#));
     }
 
     #[tokio::test]
