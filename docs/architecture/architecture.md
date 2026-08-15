@@ -69,7 +69,7 @@ okawak_blog/
   - path処理の対応環境はmacOSとLinuxとし、Windows形式のpathは対象外とする
   - vault moduleによるObsidian vault走査、Markdown読込、frontmatter parse
   - links moduleによる全公開contentのvault相対source keyと公開URLの索引構築、およびObsidian link解決
-  - render moduleによるcontent kindごとの組み立て、共通本文処理、MarkdownからHTMLへの変換、KaTeX処理、外部HTTPを伴うbookmark enrichment
+  - render moduleによるcontent kindごとの組み立て、共通本文処理、`pulldown-cmark`の数式eventを含むMarkdownからHTMLへの変換、外部HTTPを伴うbookmark enrichment
   - classify moduleによる公開種別の確定と`section_path`の導出
   - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
   - `ObsidianFrontMatter`と`ContentKind`はpublisher入力形式として内部に保持する
@@ -90,6 +90,7 @@ okawak_blog/
   - Leptos server function による page document の組み立て
   - SSR feature 時のみ `ArtifactReader` 境界を利用
   - metadata / canonical / Open Graph 生成
+  - publisherが生成する`.math-inline` / `.math-display`と、既存artifactの`.okawak-katex-*`に対するclient-side KaTeX描画
 - `e2e`
   - `crates/site/server`、`crates/site/web`、`crates/site/infra` をまたぐ browser E2E
   - 通常CIではprivate Obsidian submoduleやS3に依存しない固定artifact fixture
@@ -379,7 +380,7 @@ home、about、category、articleの公開routeは`SsrMode::Async`で描画す�
   - semantic color、radius、typography、site layout tokenとbase styleのsource of truth
 - `style/content.css`
   - article、about、category landing、home fragmentの生成HTMLだけを`.content-prose`配下で整形するplain CSS
-  - heading、code、table、image、bookmark、KaTeXなどpublisher artifactの表現を担当する
+  - heading、code、table、image、bookmark、math spanとKaTeX描画結果などpublisher artifactの表現を担当する
 
 `cargo-leptos`は`tailwind-input-file`からCSSを生成する。Sass、Stylance、routeごとのCSS module生成工程は持たない。これによりRust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
 

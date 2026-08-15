@@ -258,13 +258,13 @@ async fn test_end_to_end_obsidian_processing() {
     );
     assert!(!draft_file_found, "Draft blog HTML should not be generated");
 
-    // Verify KaTeX math rendering.
+    // Verify semantic math markup for client-side KaTeX rendering.
     let mut math_processing_verified = false;
 
     for path in collect_html_files(&articles_dir) {
         if let Ok(content) = fs::read_to_string(path)
-            && content.contains("<span class=\"okawak-katex-display\">")
-            && content.contains("<span class=\"okawak-katex-inline\">")
+            && content.contains("<span class=\"math math-display\">")
+            && content.contains("<span class=\"math math-inline\">")
         {
             math_processing_verified = true;
         }
@@ -272,7 +272,7 @@ async fn test_end_to_end_obsidian_processing() {
 
     assert!(
         math_processing_verified,
-        "KaTeX math processing should work in tech files"
+        "semantic math markup should be generated in tech files"
     );
 
     let article_index: ArticleIndexDocument =
