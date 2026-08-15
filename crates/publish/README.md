@@ -93,21 +93,21 @@ cargo run -p publish
 cargo run --release -p publish
 ```
 
-repository rootの`mise run dev-local`はprivate Obsidian submoduleをremoteの最新状態へ同期し、通常のpublishで生成したlocal artifactをLeptos開発サーバーで配信します。
+repository rootの`mise run dev-local`はprivate Obsidian submoduleをremoteの最新状態へ同期し、通常の`publish`で生成したlocal artifactをLeptos開発サーバーで配信します。
 
 ### ディレクトリ構成
 
 - 入力ディレクトリ: `./crates/publish/obsidian/Publish` (固定)
 - 出力ディレクトリ: `./crates/publish/dist` (固定)
 
-publishのpath処理はmacOSとLinuxを対象とし、Windows形式のpathには対応しません。
+`publish`のpath処理はmacOSとLinuxを対象とし、Windows形式のpathには対応しません。
 
 ## GitHub Actions連携
 
 AWS S3 への同期は GitHub Actions workflow が担当します。
 この crate の責務は、ローカルに `site/` 配下の公開成果物を生成するところまでです。
 
-publishはdeploy可能な完全なartifactだけを生成します。入力ファイルに解析・検証エラーがある場合や、記事が0件、必須artifactが欠落している場合は非0で終了します。
+`publish`はdeploy可能な完全なartifactだけを生成します。入力ファイルに解析・検証エラーがある場合や、記事が0件、必須artifactが欠落している場合は非0で終了します。
 
 ## アーキテクチャ
 
@@ -133,7 +133,7 @@ src/
 
 `lib.rs`はorchestrationとcrate外向けAPIを担います。公開するのは`publish`、
 `publish_with_bookmark_enricher`、`BookmarkEnricher`、`PublishError`、`Result`です。
-それ以外のmoduleはpublish内部に閉じ、`error.rs`にpublish全体のerrorを集約します。
+それ以外のmoduleは`publish`内部に閉じ、`error.rs`に`publish`全体のerrorを集約します。
 分類済み入力型は`classify.rs`、内部リンク索引の構築と解決規則は`links.rs`、
 render済み出力型は`render.rs`が所有します。
 共有するartifactとsiteの契約だけを`crates/domain`に置きます。
