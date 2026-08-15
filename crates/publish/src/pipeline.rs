@@ -197,7 +197,7 @@ async fn process_page(
     enrich: BookmarkEnricher,
     site_directories: SiteDirectories,
 ) -> Result<()> {
-    let rendered = render_page(parsed_file, link_index, enrich).await?;
+    let rendered = render_page(parsed_file, link_index, enrich).await;
     run_artifact_write(move || {
         let output_file_path = write_page_document(&site_directories, &rendered.document)?;
         Ok(((), output_file_path))
@@ -212,7 +212,7 @@ async fn process_home(
     enrich: BookmarkEnricher,
     site_directories: SiteDirectories,
 ) -> Result<()> {
-    let rendered = render_home(parsed_file, link_index, enrich).await?;
+    let rendered = render_home(parsed_file, link_index, enrich).await;
     run_artifact_write(move || {
         let output_file_path = write_home_fragment(&site_directories, &rendered)?;
         Ok(((), output_file_path))

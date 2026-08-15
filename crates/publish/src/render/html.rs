@@ -1,7 +1,4 @@
-use crate::{
-    error::Result,
-    links::{self, Index},
-};
+use crate::links::{self, Index};
 use pulldown_cmark::{CowStr, Event, LinkType, Options, Parser, Tag, html};
 use regex::Regex;
 use std::{borrow::Cow, ops::Range, sync::LazyLock};
@@ -15,10 +12,7 @@ static HREF_ATTR_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"href="([^"]*)""#).expect("Invalid href regex"));
 
 /// Converts Markdown to sanitized HTML.
-pub(crate) fn convert_markdown_to_html(
-    markdown_content: &str,
-    link_index: &Index,
-) -> Result<String> {
+pub(crate) fn convert_markdown_to_html(markdown_content: &str, link_index: &Index) -> String {
     let markdown_content = escape_wikilink_pipes_for_table_parser(markdown_content);
 
     let mut options = Options::empty();
@@ -35,7 +29,7 @@ pub(crate) fn convert_markdown_to_html(
     let mut html_output = String::with_capacity(markdown_content.len() * 2);
     html::push_html(&mut html_output, sanitize_events(parser).into_iter());
 
-    Ok(repair_unparsed_strong_markers(&html_output))
+    html_output
 }
 
 fn escape_wikilink_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
@@ -254,85 +248,13 @@ fn sanitize_events<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>
     result
 }
 
-fn repair_unparsed_strong_markers(html: &str) -> String {
-    let mut result = String::with_capacity(html.len());
-    let mut remaining = html;
-
-    loop {
-        let code_start = [remaining.find("<pre"), remaining.find("<code")]
-            .into_iter()
-            .flatten()
-            .min();
-
-        match code_start {
-            None => {
-                result.push_str(&apply_unparsed_strong_markers(remaining));
-                break;
-            }
-            Some(start) => {
-                result.push_str(&apply_unparsed_strong_markers(&remaining[..start]));
-
-                let close_tag = if remaining[start..].starts_with("<pre") {
-                    "</pre>"
-                } else {
-                    "</code>"
-                };
-
-                match remaining[start..].find(close_tag) {
-                    Some(close_offset) => {
-                        let end = start + close_offset + close_tag.len();
-                        result.push_str(&remaining[start..end]);
-                        remaining = &remaining[end..];
-                    }
-                    None => {
-                        result.push_str(&remaining[start..]);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    repair_nested_adjacent_strong_tags(&result)
-}
-
-fn apply_unparsed_strong_markers(html: &str) -> String {
-    static STRONG_MATH_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"(?s)\*\*((?:<span class="math math-(?:inline|display)">.*?</span>))\*\*"#)
-            .expect("Invalid math strong marker regex")
-    });
-
-    STRONG_MATH_RE
-        .replace_all(html, "<strong>$1</strong>")
-        .into_owned()
-}
-
-fn repair_nested_adjacent_strong_tags(html: &str) -> String {
-    static NESTED_STRONG_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"<strong>([^<]+)<strong>([^<]+)</strong>([^<]+)</strong>")
-            .expect("Invalid nested strong regex")
-    });
-    static RAW_STRONG_SPLIT_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"\*\*([^*<]+)<strong>([^<]+)</strong>([^*<]+)\*\*")
-            .expect("Invalid raw strong split regex")
-    });
-
-    let html = RAW_STRONG_SPLIT_RE
-        .replace_all(html, "<strong>$1</strong>$2<strong>$3</strong>")
-        .into_owned();
-
-    NESTED_STRONG_RE
-        .replace_all(&html, "<strong>$1</strong>$2<strong>$3</strong>")
-        .into_owned()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use indoc::indoc;
     use rstest::*;
 
-    fn convert_markdown_to_html(markdown: &str) -> Result<String> {
+    fn convert_markdown_to_html(markdown: &str) -> String {
         super::convert_markdown_to_html(markdown, &Index::default())
     }
 
@@ -358,7 +280,7 @@ mod tests {
         "<h1>日本語のタイトル</h1>\n<p><strong>太字</strong>のテキストです。</p>\n"
     )]
     fn test_markdown_to_html_conversion(#[case] markdown: &str, #[case] expected_html: &str) {
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
         assert_eq!(result, expected_html);
     }
 
@@ -384,13 +306,13 @@ mod tests {
         "<p>Inline <span class=\"math math-inline\">a|b</span> math.</p>\n"
     )]
     fn test_math_processing(#[case] input: &str, #[case] expected: &str) {
-        let result = convert_markdown_to_html(input).unwrap();
+        let result = convert_markdown_to_html(input);
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_math_markup_uses_semantic_classes() {
-        let result = convert_markdown_to_html("Inline $a+b$ and display $$c+d$$.").unwrap();
+        let result = convert_markdown_to_html("Inline $a+b$ and display $$c+d$$.");
 
         assert!(result.contains(r#"class="math math-inline">a+b</span>"#));
         assert!(result.contains(r#"class="math math-display">c+d</span>"#));
@@ -400,7 +322,7 @@ mod tests {
     fn test_escaped_math_pipe_inside_table_cell_is_preserved() {
         let markdown = "| Type | Expression |\n| --- | --- |\n| math | $a\\|b$ |";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             result.contains(r#"<td><span class="math math-inline">a|b</span></td>"#),
@@ -412,7 +334,7 @@ mod tests {
     fn test_escaped_math_pipe_inside_table_header_is_preserved() {
         let markdown = "| $a\\|b$ | Value |\n| --- | --- |\n| math | result |";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             result.contains(r#"<th><span class="math math-inline">a|b</span></th>"#),
@@ -425,14 +347,14 @@ mod tests {
     #[case::inline("$unclosed", "<p>$unclosed</p>\n")]
     #[case::display("$$unclosed", "<p>$$unclosed</p>\n")]
     fn test_unclosed_math_delimiter_remains_text(#[case] input: &str, #[case] expected: &str) {
-        let result = convert_markdown_to_html(input).unwrap();
+        let result = convert_markdown_to_html(input);
 
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_math_content_is_html_escaped() {
-        let result = convert_markdown_to_html(r#"$x < y & "quoted"$"#).unwrap();
+        let result = convert_markdown_to_html(r#"$x < y & "quoted"$"#);
 
         assert_eq!(
             result,
@@ -441,13 +363,13 @@ mod tests {
     }
 
     #[test]
-    fn test_bold_text_around_math_is_preserved() {
-        let markdown = "この時に使う考え方が、**「サンプリング」**と**「モデル化」**です。\n\nその身長を**$x = (x_1, x_2)$**と書きます。";
+    fn test_commonmark_bold_text_around_math_is_preserved() {
+        let markdown = "この時に使う考え方が、 **「サンプリング」** と **「モデル化」** です。\n\nその身長を **$x = (x_1, x_2)$** と書きます。";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
-            result.contains("<strong>「サンプリング」</strong>と<strong>「モデル化」</strong>"),
+            result.contains("<strong>「サンプリング」</strong> と <strong>「モデル化」</strong>"),
             "unexpected html:\n{result}"
         );
         assert!(
@@ -458,21 +380,21 @@ mod tests {
         assert!(!result.contains("**"));
     }
 
-    #[test]
-    fn test_escaped_strong_markers_are_not_repaired() {
-        let markdown = r#"これは \*\*literal\*\* です。"#;
+    #[rstest]
+    #[case::text(r#"これは \*\*literal\*\* です。"#)]
+    #[case::math(r#"これは \*\*$x$\*\* です。"#)]
+    fn test_escaped_strong_markers_remain_literal(#[case] markdown: &str) {
+        let result = convert_markdown_to_html(markdown);
 
-        let result = convert_markdown_to_html(markdown).unwrap();
-
-        assert!(result.contains("**literal**"));
-        assert!(!result.contains("<strong>literal</strong>"));
+        assert!(result.contains("**"));
+        assert!(!result.contains("<strong>"));
     }
 
     #[test]
     fn test_math_parser_skips_inline_code_with_longer_backtick_delimiter() {
         let markdown = "``code with `$x$` inside`` and real math $y$";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(result.contains("<code>code with `$x$` inside</code>"));
         assert!(result.contains(r#"<span class="math math-inline">y</span>"#));
@@ -483,7 +405,7 @@ mod tests {
     fn test_math_parser_skips_backticks_inside_fenced_code() {
         let markdown = "```text\nliteral ``` and $x$\n```\noutside $y$";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             result
@@ -497,7 +419,7 @@ mod tests {
     fn test_markdown_to_html_escapes_raw_html() {
         let markdown = "<script>alert('xss')</script>\n\nHello <span>world</span>";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(result.contains("&lt;script&gt;alert('xss')&lt;/script&gt;"));
         assert!(result.contains("Hello &lt;span&gt;world&lt;/span&gt;"));
@@ -509,7 +431,7 @@ mod tests {
     fn test_markdown_to_html_sanitizes_javascript_href() {
         let markdown = "[click](javascript:alert('xss'))";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             result.contains("href=\"#\""),
@@ -522,7 +444,7 @@ mod tests {
     fn test_markdown_to_html_sanitizes_javascript_image_source() {
         let markdown = "![image](javascript:alert('xss'))";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(result.contains("src=\"#\""));
         assert!(!result.contains("javascript:alert"));
@@ -532,7 +454,7 @@ mod tests {
     fn test_math_parser_skips_link_destinations() {
         let markdown = "[example](https://example.com/search?q=$x$)";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(result.contains(r#"href="https://example.com/search?q=$x$""#));
         assert!(!result.contains("math math-inline"));
@@ -542,7 +464,7 @@ mod tests {
     fn test_math_parser_skips_raw_html_attributes() {
         let markdown = r#"<img src="https://example.com/$x$.png" alt="img">"#;
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(result.contains("&lt;img"));
         assert!(result.contains("$x$.png"));
@@ -553,7 +475,7 @@ mod tests {
     fn test_math_parser_handles_comparison_text() {
         let markdown = "x < y and $z$ > 0";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(result.contains(r#"<span class="math math-inline">z</span>"#));
     }
@@ -562,7 +484,7 @@ mod tests {
     fn test_math_parser_respects_escaped_dollar_signs() {
         let markdown = r"\$100 and \$x\$";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(result.contains("$100"));
         assert!(result.contains("$x$"));
@@ -583,7 +505,7 @@ mod tests {
         // keep all of them unescaped.
         let markdown = "<div class=\"bookmark\">\n  <a href=\"https://example.com\">Example Site</a>\n</div>\n";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             result.contains("<div class=\"bookmark\">"),
@@ -607,7 +529,7 @@ mod tests {
     fn test_bookmark_html_sanitizes_unsafe_href_scheme() {
         let markdown = "<div class=\"bookmark\">\n  <a href=\"javascript:alert('xss')\">Example Site</a>\n</div>\n";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(result.contains("<a href=\"#\">"));
         assert!(!result.contains("javascript:alert"));
@@ -620,7 +542,7 @@ mod tests {
         let markdown =
             "<div class=\"bookmark\"><a href=\"https://example.com\">Example</a></div>\n";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             result.contains("<div class=\"bookmark\">"),
@@ -638,7 +560,7 @@ mod tests {
     #[case::script_tag("<script>alert('xss')</script>")]
     #[case::inline_span("<span>inline</span>")]
     fn test_non_bookmark_raw_html_is_still_escaped(#[case] markdown: &str) {
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             result.contains("&lt;"),
@@ -655,7 +577,7 @@ mod tests {
     fn test_html_after_bookmark_is_escaped() {
         let markdown = "<div class=\"bookmark\">\n  <a href=\"https://example.com\">X</a>\n</div>\n\n<script>bad()</script>\n";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             result.contains("<div class=\"bookmark\">"),
@@ -677,7 +599,7 @@ mod tests {
     fn test_trailing_content_after_bookmark_close_is_escaped() {
         let markdown = "<div class=\"bookmark\"><a href=\"https://example.com\">X</a></div><script>bad()</script>\n";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             result.contains(r#"<div class="bookmark">"#),
@@ -706,7 +628,7 @@ mod tests {
         "<div class=\"bookmark\"><div><a href=\"https://example.com\">Title</a></div></div>"
     )]
     fn test_bookmark_with_unexpected_html_is_escaped(#[case] markdown: &str) {
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             !result.contains(r#"<div class="bookmark">"#),
@@ -726,7 +648,7 @@ mod tests {
         // Deliberately omit the closing </div>.
         let markdown = "<div class=\"bookmark\">\n  <a href=\"https://example.com\">Title</a>\n";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             !result.contains(r#"<div class="bookmark">"#),
@@ -788,7 +710,7 @@ mod tests {
         "#}
     )]
     fn test_multiple_bookmarks_all_pass_through_unescaped(#[case] markdown: &str) {
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         let input_count = markdown.matches(r#"<div class="bookmark">"#).count();
         let output_count = result.matches(r#"<div class="bookmark">"#).count();
@@ -814,7 +736,7 @@ mod tests {
     fn test_math_not_processed_in_inline_code() {
         let markdown = "See `$x^2$` for the formula.";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             result.contains("<code>$x^2$</code>"),
@@ -832,7 +754,7 @@ mod tests {
     fn test_math_not_processed_in_fenced_code_block() {
         let markdown = "```\n$x^2$ and $$block$$ formula\n```";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             !result.contains("math math-display"),
@@ -854,7 +776,7 @@ mod tests {
     fn test_math_processed_in_text_adjacent_to_code() {
         let markdown = "The formula $a+b$ is useful. Code: `$not_math$`.";
 
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(
             result.contains(r#"<span class="math math-inline">a+b</span>"#),
@@ -878,7 +800,7 @@ mod tests {
         After $b$.
     "#})]
     fn test_math_parser_skips_code(#[case] markdown: &str) {
-        let result = convert_markdown_to_html(markdown).unwrap();
+        let result = convert_markdown_to_html(markdown);
 
         assert!(result.contains("math math-inline"));
         assert!(result.contains("$not_math$"));

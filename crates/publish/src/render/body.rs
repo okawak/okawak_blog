@@ -1,18 +1,18 @@
 use super::{bookmark::BookmarkEnricher, html::convert_markdown_to_html};
-use crate::{error::Result, links};
+use crate::links;
 use tracing::warn;
 
 pub(super) async fn render(
     markdown: &str,
     link_index: &links::Index,
     enrich: &BookmarkEnricher,
-) -> Result<String> {
-    let html = convert_markdown_to_html(markdown, link_index)?;
+) -> String {
+    let html = convert_markdown_to_html(markdown, link_index);
     let fallback = html.clone();
-    Ok(enrich(html).await.unwrap_or_else(|error| {
+    enrich(html).await.unwrap_or_else(|error| {
         warn!(%error, "failed to enrich bookmarks");
         fallback
-    }))
+    })
 }
 
 #[cfg(test)]
@@ -49,7 +49,7 @@ mod tests {
             - Regular item
         "#};
 
-        let html = render(markdown, &link_index, &enrich).await.unwrap();
+        let html = render(markdown, &link_index, &enrich).await;
 
         assert!(html.contains("<h1>My Article</h1>"));
         assert!(html.contains("<a href=\"/tech/def456\">link</a>"));
@@ -72,8 +72,7 @@ mod tests {
             &link_index,
             &enrich,
         )
-        .await
-        .unwrap();
+        .await;
 
         assert!(html.contains(r#"<img src="/tech/def456" alt="article" />"#));
         assert!(html.contains(r#"<img src="/tech/def456" alt="Alt text" />"#));
@@ -93,7 +92,7 @@ mod tests {
             | [[article|Cell link]] | ![[article|Cell embed]] |
         "#};
 
-        let html = render(markdown, &link_index, &enrich).await.unwrap();
+        let html = render(markdown, &link_index, &enrich).await;
 
         assert!(html.starts_with("<table>"), "unexpected html:\n{html}");
         assert!(
@@ -128,8 +127,7 @@ mod tests {
             &link_index,
             &enrich,
         )
-        .await
-        .unwrap();
+        .await;
 
         assert!(html.contains(r#"<a href="/tech/def456">Display &amp; &lt;script&gt;</a>"#));
         assert!(html.contains(r#"<a href="/File%20%22quoted%22">missing</a>"#));
@@ -142,7 +140,7 @@ mod tests {
             Box::pin(async { Err(PublishError::Parse("enrichment failed".to_string())) })
         });
 
-        let html = render("# Hello", &link_index, &enrich).await.unwrap();
+        let html = render("# Hello", &link_index, &enrich).await;
 
         assert_eq!(html, "<h1>Hello</h1>\n");
     }
