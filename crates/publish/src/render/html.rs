@@ -63,7 +63,7 @@ fn escape_table_wikilink_pipes(markdown: &str) -> Cow<'_, str> {
 }
 
 fn piped_wikilink_ranges(markdown: &str) -> Vec<Range<usize>> {
-    Parser::new_ext(markdown, Options::ENABLE_WIKILINKS)
+    let mut ranges = Parser::new_ext(markdown, Options::ENABLE_WIKILINKS)
         .into_offset_iter()
         .filter_map(|(event, range)| match event {
             Event::Start(
@@ -78,7 +78,22 @@ fn piped_wikilink_ranges(markdown: &str) -> Vec<Range<usize>> {
             ) => Some(range),
             _ => None,
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    ranges.sort_unstable_by_key(|range| range.start);
+
+    let mut disjoint_ranges: Vec<Range<usize>> = Vec::with_capacity(ranges.len());
+    for range in ranges {
+        if let Some(previous) = disjoint_ranges.last_mut()
+            && range.start <= previous.end
+        {
+            previous.end = previous.end.max(range.end);
+        } else {
+            disjoint_ranges.push(range);
+        }
+    }
+
+    disjoint_ranges
 }
 
 fn replace_wikilink_pipes(
@@ -111,6 +126,7 @@ mod tests {
 
     #[rstest]
     #[case::link_outside_table("See [[Page|Label]].", "See [[Page|Label]].")]
+    #[case::nested_wikilinks_outside_table("![[image|[[page|text]]]]", "![[image|[[page|text]]]]")]
     #[case::link_inside_table(
         indoc! {r#"
             | Link |
