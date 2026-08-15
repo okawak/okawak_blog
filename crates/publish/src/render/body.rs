@@ -80,6 +80,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_render_preserves_piped_wikilinks_inside_table_cells() {
+        let files = ClassifiedFiles {
+            articles: vec![parsed_article("notes/article", Category::Tech, "def456")],
+            ..Default::default()
+        };
+        let link_index = links::Index::from_classified_files(&files);
+        let enrich: BookmarkEnricher = Arc::new(|html| Box::pin(async move { Ok(html) }));
+        let markdown = indoc! {r#"
+            | [[article|Header link]] | ![[article|Header embed]] |
+            | --- | --- |
+            | [[article|Cell link]] | ![[article|Cell embed]] |
+        "#};
+
+        let html = render(markdown, &link_index, &enrich).await.unwrap();
+
+        assert!(html.starts_with("<table>"), "unexpected html:\n{html}");
+        assert!(
+            html.contains(r#"<th><a href="/tech/def456">Header link</a></th>"#),
+            "unexpected html:\n{html}"
+        );
+        assert!(
+            html.contains(r#"<th><img src="/tech/def456" alt="Header embed" /></th>"#),
+            "unexpected html:\n{html}"
+        );
+        assert!(
+            html.contains(r#"<td><a href="/tech/def456">Cell link</a></td>"#),
+            "unexpected html:\n{html}"
+        );
+        assert!(
+            html.contains(r#"<td><img src="/tech/def456" alt="Cell embed" /></td>"#),
+            "unexpected html:\n{html}"
+        );
+    }
+
+    #[tokio::test]
     async fn test_render_escapes_wikilink_text_and_destination() {
         let files = ClassifiedFiles {
             articles: vec![parsed_article("notes/article", Category::Tech, "def456")],

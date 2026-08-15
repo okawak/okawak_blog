@@ -61,24 +61,24 @@ pub(crate) fn resolve_wikilinks<'a>(
 ) -> impl Iterator<Item = Event<'a>> + 'a {
     events.map(move |event| match event {
         Event::Start(Tag::Link {
-            link_type: link_type @ LinkType::WikiLink { .. },
+            link_type: link_type @ LinkType::WikiLink { has_pothole },
             dest_url,
             title,
             id,
         }) => Event::Start(Tag::Link {
             link_type,
-            dest_url: resolve_wikilink_destination(dest_url.trim(), index),
+            dest_url: resolve_wikilink_destination(&dest_url, has_pothole, index),
             title,
             id,
         }),
         Event::Start(Tag::Image {
-            link_type: link_type @ LinkType::WikiLink { .. },
+            link_type: link_type @ LinkType::WikiLink { has_pothole },
             dest_url,
             title,
             id,
         }) => Event::Start(Tag::Image {
             link_type,
-            dest_url: resolve_wikilink_destination(dest_url.trim(), index),
+            dest_url: resolve_wikilink_destination(&dest_url, has_pothole, index),
             title,
             id,
         }),
@@ -86,7 +86,19 @@ pub(crate) fn resolve_wikilinks<'a>(
     })
 }
 
-fn resolve_wikilink_destination<'a>(target: &str, index: &'a Index) -> CowStr<'a> {
+fn resolve_wikilink_destination<'a>(
+    target: &str,
+    has_pothole: bool,
+    index: &'a Index,
+) -> CowStr<'a> {
+    let target = target.trim();
+    // The table prepass escapes a piped WikiLink delimiter, leaving this suffix on its target.
+    let target = if has_pothole {
+        target.strip_suffix('\\').unwrap_or(target)
+    } else {
+        target
+    };
+
     match index.resolve(target) {
         Some(href) => href.into(),
         None => {
@@ -296,6 +308,19 @@ mod tests {
                 ("image", "/daily/xyz789abc".to_string()),
                 ("image", "/daily/xyz789abc".to_string()),
                 ("link", "/missing".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn resolve_wikilinks_accepts_table_escaped_pipe_delimiters() {
+        let index = index(&[("article", "/tech/slug")]);
+
+        assert_eq!(
+            resolved_destinations(r"[[article\|Label]] ![[article\|Alt]]", &index),
+            vec![
+                ("link", "/tech/slug".to_string()),
+                ("image", "/tech/slug".to_string()),
             ]
         );
     }

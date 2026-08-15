@@ -2,7 +2,7 @@ use crate::{
     error::Result,
     links::{self, Index},
 };
-use pulldown_cmark::{CowStr, Event, Options, Parser, Tag, html};
+use pulldown_cmark::{CowStr, Event, LinkType, Options, Parser, Tag, html};
 use regex::Regex;
 use std::{borrow::Cow, ops::Range, sync::LazyLock};
 
@@ -19,7 +19,7 @@ pub(crate) fn convert_markdown_to_html(
     markdown_content: &str,
     link_index: &Index,
 ) -> Result<String> {
-    let markdown_content = escape_math_pipes_for_table_parser(markdown_content);
+    let markdown_content = escape_pipes_for_table_parser(markdown_content);
 
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -51,8 +51,48 @@ fn add_legacy_math_classes(html: &str) -> String {
     )
 }
 
-fn escape_math_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
-    let math_ranges = Parser::new_ext(markdown, Options::ENABLE_MATH)
+fn escape_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
+    let protected_ranges = pipe_sensitive_ranges(markdown);
+
+    if protected_ranges.is_empty() {
+        return Cow::Borrowed(markdown);
+    }
+
+    // A one-byte replacement keeps parser offsets aligned with the original Markdown.
+    let table_probe = replace_pipes_in_ranges(markdown, &protected_ranges, "/");
+    let table_ranges = Parser::new_ext(
+        &table_probe,
+        Options::ENABLE_TABLES | Options::ENABLE_MATH | Options::ENABLE_WIKILINKS,
+    )
+    .into_offset_iter()
+    .filter_map(|(event, range)| match event {
+        Event::Start(Tag::Table(_)) => Some(range),
+        _ => None,
+    })
+    .collect::<Vec<_>>();
+
+    let table_ranges_to_escape = protected_ranges
+        .into_iter()
+        .filter(|range| {
+            table_ranges
+                .iter()
+                .any(|table_range| table_range.start <= range.start && range.end <= table_range.end)
+        })
+        .collect::<Vec<_>>();
+
+    if table_ranges_to_escape.is_empty() {
+        return Cow::Borrowed(markdown);
+    }
+
+    Cow::Owned(replace_pipes_in_ranges(
+        markdown,
+        &table_ranges_to_escape,
+        r"\|",
+    ))
+}
+
+fn pipe_sensitive_ranges(markdown: &str) -> Vec<Range<usize>> {
+    let mut ranges = Parser::new_ext(markdown, Options::ENABLE_MATH)
         .into_offset_iter()
         .filter_map(|(event, range)| match event {
             Event::InlineMath(_) | Event::DisplayMath(_)
@@ -64,34 +104,38 @@ fn escape_math_pipes_for_table_parser(markdown: &str) -> Cow<'_, str> {
         })
         .collect::<Vec<_>>();
 
-    if math_ranges.is_empty() {
-        return Cow::Borrowed(markdown);
+    ranges.extend(
+        Parser::new_ext(markdown, Options::ENABLE_WIKILINKS)
+            .into_offset_iter()
+            .filter_map(|(event, range)| match event {
+                Event::Start(
+                    Tag::Link {
+                        link_type: LinkType::WikiLink { has_pothole: true },
+                        ..
+                    }
+                    | Tag::Image {
+                        link_type: LinkType::WikiLink { has_pothole: true },
+                        ..
+                    },
+                ) => Some(range),
+                _ => None,
+            }),
+    );
+
+    ranges.sort_unstable_by_key(|range| range.start);
+    let mut merged_ranges: Vec<Range<usize>> = Vec::with_capacity(ranges.len());
+
+    for range in ranges {
+        if let Some(previous) = merged_ranges.last_mut()
+            && range.start <= previous.end
+        {
+            previous.end = previous.end.max(range.end);
+            continue;
+        }
+        merged_ranges.push(range);
     }
 
-    // A one-byte replacement keeps parser offsets aligned with the original Markdown.
-    let table_probe = replace_pipes_in_ranges(markdown, &math_ranges, "/");
-    let table_ranges = Parser::new_ext(&table_probe, Options::ENABLE_TABLES | Options::ENABLE_MATH)
-        .into_offset_iter()
-        .filter_map(|(event, range)| match event {
-            Event::Start(Tag::Table(_)) => Some(range),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    let table_math_ranges = math_ranges
-        .into_iter()
-        .filter(|range| {
-            table_ranges
-                .iter()
-                .any(|table_range| table_range.start <= range.start && range.end <= table_range.end)
-        })
-        .collect::<Vec<_>>();
-
-    if table_math_ranges.is_empty() {
-        return Cow::Borrowed(markdown);
-    }
-
-    Cow::Owned(replace_pipes_in_ranges(markdown, &table_math_ranges, r"\|"))
+    merged_ranges
 }
 
 fn replace_pipes_in_ranges(markdown: &str, ranges: &[Range<usize>], replacement: &str) -> String {
