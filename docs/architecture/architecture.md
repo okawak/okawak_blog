@@ -69,7 +69,7 @@ okawak_blog/
   - path処理の対応環境はmacOSとLinuxとし、Windows形式のpathは対象外とする
   - vault moduleによるObsidian vault走査、Markdown読込、frontmatter parse
   - links moduleによる全公開contentのvault相対source keyと公開URLの索引構築、およびWikiLink link / image eventの公開URL解決
-  - render moduleによるcontent kindごとの組み立て、共通本文処理、WikiLinkと数式を含む単一の`pulldown-cmark` event pipelineによるMarkdownからHTMLへの変換、外部HTTPを伴うbookmark enrichment。数式spanはruntime移行中の互換性のため`.math-*`と`.okawak-katex-*`を併記する
+  - render moduleによるcontent kindごとの組み立て、共通本文処理、WikiLinkと数式を含む単一の`pulldown-cmark` event pipelineによるMarkdownからHTMLへの変換、外部HTTPを伴うbookmark enrichment。数式spanには`.math-inline` / `.math-display`を使用する
   - classify moduleによる公開種別の確定と`section_path`の導出
   - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
   - `ObsidianFrontMatter`と`ContentKind`はpublisher入力形式として内部に保持する
@@ -90,7 +90,7 @@ okawak_blog/
   - Leptos server function による page document の組み立て
   - SSR feature 時のみ `ArtifactReader` 境界を利用
   - metadata / canonical / Open Graph 生成
-  - publisherが生成する`.math-inline` / `.math-display`と、移行中の新旧artifactが持つ`.okawak-katex-*`に対するclient-side KaTeX描画
+  - publisherが生成する`.math-inline` / `.math-display`に対するclient-side KaTeX描画
 - `e2e`
   - `crates/site/server`、`crates/site/web`、`crates/site/infra` をまたぐ browser E2E
   - 通常CIではprivate Obsidian submoduleやS3に依存しない固定artifact fixture

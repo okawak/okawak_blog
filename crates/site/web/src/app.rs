@@ -62,7 +62,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     const normalizeExpression = (value) =>
                     (value || '').replace(/[\u2009\u200A\u200B\u200C\u200D\u2061\u202F\u2060\uFEFF]/g, '');
                     
-                    scope.querySelectorAll('.okawak-katex-inline, .math-inline').forEach((element) => {
+                    scope.querySelectorAll('.math-inline').forEach((element) => {
                     if (element.dataset.katexRendered === 'true') return;
                     
                     const expression = normalizeExpression(element.textContent);
@@ -73,7 +73,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                     element.dataset.katexRendered = 'true';
                     });
                     
-                    scope.querySelectorAll('.okawak-katex-display, .math-display').forEach((element) => {
+                    scope.querySelectorAll('.math-display').forEach((element) => {
                     if (element.dataset.katexRendered === 'true') return;
                     
                     const expression = normalizeExpression(element.textContent);
@@ -472,15 +472,11 @@ fn node_contains_generated_content(node: &web_sys::Node) -> bool {
     use wasm_bindgen::JsCast;
 
     node.dyn_ref::<web_sys::Element>().is_some_and(|element| {
-        element.class_list().contains("okawak-katex-inline")
-            || element.class_list().contains("okawak-katex-display")
-            || element.class_list().contains("math-inline")
+        element.class_list().contains("math-inline")
             || element.class_list().contains("math-display")
             || element.tag_name().eq_ignore_ascii_case("code")
             || element
-                .query_selector(
-                    ".okawak-katex-inline, .okawak-katex-display, .math-inline, .math-display, .content-prose pre code",
-                )
+                .query_selector(".math-inline, .math-display, .content-prose pre code")
                 .ok()
                 .flatten()
                 .is_some()

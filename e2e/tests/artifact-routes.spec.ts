@@ -276,7 +276,6 @@ test("generated article content stays readable on mobile", async ({ page }) => {
   await expect(prose).toBeVisible();
   await expect(page.getByTestId("article-bookmark")).toBeVisible();
   await expect(page.getByTestId("article-katex")).toBeVisible();
-  await expect(page.getByTestId("article-katex-legacy")).toBeVisible();
   await expect(wideCode.locator("code")).toHaveClass(/hljs/);
   await expect(wideCode.locator(".hljs-keyword").first()).toBeVisible();
 
