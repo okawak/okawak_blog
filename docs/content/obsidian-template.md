@@ -78,6 +78,8 @@ updated: "2026-04-12T10:00:00+09:00"
 Obsidian link や bookmark 埋め込みを含めてよい。
 ```
 
+本文の基本的な Markdown 記法は CommonMark に従う。Obsidian 固有の解釈だけで成立する強調記法などは publisher では補正しない。
+
 メモ:
 
 - `kind` を省略した場合は `article` として扱う

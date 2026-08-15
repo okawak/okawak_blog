@@ -28,7 +28,7 @@ pub(crate) async fn render_article(
     link_index: &links::Index,
     enrich: BookmarkEnricher,
 ) -> Result<RenderedArticle> {
-    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await?;
+    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await;
     let meta = ArticleMeta::new(ArticleMetaInput {
         slug: parsed_file.slug,
         title: Title::new(parsed_file.front_matter.title)?,
@@ -52,7 +52,7 @@ pub(crate) async fn render_category(
     link_index: &links::Index,
     enrich: BookmarkEnricher,
 ) -> Result<RenderedCategoryLanding> {
-    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await?;
+    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await;
     let title = normalize_category_title(parsed_file.category, &parsed_file.front_matter.title);
     let description = normalize_category_description(parsed_file.front_matter.summary.as_deref());
     let html = if html.trim().is_empty() {
@@ -73,23 +73,23 @@ pub(crate) async fn render_home(
     parsed_file: ParsedHomeFile,
     link_index: &links::Index,
     enrich: BookmarkEnricher,
-) -> Result<HomeFragmentArtifactDocument> {
-    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await?;
-    Ok(HomeFragmentArtifactDocument {
+) -> HomeFragmentArtifactDocument {
+    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await;
+    HomeFragmentArtifactDocument {
         title: parsed_file.front_matter.title,
         description: parsed_file.front_matter.summary,
         html,
         updated_at: parsed_file.front_matter.updated,
-    })
+    }
 }
 
 pub(crate) async fn render_page(
     parsed_file: ParsedPageFile,
     link_index: &links::Index,
     enrich: BookmarkEnricher,
-) -> Result<RenderedPage> {
-    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await?;
-    Ok(RenderedPage {
+) -> RenderedPage {
+    let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await;
+    RenderedPage {
         document: PageArtifactDocument {
             page: parsed_file.page,
             title: parsed_file.front_matter.title,
@@ -97,7 +97,7 @@ pub(crate) async fn render_page(
             html,
             updated_at: parsed_file.front_matter.updated,
         },
-    })
+    }
 }
 
 fn normalize_category_title(category: Category, title: &str) -> String {
