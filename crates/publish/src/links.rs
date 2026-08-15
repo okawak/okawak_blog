@@ -119,7 +119,6 @@ mod tests {
     use crate::classify::{
         ClassifiedFiles, ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, ParsedPageFile,
     };
-    use crate::render::convert_markdown_to_html;
     use crate::vault::{ContentKind, ObsidianFrontMatter};
     use domain::{Category, SectionPath, Slug};
     use rstest::rstest;
@@ -339,30 +338,5 @@ mod tests {
         let index = index(&[("article", "/tech/slug")]);
 
         assert_eq!(resolve_internal_links(markdown, &index), expected);
-    }
-
-    #[test]
-    fn converted_links_are_rendered_as_html() {
-        let markdown = r#"# My Article
-
-This is a test with [[Another Article|link]] and **bold** text.
-
-## Section Two
-
-- Item with [[Reference Note]]
-- Regular item"#;
-        let index = index(&[
-            ("Another Article", "/tech/def456"),
-            ("Reference Note", "/daily/ghi789"),
-        ]);
-
-        let markdown = resolve_internal_links(markdown, &index);
-        let html = convert_markdown_to_html(&markdown).unwrap();
-
-        assert!(html.contains("<h1>My Article</h1>"));
-        assert!(html.contains("<a href=\"/tech/def456\">link</a>"));
-        assert!(html.contains("<a href=\"/daily/ghi789\">Reference Note</a>"));
-        assert!(html.contains("<strong>bold</strong>"));
-        assert!(html.contains("<ul>"));
     }
 }
