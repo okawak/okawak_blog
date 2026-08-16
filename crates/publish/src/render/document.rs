@@ -5,15 +5,10 @@ use crate::{
     links,
 };
 use domain::{
-    ArticleBody, ArticleMeta, ArticleMetaInput, Category, CategoryLandingMeta,
-    CategoryLandingMetaInput, HomeFragmentArtifactDocument, PageArtifactDocument, Title,
+    ArticleBody, ArticleMeta, Category, CategoryLandingMeta, HomeFragmentArtifactDocument,
+    PageArtifactDocument, PublishableArticle, Timestamp, Title,
 };
 use html_escape::encode_text;
-
-pub(crate) struct RenderedArticle {
-    pub(crate) meta: ArticleMeta,
-    pub(crate) html: String,
-}
 
 pub(crate) struct RenderedCategoryLanding {
     pub(crate) meta: CategoryLandingMeta,
@@ -24,9 +19,9 @@ pub(crate) async fn render_article(
     parsed_file: ParsedArticleFile,
     link_index: &links::Index,
     enrich: BookmarkEnricher,
-) -> Result<RenderedArticle> {
+) -> Result<PublishableArticle> {
     let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await;
-    let meta = ArticleMeta::new(ArticleMetaInput {
+    let meta = ArticleMeta {
         slug: parsed_file.slug,
         title: Title::new(parsed_file.front_matter.title)?,
         category: parsed_file.category,
@@ -34,14 +29,11 @@ pub(crate) async fn render_article(
         description: parsed_file.front_matter.summary,
         tags: parsed_file.front_matter.tags.unwrap_or_default(),
         priority: parsed_file.front_matter.priority,
-        created_at: parsed_file.front_matter.created,
-        updated_at: parsed_file.front_matter.updated,
-    })?;
+        created_at: Timestamp::new(parsed_file.front_matter.created)?,
+        updated_at: Timestamp::new(parsed_file.front_matter.updated)?,
+    };
     let body = ArticleBody::new(html)?;
-    Ok(RenderedArticle {
-        meta,
-        html: body.html,
-    })
+    Ok(PublishableArticle::new(meta, body))
 }
 
 pub(crate) async fn render_category(
@@ -57,12 +49,12 @@ pub(crate) async fn render_category(
     } else {
         html
     };
-    let meta = CategoryLandingMeta::new(CategoryLandingMetaInput {
+    let meta = CategoryLandingMeta {
         category: parsed_file.category,
         title: Title::new(title)?,
         description,
-        updated_at: parsed_file.front_matter.updated,
-    })?;
+        updated_at: Timestamp::new(parsed_file.front_matter.updated)?,
+    };
     Ok(RenderedCategoryLanding { meta, html })
 }
 

@@ -177,15 +177,15 @@ async fn process_article(
     enrich: BookmarkEnricher,
     site_directories: SiteDirectories,
 ) -> Result<domain::ArticleMeta> {
-    let rendered = render_article(parsed_file, link_index, enrich).await?;
+    let article = render_article(parsed_file, link_index, enrich).await?;
     run_artifact_write(move || {
         let output_file_path = write_article_page(
             &site_directories,
-            rendered.meta.category,
-            &rendered.meta.slug,
-            &rendered.html,
+            article.meta.category,
+            &article.meta.slug,
+            article.body.as_str(),
         )?;
-        Ok((rendered.meta, output_file_path))
+        Ok((article.meta, output_file_path))
     })
     .await
 }

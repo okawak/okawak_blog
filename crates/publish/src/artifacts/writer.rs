@@ -141,8 +141,7 @@ mod tests {
     use super::super::validator::validate_site_artifacts;
     use super::*;
     use domain::{
-        ArticleMeta, ArticleMetaInput, Category, CategoryLandingMeta, CategoryLandingMetaInput,
-        PageKey, SectionPath, Title,
+        ArticleMeta, Category, CategoryLandingMeta, PageKey, SectionPath, Timestamp, Title,
     };
     use tempfile::TempDir;
 
@@ -153,7 +152,7 @@ mod tests {
         priority: Option<i32>,
         created_at: &str,
     ) -> ArticleMeta {
-        ArticleMeta::new(ArticleMetaInput {
+        ArticleMeta {
             slug: Slug::new(slug.to_string()).unwrap(),
             title: Title::new(title.to_string()).unwrap(),
             category,
@@ -161,10 +160,9 @@ mod tests {
             description: Some(format!("{title} summary")),
             tags: vec!["rust".to_string()],
             priority,
-            created_at: created_at.to_string(),
-            updated_at: created_at.to_string(),
-        })
-        .unwrap()
+            created_at: Timestamp::new(created_at.to_string()).unwrap(),
+            updated_at: Timestamp::new(created_at.to_string()).unwrap(),
+        }
     }
 
     fn build_category_landing(
@@ -172,13 +170,12 @@ mod tests {
         title: &str,
         description: Option<&str>,
     ) -> CategoryLandingMeta {
-        CategoryLandingMeta::new(CategoryLandingMetaInput {
+        CategoryLandingMeta {
             category,
             title: Title::new(title.to_string()).unwrap(),
             description: description.map(str::to_string),
-            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
-        })
-        .unwrap()
+            updated_at: Timestamp::new("2025-01-01T00:00:00+09:00".to_string()).unwrap(),
+        }
     }
 
     #[test]

@@ -74,6 +74,48 @@ impl<'de> Deserialize<'de> for Title {
     }
 }
 
+/// RFC 3339 timestamp used by publishable content.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+pub struct Timestamp(String);
+
+impl Timestamp {
+    pub fn new(value: String) -> Result<Self> {
+        let value = value.trim();
+        chrono::DateTime::parse_from_rfc3339(value).map_err(|_| DomainError::InvalidTimestamp {
+            value: value.to_string(),
+        })?;
+
+        Ok(Self(value.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FromStr for Timestamp {
+    type Err = DomainError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::new(s.to_string())
+    }
+}
+
+impl fmt::Display for Timestamp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for Timestamp {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        super::deserialize_validated_string(deserializer)
+    }
+}
+
 /// Category constrained by an enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum Category {
@@ -136,7 +178,7 @@ impl<'de> Deserialize<'de> for Category {
 
 #[cfg(test)]
 mod tests {
-    use super::{Category, SectionPath, Title};
+    use super::{Category, SectionPath, Timestamp, Title};
 
     #[test]
     fn test_section_path_exposes_ordered_segments() {
@@ -168,6 +210,20 @@ mod tests {
     fn test_title_validates_unicode_character_count() {
         assert!(Title::new("あ".repeat(200)).is_ok());
         assert!(Title::new("あ".repeat(201)).is_err());
+    }
+
+    #[test]
+    fn test_timestamp_accepts_rfc3339_and_trims_whitespace() {
+        let timestamp = Timestamp::new("  2025-01-01T00:00:00+09:00  ".to_string()).unwrap();
+
+        assert_eq!(timestamp.as_str(), "2025-01-01T00:00:00+09:00");
+    }
+
+    #[test]
+    fn test_timestamp_rejects_invalid_values() {
+        for value in ["", "   ", "2025-01-01", "not-a-timestamp"] {
+            assert!(Timestamp::new(value.to_string()).is_err());
+        }
     }
 
     #[test]
