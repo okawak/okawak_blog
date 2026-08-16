@@ -95,8 +95,8 @@ impl From<&PublishedArticleSummary> for ArticleSummaryDocument {
             description: summary.description.clone(),
             tags: summary.tags.clone(),
             priority: summary.priority,
-            created_at: summary.created_at.clone(),
-            updated_at: summary.updated_at.clone(),
+            created_at: summary.created_at.to_string(),
+            updated_at: summary.updated_at.to_string(),
         }
     }
 }
@@ -133,7 +133,7 @@ impl From<&CategoryIndex> for CategoryIndexDocument {
             category: index.category.as_str().to_string(),
             title: landing.map(|landing| landing.title.as_str().to_string()),
             description: landing.and_then(|landing| landing.description.clone()),
-            updated_at: landing.map(|landing| landing.updated_at.clone()),
+            updated_at: landing.map(|landing| landing.updated_at.to_string()),
             articles: index
                 .articles
                 .iter()
@@ -193,7 +193,7 @@ impl From<&SiteMetadata> for SiteMetadataDocument {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Category, CategoryLandingMeta, CategoryLandingMetaInput, PageKey, Slug, Title};
+    use crate::{Category, CategoryLandingMeta, PageKey, Slug, Timestamp, Title};
 
     fn release_pointer(prefix: &str) -> ArtifactReleasePointerDocument {
         ArtifactReleasePointerDocument {
@@ -267,8 +267,8 @@ mod tests {
             description: Some("Test description".to_string()),
             tags: vec!["test".to_string()],
             priority: Some(1),
-            created_at: "2025-01-01T00:00:00+09:00".to_string(),
-            updated_at: "2025-01-02T00:00:00+09:00".to_string(),
+            created_at: Timestamp::new("2025-01-01T00:00:00+09:00".to_string()).unwrap(),
+            updated_at: Timestamp::new("2025-01-02T00:00:00+09:00".to_string()).unwrap(),
         };
 
         let json = serde_json::to_string(&ArticleSummaryDocument::from(&summary)).unwrap();
@@ -289,8 +289,8 @@ mod tests {
             description: None,
             tags: vec![],
             priority: None,
-            created_at: "2025-01-01T00:00:00+09:00".to_string(),
-            updated_at: "2025-01-02T00:00:00+09:00".to_string(),
+            created_at: Timestamp::new("2025-01-01T00:00:00+09:00".to_string()).unwrap(),
+            updated_at: Timestamp::new("2025-01-02T00:00:00+09:00".to_string()).unwrap(),
         };
 
         let json = serde_json::to_string(&ArticleSummaryDocument::from(&summary)).unwrap();
@@ -365,13 +365,12 @@ mod tests {
 
     #[test]
     fn test_category_index_document_uses_landing_metadata() {
-        let landing = CategoryLandingMeta::new(CategoryLandingMetaInput {
+        let landing = CategoryLandingMeta {
             category: Category::Tech,
             title: Title::new("Technology".to_string()).unwrap(),
             description: Some("Technology landing".to_string()),
-            updated_at: "2025-01-02T00:00:00+09:00".to_string(),
-        })
-        .unwrap();
+            updated_at: Timestamp::new("2025-01-02T00:00:00+09:00".to_string()).unwrap(),
+        };
         let index = CategoryIndex {
             category: Category::Tech,
             landing: Some(landing),

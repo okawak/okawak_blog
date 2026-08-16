@@ -17,6 +17,9 @@ pub enum DomainError {
     #[error("無効なパスです: {path}")]
     InvalidPath { path: String },
 
+    #[error("invalid RFC 3339 timestamp: {value}")]
+    InvalidTimestamp { value: String },
+
     #[error("バリデーションエラー: {field}")]
     ValidationError { field: String },
 }

@@ -1,6 +1,6 @@
 //! Domain models and pure functions for publishable site artifacts.
 
-use crate::{Category, DomainError, Result, SectionPath, Slug, Title};
+use crate::{Category, DomainError, Result, SectionPath, Slug, Timestamp, Title};
 use std::cmp::Ordering;
 
 /// Metadata for a publishable article.
@@ -13,51 +13,13 @@ pub struct ArticleMeta {
     pub description: Option<String>,
     pub tags: Vec<String>,
     pub priority: Option<i32>,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ArticleMetaInput {
-    pub slug: Slug,
-    pub title: Title,
-    pub category: Category,
-    pub section_path: SectionPath,
-    pub description: Option<String>,
-    pub tags: Vec<String>,
-    pub priority: Option<i32>,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-impl ArticleMeta {
-    pub fn new(input: ArticleMetaInput) -> Result<Self> {
-        if input.created_at.trim().is_empty() {
-            return Err(DomainError::validation("created_at"));
-        }
-        if input.updated_at.trim().is_empty() {
-            return Err(DomainError::validation("updated_at"));
-        }
-
-        Ok(Self {
-            slug: input.slug,
-            title: input.title,
-            category: input.category,
-            section_path: input.section_path,
-            description: input.description,
-            tags: input.tags,
-            priority: input.priority,
-            created_at: input.created_at,
-            updated_at: input.updated_at,
-        })
-    }
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Rendered HTML body for a publishable article.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ArticleBody {
-    pub html: String,
-}
+pub struct ArticleBody(String);
 
 impl ArticleBody {
     pub fn new(html: String) -> Result<Self> {
@@ -65,7 +27,11 @@ impl ArticleBody {
             return Err(DomainError::validation("html"));
         }
 
-        Ok(Self { html })
+        Ok(Self(html))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -92,8 +58,8 @@ pub struct PublishedArticleSummary {
     pub description: Option<String>,
     pub tags: Vec<String>,
     pub priority: Option<i32>,
-    pub created_at: String,
-    pub updated_at: String,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Metadata for a rendered category landing page.
@@ -102,29 +68,37 @@ pub struct CategoryLandingMeta {
     pub category: Category,
     pub title: Title,
     pub description: Option<String>,
-    pub updated_at: String,
+    pub updated_at: Timestamp,
 }
 
+/// Rendered HTML body for a publishable category landing page.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CategoryLandingMetaInput {
-    pub category: Category,
-    pub title: Title,
-    pub description: Option<String>,
-    pub updated_at: String,
-}
+pub struct CategoryLandingBody(String);
 
-impl CategoryLandingMeta {
-    pub fn new(input: CategoryLandingMetaInput) -> Result<Self> {
-        if input.updated_at.trim().is_empty() {
-            return Err(DomainError::validation("updated_at"));
+impl CategoryLandingBody {
+    pub fn new(html: String) -> Result<Self> {
+        if html.trim().is_empty() {
+            return Err(DomainError::validation("html"));
         }
 
-        Ok(Self {
-            category: input.category,
-            title: input.title,
-            description: input.description,
-            updated_at: input.updated_at,
-        })
+        Ok(Self(html))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Fully publishable category landing page used by the artifact pipeline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublishableCategoryLanding {
+    pub meta: CategoryLandingMeta,
+    pub body: CategoryLandingBody,
+}
+
+impl PublishableCategoryLanding {
+    pub fn new(meta: CategoryLandingMeta, body: CategoryLandingBody) -> Self {
+        Self { meta, body }
     }
 }
 
@@ -252,13 +226,12 @@ mod tests {
     use super::*;
 
     fn build_category_landing(category: Category, title: &str) -> CategoryLandingMeta {
-        CategoryLandingMeta::new(CategoryLandingMetaInput {
+        CategoryLandingMeta {
             category,
             title: Title::new(title.to_string()).unwrap(),
             description: Some(format!("{title} landing")),
-            updated_at: "2025-01-03T00:00:00+09:00".to_string(),
-        })
-        .unwrap()
+            updated_at: Timestamp::new("2025-01-03T00:00:00+09:00".to_string()).unwrap(),
+        }
     }
 
     fn build_article(
@@ -268,7 +241,7 @@ mod tests {
         priority: Option<i32>,
         created_at: &str,
     ) -> PublishableArticle {
-        let meta = ArticleMeta::new(ArticleMetaInput {
+        let meta = ArticleMeta {
             slug: Slug::new(slug.to_string()).unwrap(),
             title: Title::new(title.to_string()).unwrap(),
             category,
@@ -276,10 +249,9 @@ mod tests {
             description: Some(format!("{title} summary")),
             tags: vec!["tag".to_string()],
             priority,
-            created_at: created_at.to_string(),
-            updated_at: created_at.to_string(),
-        })
-        .unwrap();
+            created_at: Timestamp::new(created_at.to_string()).unwrap(),
+            updated_at: Timestamp::new(created_at.to_string()).unwrap(),
+        };
         let body = ArticleBody::new(format!("<p>{title}</p>")).unwrap();
         PublishableArticle::new(meta, body)
     }
@@ -287,48 +259,17 @@ mod tests {
     #[test]
     fn test_article_body_validation() {
         assert!(ArticleBody::new("   ".to_string()).is_err());
-        assert!(ArticleBody::new("<p>body</p>".to_string()).is_ok());
+        let body = ArticleBody::new("<p>body</p>".to_string()).unwrap();
+
+        assert_eq!(body.as_str(), "<p>body</p>");
     }
 
     #[test]
-    fn test_article_meta_validation() {
-        let valid_input = ArticleMetaInput {
-            slug: Slug::new("valid00000001".to_string()).unwrap(),
-            title: Title::new("Valid".to_string()).unwrap(),
-            category: Category::Tech,
-            section_path: SectionPath::new(vec!["block".to_string()]),
-            description: Some("summary".to_string()),
-            tags: vec!["tag".to_string()],
-            priority: Some(1),
-            created_at: "2025-01-01T00:00:00+09:00".to_string(),
-            updated_at: "2025-01-02T00:00:00+09:00".to_string(),
-        };
+    fn test_category_landing_body_validation() {
+        assert!(CategoryLandingBody::new("   ".to_string()).is_err());
+        let body = CategoryLandingBody::new("<p>category</p>".to_string()).unwrap();
 
-        assert!(ArticleMeta::new(valid_input.clone()).is_ok());
-
-        let missing_created_at = ArticleMetaInput {
-            created_at: "   ".to_string(),
-            ..valid_input.clone()
-        };
-        assert!(ArticleMeta::new(missing_created_at).is_err());
-
-        let missing_updated_at = ArticleMetaInput {
-            updated_at: "".to_string(),
-            ..valid_input
-        };
-        assert!(ArticleMeta::new(missing_updated_at).is_err());
-    }
-
-    #[test]
-    fn test_category_landing_meta_requires_updated_at() {
-        let input = CategoryLandingMetaInput {
-            category: Category::Tech,
-            title: Title::new("Tech".to_string()).unwrap(),
-            description: None,
-            updated_at: "   ".to_string(),
-        };
-
-        assert!(CategoryLandingMeta::new(input).is_err());
+        assert_eq!(body.as_str(), "<p>category</p>");
     }
 
     #[test]

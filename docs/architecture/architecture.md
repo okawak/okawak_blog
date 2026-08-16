@@ -59,7 +59,7 @@ okawak_blog/
 - `crates/domain`
   - 公開コンテンツの純粋なdomain model・ルールと、`publish` / readerが共有する契約
   - `Category`、`Slug`、`PageKey`、`SectionPath`
-  - `ArticleMeta`、`CategoryLandingMeta`と記事・カテゴリ索引を構築する純粋ルール
+  - `ArticleMeta`、`PublishableArticle`、`CategoryLandingMeta`、`PublishableCategoryLanding`と記事・カテゴリ索引を構築する純粋ルール
   - artifact contract
   - site page contract
 - `crates/publish`
@@ -274,6 +274,7 @@ artifact の意味は次の通り。
 - `categories/<category>/page.html`
   - カテゴリ landing page 本文
   - landing Markdown が無い場合は fallback HTML を生成する
+  - landing Markdown がある場合はfrontmatterのtitleと本文を必須とし、空値をfallbackで補完しない
 - `pages/<page>.json`
   - 固定ページ
   - HTML 本文と title / description / updated_at を含む
@@ -285,7 +286,7 @@ artifact の意味は次の通り。
 
 `PageArtifactDocument` は固定ページを保持する。homeは完成したpageではなく実行時に記事一覧やmetadataと合成する一部分なので、`HomeFragmentArtifactDocument` として独立させる。
 
-`publish`は描画済みカテゴリのmetadataを`CategoryLandingMeta`としてdomainへ渡す。domainはlandingだけが存在するカテゴリも含めて`CategoryIndex`へ統合し、カテゴリ順、記事順、`SiteMetadata`の集計を確定する。Markdown変換、HTML生成、filesystemへの書込みは`publish`に残す。
+`publish`は描画済みカテゴリを`PublishableCategoryLanding`として組み立て、metadataを`CategoryLandingMeta`としてdomainへ渡す。frontmatterのtitleと描画済み本文はdomainの値オブジェクトで検証し、descriptionはArticleと同様に入力値を保持する。domainはlandingだけが存在するカテゴリも含めて`CategoryIndex`へ統合し、カテゴリ順、記事順、`SiteMetadata`の集計を確定する。Markdown変換、HTML生成、filesystemへの書込みは`publish`に残す。
 
 ### S3 release 契約
 
