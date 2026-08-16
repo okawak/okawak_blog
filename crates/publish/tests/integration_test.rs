@@ -2,6 +2,7 @@ mod test_fixtures;
 
 use indoc::indoc;
 use publish::{BookmarkEnricher, PublishError, publish, publish_with_bookmark_enricher};
+use rstest::rstest;
 use std::{fs, path::Path, sync::Arc};
 use tempfile::TempDir;
 use test_fixtures::{collect_html_files, write_about_page};
@@ -369,7 +370,7 @@ async fn test_publish_with_category_landing_file() {
         title: "Tech"
         kind: category
         category: tech
-        summary: "Technology landing"
+        summary: "  Technology landing  "
         created: "2025-01-01T00:00:00+09:00"
         updated: "2025-01-01T00:00:00+09:00"
         is_completed: true
@@ -406,8 +407,40 @@ async fn test_publish_with_category_landing_file() {
 
     assert!(category_index.contains("\"category\": \"tech\""));
     assert!(category_index.contains("\"title\": \"Tech\""));
-    assert!(category_index.contains("\"description\": \"Technology landing\""));
+    assert!(category_index.contains("\"description\": \"  Technology landing  \""));
     assert!(category_page.contains("Welcome to the category landing page."));
+}
+
+#[rstest]
+#[case::blank_title("   ", "# Tech\n\nCategory description.")]
+#[case::blank_body("Tech", "   ")]
+#[tokio::test]
+async fn test_publish_rejects_incomplete_category_landing(#[case] title: &str, #[case] body: &str) {
+    let temp_dir = TempDir::new().unwrap();
+    let obsidian_dir = temp_dir.path().join("obsidian");
+    let output_dir = temp_dir.path().join("dist");
+
+    write_required_article(&obsidian_dir);
+    write_about_page(&obsidian_dir);
+    let category_content = format!(
+        r#"---
+title: "{title}"
+kind: category
+category: tech
+summary: "Technology landing"
+created: "2025-01-01T00:00:00+09:00"
+updated: "2025-01-01T00:00:00+09:00"
+is_completed: true
+---
+
+{body}
+"#
+    );
+    fs::write(obsidian_dir.join("tech/index.md"), category_content).unwrap();
+
+    let result = publish(&obsidian_dir, &output_dir).await;
+
+    assert!(result.is_err(), "publish should reject incomplete landing");
 }
 
 #[tokio::test]
