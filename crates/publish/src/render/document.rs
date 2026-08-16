@@ -5,15 +5,10 @@ use crate::{
     links,
 };
 use domain::{
-    ArticleBody, ArticleMeta, Category, CategoryLandingMeta, HomeFragmentArtifactDocument,
-    PageArtifactDocument, PublishableArticle, Timestamp, Title,
+    ArticleBody, ArticleMeta, CategoryLandingBody, CategoryLandingMeta,
+    HomeFragmentArtifactDocument, PageArtifactDocument, PublishableArticle,
+    PublishableCategoryLanding, Timestamp, Title,
 };
-use html_escape::encode_text;
-
-pub(crate) struct RenderedCategoryLanding {
-    pub(crate) meta: CategoryLandingMeta,
-    pub(crate) html: String,
-}
 
 pub(crate) async fn render_article(
     parsed_file: ParsedArticleFile,
@@ -40,22 +35,16 @@ pub(crate) async fn render_category(
     parsed_file: ParsedCategoryFile,
     link_index: &links::Index,
     enrich: BookmarkEnricher,
-) -> Result<RenderedCategoryLanding> {
+) -> Result<PublishableCategoryLanding> {
     let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await;
-    let title = normalize_category_title(parsed_file.category, &parsed_file.front_matter.title);
-    let description = normalize_category_description(parsed_file.front_matter.summary.as_deref());
-    let html = if html.trim().is_empty() {
-        build_fallback_category_html(parsed_file.category, &title, description.as_deref())
-    } else {
-        html
-    };
     let meta = CategoryLandingMeta {
         category: parsed_file.category,
-        title: Title::new(title)?,
-        description,
+        title: Title::new(parsed_file.front_matter.title)?,
+        description: parsed_file.front_matter.summary,
         updated_at: Timestamp::new(parsed_file.front_matter.updated)?,
     };
-    Ok(RenderedCategoryLanding { meta, html })
+    let body = CategoryLandingBody::new(html)?;
+    Ok(PublishableCategoryLanding::new(meta, body))
 }
 
 pub(crate) async fn render_home(
@@ -84,87 +73,5 @@ pub(crate) async fn render_page(
         description: parsed_file.front_matter.summary,
         html,
         updated_at: parsed_file.front_matter.updated,
-    }
-}
-
-fn normalize_category_title(category: Category, title: &str) -> String {
-    let title = title.trim();
-    if title.is_empty() {
-        category.display_name().to_owned()
-    } else {
-        title.to_owned()
-    }
-}
-
-fn normalize_category_description(description: Option<&str>) -> Option<String> {
-    description
-        .map(str::trim)
-        .filter(|description| !description.is_empty())
-        .map(str::to_owned)
-}
-
-fn build_fallback_category_html(
-    category: Category,
-    title: &str,
-    description: Option<&str>,
-) -> String {
-    let heading = if title.trim().is_empty() {
-        category.display_name()
-    } else {
-        title.trim()
-    };
-
-    let body = description
-        .filter(|description| !description.trim().is_empty())
-        .map(str::trim)
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("{}カテゴリの記事一覧です。", category.display_name()));
-    let heading = encode_text(heading);
-    let body = encode_text(&body);
-    format!("<article><h1>{heading}</h1><p>{body}</p></article>")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_build_fallback_category_html_uses_title_and_summary() {
-        let html = build_fallback_category_html(Category::Tech, "Tech", Some("Technology landing"));
-
-        assert!(html.contains("<h1>Tech</h1>"));
-        assert!(html.contains("<p>Technology landing</p>"));
-    }
-
-    #[test]
-    fn test_build_fallback_category_html_falls_back_to_category_display_name() {
-        let html = build_fallback_category_html(Category::Physics, "   ", None);
-
-        assert!(html.contains("<h1>物理学</h1>"));
-        assert!(html.contains("物理学カテゴリの記事一覧です。"));
-    }
-
-    #[test]
-    fn test_build_fallback_category_html_escapes_frontmatter_text() {
-        let html = build_fallback_category_html(
-            Category::Tech,
-            "<script>alert(1)</script>",
-            Some("\"quoted\" & <tag>"),
-        );
-
-        assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
-        assert!(html.contains("\"quoted\" &amp; &lt;tag&gt;"));
-        assert!(!html.contains("<script>alert(1)</script>"));
-    }
-
-    #[test]
-    fn test_normalize_category_metadata_trims_and_falls_back() {
-        assert_eq!(normalize_category_title(Category::Physics, "   "), "物理学");
-        assert_eq!(normalize_category_title(Category::Tech, "  Tech  "), "Tech");
-        assert_eq!(normalize_category_description(Some("   ")), None);
-        assert_eq!(
-            normalize_category_description(Some("  Technology landing  ")),
-            Some("Technology landing".to_string())
-        );
     }
 }

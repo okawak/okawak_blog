@@ -229,8 +229,11 @@ async fn process_category(
 ) -> Result<domain::CategoryLandingMeta> {
     let rendered = render_category(parsed_file, link_index, enrich).await?;
     run_artifact_write(move || {
-        let output_file_path =
-            write_category_page(&site_directories, rendered.meta.category, &rendered.html)?;
+        let output_file_path = write_category_page(
+            &site_directories,
+            rendered.meta.category,
+            rendered.body.as_str(),
+        )?;
         Ok((rendered.meta, output_file_path))
     })
     .await

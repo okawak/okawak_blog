@@ -71,6 +71,37 @@ pub struct CategoryLandingMeta {
     pub updated_at: Timestamp,
 }
 
+/// Rendered HTML body for a publishable category landing page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CategoryLandingBody(String);
+
+impl CategoryLandingBody {
+    pub fn new(html: String) -> Result<Self> {
+        if html.trim().is_empty() {
+            return Err(DomainError::validation("html"));
+        }
+
+        Ok(Self(html))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Fully publishable category landing page used by the artifact pipeline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublishableCategoryLanding {
+    pub meta: CategoryLandingMeta,
+    pub body: CategoryLandingBody,
+}
+
+impl PublishableCategoryLanding {
+    pub fn new(meta: CategoryLandingMeta, body: CategoryLandingBody) -> Self {
+        Self { meta, body }
+    }
+}
+
 /// Category-specific index.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CategoryIndex {
@@ -231,6 +262,14 @@ mod tests {
         let body = ArticleBody::new("<p>body</p>".to_string()).unwrap();
 
         assert_eq!(body.as_str(), "<p>body</p>");
+    }
+
+    #[test]
+    fn test_category_landing_body_validation() {
+        assert!(CategoryLandingBody::new("   ".to_string()).is_err());
+        let body = CategoryLandingBody::new("<p>category</p>".to_string()).unwrap();
+
+        assert_eq!(body.as_str(), "<p>category</p>");
     }
 
     #[test]
