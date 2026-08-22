@@ -92,7 +92,7 @@ fn resolve_wikilink_destination<'a>(
     index: &'a Index,
 ) -> CowStr<'a> {
     let target = target.trim();
-    // The table prepass escapes a piped WikiLink delimiter, leaving this suffix on its target.
+    // pulldown-cmark keeps the escape before a piped WikiLink delimiter in its target.
     let target = if has_pothole {
         target.strip_suffix('\\').unwrap_or(target)
     } else {
