@@ -48,7 +48,7 @@ impl PublishableArticle {
     }
 }
 
-/// Lightweight summary entry stored in article and category indexes.
+/// Lightweight summary entry stored in the article index and category artifacts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublishedArticleSummary {
     pub slug: Slug,
@@ -106,7 +106,7 @@ impl PublishableCategoryLanding {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CategoryIndex {
     pub category: Category,
-    /// Landing metadata included in the category index artifact when available.
+    /// Landing metadata used to construct the category artifact when available.
     pub landing: Option<CategoryLandingMeta>,
     pub articles: Vec<PublishedArticleSummary>,
 }

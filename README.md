@@ -99,9 +99,7 @@ site/
 │   │   └── <slug>.html
 │   └── index.json
 ├── categories/
-│   ├── <category>/
-│   │   ├── index.json
-│   │   └── page.html
+│   ├── <category>.json
 │   └── ...
 ├── pages/
 │   ├── about.json

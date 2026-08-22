@@ -2,6 +2,7 @@
   "category": "tech",
   "title": "Fixture Tech",
   "description": "Category fixture description",
+  "html": "<article><h2>Tech landing</h2><p>Category fixture body</p><img data-testid=\"wide-landing-content\" width=\"1200\" height=\"24\" alt=\"Wide landing fixture\"></article>",
   "updated_at": "2026-01-02T00:00:00+09:00",
   "articles": [
     {

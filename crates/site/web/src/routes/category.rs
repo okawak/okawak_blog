@@ -34,18 +34,13 @@ pub async fn get_category_page_document(
         };
         let snapshot = artifact_reader.snapshot().await?;
 
-        let category_index = match snapshot.read_category_index(category.as_str()).await {
-            Ok(index) => index,
-            Err(error) if error.is_not_found() => return Ok(None),
-            Err(error) => return Err(error.into()),
-        };
-        let html = match snapshot.read_category_html(&category).await {
-            Ok(html) => html,
+        let category_document = match snapshot.read_category_document(&category).await {
+            Ok(document) => document,
             Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error.into()),
         };
 
-        Ok(Some(build_category_page_document(&category_index, &html)?))
+        Ok(Some(build_category_page_document(&category_document)?))
     }
 
     #[cfg(not(feature = "ssr"))]

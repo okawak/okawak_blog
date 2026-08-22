@@ -1,10 +1,10 @@
 use crate::artifacts::{
     SiteDirectories, build_site_artifacts, validate_site_artifacts, write_article_page,
-    write_category_page, write_home_fragment, write_page_document, write_site_artifacts,
+    write_site_artifacts,
 };
 use crate::classify::{
-    ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, ParsedPageFile, classify_obsidian_files,
-    ensure_category_landings, ensure_unique_category_landings, ensure_unique_page_keys,
+    ParsedArticleFile, classify_obsidian_files, ensure_category_landings,
+    ensure_unique_category_landings, ensure_unique_page_keys,
 };
 use crate::error::{PublishError, Result};
 use crate::render::{
@@ -14,10 +14,7 @@ use crate::render::{
 use crate::vault::{scan_markdown_files, validate_obsidian_dir};
 use crate::{classify, links};
 use futures::{StreamExt, stream};
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 use tracing::info;
 
 pub async fn publish(obsidian_dir: &Path, output_dir: &Path) -> Result<()> {
@@ -93,45 +90,30 @@ pub async fn publish_with_bookmark_enricher(
         .await;
     let article_metas = article_results.into_iter().collect::<Result<Vec<_>>>()?;
 
-    let page_results = stream::iter(pages)
-        .map(|parsed_file| {
-            process_page(
-                parsed_file,
-                &link_index,
-                Arc::clone(&enrich),
-                site_directories.clone(),
-            )
-        })
+    let page_documents = stream::iter(pages)
+        .map(|parsed_file| render_page(parsed_file, &link_index, Arc::clone(&enrich)))
         .buffer_unordered(CONCURRENT_LIMIT)
         .collect::<Vec<_>>()
         .await;
-    page_results.into_iter().collect::<Result<Vec<_>>>()?;
 
-    if let Some(parsed_file) = home {
-        process_home(
-            parsed_file,
-            &link_index,
-            Arc::clone(&enrich),
-            site_directories.clone(),
-        )
-        .await?;
-    }
+    let home_fragment = match home {
+        Some(parsed_file) => Some(render_home(parsed_file, &link_index, Arc::clone(&enrich)).await),
+        None => None,
+    };
 
     let category_results = stream::iter(categories)
-        .map(|parsed_file| {
-            process_category(
-                parsed_file,
-                &link_index,
-                Arc::clone(&enrich),
-                site_directories.clone(),
-            )
-        })
+        .map(|parsed_file| render_category(parsed_file, &link_index, Arc::clone(&enrich)))
         .buffer_unordered(CONCURRENT_LIMIT)
         .collect::<Vec<_>>()
         .await;
     let category_landings = category_results.into_iter().collect::<Result<Vec<_>>>()?;
 
-    let site_artifacts = build_site_artifacts(article_metas, category_landings);
+    let site_artifacts = build_site_artifacts(
+        article_metas,
+        category_landings,
+        page_documents,
+        home_fragment,
+    )?;
     let site_directories_for_write = site_directories.clone();
     let site_artifacts = tokio::task::spawn_blocking(move || {
         write_site_artifacts(&site_directories_for_write, &site_artifacts)?;
@@ -179,74 +161,17 @@ async fn process_article(
     site_directories: SiteDirectories,
 ) -> Result<domain::ArticleMeta> {
     let article = render_article(parsed_file, link_index, enrich).await?;
-    run_artifact_write(move || {
+    let (meta, output_file_path) = tokio::task::spawn_blocking(move || {
         let output_file_path = write_article_page(
             &site_directories,
             article.meta.category,
             &article.meta.slug,
             article.body.as_str(),
         )?;
-        Ok((article.meta, output_file_path))
+        Ok::<_, PublishError>((article.meta, output_file_path))
     })
-    .await
-}
+    .await??;
 
-#[tracing::instrument(skip_all, fields(source_key = %parsed_file.source_key), err)]
-async fn process_page(
-    parsed_file: ParsedPageFile,
-    link_index: &links::Index,
-    enrich: BookmarkEnricher,
-    site_directories: SiteDirectories,
-) -> Result<()> {
-    let rendered = render_page(parsed_file, link_index, enrich).await;
-    run_artifact_write(move || {
-        let output_file_path = write_page_document(&site_directories, &rendered)?;
-        Ok(((), output_file_path))
-    })
-    .await
-}
-
-#[tracing::instrument(skip_all, fields(source_key = %parsed_file.source_key), err)]
-async fn process_home(
-    parsed_file: ParsedHomeFile,
-    link_index: &links::Index,
-    enrich: BookmarkEnricher,
-    site_directories: SiteDirectories,
-) -> Result<()> {
-    let rendered = render_home(parsed_file, link_index, enrich).await;
-    run_artifact_write(move || {
-        let output_file_path = write_home_fragment(&site_directories, &rendered)?;
-        Ok(((), output_file_path))
-    })
-    .await
-}
-
-#[tracing::instrument(skip_all, fields(source_key = %parsed_file.source_key), err)]
-async fn process_category(
-    parsed_file: ParsedCategoryFile,
-    link_index: &links::Index,
-    enrich: BookmarkEnricher,
-    site_directories: SiteDirectories,
-) -> Result<domain::CategoryLandingMeta> {
-    let rendered = render_category(parsed_file, link_index, enrich).await?;
-    run_artifact_write(move || {
-        let output_file_path = write_category_page(
-            &site_directories,
-            rendered.meta.category,
-            rendered.body.as_str(),
-        )?;
-        Ok((rendered.meta, output_file_path))
-    })
-    .await
-}
-
-async fn run_artifact_write<T>(
-    write: impl FnOnce() -> Result<(T, PathBuf)> + Send + 'static,
-) -> Result<T>
-where
-    T: Send + 'static,
-{
-    let (result, output_file_path) = tokio::task::spawn_blocking(write).await??;
     info!(output_file = %output_file_path.display(), "wrote artifact");
-    Ok(result)
+    Ok(meta)
 }

@@ -1,7 +1,7 @@
 //! Shared page contracts built from persisted artifact documents.
 
 use crate::{
-    ArticleIndexDocument, ArticleSummaryDocument, Category, CategoryIndexDocument, DomainError,
+    ArticleIndexDocument, ArticleSummaryDocument, Category, CategoryArtifactDocument, DomainError,
     HomeFragmentArtifactDocument, PageArtifactDocument, PageKey, Result, SectionPath,
     SiteMetadataDocument, Slug, Title,
 };
@@ -234,7 +234,7 @@ pub fn build_home_fragment_document(
     Ok(HomeFragmentDocument {
         title: title.to_string(),
         description: artifact.description.clone(),
-        html: artifact.html.clone(),
+        html: html.to_string(),
     })
 }
 
@@ -253,34 +253,31 @@ pub fn build_article_page_document(
 }
 
 pub fn build_category_page_document(
-    index: &CategoryIndexDocument,
-    html: &str,
+    artifact: &CategoryArtifactDocument,
 ) -> Result<CategoryPageDocument> {
-    let category = Category::from_str(&index.category)?;
-    let html = html.trim();
+    let category = Category::from_str(&artifact.category)?;
+    let title = artifact.title.trim();
+    if title.is_empty() {
+        return Err(DomainError::validation("title"));
+    }
+    let html = artifact.html.trim();
     if html.is_empty() {
         return Err(DomainError::validation("html"));
     }
 
-    let articles = index
+    let articles = artifact
         .articles
         .iter()
         .map(SiteArticleCard::try_from)
         .collect::<Result<Vec<_>>>()?;
-    let title = index
-        .title
-        .as_deref()
-        .filter(|title| !title.trim().is_empty())
-        .unwrap_or(category.display_name())
-        .to_string();
     let sections = build_category_section_groups(&articles);
 
     Ok(CategoryPageDocument {
         category,
-        title,
+        title: title.to_string(),
         category_display_name: category.display_name().to_string(),
-        description: index.description.clone(),
-        html: html.to_string(),
+        description: artifact.description.clone(),
+        html: artifact.html.clone(),
         sections,
         articles,
     })
@@ -445,19 +442,17 @@ mod tests {
 
     #[test]
     fn test_build_category_page_document() {
-        let document = build_category_page_document(
-            &CategoryIndexDocument {
+        let document = build_category_page_document(&CategoryArtifactDocument {
+            category: "daily".to_string(),
+            title: "Daily Notes".to_string(),
+            description: Some("Daily landing".to_string()),
+            html: "<article><h1>Daily Notes</h1></article>".to_string(),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            articles: vec![ArticleSummaryDocument {
                 category: "daily".to_string(),
-                title: Some("Daily Notes".to_string()),
-                description: Some("Daily landing".to_string()),
-                updated_at: Some("2025-01-01T00:00:00+09:00".to_string()),
-                articles: vec![ArticleSummaryDocument {
-                    category: "daily".to_string(),
-                    ..sample_summary()
-                }],
-            },
-            "<article><h1>Daily Notes</h1></article>",
-        )
+                ..sample_summary()
+            }],
+        })
         .unwrap();
 
         assert_eq!(document.category, Category::Daily);
@@ -596,16 +591,14 @@ mod tests {
 
     #[test]
     fn test_build_category_page_metadata() {
-        let document = build_category_page_document(
-            &CategoryIndexDocument {
-                category: "tech".to_string(),
-                title: Some("Rust".to_string()),
-                description: Some("Rust articles".to_string()),
-                updated_at: Some("2025-01-01T00:00:00+09:00".to_string()),
-                articles: vec![sample_summary()],
-            },
-            "<article><h1>Rust</h1></article>",
-        )
+        let document = build_category_page_document(&CategoryArtifactDocument {
+            category: "tech".to_string(),
+            title: "Rust".to_string(),
+            description: Some("Rust articles".to_string()),
+            html: "<article><h1>Rust</h1></article>".to_string(),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            articles: vec![sample_summary()],
+        })
         .unwrap();
 
         assert_eq!(
@@ -618,16 +611,14 @@ mod tests {
 
     #[test]
     fn test_build_category_page_description_falls_back_when_missing() {
-        let document = build_category_page_document(
-            &CategoryIndexDocument {
-                category: "tech".to_string(),
-                title: None,
-                description: None,
-                updated_at: None,
-                articles: vec![sample_summary()],
-            },
-            "<article><h1>Tech</h1></article>",
-        )
+        let document = build_category_page_document(&CategoryArtifactDocument {
+            category: "tech".to_string(),
+            title: "Tech".to_string(),
+            description: None,
+            html: "<article><h1>Tech</h1></article>".to_string(),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            articles: vec![sample_summary()],
+        })
         .unwrap();
 
         assert_eq!(
@@ -638,69 +629,62 @@ mod tests {
 
     #[test]
     fn test_build_category_page_document_rejects_blank_html() {
-        let result = build_category_page_document(
-            &CategoryIndexDocument {
-                category: "tech".to_string(),
-                title: None,
-                description: None,
-                updated_at: None,
-                articles: vec![sample_summary()],
-            },
-            "  ",
-        );
+        let result = build_category_page_document(&CategoryArtifactDocument {
+            category: "tech".to_string(),
+            title: "Tech".to_string(),
+            description: None,
+            html: "  ".to_string(),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            articles: vec![sample_summary()],
+        });
 
         assert_eq!(result, Err(DomainError::validation("html")));
     }
 
     #[test]
     fn test_build_category_page_document_groups_articles_by_section_path() {
-        let document = build_category_page_document(
-            &CategoryIndexDocument {
-                category: "tech".to_string(),
-                title: Some("Tech".to_string()),
-                description: None,
-                updated_at: None,
-                articles: vec![
-                    ArticleSummaryDocument {
-                        slug: "alpha0000001".to_string(),
-                        title: "Alpha".to_string(),
-                        category: "tech".to_string(),
-                        section_path: SectionPath::new(vec!["rust".to_string()]),
-                        description: None,
-                        tags: vec![],
-                        priority: None,
-                        created_at: "2025-01-01T00:00:00+09:00".to_string(),
-                        updated_at: "2025-01-01T00:00:00+09:00".to_string(),
-                    },
-                    ArticleSummaryDocument {
-                        slug: "beta00000001".to_string(),
-                        title: "Beta".to_string(),
-                        category: "tech".to_string(),
-                        section_path: SectionPath::new(vec![
-                            "rust".to_string(),
-                            "async".to_string(),
-                        ]),
-                        description: None,
-                        tags: vec![],
-                        priority: None,
-                        created_at: "2025-01-01T00:00:00+09:00".to_string(),
-                        updated_at: "2025-01-01T00:00:00+09:00".to_string(),
-                    },
-                    ArticleSummaryDocument {
-                        slug: "gamma0000001".to_string(),
-                        title: "Gamma".to_string(),
-                        category: "tech".to_string(),
-                        section_path: SectionPath::default(),
-                        description: None,
-                        tags: vec![],
-                        priority: None,
-                        created_at: "2025-01-01T00:00:00+09:00".to_string(),
-                        updated_at: "2025-01-01T00:00:00+09:00".to_string(),
-                    },
-                ],
-            },
-            "<article><h1>Tech</h1></article>",
-        )
+        let document = build_category_page_document(&CategoryArtifactDocument {
+            category: "tech".to_string(),
+            title: "Tech".to_string(),
+            description: None,
+            html: "<article><h1>Tech</h1></article>".to_string(),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            articles: vec![
+                ArticleSummaryDocument {
+                    slug: "alpha0000001".to_string(),
+                    title: "Alpha".to_string(),
+                    category: "tech".to_string(),
+                    section_path: SectionPath::new(vec!["rust".to_string()]),
+                    description: None,
+                    tags: vec![],
+                    priority: None,
+                    created_at: "2025-01-01T00:00:00+09:00".to_string(),
+                    updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+                },
+                ArticleSummaryDocument {
+                    slug: "beta00000001".to_string(),
+                    title: "Beta".to_string(),
+                    category: "tech".to_string(),
+                    section_path: SectionPath::new(vec!["rust".to_string(), "async".to_string()]),
+                    description: None,
+                    tags: vec![],
+                    priority: None,
+                    created_at: "2025-01-01T00:00:00+09:00".to_string(),
+                    updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+                },
+                ArticleSummaryDocument {
+                    slug: "gamma0000001".to_string(),
+                    title: "Gamma".to_string(),
+                    category: "tech".to_string(),
+                    section_path: SectionPath::default(),
+                    description: None,
+                    tags: vec![],
+                    priority: None,
+                    created_at: "2025-01-01T00:00:00+09:00".to_string(),
+                    updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+                },
+            ],
+        })
         .unwrap();
 
         assert_eq!(document.sections.len(), 3);

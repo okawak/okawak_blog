@@ -220,7 +220,7 @@ mod tests {
     use async_trait::async_trait;
     use axum::{Router, body::Body, routing::get};
     use domain::{
-        ArticleIndexDocument, Category, CategoryIndexDocument, HomeFragmentArtifactDocument,
+        ArticleIndexDocument, Category, CategoryArtifactDocument, HomeFragmentArtifactDocument,
         PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
     };
     use infra::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, Result};
@@ -268,11 +268,10 @@ mod tests {
             unreachable!()
         }
 
-        async fn read_category_index(&self, _category: &str) -> Result<CategoryIndexDocument> {
-            unreachable!()
-        }
-
-        async fn read_category_html(&self, _category: &Category) -> Result<String> {
+        async fn read_category_document(
+            &self,
+            _category: &Category,
+        ) -> Result<CategoryArtifactDocument> {
             unreachable!()
         }
 

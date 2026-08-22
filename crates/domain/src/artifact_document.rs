@@ -115,31 +115,40 @@ impl From<&[PublishedArticleSummary]> for ArticleIndexDocument {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CategoryIndexDocument {
+pub struct CategoryArtifactDocument {
     pub category: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<String>,
+    pub html: String,
+    pub updated_at: String,
     pub articles: Vec<ArticleSummaryDocument>,
 }
 
-impl From<&CategoryIndex> for CategoryIndexDocument {
-    fn from(index: &CategoryIndex) -> Self {
-        let landing = index.landing.as_ref();
-        Self {
+impl TryFrom<(&CategoryIndex, &str)> for CategoryArtifactDocument {
+    type Error = crate::DomainError;
+
+    fn try_from((index, html): (&CategoryIndex, &str)) -> crate::Result<Self> {
+        if html.trim().is_empty() {
+            return Err(crate::DomainError::validation("html"));
+        }
+        let landing = index
+            .landing
+            .as_ref()
+            .ok_or_else(|| crate::DomainError::validation("category_landing"))?;
+
+        Ok(Self {
             category: index.category.as_str().to_string(),
-            title: landing.map(|landing| landing.title.as_str().to_string()),
-            description: landing.and_then(|landing| landing.description.clone()),
-            updated_at: landing.map(|landing| landing.updated_at.to_string()),
+            title: landing.title.as_str().to_string(),
+            description: landing.description.clone(),
+            html: html.to_string(),
+            updated_at: landing.updated_at.to_string(),
             articles: index
                 .articles
                 .iter()
                 .map(ArticleSummaryDocument::from)
                 .collect(),
-        }
+        })
     }
 }
 
@@ -350,21 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn test_category_index_document_deserialization_defaults_missing_metadata() {
-        let json = r#"{
-            "category":"tech",
-            "articles":[]
-        }"#;
-
-        let document: CategoryIndexDocument = serde_json::from_str(json).unwrap();
-
-        assert_eq!(document.title, None);
-        assert_eq!(document.description, None);
-        assert_eq!(document.updated_at, None);
-    }
-
-    #[test]
-    fn test_category_index_document_uses_landing_metadata() {
+    fn test_category_artifact_document_combines_landing_and_index() {
         let landing = CategoryLandingMeta {
             category: Category::Tech,
             title: Title::new("Technology".to_string()).unwrap(),
@@ -377,13 +372,38 @@ mod tests {
             articles: vec![],
         };
 
-        let document = CategoryIndexDocument::from(&index);
+        let document = CategoryArtifactDocument::try_from((&index, "<p>Technology</p>")).unwrap();
 
-        assert_eq!(document.title.as_deref(), Some("Technology"));
+        assert_eq!(document.title, "Technology");
         assert_eq!(document.description.as_deref(), Some("Technology landing"));
-        assert_eq!(
-            document.updated_at.as_deref(),
-            Some("2025-01-02T00:00:00+09:00")
-        );
+        assert_eq!(document.html, "<p>Technology</p>");
+        assert_eq!(document.updated_at, "2025-01-02T00:00:00+09:00");
+    }
+
+    #[test]
+    fn test_category_artifact_document_requires_landing() {
+        let index = CategoryIndex {
+            category: Category::Tech,
+            landing: None,
+            articles: vec![],
+        };
+
+        assert!(CategoryArtifactDocument::try_from((&index, "<p>Technology</p>")).is_err());
+    }
+
+    #[test]
+    fn test_category_artifact_document_rejects_blank_html() {
+        let index = CategoryIndex {
+            category: Category::Tech,
+            landing: Some(CategoryLandingMeta {
+                category: Category::Tech,
+                title: Title::new("Technology".to_string()).unwrap(),
+                description: None,
+                updated_at: Timestamp::new("2025-01-02T00:00:00+09:00".to_string()).unwrap(),
+            }),
+            articles: vec![],
+        };
+
+        assert!(CategoryArtifactDocument::try_from((&index, "  ")).is_err());
     }
 }

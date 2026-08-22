@@ -1,6 +1,6 @@
 use crate::error::{PublishError, Result};
 use domain::{
-    ArticleIndexDocument, Category, CategoryIndexDocument, PageArtifactDocument,
+    ArticleIndexDocument, Category, CategoryArtifactDocument, PageArtifactDocument,
     SiteMetadataDocument, Slug,
 };
 use std::{
@@ -87,16 +87,27 @@ pub(crate) fn validate_site_artifacts(
                     category_metadata.category
                 ))
             })?;
-        let category_root = PathBuf::from("categories").join(category.as_str());
-        let category_index_path = category_root.join("index.json");
-        let category_index: CategoryIndexDocument =
-            read_required_json(site_root, &category_index_path)?;
-        if category_index.category != category.as_str() {
+        let category_path = PathBuf::from("categories").join(format!("{}.json", category.as_str()));
+        let category_document: CategoryArtifactDocument =
+            read_required_json(site_root, &category_path)?;
+        if category_document.category != category.as_str() {
             return Err(PublishError::ArtifactValidation(format!(
                 "{} declares category {} instead of {}",
-                category_index_path.display(),
-                category_index.category,
+                category_path.display(),
+                category_document.category,
                 category.as_str(),
+            )));
+        }
+        if category_document.title.trim().is_empty() {
+            return Err(PublishError::ArtifactValidation(format!(
+                "required artifact {} contains empty title",
+                category_path.display(),
+            )));
+        }
+        if category_document.html.trim().is_empty() {
+            return Err(PublishError::ArtifactValidation(format!(
+                "required artifact {} contains empty html",
+                category_path.display(),
             )));
         }
 
@@ -106,22 +117,20 @@ pub(crate) fn validate_site_artifacts(
             .filter(|article| article.category == category.as_str())
             .cloned()
             .collect();
-        if category_index.articles != expected_articles {
+        if category_document.articles != expected_articles {
             return Err(PublishError::ArtifactValidation(format!(
                 "{} does not match articles/index.json",
-                category_index_path.display(),
+                category_path.display(),
             )));
         }
-        if category_metadata.article_count != category_index.articles.len() {
+        if category_metadata.article_count != category_document.articles.len() {
             return Err(PublishError::ArtifactValidation(format!(
-                "metadata count for {} is {}, but category index contains {} articles",
+                "metadata count for {} is {}, but category artifact contains {} articles",
                 category.as_str(),
                 category_metadata.article_count,
-                category_index.articles.len(),
+                category_document.articles.len(),
             )));
         }
-
-        read_required_nonempty(site_root, &category_root.join("page.html"))?;
     }
 
     let about_path = Path::new("pages/about.json");
@@ -179,16 +188,16 @@ fn read_required_nonempty(site_root: &Path, relative_path: &Path) -> Result<Stri
 #[cfg(test)]
 mod tests {
     use super::super::builder::build_site_artifacts;
-    use super::super::writer::{
-        SiteDirectories, write_article_page, write_category_page, write_page_document,
-        write_site_artifacts,
-    };
+    use super::super::writer::{SiteDirectories, write_article_page, write_site_artifacts};
     use super::*;
-    use domain::{ArticleMeta, CategoryLandingMeta, PageKey, SectionPath, Timestamp, Title};
+    use domain::{
+        ArticleMeta, CategoryLandingBody, CategoryLandingMeta, PageKey, PublishableCategoryLanding,
+        SectionPath, Timestamp, Title,
+    };
     use tempfile::TempDir;
 
     const ARTICLE_PATH: &str = "site/articles/tech/artifact00001.html";
-    const CATEGORY_PATH: &str = "site/categories/tech/page.html";
+    const CATEGORY_PATH: &str = "site/categories/tech.json";
     const ABOUT_PATH: &str = "site/pages/about.json";
 
     fn write_complete_site() -> TempDir {
@@ -212,25 +221,28 @@ mod tests {
             description: Some("Tech landing".to_string()),
             updated_at: timestamp,
         };
-        let artifacts = build_site_artifacts(vec![article.clone()], vec![landing]);
+        let artifacts = build_site_artifacts(
+            vec![article.clone()],
+            vec![PublishableCategoryLanding::new(
+                landing,
+                CategoryLandingBody::new("<h1>Tech</h1>".to_string()).unwrap(),
+            )],
+            vec![PageArtifactDocument {
+                page: PageKey::new("about".to_string()).unwrap(),
+                title: "About".to_string(),
+                description: Some("About this site".to_string()),
+                html: "<article><h1>About</h1></article>".to_string(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            }],
+            None,
+        )
+        .unwrap();
 
         write_article_page(
             &directories,
             article.category,
             &article.slug,
             "<h1>Artifact Test</h1>",
-        )
-        .unwrap();
-        write_category_page(&directories, Category::Tech, "<h1>Tech</h1>").unwrap();
-        write_page_document(
-            &directories,
-            &PageArtifactDocument {
-                page: PageKey::new("about".to_string()).unwrap(),
-                title: "About".to_string(),
-                description: Some("About this site".to_string()),
-                html: "<article><h1>About</h1></article>".to_string(),
-                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
-            },
         )
         .unwrap();
         write_site_artifacts(&directories, &artifacts).unwrap();
@@ -252,7 +264,11 @@ mod tests {
     fn test_validate_site_artifacts_rejects_empty_article_index() {
         let temp_dir = TempDir::new().unwrap();
         let directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
-        write_site_artifacts(&directories, &build_site_artifacts(vec![], vec![])).unwrap();
+        write_site_artifacts(
+            &directories,
+            &build_site_artifacts(vec![], vec![], vec![], None).unwrap(),
+        )
+        .unwrap();
 
         let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
 
@@ -274,13 +290,13 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_site_artifacts_rejects_missing_category_page() {
+    fn test_validate_site_artifacts_rejects_missing_category_artifact() {
         let temp_dir = write_complete_site();
         fs::remove_file(temp_dir.path().join(CATEGORY_PATH)).unwrap();
 
         let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
 
-        assert!(error.to_string().contains("categories/tech/page.html"));
+        assert!(error.to_string().contains("categories/tech.json"));
     }
 
     #[test]
