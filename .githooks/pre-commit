@@ -1,4 +1,0 @@
-#!/bin/sh
-
-cargo fmt --all
-leptosfmt ./crates/web/**/*.rs

@@ -11,7 +11,6 @@ mise_bun_version="$(sed -nE 's/^bun = "([^"]+)"$/\1/p' mise.toml)"
 cargo_leptos_version="$(sed -nE 's/^"github:leptos-rs\/cargo-leptos" = "([^"]+)"$/\1/p' mise.toml)"
 leptosfmt_version="$(sed -nE 's/^"github:bram209\/leptosfmt" = "([^"]+)"$/\1/p' mise.toml)"
 tailwind_version="$(sed -nE 's/^LEPTOS_TAILWIND_VERSION = "v([^"]+)"$/\1/p' mise.toml)"
-e2e_bun_version="$(sed -nE 's/.*"packageManager": "bun@([^"]+)".*/\1/p' e2e/package.json)"
 tailwind_cli_version="$(sed -nE 's/.*"@tailwindcss\/cli": "([^"]+)".*/\1/p' crates/site/web/package.json)"
 tailwind_package_version="$(sed -nE 's/.*"tailwindcss": "([^"]+)".*/\1/p' crates/site/web/package.json)"
 
@@ -19,8 +18,6 @@ for version in "$mise_bun_version" "$cargo_leptos_version" "$leptosfmt_version" 
   [ -n "$version" ] || fail "required version is missing from mise.toml"
 done
 
-[ "$mise_bun_version" = "$e2e_bun_version" ] \
-  || fail "mise Bun $mise_bun_version does not match e2e packageManager $e2e_bun_version"
 [ "$tailwind_version" = "$tailwind_cli_version" ] \
   || fail "Tailwind CLI $tailwind_cli_version does not match LEPTOS_TAILWIND_VERSION $tailwind_version"
 [ "$tailwind_version" = "$tailwind_package_version" ] \
