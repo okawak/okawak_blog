@@ -1,11 +1,47 @@
 use crate::error::Result;
 
 use scraper::{Html, Selector};
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
+use tokio::sync::Semaphore;
 use url::Url;
 
+const CONCURRENT_REQUEST_LIMIT: usize = 8;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const USER_AGENT: &str = "publish-bookmark/1.0 (+https://github.com/okawak/okawak_blog)";
+
+#[derive(Clone)]
+pub(super) struct Fetcher {
+    client: reqwest::Client,
+    permits: Arc<Semaphore>,
+}
+
+impl Fetcher {
+    pub(super) fn new() -> Result<Self> {
+        let client = reqwest::Client::builder()
+            .user_agent(USER_AGENT)
+            .timeout(REQUEST_TIMEOUT)
+            .build()?;
+
+        Ok(Self {
+            client,
+            permits: Arc::new(Semaphore::new(CONCURRENT_REQUEST_LIMIT)),
+        })
+    }
+
+    /// Fetches bookmark metadata while bounding requests across all rendered documents.
+    pub(super) async fn fetch(&self, url: &str) -> Result<BookmarkMetadata> {
+        let html_content = {
+            let _permit = self
+                .permits
+                .acquire()
+                .await
+                .expect("bookmark request semaphore must remain open");
+            fetch_html_content(&self.client, url).await?
+        };
+
+        Ok(parse_metadata(url, &html_content))
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct BookmarkMetadata {
@@ -14,14 +50,6 @@ pub(super) struct BookmarkMetadata {
     pub(super) description: Option<String>,
     pub(super) image_url: Option<String>,
     pub(super) favicon_url: Option<String>,
-}
-
-/// Fetches bookmark metadata from a URL.
-pub(super) async fn fetch(url: &str) -> Result<BookmarkMetadata> {
-    let client = create_http_client()?;
-    let html_content = fetch_html_content(&client, url).await?;
-
-    Ok(parse_metadata(url, &html_content))
 }
 
 pub(super) fn fallback(url: &str, original_title: &str) -> BookmarkMetadata {
@@ -36,14 +64,6 @@ pub(super) fn fallback(url: &str, original_title: &str) -> BookmarkMetadata {
         image_url: None,
         favicon_url: None,
     }
-}
-
-fn create_http_client() -> Result<reqwest::Client> {
-    reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .timeout(REQUEST_TIMEOUT)
-        .build()
-        .map_err(Into::into)
 }
 
 async fn fetch_html_content(client: &reqwest::Client, url: &str) -> Result<String> {
