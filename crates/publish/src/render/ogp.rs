@@ -29,153 +29,131 @@ impl Fetcher {
     }
 
     /// Fetches bookmark metadata while bounding requests across all rendered documents.
-    pub(super) async fn fetch(&self, url: &str) -> Result<BookmarkMetadata> {
+    pub(super) async fn fetch(&self, url: &str) -> Result<Metadata> {
         let html_content = {
             let _permit = self
                 .permits
                 .acquire()
                 .await
                 .expect("bookmark request semaphore must remain open");
-            fetch_html_content(&self.client, url).await?
+            self.client
+                .get(url)
+                .send()
+                .await?
+                .error_for_status()?
+                .text()
+                .await?
         };
 
         Ok(parse_metadata(url, &html_content))
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub(super) struct BookmarkMetadata {
-    pub(super) url: String,
-    pub(super) title: String,
+#[derive(Debug, Default)]
+pub(super) struct Metadata {
+    pub(super) title: Option<String>,
     pub(super) description: Option<String>,
     pub(super) image_url: Option<String>,
     pub(super) favicon_url: Option<String>,
 }
 
-impl BookmarkMetadata {
-    pub(super) fn fallback(url: &str, original_title: &str) -> Self {
-        Self {
-            url: url.to_string(),
-            title: if original_title.trim().is_empty() {
-                url.to_string()
-            } else {
-                original_title.to_string()
-            },
-            description: None,
-            image_url: None,
-            favicon_url: None,
-        }
-    }
-}
-
-async fn fetch_html_content(client: &reqwest::Client, url: &str) -> Result<String> {
-    let response = client.get(url).send().await?;
-
-    response.text().await.map_err(Into::into)
-}
-
-fn parse_metadata(url: &str, html_content: &str) -> BookmarkMetadata {
+fn parse_metadata(url: &str, html_content: &str) -> Metadata {
     let document = Html::parse_document(html_content);
+    let base_url = Url::parse(url).ok();
 
-    BookmarkMetadata {
-        url: url.to_string(),
-        title: extract_title(&document).unwrap_or_else(|| url.to_string()),
-        description: extract_description(&document),
-        image_url: extract_image(&document, url),
-        favicon_url: extract_favicon(&document, url),
+    Metadata {
+        title: extract_first_attribute(
+            &document,
+            &["meta[property='og:title']", "meta[name='twitter:title']"],
+            "content",
+        )
+        .or_else(|| extract_text(&document, "title")),
+        description: extract_first_attribute(
+            &document,
+            &[
+                "meta[property='og:description']",
+                "meta[name='twitter:description']",
+                "meta[name='description']",
+            ],
+            "content",
+        ),
+        image_url: base_url.as_ref().and_then(|base_url| {
+            extract_first_url(
+                &document,
+                base_url,
+                &["meta[property='og:image']", "meta[name='twitter:image']"],
+                "content",
+            )
+        }),
+        favicon_url: base_url.as_ref().and_then(|base_url| {
+            extract_first_url(
+                &document,
+                base_url,
+                &[
+                    "link[rel='apple-touch-icon']",
+                    "link[rel='icon']",
+                    "link[rel='shortcut icon']",
+                ],
+                "href",
+            )
+            .or_else(|| resolve_url(base_url, "/favicon.ico"))
+        }),
     }
 }
 
-fn extract_title(document: &Html) -> Option<String> {
-    extract_meta_content(document, "meta[property='og:title']")
-        .or_else(|| extract_meta_content(document, "meta[name='twitter:title']"))
-        .or_else(|| extract_title_tag(document))
-}
-
-fn extract_meta_content(document: &Html, selector: &str) -> Option<String> {
-    let selector = Selector::parse(selector).ok()?;
-    let content = document
-        .select(&selector)
-        .next()?
-        .value()
-        .attr("content")?
-        .trim();
-
-    if content.is_empty() {
-        None
-    } else {
-        Some(content.to_string())
-    }
-}
-
-fn extract_title_tag(document: &Html) -> Option<String> {
-    let selector = Selector::parse("title").ok()?;
-    let title_text = document
-        .select(&selector)
-        .next()?
-        .text()
-        .collect::<String>();
-
-    let trimmed = title_text.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
-fn extract_description(document: &Html) -> Option<String> {
-    extract_meta_content(document, "meta[property='og:description']")
-        .or_else(|| extract_meta_content(document, "meta[name='twitter:description']"))
-        .or_else(|| extract_meta_content(document, "meta[name='description']"))
-}
-
-fn extract_image(document: &Html, base_url: &str) -> Option<String> {
-    let base = Url::parse(base_url).ok()?;
-
-    extract_meta_content(document, "meta[property='og:image']")
-        .or_else(|| extract_meta_content(document, "meta[name='twitter:image']"))
-        .and_then(|content| resolve_url(&base, content))
-}
-
-fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
-    let base = Url::parse(base_url).ok()?;
-    let selectors = [
-        "link[rel='apple-touch-icon']",
-        "link[rel='icon']",
-        "link[rel='shortcut icon']",
-    ];
-
+fn extract_first_attribute(document: &Html, selectors: &[&str], attribute: &str) -> Option<String> {
     selectors
         .iter()
-        .find_map(|selector| {
-            extract_link_href(document, selector).and_then(|href| resolve_url(&base, href))
-        })
-        .or_else(|| base.join("/favicon.ico").ok().map(|url| url.to_string()))
+        .find_map(|selector| extract_attribute(document, selector, attribute))
 }
 
-fn extract_link_href(document: &Html, selector: &str) -> Option<String> {
-    let selector = Selector::parse(selector).ok()?;
+fn extract_attribute(document: &Html, selector: &str, attribute: &str) -> Option<String> {
+    let selector = Selector::parse(selector).expect("metadata selector must be valid");
     document
         .select(&selector)
         .next()?
         .value()
-        .attr("href")
-        .map(ToString::to_string)
+        .attr(attribute)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
 }
 
-fn resolve_url(base: &Url, value: String) -> Option<String> {
-    if value.starts_with("http://") || value.starts_with("https://") {
-        Some(value)
-    } else {
-        base.join(&value).ok().map(|url| url.to_string())
-    }
+fn extract_text(document: &Html, selector: &str) -> Option<String> {
+    let selector = Selector::parse(selector).expect("metadata selector must be valid");
+    let text = document
+        .select(&selector)
+        .next()?
+        .text()
+        .collect::<String>();
+    let text = text.trim();
+
+    (!text.is_empty()).then(|| text.to_owned())
+}
+
+fn extract_first_url(
+    document: &Html,
+    base_url: &Url,
+    selectors: &[&str],
+    attribute: &str,
+) -> Option<String> {
+    selectors.iter().find_map(|selector| {
+        extract_attribute(document, selector, attribute)
+            .and_then(|value| resolve_url(base_url, &value))
+    })
+}
+
+fn resolve_url(base_url: &Url, value: &str) -> Option<String> {
+    let url = base_url.join(value).ok()?;
+
+    matches!(url.scheme(), "http" | "https").then(|| url.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use indoc::indoc;
+    use rstest::rstest;
 
     #[test]
     fn test_parse_metadata_prefers_open_graph_values() {
@@ -193,7 +171,7 @@ mod tests {
 
         let metadata = parse_metadata("https://example.com/articles/page", html);
 
-        assert_eq!(metadata.title, "Open Graph title");
+        assert_eq!(metadata.title.as_deref(), Some("Open Graph title"));
         assert_eq!(
             metadata.description.as_deref(),
             Some("Open Graph description")
@@ -209,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_metadata_uses_fallback_values() {
+    fn test_parse_metadata_uses_standard_metadata() {
         let html = indoc! {r#"
             <html>
               <head>
@@ -221,12 +199,32 @@ mod tests {
 
         let metadata = parse_metadata("https://example.com/articles/page", html);
 
-        assert_eq!(metadata.title, "Title tag");
+        assert_eq!(metadata.title.as_deref(), Some("Title tag"));
         assert_eq!(metadata.description.as_deref(), Some("Description"));
         assert_eq!(metadata.image_url, None);
         assert_eq!(
             metadata.favicon_url.as_deref(),
             Some("https://example.com/favicon.ico")
         );
+    }
+
+    #[test]
+    fn test_parse_metadata_leaves_missing_title_unresolved() {
+        let metadata = parse_metadata("https://example.com/articles/page", "<html></html>");
+
+        assert_eq!(metadata.title, None);
+    }
+
+    #[rstest]
+    #[case::relative("/images/card.png", Some("https://example.com/images/card.png"))]
+    #[case::absolute(
+        "https://cdn.example.com/card.png",
+        Some("https://cdn.example.com/card.png")
+    )]
+    #[case::unsafe_scheme("javascript:alert(1)", None)]
+    fn test_resolve_url(#[case] value: &str, #[case] expected: Option<&str>) {
+        let base_url = Url::parse("https://example.com/articles/page").unwrap();
+
+        assert_eq!(resolve_url(&base_url, value).as_deref(), expected);
     }
 }
