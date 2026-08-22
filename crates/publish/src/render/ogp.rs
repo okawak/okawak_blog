@@ -52,17 +52,19 @@ pub(super) struct BookmarkMetadata {
     pub(super) favicon_url: Option<String>,
 }
 
-pub(super) fn fallback(url: &str, original_title: &str) -> BookmarkMetadata {
-    BookmarkMetadata {
-        url: url.to_string(),
-        title: if original_title.trim().is_empty() {
-            url.to_string()
-        } else {
-            original_title.to_string()
-        },
-        description: None,
-        image_url: None,
-        favicon_url: None,
+impl BookmarkMetadata {
+    pub(super) fn fallback(url: &str, original_title: &str) -> Self {
+        Self {
+            url: url.to_string(),
+            title: if original_title.trim().is_empty() {
+                url.to_string()
+            } else {
+                original_title.to_string()
+            },
+            description: None,
+            image_url: None,
+            favicon_url: None,
+        }
     }
 }
 
