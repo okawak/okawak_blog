@@ -4,7 +4,7 @@ use crate::{CategoryIndex, PageKey, PublishedArticleSummary, SectionPath, SiteMe
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
-pub const ARTIFACT_RELEASE_SCHEMA_VERSION: u32 = 2;
+pub const ARTIFACT_RELEASE_SCHEMA_VERSION: u32 = 1;
 
 /// Points readers at one immutable set of published artifacts.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
