@@ -79,7 +79,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_render_preserves_piped_wikilinks_inside_table_cells() {
+    async fn test_render_resolves_escaped_piped_wikilinks_inside_tables() {
         let files = ClassifiedFiles {
             articles: vec![parsed_article("notes/article", Category::Tech, "def456")],
             ..Default::default()
@@ -87,9 +87,9 @@ mod tests {
         let link_index = links::Index::from_classified_files(&files);
         let enrich: BookmarkEnricher = Arc::new(|html| Box::pin(async move { Ok(html) }));
         let markdown = indoc! {r#"
-            | [[article|Header link]] | ![[article|Header embed]] |
+            | [[article\|Header link]] | ![[article\|Header embed]] |
             | --- | --- |
-            | [[article|Cell link]] | ![[article|Cell embed]] |
+            | [[article\|Cell link]] | ![[article\|Cell embed]] |
         "#};
 
         let html = render(markdown, &link_index, &enrich).await;

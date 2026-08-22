@@ -80,6 +80,8 @@ Obsidian link や bookmark 埋め込みを含めてよい。
 
 本文の基本的な Markdown 記法は CommonMark に従う。Obsidian 固有の解釈だけで成立する強調記法などは`publish`では補正しない。
 
+Markdown table内の表示名付きWikiLinkは、cell区切りと区別するためpipeをescapeして`[[target\|label]]`と書く。embedも同様に`![[target\|alt]]`とする。table外では通常どおり`[[target|label]]`と書ける。`publish`はMarkdown自体を書き換えず、`pulldown-cmark`が生成したWikiLink eventのtargetからtable用escapeだけを除去して公開URLを解決する。
+
 メモ:
 
 - `kind` を省略した場合は `article` として扱う

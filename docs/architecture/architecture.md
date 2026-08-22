@@ -68,9 +68,9 @@ okawak_blog/
   - crate外向けAPIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
   - path処理の対応環境はmacOSとLinuxとし、Windows形式のpathは対象外とする
   - vault moduleによるObsidian vault走査、Markdown読込、frontmatter parse
-  - links moduleによる全公開contentのvault相対source keyと公開URLの索引構築、およびWikiLink link / image eventの公開URL解決
+  - links moduleによる全公開contentのvault相対source keyと公開URLの索引構築、およびtable用にescapeされたpipeの正規化を含むWikiLink link / image eventの公開URL解決
   - render moduleによるcontent kindごとのdocument組み立てと共通本文処理
-  - render/htmlによるWikiLinkと数式を含む`pulldown-cmark` event生成とHTML変換。数式spanには`.math-inline` / `.math-display`を使用する
+  - render/htmlによる入力Markdownを事前書換えしないWikiLinkと数式を含む`pulldown-cmark` event生成とHTML変換。数式spanには`.math-inline` / `.math-display`を使用する
   - render/sanitizeによるlink・image URLとraw HTMLの安全化
   - render/bookmarkによるsimple bookmark構文の判定、外部HTTPを伴うmetadata取得、rich bookmark HTML生成
   - classify moduleによる公開種別の確定と`section_path`の導出

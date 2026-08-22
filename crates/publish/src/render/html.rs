@@ -1,12 +1,9 @@
 use super::sanitize;
 use crate::links::{self, Index};
-use pulldown_cmark::{Event, LinkType, Options, Parser, Tag, html};
-use std::{borrow::Cow, ops::Range};
+use pulldown_cmark::{Options, Parser, html};
 
 /// Converts Markdown to sanitized HTML.
 pub(crate) fn convert_markdown_to_html(markdown_content: &str, link_index: &Index) -> String {
-    let prepared_markdown = escape_table_wikilink_pipes(markdown_content);
-
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_FOOTNOTES);
@@ -16,102 +13,12 @@ pub(crate) fn convert_markdown_to_html(markdown_content: &str, link_index: &Inde
     options.insert(Options::ENABLE_MATH);
     options.insert(Options::ENABLE_WIKILINKS);
 
-    let parser = Parser::new_ext(&prepared_markdown, options);
+    let parser = Parser::new_ext(markdown_content, options);
     let parser = links::resolve_wikilinks(parser, link_index);
-    let mut html_output = String::with_capacity(prepared_markdown.len() * 2);
+    let mut html_output = String::with_capacity(markdown_content.len() * 2);
     html::push_html(&mut html_output, sanitize::events(parser).into_iter());
 
     html_output
-}
-
-/// Escapes piped WikiLinks only where pulldown-cmark would treat their pipes as table separators.
-/// Remove this workaround once pulldown-cmark handles piped WikiLinks inside tables.
-fn escape_table_wikilink_pipes(markdown: &str) -> Cow<'_, str> {
-    let piped_wikilinks = piped_wikilink_ranges(markdown);
-
-    if piped_wikilinks.is_empty() {
-        return Cow::Borrowed(markdown);
-    }
-
-    // Hide WikiLink pipes while detecting tables. `/` preserves the original byte offsets.
-    let table_probe = replace_wikilink_pipes(markdown, &piped_wikilinks, "/");
-    let table_ranges = Parser::new_ext(
-        &table_probe,
-        Options::ENABLE_TABLES | Options::ENABLE_WIKILINKS,
-    )
-    .into_offset_iter()
-    .filter_map(|(event, range)| match event {
-        Event::Start(Tag::Table(_)) => Some(range),
-        _ => None,
-    })
-    .collect::<Vec<_>>();
-
-    let table_wikilinks = piped_wikilinks
-        .into_iter()
-        .filter(|wikilink| {
-            table_ranges
-                .iter()
-                .any(|table| table.start <= wikilink.start && wikilink.end <= table.end)
-        })
-        .collect::<Vec<_>>();
-
-    if table_wikilinks.is_empty() {
-        return Cow::Borrowed(markdown);
-    }
-
-    Cow::Owned(replace_wikilink_pipes(markdown, &table_wikilinks, r"\|"))
-}
-
-fn piped_wikilink_ranges(markdown: &str) -> Vec<Range<usize>> {
-    let mut ranges = Parser::new_ext(markdown, Options::ENABLE_WIKILINKS)
-        .into_offset_iter()
-        .filter_map(|(event, range)| match event {
-            Event::Start(
-                Tag::Link {
-                    link_type: LinkType::WikiLink { has_pothole: true },
-                    ..
-                }
-                | Tag::Image {
-                    link_type: LinkType::WikiLink { has_pothole: true },
-                    ..
-                },
-            ) => Some(range),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    ranges.sort_unstable_by_key(|range| range.start);
-
-    let mut disjoint_ranges: Vec<Range<usize>> = Vec::with_capacity(ranges.len());
-    for range in ranges {
-        if let Some(previous) = disjoint_ranges.last_mut()
-            && range.start <= previous.end
-        {
-            previous.end = previous.end.max(range.end);
-        } else {
-            disjoint_ranges.push(range);
-        }
-    }
-
-    disjoint_ranges
-}
-
-fn replace_wikilink_pipes(
-    markdown: &str,
-    wikilink_ranges: &[Range<usize>],
-    replacement: &str,
-) -> String {
-    let mut replaced = String::with_capacity(markdown.len());
-    let mut previous_end = 0;
-
-    for range in wikilink_ranges {
-        replaced.push_str(&markdown[previous_end..range.start]);
-        replaced.push_str(&markdown[range.clone()].replace('|', replacement));
-        previous_end = range.end;
-    }
-
-    replaced.push_str(&markdown[previous_end..]);
-    replaced
 }
 
 #[cfg(test)]
@@ -122,37 +29,6 @@ mod tests {
 
     fn convert_markdown_to_html(markdown: &str) -> String {
         super::convert_markdown_to_html(markdown, &Index::default())
-    }
-
-    #[rstest]
-    #[case::link_outside_table("See [[Page|Label]].", "See [[Page|Label]].")]
-    #[case::nested_wikilinks_outside_table("![[image|[[page|text]]]]", "![[image|[[page|text]]]]")]
-    #[case::link_inside_table(
-        indoc! {r#"
-            | Link |
-            | --- |
-            | [[Page|Label]] |
-        "#},
-        indoc! {r#"
-            | Link |
-            | --- |
-            | [[Page\|Label]] |
-        "#}
-    )]
-    #[case::embed_inside_table(
-        indoc! {r#"
-            | Image |
-            | --- |
-            | ![[image.png|Alt]] |
-        "#},
-        indoc! {r#"
-            | Image |
-            | --- |
-            | ![[image.png\|Alt]] |
-        "#}
-    )]
-    fn test_escape_table_wikilink_pipes(#[case] markdown: &str, #[case] expected: &str) {
-        assert_eq!(escape_table_wikilink_pipes(markdown), expected);
     }
 
     #[rstest]
