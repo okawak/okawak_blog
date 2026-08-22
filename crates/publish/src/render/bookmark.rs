@@ -1,13 +1,14 @@
 use super::ogp::{self, BookmarkMetadata};
 use crate::error::Result;
 
-use futures::future::BoxFuture;
+use futures::future::{BoxFuture, join_all};
 use html_escape::{encode_double_quoted_attribute, encode_text};
 use regex::Regex;
-use std::future::Future;
-use std::ops::Range;
-use std::sync::Arc;
-use std::sync::LazyLock;
+use std::{
+    future::Future,
+    ops::Range,
+    sync::{Arc, LazyLock},
+};
 
 const HTML_INITIAL_CAPACITY: usize = 1024;
 const HTML_EXTENSION_CAPACITY: usize = 2048;
@@ -23,10 +24,13 @@ static SIMPLE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// Async function that enriches page HTML with rich bookmark cards.
 pub type BookmarkEnricher = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String>> + Send + Sync>;
 
-pub(crate) fn rich_bookmark_enricher() -> BookmarkEnricher {
-    Arc::new(|html: String| {
-        Box::pin(async move { Ok(convert_simple_bookmarks_to_rich(&html).await) })
-    })
+pub(crate) fn rich_bookmark_enricher() -> Result<BookmarkEnricher> {
+    let fetcher = ogp::Fetcher::new()?;
+
+    Ok(Arc::new(move |html: String| {
+        let fetcher = fetcher.clone();
+        Box::pin(async move { Ok(convert_simple_bookmarks_to_rich(&html, &fetcher).await) })
+    }))
 }
 
 pub(super) struct SimpleBookmark<'a> {
@@ -193,15 +197,16 @@ where
 {
     let mut result = String::with_capacity(html_content.len() + HTML_EXTENSION_CAPACITY);
     let mut last_end = 0;
-
-    for bookmark in simple_bookmarks(html_content) {
+    let bookmarks = simple_bookmarks(html_content).map(|bookmark| {
         let range = bookmark.range();
-        let url = bookmark.href().to_string();
-        let original_title = bookmark.title().to_string();
+        let metadata = fetch_data(bookmark.href().to_string(), bookmark.title().to_string());
 
+        async move { (range, metadata.await) }
+    });
+
+    // `join_all` polls metadata fetches concurrently and returns them in source order.
+    for (range, metadata) in join_all(bookmarks).await {
         result.push_str(&html_content[last_end..range.start]);
-
-        let metadata = fetch_data(url, original_title).await;
         let rich_bookmark_html = generate_rich_bookmark(&metadata);
         result.push_str(&rich_bookmark_html);
 
@@ -214,12 +219,16 @@ where
 }
 
 /// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
-async fn convert_simple_bookmarks_to_rich(html_content: &str) -> String {
-    convert_simple_bookmarks_with(html_content, |url, original_title| async move {
-        ogp::fetch(&url).await.unwrap_or_else(|error| {
-            tracing::warn!(%url, %error, "failed to fetch OGP metadata");
-            ogp::fallback(&url, &original_title)
-        })
+async fn convert_simple_bookmarks_to_rich(html_content: &str, fetcher: &ogp::Fetcher) -> String {
+    convert_simple_bookmarks_with(html_content, |url, original_title| {
+        let fetcher = fetcher.clone();
+
+        async move {
+            fetcher.fetch(&url).await.unwrap_or_else(|error| {
+                tracing::warn!(%url, %error, "failed to fetch OGP metadata");
+                ogp::fallback(&url, &original_title)
+            })
+        }
     })
     .await
 }
@@ -229,6 +238,14 @@ mod tests {
     use super::*;
     use indoc::indoc;
     use rstest::*;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use tokio::{
+        sync::Barrier,
+        time::{Duration, sleep, timeout},
+    };
 
     #[rstest]
     #[case::single_line(
@@ -389,5 +406,52 @@ mod tests {
         .await;
 
         assert_eq!(result, expected);
+    }
+
+    #[tokio::test]
+    async fn test_convert_simple_bookmarks_fetches_concurrently_and_preserves_order() {
+        let input = indoc! {r#"
+            <div class="bookmark"><a href="https://example.com">Example</a></div>
+            <div class="bookmark"><a href="https://github.com">GitHub</a></div>
+        "#};
+        let barrier = Arc::new(Barrier::new(2));
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+
+        let result = timeout(
+            Duration::from_secs(1),
+            convert_simple_bookmarks_with(input, {
+                let barrier = Arc::clone(&barrier);
+                let active = Arc::clone(&active);
+                let max_active = Arc::clone(&max_active);
+
+                move |url, title| {
+                    let barrier = Arc::clone(&barrier);
+                    let active = Arc::clone(&active);
+                    let max_active = Arc::clone(&max_active);
+
+                    async move {
+                        let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                        max_active.fetch_max(current, Ordering::SeqCst);
+                        barrier.wait().await;
+
+                        if url == "https://example.com" {
+                            sleep(Duration::from_millis(20)).await;
+                        }
+
+                        active.fetch_sub(1, Ordering::SeqCst);
+                        ogp::fallback(&url, &title)
+                    }
+                }
+            }),
+        )
+        .await
+        .expect("bookmark metadata fetches should run concurrently");
+
+        assert_eq!(max_active.load(Ordering::SeqCst), 2);
+        assert!(
+            result.find("https://example.com").unwrap()
+                < result.find("https://github.com").unwrap()
+        );
     }
 }
