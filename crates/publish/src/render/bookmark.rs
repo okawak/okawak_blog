@@ -1,9 +1,9 @@
+use super::ogp::{self, BookmarkMetadata};
 use crate::error::Result;
 
 use futures::future::BoxFuture;
 use html_escape::{encode_double_quoted_attribute, encode_text};
 use regex::Regex;
-use scraper::{Html, Selector};
 use std::future::Future;
 use std::ops::Range;
 use std::sync::Arc;
@@ -97,151 +97,8 @@ fn simple_bookmarks(html: &str) -> impl Iterator<Item = SimpleBookmark<'_>> {
     })
 }
 
-#[derive(Debug, Clone, PartialEq)]
-struct BookmarkData {
-    url: String,
-    title: String,
-    description: Option<String>,
-    image_url: Option<String>,
-    favicon_url: Option<String>,
-}
-
-/// Fetches OGP metadata from a URL with a 10-second timeout.
-async fn fetch_ogp_metadata(url: &str) -> Result<BookmarkData> {
-    let client = create_http_client()?;
-    let html_content = fetch_html_content(&client, url).await?;
-    let document = Html::parse_document(&html_content);
-
-    Ok(BookmarkData {
-        url: url.to_string(),
-        title: extract_title(&document).unwrap_or_else(|| url.to_string()),
-        description: extract_description(&document),
-        image_url: extract_image(&document, url),
-        favicon_url: extract_favicon(&document, url),
-    })
-}
-
-fn create_http_client() -> Result<reqwest::Client> {
-    // Use a standard User-Agent format without exposing internal package details.
-    let user_agent = "publish-bookmark/1.0 (+https://github.com/okawak/okawak_blog)";
-
-    reqwest::Client::builder()
-        .user_agent(user_agent)
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(Into::into)
-}
-
-async fn fetch_html_content(client: &reqwest::Client, url: &str) -> Result<String> {
-    let response = client.get(url).send().await?;
-
-    response.text().await.map_err(Into::into)
-}
-
-fn extract_title(document: &Html) -> Option<String> {
-    extract_meta_content(document, "meta[property='og:title']")
-        .or_else(|| extract_meta_content(document, "meta[name='twitter:title']"))
-        .or_else(|| extract_title_tag(document))
-}
-
-/// Extracts the `content` attribute from a meta tag.
-fn extract_meta_content(document: &Html, selector: &str) -> Option<String> {
-    let selector = Selector::parse(selector).ok()?;
-    let content = document
-        .select(&selector)
-        .next()?
-        .value()
-        .attr("content")?
-        .trim();
-
-    if content.is_empty() {
-        None
-    } else {
-        Some(content.to_string())
-    }
-}
-
-fn extract_title_tag(document: &Html) -> Option<String> {
-    let selector = Selector::parse("title").ok()?;
-    let title_text = document
-        .select(&selector)
-        .next()?
-        .text()
-        .collect::<String>();
-
-    let trimmed = title_text.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
-fn extract_description(document: &Html) -> Option<String> {
-    extract_meta_content(document, "meta[property='og:description']")
-        .or_else(|| extract_meta_content(document, "meta[name='twitter:description']"))
-        .or_else(|| extract_meta_content(document, "meta[name='description']"))
-}
-
-fn extract_image(document: &Html, base_url: &str) -> Option<String> {
-    use url::Url;
-
-    let base = Url::parse(base_url).ok()?;
-
-    extract_meta_content(document, "meta[property='og:image']")
-        .or_else(|| extract_meta_content(document, "meta[name='twitter:image']"))
-        .and_then(|content| {
-            // Keep absolute URLs as-is and resolve relative URLs against the base URL.
-            if content.starts_with("http://") || content.starts_with("https://") {
-                Some(content)
-            } else {
-                base.join(&content).ok().map(|url| url.to_string())
-            }
-        })
-}
-
-fn extract_favicon(document: &Html, base_url: &str) -> Option<String> {
-    use url::Url;
-
-    let base = Url::parse(base_url).ok()?;
-
-    let selectors = [
-        "link[rel='apple-touch-icon']",
-        "link[rel='icon']",
-        "link[rel='shortcut icon']",
-    ];
-
-    for selector in &selectors {
-        if let Some(href) = extract_link_href(document, selector) {
-            // Keep absolute URLs as-is and resolve relative URLs against the base URL.
-            let result_url = if href.starts_with("http://") || href.starts_with("https://") {
-                Some(href)
-            } else {
-                base.join(&href).ok().map(|url| url.to_string())
-            };
-
-            if let Some(url) = result_url {
-                return Some(url);
-            }
-        }
-    }
-
-    // A valid base URL can always resolve `/favicon.ico`, so `unwrap` is acceptable here.
-    Some(base.join("/favicon.ico").unwrap().to_string())
-}
-
-fn extract_link_href(document: &Html, selector: &str) -> Option<String> {
-    let selector = Selector::parse(selector).ok()?;
-    document
-        .select(&selector)
-        .next()?
-        .value()
-        .attr("href")
-        .map(ToString::to_string)
-}
-
 /// Generates rich bookmark HTML using the `bookmark` class.
-fn generate_rich_bookmark(data: &BookmarkData) -> String {
+fn generate_rich_bookmark(data: &BookmarkMetadata) -> String {
     let domain = extract_domain(&data.url);
 
     let mut html = String::with_capacity(HTML_INITIAL_CAPACITY);
@@ -272,7 +129,7 @@ fn write_bookmark_link(html: &mut String, url: &str) {
     ));
 }
 
-fn write_bookmark_container(html: &mut String, data: &BookmarkData, domain: &str) {
+fn write_bookmark_container(html: &mut String, data: &BookmarkMetadata, domain: &str) {
     html.push_str("    <div class=\"bookmark-container\">\n");
 
     write_bookmark_info(html, data, domain);
@@ -281,7 +138,7 @@ fn write_bookmark_container(html: &mut String, data: &BookmarkData, domain: &str
     html.push_str("    </div>\n");
 }
 
-fn write_bookmark_info(html: &mut String, data: &BookmarkData, domain: &str) {
+fn write_bookmark_info(html: &mut String, data: &BookmarkMetadata, domain: &str) {
     html.push_str("      <div class=\"bookmark-info\">\n");
     html.push_str(&format!(
         "        <div class=\"bookmark-title\">{}</div>\n",
@@ -299,7 +156,7 @@ fn write_bookmark_info(html: &mut String, data: &BookmarkData, domain: &str) {
     html.push_str("      </div>\n");
 }
 
-fn write_bookmark_link_info(html: &mut String, data: &BookmarkData, domain: &str) {
+fn write_bookmark_link_info(html: &mut String, data: &BookmarkMetadata, domain: &str) {
     html.push_str("        <div class=\"bookmark-link-info\">\n");
 
     if let Some(favicon) = &data.favicon_url {
@@ -316,7 +173,7 @@ fn write_bookmark_link_info(html: &mut String, data: &BookmarkData, domain: &str
     html.push_str("        </div>\n");
 }
 
-fn write_bookmark_image(html: &mut String, data: &BookmarkData) {
+fn write_bookmark_image(html: &mut String, data: &BookmarkMetadata) {
     if let Some(image_url) = &data.image_url {
         html.push_str("      <div class=\"bookmark-image\">\n");
         html.push_str(&format!(
@@ -332,7 +189,7 @@ fn write_bookmark_image(html: &mut String, data: &BookmarkData) {
 async fn convert_simple_bookmarks_with<F, Fut>(html_content: &str, fetch_data: F) -> String
 where
     F: Fn(String, String) -> Fut,
-    Fut: Future<Output = BookmarkData>,
+    Fut: Future<Output = BookmarkMetadata>,
 {
     let mut result = String::with_capacity(html_content.len() + HTML_EXTENSION_CAPACITY);
     let mut last_end = 0;
@@ -344,8 +201,8 @@ where
 
         result.push_str(&html_content[last_end..range.start]);
 
-        let bookmark_data = fetch_data(url, original_title).await;
-        let rich_bookmark_html = generate_rich_bookmark(&bookmark_data);
+        let metadata = fetch_data(url, original_title).await;
+        let rich_bookmark_html = generate_rich_bookmark(&metadata);
         result.push_str(&rich_bookmark_html);
 
         last_end = range.end;
@@ -359,26 +216,12 @@ where
 /// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
 async fn convert_simple_bookmarks_to_rich(html_content: &str) -> String {
     convert_simple_bookmarks_with(html_content, |url, original_title| async move {
-        fetch_ogp_metadata(&url).await.unwrap_or_else(|error| {
+        ogp::fetch(&url).await.unwrap_or_else(|error| {
             tracing::warn!(%url, %error, "failed to fetch OGP metadata");
-            create_fallback_bookmark_data(&url, &original_title)
+            ogp::fallback(&url, &original_title)
         })
     })
     .await
-}
-
-fn create_fallback_bookmark_data(url: &str, original_title: &str) -> BookmarkData {
-    BookmarkData {
-        url: url.to_string(),
-        title: if original_title.trim().is_empty() {
-            url.to_string()
-        } else {
-            original_title.to_string()
-        },
-        description: None,
-        image_url: None,
-        favicon_url: None,
-    }
 }
 
 #[cfg(test)]
@@ -414,7 +257,7 @@ mod tests {
 
     #[rstest]
     #[case::full_metadata(
-        &BookmarkData {
+        &BookmarkMetadata {
             url: "https://example.com".to_string(),
             title: "Example Title".to_string(),
             description: Some("This is an example description".to_string()),
@@ -441,7 +284,7 @@ mod tests {
             </div>"#}
     )]
     #[case::minimal_metadata(
-        &BookmarkData {
+        &BookmarkMetadata {
             url: "https://github.com".to_string(),
             title: "GitHub".to_string(),
             description: None,
@@ -463,7 +306,7 @@ mod tests {
             </div>"#}
     )]
     fn test_generate_rich_bookmark(
-        #[case] bookmark_data: &BookmarkData,
+        #[case] bookmark_data: &BookmarkMetadata,
         #[case] expected_html: &str,
     ) {
         let result = generate_rich_bookmark(bookmark_data);
@@ -541,7 +384,7 @@ mod tests {
     #[tokio::test]
     async fn test_convert_simple_bookmarks_to_rich(#[case] input: &str, #[case] expected: &str) {
         let result = convert_simple_bookmarks_with(input, |url, title| async move {
-            create_fallback_bookmark_data(&url, &title)
+            ogp::fallback(&url, &title)
         })
         .await;
 

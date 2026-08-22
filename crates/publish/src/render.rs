@@ -2,6 +2,7 @@ mod body;
 mod bookmark;
 mod document;
 mod html;
+mod ogp;
 mod sanitize;
 
 pub use bookmark::BookmarkEnricher;
