@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::Client;
 use domain::{
-    ArticleIndexDocument, ArtifactReleasePointerDocument, Category, CategoryIndexDocument,
+    ArticleIndexDocument, ArtifactReleasePointerDocument, Category, CategoryArtifactDocument,
     HomeFragmentArtifactDocument, PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
 };
 use std::{
@@ -45,8 +45,8 @@ pub trait ArtifactSnapshot: Send + Sync {
     }
 
     async fn read_article_index(&self) -> Result<ArticleIndexDocument>;
-    async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument>;
-    async fn read_category_html(&self, category: &Category) -> Result<String>;
+    async fn read_category_document(&self, category: &Category)
+    -> Result<CategoryArtifactDocument>;
     async fn read_site_metadata(&self) -> Result<SiteMetadataDocument>;
     async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<String>;
     async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument>;
@@ -95,16 +95,12 @@ impl ArtifactSnapshot for LocalArtifactReader {
         self.read_json("articles/index.json").await
     }
 
-    async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument> {
-        self.read_json(&format!("categories/{category}/index.json"))
+    async fn read_category_document(
+        &self,
+        category: &Category,
+    ) -> Result<CategoryArtifactDocument> {
+        self.read_json(&format!("categories/{}.json", category.as_str()))
             .await
-    }
-
-    async fn read_category_html(&self, category: &Category) -> Result<String> {
-        Ok(tokio::fs::read_to_string(
-            self.artifact_path(&format!("categories/{}/page.html", category.as_str())),
-        )
-        .await?)
     }
 
     async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
@@ -301,13 +297,11 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
         self.read_json("articles/index.json").await
     }
 
-    async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument> {
-        self.read_json(&format!("categories/{category}/index.json"))
-            .await
-    }
-
-    async fn read_category_html(&self, category: &Category) -> Result<String> {
-        self.read_text(&format!("categories/{}/page.html", category.as_str()))
+    async fn read_category_document(
+        &self,
+        category: &Category,
+    ) -> Result<CategoryArtifactDocument> {
+        self.read_json(&format!("categories/{}.json", category.as_str()))
             .await
     }
 
@@ -422,7 +416,7 @@ mod tests {
 
     fn write_fixture_site(root: &Path) {
         fs::create_dir_all(root.join("articles")).unwrap();
-        fs::create_dir_all(root.join("categories/tech")).unwrap();
+        fs::create_dir_all(root.join("categories")).unwrap();
         fs::create_dir_all(root.join("metadata")).unwrap();
         fs::create_dir_all(root.join("pages")).unwrap();
 
@@ -445,12 +439,13 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            root.join("categories/tech/index.json"),
-            serde_json::to_string_pretty(&CategoryIndexDocument {
+            root.join("categories/tech.json"),
+            serde_json::to_string_pretty(&CategoryArtifactDocument {
                 category: "tech".to_string(),
-                title: Some("Tech".to_string()),
+                title: "Tech".to_string(),
                 description: Some("Tech landing".to_string()),
-                updated_at: Some("2025-01-01T00:00:00+09:00".to_string()),
+                html: "<article><h1>Tech</h1></article>".to_string(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
                 articles: vec![ArticleSummaryDocument {
                     slug: "intro00000001".to_string(),
                     title: "Intro".to_string(),
@@ -464,11 +459,6 @@ mod tests {
                 }],
             })
             .unwrap(),
-        )
-        .unwrap();
-        fs::write(
-            root.join("categories/tech/page.html"),
-            "<article><h1>Tech</h1></article>",
         )
         .unwrap();
         fs::write(
@@ -522,8 +512,10 @@ mod tests {
         let snapshot = reader.snapshot().await.unwrap();
 
         let document = snapshot.read_article_index().await.unwrap();
-        let category = snapshot.read_category_index("tech").await.unwrap();
-        let category_html = snapshot.read_category_html(&Category::Tech).await.unwrap();
+        let category = snapshot
+            .read_category_document(&Category::Tech)
+            .await
+            .unwrap();
         let metadata = snapshot.read_site_metadata().await.unwrap();
         let html = snapshot
             .read_article_html(
@@ -541,8 +533,8 @@ mod tests {
         assert_eq!(document.articles.len(), 1);
         assert_eq!(document.articles[0].slug, "intro00000001");
         assert_eq!(category.category, "tech");
-        assert_eq!(category.title.as_deref(), Some("Tech"));
-        assert_eq!(category_html, "<article><h1>Tech</h1></article>");
+        assert_eq!(category.title, "Tech");
+        assert_eq!(category.html, "<article><h1>Tech</h1></article>");
         assert_eq!(metadata.total_articles, 1);
         assert_eq!(html, "<h1>Intro</h1>");
         assert_eq!(page.page.as_str(), "about");

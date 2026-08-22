@@ -392,27 +392,13 @@ async fn test_publish_with_category_landing_file() {
     let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
-    let category_index = fs::read_to_string(
-        output_dir
-            .join("site")
-            .join("categories")
-            .join("tech")
-            .join("index.json"),
-    )
-    .unwrap();
-    let category_page = fs::read_to_string(
-        output_dir
-            .join("site")
-            .join("categories")
-            .join("tech")
-            .join("page.html"),
-    )
-    .unwrap();
+    let category_document =
+        fs::read_to_string(output_dir.join("site").join("categories").join("tech.json")).unwrap();
 
-    assert!(category_index.contains("\"category\": \"tech\""));
-    assert!(category_index.contains("\"title\": \"Tech\""));
-    assert!(category_index.contains("\"description\": \"  Technology landing  \""));
-    assert!(category_page.contains("Welcome to the category landing page."));
+    assert!(category_document.contains("\"category\": \"tech\""));
+    assert!(category_document.contains("\"title\": \"Tech\""));
+    assert!(category_document.contains("\"description\": \"  Technology landing  \""));
+    assert!(category_document.contains("Welcome to the category landing page."));
 }
 
 #[tokio::test]

@@ -309,9 +309,8 @@ async fn test_end_to_end_obsidian_processing() {
         );
     }
 
-    let tech_category_index =
-        fs::read_to_string(site_root.join("categories").join("tech").join("index.json")).unwrap();
-    assert!(tech_category_index.contains("\"category\": \"tech\""));
+    let tech_category = fs::read_to_string(site_root.join("categories").join("tech.json")).unwrap();
+    assert!(tech_category.contains("\"category\": \"tech\""));
 
     let site_metadata = fs::read_to_string(site_root.join("metadata").join("site.json")).unwrap();
     assert!(site_metadata.contains("\"total_articles\": 3"));

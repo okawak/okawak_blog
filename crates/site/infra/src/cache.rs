@@ -1,7 +1,7 @@
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactReader, DynArtifactSnapshot, Result};
 use async_trait::async_trait;
 use domain::{
-    ArticleIndexDocument, Category, CategoryIndexDocument, HomeFragmentArtifactDocument,
+    ArticleIndexDocument, Category, CategoryArtifactDocument, HomeFragmentArtifactDocument,
     PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
 };
 use std::{
@@ -111,8 +111,7 @@ struct CachingArtifactSnapshot {
     article_index: OnceCell<ArticleIndexDocument>,
     site_metadata: OnceCell<SiteMetadataDocument>,
     home_fragment: OnceCell<HomeFragmentArtifactDocument>,
-    category_indexes: KeyedCache<CategoryIndexDocument>,
-    category_html: KeyedCache<String>,
+    category_documents: KeyedCache<CategoryArtifactDocument>,
     article_html: KeyedCache<String>,
     page_documents: KeyedCache<PageArtifactDocument>,
 }
@@ -124,8 +123,7 @@ impl CachingArtifactSnapshot {
             article_index: OnceCell::new(),
             site_metadata: OnceCell::new(),
             home_fragment: OnceCell::new(),
-            category_indexes: KeyedCache::new(),
-            category_html: KeyedCache::new(),
+            category_documents: KeyedCache::new(),
             article_html: KeyedCache::new(),
             page_documents: KeyedCache::new(),
         }
@@ -149,18 +147,13 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
             .cloned()
     }
 
-    async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument> {
-        self.category_indexes
-            .get_or_try_init(category.to_string(), || {
-                self.inner.read_category_index(category)
-            })
-            .await
-    }
-
-    async fn read_category_html(&self, category: &Category) -> Result<String> {
-        self.category_html
+    async fn read_category_document(
+        &self,
+        category: &Category,
+    ) -> Result<CategoryArtifactDocument> {
+        self.category_documents
             .get_or_try_init(category.as_str().to_string(), || {
-                self.inner.read_category_html(category)
+                self.inner.read_category_document(category)
             })
             .await
     }
@@ -323,18 +316,18 @@ mod tests {
             Ok(ArticleIndexDocument { articles: vec![] })
         }
 
-        async fn read_category_index(&self, category: &str) -> Result<CategoryIndexDocument> {
-            Ok(CategoryIndexDocument {
-                category: category.to_string(),
-                title: None,
+        async fn read_category_document(
+            &self,
+            category: &Category,
+        ) -> Result<CategoryArtifactDocument> {
+            Ok(CategoryArtifactDocument {
+                category: category.as_str().to_string(),
+                title: category.display_name().to_string(),
                 description: None,
-                updated_at: None,
+                html: category.as_str().to_string(),
+                updated_at: String::new(),
                 articles: vec![],
             })
-        }
-
-        async fn read_category_html(&self, category: &Category) -> Result<String> {
-            Ok(category.as_str().to_string())
         }
 
         async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {

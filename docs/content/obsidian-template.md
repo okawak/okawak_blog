@@ -123,7 +123,7 @@ updated: "2026-04-12T10:00:00+09:00"
 - ファイル名は固定しない
 - 同じカテゴリ配下で `kind=category` を持つ Markdown を、そのカテゴリの landing page として扱う
 - 記事が存在するカテゴリでは landing page を必須とする
-- 対応する artifact は `site/categories/<category>/page.html` と `site/categories/<category>/index.json`
+- 対応する artifact は `site/categories/<category>.json`
 
 ## 3. 固定ページ
 
