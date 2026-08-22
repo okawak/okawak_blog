@@ -39,4 +39,7 @@ pub enum PublishError {
 
     #[error("publish rejected {count} invalid content file(s)")]
     ContentErrors { count: usize },
+
+    #[error("missing category landing: {category}")]
+    MissingCategoryLanding { category: domain::Category },
 }

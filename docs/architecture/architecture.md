@@ -274,8 +274,8 @@ artifact の意味は次の通り。
   - 各記事に`section_path`を含む
 - `categories/<category>/page.html`
   - カテゴリ landing page 本文
-  - landing Markdown が無い場合は fallback HTML を生成する
-  - landing Markdown がある場合はfrontmatterのtitleと本文を必須とし、空値をfallbackで補完しない
+  - 記事が存在するカテゴリでは landing Markdown を必須とする
+  - frontmatterのtitleと本文を必須とし、空値を補完しない
 - `pages/<page>.json`
   - 固定ページ
   - HTML 本文と title / description / updated_at を含む

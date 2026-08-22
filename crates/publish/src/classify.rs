@@ -220,6 +220,22 @@ pub(crate) fn ensure_unique_category_landings(categories: &[ParsedCategoryFile])
     Ok(())
 }
 
+pub(crate) fn ensure_category_landings(
+    articles: &[ParsedArticleFile],
+    categories: &[ParsedCategoryFile],
+) -> Result<()> {
+    let category_landings: HashSet<_> = categories.iter().map(|file| file.category).collect();
+    let missing = articles
+        .iter()
+        .map(|file| file.category)
+        .find(|category| !category_landings.contains(category));
+
+    match missing {
+        Some(category) => Err(PublishError::MissingCategoryLanding { category }),
+        None => Ok(()),
+    }
+}
+
 fn parse_category(category: Option<&str>) -> Result<Category> {
     let category = category
         .ok_or_else(|| PublishError::Parse("Completed content requires a category".to_string()))?;
