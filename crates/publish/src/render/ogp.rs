@@ -1,6 +1,6 @@
 use crate::error::Result;
 
-use scraper::{Html, Selector};
+use scraper::{ElementRef, Html, Selector};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Semaphore;
 use url::Url;
@@ -97,16 +97,16 @@ fn parse_metadata(url: &str, html_content: &str) -> Metadata {
 }
 
 fn extract_first_attribute(document: &Html, selectors: &[&str], attribute: &str) -> Option<String> {
-    selectors
-        .iter()
-        .find_map(|selector| extract_attribute(document, selector, attribute))
+    selectors.iter().find_map(|selector| {
+        let selector = Selector::parse(selector).expect("metadata selector must be valid");
+        document
+            .select(&selector)
+            .find_map(|element| extract_attribute(element, attribute))
+    })
 }
 
-fn extract_attribute(document: &Html, selector: &str, attribute: &str) -> Option<String> {
-    let selector = Selector::parse(selector).expect("metadata selector must be valid");
-    document
-        .select(&selector)
-        .next()?
+fn extract_attribute(element: ElementRef<'_>, attribute: &str) -> Option<String> {
+    element
         .value()
         .attr(attribute)
         .map(str::trim)
@@ -133,10 +133,13 @@ fn extract_first_url(
     attribute: &str,
 ) -> Option<String> {
     selectors.iter().find_map(|selector| {
-        let value = extract_attribute(document, selector, attribute)?;
-        let url = base_url.join(&value).ok()?;
+        let selector = Selector::parse(selector).expect("metadata selector must be valid");
+        document.select(&selector).find_map(|element| {
+            let value = extract_attribute(element, attribute)?;
+            let url = base_url.join(&value).ok()?;
 
-        matches!(url.scheme(), "http" | "https").then(|| url.to_string())
+            matches!(url.scheme(), "http" | "https").then(|| url.to_string())
+        })
     })
 }
 
@@ -224,6 +227,21 @@ mod tests {
         let html = indoc! {r#"
             <link rel="apple-touch-icon" href="/apple-touch-icon.png">
             <link rel="icon" href="/favicon.png">
+        "#};
+
+        let metadata = parse_metadata("https://example.com/articles/page", html);
+
+        assert_eq!(
+            metadata.favicon_url.as_deref(),
+            Some("https://example.com/favicon.png")
+        );
+    }
+
+    #[test]
+    fn test_parse_metadata_skips_unsafe_icon_url() {
+        let html = indoc! {r#"
+            <link rel="icon" href="data:image/png;base64,unsafe">
+            <link rel="shortcut icon" href="/favicon.png">
         "#};
 
         let metadata = parse_metadata("https://example.com/articles/page", html);
