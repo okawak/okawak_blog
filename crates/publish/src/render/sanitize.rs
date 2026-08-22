@@ -1,6 +1,98 @@
 use super::bookmark;
 use pulldown_cmark::{CowStr, Event, Tag};
 
+/// Sanitizes link destinations and raw HTML before HTML generation.
+pub(super) fn events<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> {
+    let mut result = Vec::new();
+    let mut bookmark_buffer = String::new();
+
+    for event in parser {
+        match event {
+            Event::Html(html) | Event::InlineHtml(html) => {
+                sanitize_raw_html(html, &mut bookmark_buffer, &mut result)
+            }
+            other => {
+                flush_bookmark_buffer(&mut bookmark_buffer, &mut result);
+                result.push(sanitize_destination_event(other));
+            }
+        }
+    }
+
+    flush_bookmark_buffer(&mut bookmark_buffer, &mut result);
+
+    result
+}
+
+// Escapes raw HTML while preserving valid simple bookmark markup.
+fn sanitize_raw_html<'a>(
+    html: CowStr<'a>,
+    bookmark_buffer: &mut String,
+    result: &mut Vec<Event<'a>>,
+) {
+    if bookmark_buffer.is_empty() && !bookmark::is_simple_bookmark_start(&html) {
+        result.push(Event::Text(html));
+        return;
+    }
+
+    bookmark_buffer.push_str(&html);
+    let Some(end) = bookmark::simple_bookmark_end(bookmark_buffer) else {
+        return;
+    };
+
+    let rest = bookmark_buffer.split_off(end);
+    let bookmark_html = std::mem::take(bookmark_buffer);
+    match bookmark::parse_simple_bookmark(&bookmark_html) {
+        Some(bookmark) => {
+            let href = if is_safe_destination(bookmark.href()) {
+                bookmark.href()
+            } else {
+                "#"
+            };
+            result.push(Event::Html(bookmark.with_href(href).into()));
+        }
+        None => result.push(Event::Text(bookmark_html.into())),
+    }
+
+    if !rest.is_empty() {
+        result.push(Event::Text(rest.into()));
+    }
+}
+
+// Emits an incomplete bookmark buffer as escaped text.
+fn flush_bookmark_buffer<'a>(bookmark_buffer: &mut String, result: &mut Vec<Event<'a>>) {
+    if !bookmark_buffer.is_empty() {
+        result.push(Event::Text(std::mem::take(bookmark_buffer).into()));
+    }
+}
+
+fn sanitize_destination_event(event: Event<'_>) -> Event<'_> {
+    match event {
+        Event::Start(Tag::Link {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => Event::Start(Tag::Link {
+            link_type,
+            dest_url: sanitize_destination(dest_url),
+            title,
+            id,
+        }),
+        Event::Start(Tag::Image {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => Event::Start(Tag::Image {
+            link_type,
+            dest_url: sanitize_destination(dest_url),
+            title,
+            id,
+        }),
+        event => event,
+    }
+}
+
 fn sanitize_destination(destination: CowStr<'_>) -> CowStr<'_> {
     if is_safe_destination(&destination) {
         destination
@@ -32,96 +124,6 @@ fn is_safe_destination(destination: &str) -> bool {
     }
 
     !destination.contains(':') && !destination.contains('\\') && !destination.starts_with('.')
-}
-
-fn sanitize_destination_event(event: Event<'_>) -> Event<'_> {
-    match event {
-        Event::Start(Tag::Link {
-            link_type,
-            dest_url,
-            title,
-            id,
-        }) => Event::Start(Tag::Link {
-            link_type,
-            dest_url: sanitize_destination(dest_url),
-            title,
-            id,
-        }),
-        Event::Start(Tag::Image {
-            link_type,
-            dest_url,
-            title,
-            id,
-        }) => Event::Start(Tag::Image {
-            link_type,
-            dest_url: sanitize_destination(dest_url),
-            title,
-            id,
-        }),
-        event => event,
-    }
-}
-
-/// Sanitizes link destinations and raw HTML before HTML generation.
-pub(super) fn events<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> {
-    let mut result: Vec<Event<'a>> = Vec::new();
-    let mut in_bookmark = false;
-    let mut bookmark_buffer = String::new();
-
-    for event in parser {
-        match event {
-            Event::Html(html) | Event::InlineHtml(html) => {
-                if !in_bookmark && !html.trim_start().starts_with(r#"<div class="bookmark">"#) {
-                    result.push(Event::Text(html));
-                } else {
-                    if !in_bookmark {
-                        in_bookmark = true;
-                    }
-                    bookmark_buffer.push_str(&html);
-
-                    if let Some(close) = bookmark_buffer.find("</div>") {
-                        in_bookmark = false;
-                        let safe_end = close + "</div>".len();
-                        let bookmark_part = bookmark_buffer[..safe_end].to_string();
-                        let rest = bookmark_buffer[safe_end..].to_string();
-                        bookmark_buffer.clear();
-
-                        match bookmark::parse_simple_bookmark(&bookmark_part) {
-                            Some(bookmark) => {
-                                let href = if is_safe_destination(bookmark.href()) {
-                                    bookmark.href()
-                                } else {
-                                    "#"
-                                };
-                                result.push(Event::Html(bookmark.with_href(href).into()));
-                            }
-                            None => result.push(Event::Text(bookmark_part.into())),
-                        }
-
-                        if !rest.is_empty() {
-                            result.push(Event::Text(rest.into()));
-                        }
-                    }
-                }
-            }
-            other => {
-                if in_bookmark {
-                    in_bookmark = false;
-                    let buffer = std::mem::take(&mut bookmark_buffer);
-                    if !buffer.is_empty() {
-                        result.push(Event::Text(buffer.into()));
-                    }
-                }
-                result.push(sanitize_destination_event(other));
-            }
-        }
-    }
-
-    if !bookmark_buffer.is_empty() {
-        result.push(Event::Text(bookmark_buffer.into()));
-    }
-
-    result
 }
 
 #[cfg(test)]
