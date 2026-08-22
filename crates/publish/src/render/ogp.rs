@@ -89,14 +89,9 @@ fn parse_metadata(url: &str, html_content: &str) -> Metadata {
             extract_first_url(
                 &document,
                 base_url,
-                &[
-                    "link[rel='apple-touch-icon']",
-                    "link[rel='icon']",
-                    "link[rel='shortcut icon']",
-                ],
+                &["link[rel~='icon']", "link[rel~='apple-touch-icon']"],
                 "href",
             )
-            .or_else(|| resolve_url(base_url, "/favicon.ico"))
         }),
     }
 }
@@ -138,15 +133,11 @@ fn extract_first_url(
     attribute: &str,
 ) -> Option<String> {
     selectors.iter().find_map(|selector| {
-        extract_attribute(document, selector, attribute)
-            .and_then(|value| resolve_url(base_url, &value))
+        let value = extract_attribute(document, selector, attribute)?;
+        let url = base_url.join(&value).ok()?;
+
+        matches!(url.scheme(), "http" | "https").then(|| url.to_string())
     })
-}
-
-fn resolve_url(base_url: &Url, value: &str) -> Option<String> {
-    let url = base_url.join(value).ok()?;
-
-    matches!(url.scheme(), "http" | "https").then(|| url.to_string())
 }
 
 #[cfg(test)]
@@ -202,10 +193,7 @@ mod tests {
         assert_eq!(metadata.title.as_deref(), Some("Title tag"));
         assert_eq!(metadata.description.as_deref(), Some("Description"));
         assert_eq!(metadata.image_url, None);
-        assert_eq!(
-            metadata.favicon_url.as_deref(),
-            Some("https://example.com/favicon.ico")
-        );
+        assert_eq!(metadata.favicon_url, None);
     }
 
     #[test]
@@ -216,15 +204,63 @@ mod tests {
     }
 
     #[rstest]
+    #[case::apple_touch("apple-touch-icon")]
+    #[case::icon("icon")]
+    #[case::shortcut_icon("shortcut icon")]
+    #[case::reordered_tokens("icon shortcut")]
+    fn test_parse_metadata_matches_favicon_rel_tokens(#[case] rel: &str) {
+        let html = format!(r#"<link rel="{rel}" href="/favicon.png">"#);
+
+        let metadata = parse_metadata("https://example.com/articles/page", &html);
+
+        assert_eq!(
+            metadata.favicon_url.as_deref(),
+            Some("https://example.com/favicon.png")
+        );
+    }
+
+    #[test]
+    fn test_parse_metadata_prefers_standard_icon() {
+        let html = indoc! {r#"
+            <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+            <link rel="icon" href="/favicon.png">
+        "#};
+
+        let metadata = parse_metadata("https://example.com/articles/page", html);
+
+        assert_eq!(
+            metadata.favicon_url.as_deref(),
+            Some("https://example.com/favicon.png")
+        );
+    }
+
+    #[rstest]
     #[case::relative("/images/card.png", Some("https://example.com/images/card.png"))]
     #[case::absolute(
         "https://cdn.example.com/card.png",
         Some("https://cdn.example.com/card.png")
     )]
     #[case::unsafe_scheme("javascript:alert(1)", None)]
-    fn test_resolve_url(#[case] value: &str, #[case] expected: Option<&str>) {
-        let base_url = Url::parse("https://example.com/articles/page").unwrap();
+    fn test_parse_metadata_resolves_image_url(#[case] value: &str, #[case] expected: Option<&str>) {
+        let html = format!(r#"<meta property="og:image" content="{value}">"#);
 
-        assert_eq!(resolve_url(&base_url, value).as_deref(), expected);
+        let metadata = parse_metadata("https://example.com/articles/page", &html);
+
+        assert_eq!(metadata.image_url.as_deref(), expected);
+    }
+
+    #[test]
+    fn test_parse_metadata_skips_unsafe_image_url() {
+        let html = indoc! {r#"
+            <meta property="og:image" content="javascript:alert(1)">
+            <meta name="twitter:image" content="/images/card.png">
+        "#};
+
+        let metadata = parse_metadata("https://example.com/articles/page", html);
+
+        assert_eq!(
+            metadata.image_url.as_deref(),
+            Some("https://example.com/images/card.png")
+        );
     }
 }
