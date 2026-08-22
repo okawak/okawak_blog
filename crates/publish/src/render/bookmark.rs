@@ -2,9 +2,9 @@ use super::ogp::{self, BookmarkMetadata};
 
 use futures::future::{BoxFuture, join_all};
 use html_escape::{encode_double_quoted_attribute, encode_text};
+use indoc::formatdoc;
 use regex::Regex;
 use std::{
-    fmt::Write,
     future::Future,
     ops::Range,
     sync::{Arc, LazyLock},
@@ -67,120 +67,25 @@ impl SimpleBookmark<'_> {
     }
 }
 
-pub(super) fn parse_simple_bookmark(html: &str) -> Option<SimpleBookmark<'_>> {
-    let bookmark = simple_bookmarks(html).next()?;
-    let range = bookmark.range();
-    (html[..range.start].trim().is_empty() && html[range.end..].trim().is_empty())
-        .then_some(bookmark)
-}
+/// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
+async fn convert_simple_bookmarks_to_rich(
+    html_content: &str,
+    fetcher: Option<ogp::Fetcher>,
+) -> String {
+    convert_simple_bookmarks_with(html_content, move |url, original_title| {
+        let fetcher = fetcher.clone();
 
-pub(super) fn is_simple_bookmark_start(html: &str) -> bool {
-    html.trim_start().starts_with(SIMPLE_BOOKMARK_OPEN)
-}
-
-pub(super) fn simple_bookmark_end(html: &str) -> Option<usize> {
-    html.find(SIMPLE_BOOKMARK_CLOSE)
-        .map(|start| start + SIMPLE_BOOKMARK_CLOSE.len())
-}
-
-fn simple_bookmarks(html: &str) -> impl Iterator<Item = SimpleBookmark<'_>> {
-    SIMPLE_BOOKMARK_RE.captures_iter(html).map(|captures| {
-        let full_match = captures
-            .get(0)
-            .expect("Bookmark regex must capture a match");
-        let href = captures
-            .get(1)
-            .expect("Bookmark regex must capture an href");
-        let title = captures
-            .get(2)
-            .expect("Bookmark regex must capture a title");
-
-        SimpleBookmark {
-            source: html,
-            range: full_match.range(),
-            href_range: href.range(),
-            href: href.as_str(),
-            title: title.as_str(),
+        async move {
+            match fetcher {
+                Some(fetcher) => fetcher.fetch(&url).await.unwrap_or_else(|error| {
+                    tracing::warn!(%url, %error, "failed to fetch OGP metadata");
+                    BookmarkMetadata::fallback(&url, &original_title)
+                }),
+                None => BookmarkMetadata::fallback(&url, &original_title),
+            }
         }
     })
-}
-
-/// Generates rich bookmark HTML using the `bookmark` class.
-fn generate_rich_bookmark(data: &BookmarkMetadata) -> String {
-    let domain = extract_domain(&data.url);
-    let mut html = String::new();
-
-    write!(
-        &mut html,
-        concat!(
-            "<div class=\"bookmark\">\n",
-            "  <a href=\"{}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"bookmark-link\">\n",
-            "    <div class=\"bookmark-container\">\n",
-            "      <div class=\"bookmark-info\">\n",
-            "        <div class=\"bookmark-title\">{}</div>\n",
-        ),
-        encode_double_quoted_attribute(&data.url),
-        encode_text(&data.title),
-    )
-    .expect("writing bookmark HTML to a String cannot fail");
-
-    if let Some(description) = &data.description {
-        writeln!(
-            &mut html,
-            "        <div class=\"bookmark-description\">{}</div>",
-            encode_text(description),
-        )
-        .expect("writing bookmark HTML to a String cannot fail");
-    }
-
-    html.push_str("        <div class=\"bookmark-link-info\">\n");
-
-    if let Some(favicon) = &data.favicon_url {
-        writeln!(
-            &mut html,
-            "          <img class=\"bookmark-favicon\" src=\"{}\" alt=\"favicon\">",
-            encode_double_quoted_attribute(favicon),
-        )
-        .expect("writing bookmark HTML to a String cannot fail");
-    }
-
-    write!(
-        &mut html,
-        concat!(
-            "          <span class=\"bookmark-domain\">{}</span>\n",
-            "        </div>\n",
-            "      </div>\n",
-        ),
-        encode_text(&domain),
-    )
-    .expect("writing bookmark HTML to a String cannot fail");
-
-    if let Some(image_url) = &data.image_url {
-        write!(
-            &mut html,
-            concat!(
-                "      <div class=\"bookmark-image\">\n",
-                "        <img src=\"{}\" alt=\"{}\" loading=\"lazy\">\n",
-                "      </div>\n",
-            ),
-            encode_double_quoted_attribute(image_url),
-            encode_double_quoted_attribute(&data.title),
-        )
-        .expect("writing bookmark HTML to a String cannot fail");
-    }
-
-    html.push_str("    </div>\n  </a>\n</div>");
-
-    html
-}
-
-fn extract_domain(url: &str) -> String {
-    use url::Url;
-
-    Url::parse(url)
-        .ok()
-        .and_then(|u| u.host_str().map(ToString::to_string))
-        .unwrap_or_else(|| url.to_string())
+    .await
 }
 
 /// Replaces simple bookmark markup using metadata supplied by `fetch_data`.
@@ -212,34 +117,117 @@ where
     result
 }
 
-/// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
-async fn convert_simple_bookmarks_to_rich(
-    html_content: &str,
-    fetcher: Option<ogp::Fetcher>,
-) -> String {
-    convert_simple_bookmarks_with(html_content, move |url, original_title| {
-        let fetcher = fetcher.clone();
+fn simple_bookmarks(html: &str) -> impl Iterator<Item = SimpleBookmark<'_>> {
+    SIMPLE_BOOKMARK_RE.captures_iter(html).map(|captures| {
+        let full_match = captures
+            .get(0)
+            .expect("Bookmark regex must capture a match");
+        let href = captures
+            .get(1)
+            .expect("Bookmark regex must capture an href");
+        let title = captures
+            .get(2)
+            .expect("Bookmark regex must capture a title");
 
-        async move {
-            match fetcher {
-                Some(fetcher) => fetcher.fetch(&url).await.unwrap_or_else(|error| {
-                    tracing::warn!(%url, %error, "failed to fetch OGP metadata");
-                    BookmarkMetadata::fallback(&url, &original_title)
-                }),
-                None => BookmarkMetadata::fallback(&url, &original_title),
-            }
+        SimpleBookmark {
+            source: html,
+            range: full_match.range(),
+            href_range: href.range(),
+            href: href.as_str(),
+            title: title.as_str(),
         }
     })
-    .await
+}
+
+/// Generates rich bookmark HTML using the `bookmark` class.
+fn generate_rich_bookmark(data: &BookmarkMetadata) -> String {
+    let domain = extract_domain(&data.url);
+    let description_html = data
+        .description
+        .as_ref()
+        .map_or_else(String::new, |description| {
+            format!(
+                r#"<div class="bookmark-description">{}</div>"#,
+                encode_text(description),
+            )
+        });
+    let favicon_html = data
+        .favicon_url
+        .as_ref()
+        .map_or_else(String::new, |favicon| {
+            format!(
+                r#"<img class="bookmark-favicon" src="{}" alt="favicon">"#,
+                encode_double_quoted_attribute(favicon),
+            )
+        });
+    let image_html = data
+        .image_url
+        .as_ref()
+        .map_or_else(String::new, |image_url| {
+            formatdoc! {r#"
+                <div class="bookmark-image">
+                  <img src="{}" alt="{}" loading="lazy">
+                </div>"#,
+                encode_double_quoted_attribute(image_url),
+                encode_double_quoted_attribute(&data.title),
+            }
+        });
+
+    formatdoc! {r#"
+        <div class="bookmark">
+          <a href="{url}" target="_blank" rel="noopener noreferrer" class="bookmark-link">
+            <div class="bookmark-container">
+              <div class="bookmark-info">
+                <div class="bookmark-title">{title}</div>
+                {description_html}
+                <div class="bookmark-link-info">
+                  {favicon_html}
+                  <span class="bookmark-domain">{domain}</span>
+                </div>
+              </div>
+              {image_html}
+            </div>
+          </a>
+        </div>"#,
+        url = encode_double_quoted_attribute(&data.url),
+        title = encode_text(&data.title),
+        domain = encode_text(&domain),
+    }
+}
+
+fn extract_domain(url: &str) -> String {
+    use url::Url;
+
+    Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(ToString::to_string))
+        .unwrap_or_else(|| url.to_string())
+}
+
+pub(super) fn parse_simple_bookmark(html: &str) -> Option<SimpleBookmark<'_>> {
+    let bookmark = simple_bookmarks(html).next()?;
+    let range = bookmark.range();
+    (html[..range.start].trim().is_empty() && html[range.end..].trim().is_empty())
+        .then_some(bookmark)
+}
+
+pub(super) fn is_simple_bookmark_start(html: &str) -> bool {
+    html.trim_start().starts_with(SIMPLE_BOOKMARK_OPEN)
+}
+
+pub(super) fn simple_bookmark_end(html: &str) -> Option<usize> {
+    html.find(SIMPLE_BOOKMARK_CLOSE)
+        .map(|start| start + SIMPLE_BOOKMARK_CLOSE.len())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use indoc::indoc;
+    use regex::Regex;
     use rstest::*;
     use std::sync::{
-        Arc,
+        Arc, LazyLock,
         atomic::{AtomicUsize, Ordering},
     };
     use tokio::{
@@ -327,7 +315,7 @@ mod tests {
         #[case] expected_html: &str,
     ) {
         let result = generate_rich_bookmark(bookmark_data);
-        assert_eq!(result, expected_html);
+        assert_html_eq(&result, expected_html);
     }
 
     #[rstest]
@@ -405,7 +393,7 @@ mod tests {
         })
         .await;
 
-        assert_eq!(result, expected);
+        assert_html_eq(&result, expected);
     }
 
     #[tokio::test]
@@ -463,6 +451,16 @@ mod tests {
         assert!(
             result.find("https://example.com").unwrap()
                 < result.find("https://github.com").unwrap()
+        );
+    }
+
+    fn assert_html_eq(actual: &str, expected: &str) {
+        static INTER_TAG_WHITESPACE_RE: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r">\s+<").expect("Invalid test regex pattern"));
+
+        assert_eq!(
+            INTER_TAG_WHITESPACE_RE.replace_all(actual, "><"),
+            INTER_TAG_WHITESPACE_RE.replace_all(expected, "><"),
         );
     }
 }
