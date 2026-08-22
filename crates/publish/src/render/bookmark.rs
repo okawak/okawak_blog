@@ -11,9 +11,13 @@ use std::sync::LazyLock;
 
 const HTML_INITIAL_CAPACITY: usize = 1024;
 const HTML_EXTENSION_CAPACITY: usize = 2048;
+const SIMPLE_BOOKMARK_OPEN: &str = r#"<div class="bookmark">"#;
+const SIMPLE_BOOKMARK_CLOSE: &str = "</div>";
 static SIMPLE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"<div class="bookmark">\s*<a href="([^"]+)">([^<]*)</a>\s*</div>"#)
-        .expect("Invalid bookmark regex pattern")
+    Regex::new(&format!(
+        r#"{SIMPLE_BOOKMARK_OPEN}\s*<a href="([^"]+)">([^<]*)</a>\s*{SIMPLE_BOOKMARK_CLOSE}"#
+    ))
+    .expect("Invalid bookmark regex pattern")
 });
 
 /// Async function that enriches page HTML with rich bookmark cards.
@@ -60,6 +64,15 @@ pub(super) fn parse_simple_bookmark(html: &str) -> Option<SimpleBookmark<'_>> {
     let range = bookmark.range();
     (html[..range.start].trim().is_empty() && html[range.end..].trim().is_empty())
         .then_some(bookmark)
+}
+
+pub(super) fn is_simple_bookmark_start(html: &str) -> bool {
+    html.trim_start().starts_with(SIMPLE_BOOKMARK_OPEN)
+}
+
+pub(super) fn simple_bookmark_end(html: &str) -> Option<usize> {
+    html.find(SIMPLE_BOOKMARK_CLOSE)
+        .map(|start| start + SIMPLE_BOOKMARK_CLOSE.len())
 }
 
 fn simple_bookmarks(html: &str) -> impl Iterator<Item = SimpleBookmark<'_>> {
