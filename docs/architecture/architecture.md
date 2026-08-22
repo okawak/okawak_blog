@@ -72,7 +72,8 @@ okawak_blog/
   - render moduleによるcontent kindごとのdocument組み立てと共通本文処理
   - render/htmlによる入力Markdownを事前書換えしないWikiLinkと数式を含む`pulldown-cmark` event生成とHTML変換。数式spanには`.math-inline` / `.math-display`を使用する
   - render/sanitizeによるlink・image URLとraw HTMLの安全化
-  - render/bookmarkによるsimple bookmark構文の判定、外部HTTPを伴うmetadata取得、rich bookmark HTML生成
+  - render/bookmarkによるsimple bookmark構文の判定、enrichmentの制御、rich bookmark HTML生成
+  - render/ogpによる外部HTTPを伴うbookmark metadata取得、OGP・Twitter Card・HTML fallbackの解析
   - classify moduleによる公開種別の確定と`section_path`の導出
   - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
   - `ObsidianFrontMatter`と`ContentKind`は`publish`入力形式として内部に保持する

@@ -30,7 +30,7 @@
 依存と配置の境界:
 
 - `crates/domain`: 公開コンテンツの純粋なdomain model・ルールと、`publish` / readerが共有する契約。I/O、`async`、AWS SDK、Axum、Leptos を持ち込まない。WASM 互換を意識する
-- `crates/publish`: 単一の`publish` crate。`lib.rs`は内部module宣言とcrate外向けAPIのre-exportに限定する。`pipeline` moduleが公開処理をorchestrationし、`vault` moduleをローカル入力境界、`links` moduleを公開URL索引とWikiLink event解決の境界、`render` moduleをcontent描画の境界、`artifacts` moduleをartifact構築・書込み・validationの境界とする。`render`内ではcontent kind別の組み立て、共通本文処理、Markdown event生成とHTML変換、URLとraw HTMLの安全化、bookmark構文とenrichmentを分離する。`publish`専用処理をcrate外へ公開せず、外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に絞る
+- `crates/publish`: 単一の`publish` crate。`lib.rs`は内部module宣言とcrate外向けAPIのre-exportに限定する。`pipeline` moduleが公開処理をorchestrationし、`vault` moduleをローカル入力境界、`links` moduleを公開URL索引とWikiLink event解決の境界、`render` moduleをcontent描画の境界、`artifacts` moduleをartifact構築・書込み・validationの境界とする。`render`内ではcontent kind別の組み立て、共通本文処理、Markdown event生成とHTML変換、URLとraw HTMLの安全化、bookmark構文・card生成とOGP metadata取得を分離する。`publish`専用処理をcrate外へ公開せず、外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に絞る
 - `crates/site/infra`: server が artifact を読む外部境界（local / S3、設定、将来のcache）。vault読取、Markdown変換、uploadを置かない
 - `crates/site/server`: Axum + Leptos SSR host、reader注入、API、health/readiness、release-aware conditional GET
 - `crates/site/web`: Leptos UI / route / metadataと、artifact内のmath spanに対するKaTeX描画。SSR時もstorage実装へ直接依存しない
