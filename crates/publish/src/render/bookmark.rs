@@ -1,4 +1,4 @@
-use super::ogp::{self, BookmarkMetadata};
+use super::ogp;
 
 use futures::future::{BoxFuture, join_all};
 use html_escape::{encode_double_quoted_attribute, encode_text};
@@ -35,6 +35,40 @@ pub(crate) fn rich_bookmark_enricher() -> BookmarkEnricher {
         let fetcher = fetcher.clone();
         Box::pin(async move { convert_simple_bookmarks_to_rich(&html, fetcher).await })
     })
+}
+
+struct BookmarkMetadata {
+    url: String,
+    title: String,
+    description: Option<String>,
+    image_url: Option<String>,
+    favicon_url: Option<String>,
+}
+
+impl BookmarkMetadata {
+    fn new(url: String, source_title: String, metadata: ogp::Metadata) -> Self {
+        let ogp::Metadata {
+            title,
+            description,
+            image_url,
+            favicon_url,
+        } = metadata;
+        let title = title.unwrap_or_else(|| {
+            if source_title.trim().is_empty() {
+                url.clone()
+            } else {
+                source_title
+            }
+        });
+
+        Self {
+            url,
+            title,
+            description,
+            image_url,
+            favicon_url,
+        }
+    }
 }
 
 pub(super) struct SimpleBookmark<'a> {
@@ -76,13 +110,18 @@ async fn convert_simple_bookmarks_to_rich(
         let fetcher = fetcher.clone();
 
         async move {
-            match fetcher {
-                Some(fetcher) => fetcher.fetch(&url).await.unwrap_or_else(|error| {
-                    tracing::warn!(%url, %error, "failed to fetch OGP metadata");
-                    BookmarkMetadata::fallback(&url, &original_title)
-                }),
-                None => BookmarkMetadata::fallback(&url, &original_title),
-            }
+            let metadata = match fetcher {
+                Some(fetcher) => fetcher
+                    .fetch(&url)
+                    .await
+                    .inspect_err(|error| {
+                        tracing::warn!(%url, %error, "failed to fetch OGP metadata");
+                    })
+                    .unwrap_or_default(),
+                None => ogp::Metadata::default(),
+            };
+
+            BookmarkMetadata::new(url, original_title, metadata)
         }
     })
     .await
@@ -234,6 +273,29 @@ mod tests {
         sync::Barrier,
         time::{Duration, sleep, timeout},
     };
+
+    #[rstest]
+    #[case::ogp_title(Some("OGP title"), "Source title", "OGP title")]
+    #[case::source_title(None, "Source title", "Source title")]
+    #[case::url(None, "  ", "https://example.com")]
+    fn test_bookmark_metadata_resolves_title(
+        #[case] ogp_title: Option<&str>,
+        #[case] source_title: &str,
+        #[case] expected: &str,
+    ) {
+        let metadata = ogp::Metadata {
+            title: ogp_title.map(str::to_owned),
+            ..Default::default()
+        };
+
+        let metadata = BookmarkMetadata::new(
+            "https://example.com".to_string(),
+            source_title.to_string(),
+            metadata,
+        );
+
+        assert_eq!(metadata.title, expected);
+    }
 
     #[rstest]
     #[case::single_line(
@@ -389,7 +451,7 @@ mod tests {
     #[tokio::test]
     async fn test_convert_simple_bookmarks_to_rich(#[case] input: &str, #[case] expected: &str) {
         let result = convert_simple_bookmarks_with(input, |url, title| async move {
-            BookmarkMetadata::fallback(&url, &title)
+            BookmarkMetadata::new(url, title, ogp::Metadata::default())
         })
         .await;
 
@@ -439,7 +501,7 @@ mod tests {
                         }
 
                         active.fetch_sub(1, Ordering::SeqCst);
-                        BookmarkMetadata::fallback(&url, &title)
+                        BookmarkMetadata::new(url, title, ogp::Metadata::default())
                     }
                 }
             }),
