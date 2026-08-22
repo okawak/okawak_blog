@@ -1,6 +1,5 @@
 use super::{bookmark::BookmarkEnricher, html::convert_markdown_to_html};
 use crate::links;
-use tracing::warn;
 
 pub(super) async fn render(
     markdown: &str,
@@ -8,11 +7,7 @@ pub(super) async fn render(
     enrich: &BookmarkEnricher,
 ) -> String {
     let html = convert_markdown_to_html(markdown, link_index);
-    let fallback = html.clone();
-    enrich(html).await.unwrap_or_else(|error| {
-        warn!(%error, "failed to enrich bookmarks");
-        fallback
-    })
+    enrich(html).await
 }
 
 #[cfg(test)]
@@ -20,7 +15,6 @@ mod tests {
     use super::*;
     use crate::{
         classify::{ClassifiedFiles, ParsedArticleFile},
-        error::PublishError,
         vault::{ContentKind, ObsidianFrontMatter},
     };
     use domain::{Category, SectionPath, Slug};
@@ -37,7 +31,7 @@ mod tests {
             ..Default::default()
         };
         let link_index = links::Index::from_classified_files(&files);
-        let enrich: BookmarkEnricher = Arc::new(|html| Box::pin(async move { Ok(html) }));
+        let enrich = passthrough_bookmark_enricher();
         let markdown = indoc! {r#"
             # My Article
 
@@ -65,7 +59,7 @@ mod tests {
             ..Default::default()
         };
         let link_index = links::Index::from_classified_files(&files);
-        let enrich: BookmarkEnricher = Arc::new(|html| Box::pin(async move { Ok(html) }));
+        let enrich = passthrough_bookmark_enricher();
 
         let html = render(
             "Embed ![[article]] and ![[article|Alt text]].",
@@ -85,7 +79,7 @@ mod tests {
             ..Default::default()
         };
         let link_index = links::Index::from_classified_files(&files);
-        let enrich: BookmarkEnricher = Arc::new(|html| Box::pin(async move { Ok(html) }));
+        let enrich = passthrough_bookmark_enricher();
         let markdown = indoc! {r#"
             | [[article\|Header link]] | ![[article\|Header embed]] |
             | --- | --- |
@@ -120,7 +114,7 @@ mod tests {
             ..Default::default()
         };
         let link_index = links::Index::from_classified_files(&files);
-        let enrich: BookmarkEnricher = Arc::new(|html| Box::pin(async move { Ok(html) }));
+        let enrich = passthrough_bookmark_enricher();
 
         let html = render(
             "[[article|Display & <script>]] and [[File \"quoted\"|missing]]",
@@ -133,16 +127,8 @@ mod tests {
         assert!(html.contains(r#"<a href="/File%20%22quoted%22">missing</a>"#));
     }
 
-    #[tokio::test]
-    async fn test_render_falls_back_to_html_when_bookmark_enrichment_fails() {
-        let link_index = links::Index::default();
-        let enrich: BookmarkEnricher = Arc::new(|_html| {
-            Box::pin(async { Err(PublishError::Parse("enrichment failed".to_string())) })
-        });
-
-        let html = render("# Hello", &link_index, &enrich).await;
-
-        assert_eq!(html, "<h1>Hello</h1>\n");
+    fn passthrough_bookmark_enricher() -> BookmarkEnricher {
+        Arc::new(|html| Box::pin(async move { html }))
     }
 
     fn parsed_article(source_key: &str, category: Category, slug: &str) -> ParsedArticleFile {

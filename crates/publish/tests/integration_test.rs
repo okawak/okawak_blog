@@ -17,7 +17,7 @@ fn offline_bookmark_enricher() -> BookmarkEnricher {
                 r#"<a class="bookmark-link"><span class="bookmark-domain">example.com</span></a>"#;
 
             if !html.contains("Fallback Bookmark") {
-                return Ok(html);
+                return html;
             }
 
             assert!(
@@ -25,7 +25,7 @@ fn offline_bookmark_enricher() -> BookmarkEnricher {
                 "enricher should receive simple bookmark markup; got: {html}"
             );
 
-            Ok(html.replace(SIMPLE_BOOKMARK, RICH_BOOKMARK))
+            html.replace(SIMPLE_BOOKMARK, RICH_BOOKMARK)
         })
     })
 }
