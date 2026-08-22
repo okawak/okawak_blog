@@ -5,7 +5,7 @@ use publish::{BookmarkEnricher, PublishError, publish, publish_with_bookmark_enr
 use rstest::rstest;
 use std::{fs, path::Path, sync::Arc};
 use tempfile::TempDir;
-use test_fixtures::{collect_html_files, write_about_page};
+use test_fixtures::{collect_html_files, write_about_page, write_tech_category_landing};
 
 fn offline_bookmark_enricher() -> BookmarkEnricher {
     Arc::new(|html: String| {
@@ -96,6 +96,7 @@ async fn test_publish_with_sample_file() {
     let sample_file = obsidian_dir.join("tech/test.md");
     fs::write(&sample_file, sample_content).unwrap();
     write_about_page(&obsidian_dir);
+    write_tech_category_landing(&obsidian_dir);
 
     let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
@@ -221,6 +222,7 @@ async fn test_publish_skips_incomplete_file() {
     fs::write(&sample_file, incomplete_content).unwrap();
     write_required_article(&obsidian_dir);
     write_about_page(&obsidian_dir);
+    write_tech_category_landing(&obsidian_dir);
 
     let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
@@ -258,6 +260,7 @@ async fn test_publish_with_static_page_file() {
     let page_file = obsidian_dir.join("about.md");
     fs::write(&page_file, page_content).unwrap();
     write_required_article(&obsidian_dir);
+    write_tech_category_landing(&obsidian_dir);
 
     let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
@@ -297,6 +300,7 @@ async fn test_publish_with_home_fragment_file() {
     fs::write(&page_file, page_content).unwrap();
     write_required_article(&obsidian_dir);
     write_about_page(&obsidian_dir);
+    write_tech_category_landing(&obsidian_dir);
 
     let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
@@ -411,6 +415,26 @@ async fn test_publish_with_category_landing_file() {
     assert!(category_page.contains("Welcome to the category landing page."));
 }
 
+#[tokio::test]
+async fn test_publish_rejects_missing_category_landing_before_writing() {
+    let temp_dir = TempDir::new().unwrap();
+    let obsidian_dir = temp_dir.path().join("obsidian");
+    let output_dir = temp_dir.path().join("dist");
+
+    write_required_article(&obsidian_dir);
+    write_about_page(&obsidian_dir);
+
+    let result = publish(&obsidian_dir, &output_dir).await;
+
+    assert!(matches!(
+        result,
+        Err(PublishError::MissingCategoryLanding {
+            category: domain::Category::Tech
+        })
+    ));
+    assert!(!output_dir.exists());
+}
+
 #[rstest]
 #[case::blank_title("   ", "# Tech\n\nCategory description.")]
 #[case::blank_body("Tech", "   ")]
@@ -489,6 +513,7 @@ async fn test_publish_with_bookmark_enricher() {
     let sample_file = obsidian_dir.join("tech/bookmark.md");
     fs::write(&sample_file, sample_content).unwrap();
     write_about_page(&obsidian_dir);
+    write_tech_category_landing(&obsidian_dir);
 
     let result =
         publish_with_bookmark_enricher(&obsidian_dir, &output_dir, offline_bookmark_enricher())

@@ -6,7 +6,7 @@ use publish::publish;
 use std::fs;
 use tempfile::TempDir;
 use test_fixtures::collect_html_files;
-use test_fixtures::write_about_page;
+use test_fixtures::{write_about_page, write_tech_category_landing};
 
 /// End-to-end test that simulates a realistic Obsidian vault.
 #[tokio::test]
@@ -18,6 +18,7 @@ async fn test_end_to_end_obsidian_processing() {
     // Create a realistic Obsidian directory structure.
     fs::create_dir_all(&obsidian_dir).unwrap();
     write_about_page(&obsidian_dir);
+    write_tech_category_landing(&obsidian_dir);
     fs::create_dir_all(obsidian_dir.join("tech")).unwrap();
     fs::create_dir_all(obsidian_dir.join("blog")).unwrap();
 
@@ -331,6 +332,7 @@ async fn test_large_volume_processing() {
     let tech_dir = obsidian_dir.join("tech");
     fs::create_dir_all(&tech_dir).unwrap();
     write_about_page(&obsidian_dir);
+    write_tech_category_landing(&obsidian_dir);
 
     // Generate 100 test files.
     for i in 0..100 {

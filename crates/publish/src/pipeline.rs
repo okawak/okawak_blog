@@ -4,7 +4,7 @@ use crate::artifacts::{
 };
 use crate::classify::{
     ParsedArticleFile, ParsedCategoryFile, ParsedHomeFile, ParsedPageFile, classify_obsidian_files,
-    ensure_unique_category_landings, ensure_unique_page_keys,
+    ensure_category_landings, ensure_unique_category_landings, ensure_unique_page_keys,
 };
 use crate::error::{PublishError, Result};
 use crate::render::{
@@ -62,6 +62,7 @@ pub async fn publish_with_bookmark_enricher(
 
     ensure_unique_page_keys(&classified_files.pages)?;
     ensure_unique_category_landings(&classified_files.categories)?;
+    ensure_category_landings(&classified_files.articles, &classified_files.categories)?;
 
     let link_index = links::Index::from_classified_files(&classified_files);
     let classify::ClassifiedFiles {

@@ -42,3 +42,26 @@ This page is required for deployment.
     )
     .unwrap();
 }
+
+pub(crate) fn write_tech_category_landing(obsidian_dir: &Path) {
+    let category_dir = obsidian_dir.join("tech");
+    fs::create_dir_all(&category_dir).unwrap();
+    fs::write(
+        category_dir.join("category.md"),
+        r#"---
+title: "Tech"
+kind: category
+category: tech
+summary: "Technology articles"
+created: "2025-01-01T00:00:00+09:00"
+updated: "2025-01-01T00:00:00+09:00"
+is_completed: true
+---
+
+# Tech
+
+Technology articles.
+"#,
+    )
+    .unwrap();
+}

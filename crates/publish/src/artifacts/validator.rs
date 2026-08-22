@@ -175,3 +175,140 @@ fn read_required_nonempty(site_root: &Path, relative_path: &Path) -> Result<Stri
     }
     Ok(contents)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::builder::build_site_artifacts;
+    use super::super::writer::{
+        SiteDirectories, write_article_page, write_category_page, write_page_document,
+        write_site_artifacts,
+    };
+    use super::*;
+    use domain::{ArticleMeta, CategoryLandingMeta, PageKey, SectionPath, Timestamp, Title};
+    use tempfile::TempDir;
+
+    const ARTICLE_PATH: &str = "site/articles/tech/artifact00001.html";
+    const CATEGORY_PATH: &str = "site/categories/tech/page.html";
+    const ABOUT_PATH: &str = "site/pages/about.json";
+
+    fn write_complete_site() -> TempDir {
+        let temp_dir = TempDir::new().unwrap();
+        let directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let timestamp = Timestamp::new("2025-01-01T00:00:00+09:00".to_string()).unwrap();
+        let article = ArticleMeta {
+            slug: Slug::new("artifact00001".to_string()).unwrap(),
+            title: Title::new("Artifact Test".to_string()).unwrap(),
+            category: Category::Tech,
+            section_path: SectionPath::default(),
+            description: Some("Artifact summary".to_string()),
+            tags: vec!["rust".to_string()],
+            priority: Some(1),
+            created_at: timestamp.clone(),
+            updated_at: timestamp.clone(),
+        };
+        let landing = CategoryLandingMeta {
+            category: Category::Tech,
+            title: Title::new("Tech".to_string()).unwrap(),
+            description: Some("Tech landing".to_string()),
+            updated_at: timestamp,
+        };
+        let artifacts = build_site_artifacts(vec![article.clone()], vec![landing]);
+
+        write_article_page(
+            &directories,
+            article.category,
+            &article.slug,
+            "<h1>Artifact Test</h1>",
+        )
+        .unwrap();
+        write_category_page(&directories, Category::Tech, "<h1>Tech</h1>").unwrap();
+        write_page_document(
+            &directories,
+            &PageArtifactDocument {
+                page: PageKey::new("about".to_string()).unwrap(),
+                title: "About".to_string(),
+                description: Some("About this site".to_string()),
+                html: "<article><h1>About</h1></article>".to_string(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            },
+        )
+        .unwrap();
+        write_site_artifacts(&directories, &artifacts).unwrap();
+
+        temp_dir
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_accepts_complete_site() {
+        let temp_dir = write_complete_site();
+
+        let summary = validate_site_artifacts(temp_dir.path().join("site")).unwrap();
+
+        assert_eq!(summary.article_count, 1);
+        assert_eq!(summary.category_count, 1);
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_empty_article_index() {
+        let temp_dir = TempDir::new().unwrap();
+        let directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        write_site_artifacts(&directories, &build_site_artifacts(vec![], vec![])).unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(error.to_string().contains("at least one article"));
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_missing_article_html() {
+        let temp_dir = write_complete_site();
+        fs::remove_file(temp_dir.path().join(ARTICLE_PATH)).unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("articles/tech/artifact00001.html")
+        );
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_missing_category_page() {
+        let temp_dir = write_complete_site();
+        fs::remove_file(temp_dir.path().join(CATEGORY_PATH)).unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(error.to_string().contains("categories/tech/page.html"));
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_missing_about_page() {
+        let temp_dir = write_complete_site();
+        fs::remove_file(temp_dir.path().join(ABOUT_PATH)).unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(error.to_string().contains("pages/about.json"));
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_article_category_missing_from_metadata() {
+        let temp_dir = write_complete_site();
+        fs::write(
+            temp_dir.path().join("site/metadata/site.json"),
+            serde_json::to_string_pretty(&SiteMetadataDocument {
+                total_articles: 1,
+                categories: vec![],
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(error.to_string().contains("missing article categories"));
+        assert!(error.to_string().contains("tech"));
+    }
+}
