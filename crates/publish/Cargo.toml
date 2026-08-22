@@ -12,6 +12,7 @@ domain = { path = "../domain" }
 futures.workspace = true
 html-escape.workspace = true
 ignore.workspace = true
+indoc.workspace = true
 pulldown-cmark.workspace = true
 regex.workspace = true
 reqwest.workspace = true
@@ -27,6 +28,5 @@ tracing-subscriber.workspace = true
 url.workspace = true
 
 [dev-dependencies]
-indoc.workspace = true
 rstest.workspace = true
 tempfile.workspace = true
