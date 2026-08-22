@@ -21,7 +21,7 @@ use std::{
 use tracing::info;
 
 pub async fn publish(obsidian_dir: &Path, output_dir: &Path) -> Result<()> {
-    publish_with_bookmark_enricher(obsidian_dir, output_dir, rich_bookmark_enricher()?).await
+    publish_with_bookmark_enricher(obsidian_dir, output_dir, rich_bookmark_enricher()).await
 }
 
 #[tracing::instrument(

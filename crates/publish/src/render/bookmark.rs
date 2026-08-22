@@ -24,13 +24,19 @@ static SIMPLE_BOOKMARK_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// Async function that enriches page HTML with rich bookmark cards.
 pub type BookmarkEnricher = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String>> + Send + Sync>;
 
-pub(crate) fn rich_bookmark_enricher() -> Result<BookmarkEnricher> {
-    let fetcher = ogp::Fetcher::new()?;
+pub(crate) fn rich_bookmark_enricher() -> BookmarkEnricher {
+    let fetcher = match ogp::Fetcher::new() {
+        Ok(fetcher) => Some(fetcher),
+        Err(error) => {
+            tracing::warn!(%error, "failed to initialize OGP metadata fetcher");
+            None
+        }
+    };
 
-    Ok(Arc::new(move |html: String| {
+    Arc::new(move |html: String| {
         let fetcher = fetcher.clone();
-        Box::pin(async move { Ok(convert_simple_bookmarks_to_rich(&html, &fetcher).await) })
-    }))
+        Box::pin(async move { Ok(convert_simple_bookmarks_to_rich(&html, fetcher).await) })
+    })
 }
 
 pub(super) struct SimpleBookmark<'a> {
@@ -219,15 +225,21 @@ where
 }
 
 /// Replaces simple bookmark markup with rich bookmark cards fetched from OGP metadata.
-async fn convert_simple_bookmarks_to_rich(html_content: &str, fetcher: &ogp::Fetcher) -> String {
-    convert_simple_bookmarks_with(html_content, |url, original_title| {
+async fn convert_simple_bookmarks_to_rich(
+    html_content: &str,
+    fetcher: Option<ogp::Fetcher>,
+) -> String {
+    convert_simple_bookmarks_with(html_content, move |url, original_title| {
         let fetcher = fetcher.clone();
 
         async move {
-            fetcher.fetch(&url).await.unwrap_or_else(|error| {
-                tracing::warn!(%url, %error, "failed to fetch OGP metadata");
-                ogp::fallback(&url, &original_title)
-            })
+            match fetcher {
+                Some(fetcher) => fetcher.fetch(&url).await.unwrap_or_else(|error| {
+                    tracing::warn!(%url, %error, "failed to fetch OGP metadata");
+                    ogp::fallback(&url, &original_title)
+                }),
+                None => ogp::fallback(&url, &original_title),
+            }
         }
     })
     .await
@@ -406,6 +418,17 @@ mod tests {
         .await;
 
         assert_eq!(result, expected);
+    }
+
+    #[tokio::test]
+    async fn test_convert_simple_bookmarks_to_rich_without_fetcher() {
+        let input = r#"<div class="bookmark"><a href="https://example.com">Example</a></div>"#;
+
+        let result = convert_simple_bookmarks_to_rich(input, None).await;
+
+        assert!(result.contains("class=\"bookmark-link\""));
+        assert!(result.contains("https://example.com"));
+        assert!(result.contains(">Example</div>"));
     }
 
     #[tokio::test]
