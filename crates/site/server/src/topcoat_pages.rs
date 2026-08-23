@@ -807,8 +807,11 @@ async fn site_shell(
                     onload="window.okawakScheduleCodeHighlight && window.okawakScheduleCodeHighlight();"
                 ></script>
                 <script>(code_highlight_script)</script>
+                topcoat::runtime::script()
             </head>
             <body>
+                signal menu_open = false;
+
                 <div class="flex min-h-dvh flex-col text-foreground">
                     <header
                         class="sticky top-0 z-50 h-[var(--site-header-height)] border-b border-border/60 bg-[image:var(--site-header-background)] shadow-[0_8px_24px_rgb(0_0_0/0.45)] backdrop-blur-sm"
@@ -826,8 +829,63 @@ async fn site_shell(
                                     (web::SITE_NAME)
                                 </h1>
                             </a>
-                            <nav aria-label="メインナビゲーション">
-                                <ul class="m-0 flex list-none items-center gap-2 p-0">
+
+                            <button
+                                type="button"
+                                class="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 md:hidden"
+                                aria-controls="site-header-nav"
+                                :aria-expanded=$(if menu_open.get() {
+                                    "true"
+                                } else {
+                                    "false"
+                                })
+                                :aria-label=$(if menu_open.get() {
+                                    "ナビゲーションメニューを閉じる"
+                                } else {
+                                    "ナビゲーションメニューを開く"
+                                })
+                                @click=$(|_e| menu_open.toggle())
+                            >
+                                <div
+                                    class="flex size-5 flex-col items-center justify-center gap-1.5"
+                                    aria-hidden="true"
+                                >
+                                    <span
+                                        :class=$(if menu_open.get() {
+                                            "block h-0.5 w-5 translate-y-2 rotate-45 rounded-full bg-current transition-transform"
+                                        } else {
+                                            "block h-0.5 w-5 rounded-full bg-current transition-all"
+                                        })
+                                    ></span>
+                                    <span
+                                        :class=$(if menu_open.get() {
+                                            "block h-0.5 w-5 rounded-full bg-current opacity-0 transition-opacity"
+                                        } else {
+                                            "block h-0.5 w-5 rounded-full bg-current transition-all"
+                                        })
+                                    ></span>
+                                    <span
+                                        :class=$(if menu_open.get() {
+                                            "block h-0.5 w-5 -translate-y-2 -rotate-45 rounded-full bg-current transition-transform"
+                                        } else {
+                                            "block h-0.5 w-5 rounded-full bg-current transition-all"
+                                        })
+                                    ></span>
+                                </div>
+                            </button>
+
+                            <nav
+                                id="site-header-nav"
+                                aria-label="メインナビゲーション"
+                                :class=$(if menu_open.get() {
+                                    "flex absolute inset-x-4 top-[calc(100%+0.5rem)] flex-col gap-3 rounded-lg border border-border bg-card/98 p-4 shadow-[0_18px_36px_rgb(0_0_0/0.55)] backdrop-blur-sm md:static md:flex md:flex-row md:items-center md:gap-6 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+                                } else {
+                                    "hidden absolute inset-x-4 top-[calc(100%+0.5rem)] flex-col gap-3 rounded-lg border border-border bg-card/98 p-4 shadow-[0_18px_36px_rgb(0_0_0/0.55)] backdrop-blur-sm md:static md:flex md:flex-row md:items-center md:gap-6 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+                                })
+                            >
+                                <ul
+                                    class="m-0 flex list-none flex-col gap-1 p-0 md:flex-row md:items-center md:gap-2"
+                                >
                                     <li>
                                         <a
                                             href="/"
@@ -836,6 +894,12 @@ async fn site_shell(
                                             } else {
                                                 None
                                             })
+                                            class=(if current_path == "/" {
+                                                "block rounded-md border-b-2 border-primary px-3 py-2 text-sm font-medium text-foreground no-underline"
+                                            } else {
+                                                "block rounded-md border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-primary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                            })
+                                            @click=$(|_e| menu_open.set(false))
                                         >
                                             "ホーム"
                                         </a>
@@ -848,11 +912,31 @@ async fn site_shell(
                                             } else {
                                                 None
                                             })
+                                            class=(if current_path == "/about" {
+                                                "block rounded-md border-b-2 border-primary px-3 py-2 text-sm font-medium text-foreground no-underline"
+                                            } else {
+                                                "block rounded-md border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-primary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                            })
+                                            @click=$(|_e| menu_open.set(false))
                                         >
                                             "About"
                                         </a>
                                     </li>
                                 </ul>
+
+                                <div
+                                    class="border-t border-border pt-3 md:border-t-0 md:pt-0"
+                                >
+                                    <a
+                                        href="https://github.com/okawak"
+                                        class="inline-flex size-10 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                        aria-label="Open okawak GitHub profile"
+                                        rel="noopener noreferrer"
+                                        target="_blank"
+                                    >
+                                        <i class="fab fa-github text-xl" aria-hidden="true"></i>
+                                    </a>
+                                </div>
                             </nav>
                         </div>
                     </header>
