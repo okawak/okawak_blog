@@ -1,16 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const SITE_NAME = "ぶくせんの探窟メモ";
-
-function captureReactiveWarnings(page: Page) {
-  const warnings: string[] = [];
-  page.on("console", (message) => {
-    if (message.text().includes("outside a reactive tracking context")) {
-      warnings.push(message.text());
-    }
-  });
-  return warnings;
-}
+const BASE_URL = "http://127.0.0.1:8008";
 
 function captureBrowserErrors(page: Page) {
   const errors: string[] = [];
@@ -29,19 +20,35 @@ async function expectMetadata(
   page: Page,
   title: string,
   canonicalPath: string,
+  description: string,
   ogType = "website",
 ) {
   await expect(page.locator('link[rel="canonical"]')).toHaveCount(1);
+  await expect(page.locator('meta[name="description"]')).toHaveCount(1);
   await expect(page.locator('meta[property="og:title"]')).toHaveCount(1);
+  await expect(page.locator('meta[property="og:description"]')).toHaveCount(1);
+  await expect(page.locator('meta[property="og:url"]')).toHaveCount(1);
   await expect(page.locator('meta[property="og:type"]')).toHaveCount(1);
   await expect(page).toHaveTitle(title);
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
-    `http://127.0.0.1:8008${canonicalPath}`,
+    `${BASE_URL}${canonicalPath}`,
   );
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
     "content",
     title,
+  );
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+    "content",
+    description,
+  );
+  await expect(page.locator('meta[property="og:description"]')).toHaveAttribute(
+    "content",
+    description,
+  );
+  await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
+    "content",
+    `${BASE_URL}${canonicalPath}`,
   );
   await expect(page.locator('meta[property="og:type"]')).toHaveAttribute(
     "content",
@@ -53,15 +60,7 @@ async function expectNotFoundMetadata(page: Page, canonicalPath: string) {
   const title = `ページが見つかりません | ${SITE_NAME}`;
   const description = "お探しのページは見つかりませんでした。";
 
-  await expectMetadata(page, title, canonicalPath);
-  await expect(page.locator('meta[name="description"]')).toHaveAttribute(
-    "content",
-    description,
-  );
-  await expect(page.locator('meta[property="og:description"]')).toHaveAttribute(
-    "content",
-    description,
-  );
+  await expectMetadata(page, title, canonicalPath, description);
 }
 
 async function expectFormattedFixtureDates(page: Page) {
@@ -83,6 +82,28 @@ test("runtime probes distinguish liveness and artifact readiness", async ({ requ
   expect(await readinessResponse.text()).toBe("READY");
 });
 
+test("compatibility article API returns the published index", async ({ request }) => {
+  const response = await request.get("/api/articles");
+
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toMatch(/^application\/json/);
+  expect(await response.json()).toEqual({
+    articles: [
+      {
+        slug: "e2e-article",
+        title: "E2E Article",
+        category: "tech",
+        section_path: ["rust", "async"],
+        description: "Article fixture description",
+        tags: ["rust", "e2e"],
+        priority: 10,
+        created_at: "2026-01-01T00:00:00+09:00",
+        updated_at: "2026-01-02T00:00:00+09:00",
+      },
+    ],
+  });
+});
+
 test("site declares and serves its favicon", async ({ page, request }) => {
   await page.goto("/");
 
@@ -100,23 +121,27 @@ test("site declares and serves its favicon", async ({ page, request }) => {
   expect((await response.body()).byteLength).toBeGreaterThan(0);
 });
 
-test("home renders artifacts and hydrates article navigation", async ({ page }) => {
-  const reactiveWarnings = captureReactiveWarnings(page);
+test("home renders artifacts and navigates to an article without a document reload", async ({ page }) => {
   const browserErrors = captureBrowserErrors(page);
 
   const response = await page.goto("/");
 
   expect(response?.status()).toBe(200);
-  await expect(page.locator('link#leptos[rel="stylesheet"]')).toHaveAttribute(
+  await expect(page.locator('link[rel="stylesheet"][href^="/"]')).toHaveAttribute(
     "href",
-    /\/pkg\/web\.[A-Za-z0-9_-]+\.css$/,
+    /^\/[^?]*[.-][A-Za-z0-9_-]{8,}\.css$/,
   );
   await expect(page.locator("main").getByRole("heading", { name: SITE_NAME })).toBeVisible();
   await expect(page.getByText("Fixture home content")).toBeVisible();
   await expect(page.locator("main .content-prose")).toContainText("Fixture home content");
   await expect(page.getByRole("link", { name: "E2E Article" })).toBeVisible();
   await expectFormattedFixtureDates(page);
-  await expectMetadata(page, SITE_NAME, "");
+  await expectMetadata(
+    page,
+    SITE_NAME,
+    "",
+    "1件の記事を1カテゴリで公開しています。",
+  );
 
   let documentRequests = 0;
   page.on("request", (request) => {
@@ -143,10 +168,46 @@ test("home renders artifacts and hydrates article navigation", async ({ page }) 
     page,
     `E2E Article | ${SITE_NAME}`,
     "/tech/e2e-article",
+    "Article fixture description",
     "article",
   );
-  expect(reactiveWarnings).toEqual([]);
   expect(browserErrors).toEqual([]);
+});
+
+test("server-rendered pages remain navigable without JavaScript", async ({ browser }) => {
+  const context = await browser.newContext({
+    baseURL: BASE_URL,
+    javaScriptEnabled: false,
+  });
+  const page = await context.newPage();
+
+  try {
+    const homeResponse = await page.goto("/");
+
+    expect(homeResponse?.status()).toBe(200);
+    await expect(page.getByText("Fixture home content")).toBeVisible();
+    await expectMetadata(
+      page,
+      SITE_NAME,
+      "",
+      "1件の記事を1カテゴリで公開しています。",
+    );
+
+    await page.getByRole("link", { name: "E2E Article" }).click();
+
+    await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+    await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
+    await expect(page.locator("main .content-prose")).toContainText("Article fixture body");
+    await expectMetadata(
+      page,
+      `E2E Article | ${SITE_NAME}`,
+      "/tech/e2e-article",
+      "Article fixture description",
+      "article",
+    );
+  } finally {
+    await context.close();
+  }
 });
 
 test("site shell keeps the warm gradient background", async ({ page }) => {
@@ -223,11 +284,16 @@ test("about renders its page artifact", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Fixture About" })).toBeVisible();
   await expect(page.getByText("About fixture body")).toBeVisible();
   await expect(page.locator("main .content-prose")).toContainText("About fixture body");
-  await expectMetadata(page, `Fixture About | ${SITE_NAME}`, "/about");
+  await expectMetadata(
+    page,
+    `Fixture About | ${SITE_NAME}`,
+    "/about",
+    "About fixture description",
+  );
 });
 
 test("category renders landing content and grouped articles", async ({ page }) => {
-  const reactiveWarnings = captureReactiveWarnings(page);
+  const browserErrors = captureBrowserErrors(page);
   const response = await page.goto("/tech");
 
   expect(response?.status()).toBe(200);
@@ -237,8 +303,13 @@ test("category renders landing content and grouped articles", async ({ page }) =
   await expect(page.getByRole("heading", { name: "rust / async" })).toBeVisible();
   await expect(page.getByRole("link", { name: "E2E Article" })).toBeVisible();
   await expectFormattedFixtureDates(page);
-  await expectMetadata(page, `Fixture Tech | ${SITE_NAME}`, "/tech");
-  expect(reactiveWarnings).toEqual([]);
+  await expectMetadata(
+    page,
+    `Fixture Tech | ${SITE_NAME}`,
+    "/tech",
+    "Category fixture description",
+  );
+  expect(browserErrors).toEqual([]);
 });
 
 test("category landing content stays within the mobile viewport", async ({ page }) => {
