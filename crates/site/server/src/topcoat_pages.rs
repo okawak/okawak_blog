@@ -1,8 +1,12 @@
 //! Topcoat SSR pages introduced route by route during the migration.
 
+use std::str::FromStr;
+
 use chrono::Datelike;
 use domain::{
-    HomePageDocument, PageKey, SiteArticleCard, StaticPageDocument, build_article_path,
+    Category as DomainCategory, CategoryPageDocument, HomePageDocument, PageKey, SiteArticleCard,
+    StaticPageDocument, build_article_path, build_category_page_canonical_path,
+    build_category_page_description, build_category_page_document, build_category_page_title,
     build_category_path, build_home_page_canonical_path, build_home_page_description,
     build_home_page_document, build_home_page_title, build_static_page_canonical_path,
     build_static_page_description, build_static_page_document, build_static_page_title,
@@ -11,7 +15,7 @@ use infra::DynArtifactSnapshot;
 use topcoat::{
     Result,
     context::{Cx, app_context, try_request_context},
-    router::{StatusCode, route},
+    router::{StatusCode, path_param, request, route},
     view::{Unescaped, View, component, view},
 };
 
@@ -26,6 +30,8 @@ const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
 const STYLESHEET_PATH: &str = "/pkg/web.css";
 
+path_param!(category_name);
+
 #[route(GET "/")]
 pub(crate) async fn home(cx: &Cx) -> Result<View> {
     let snapshot = match request_snapshot(cx).await {
@@ -37,7 +43,7 @@ pub(crate) async fn home(cx: &Cx) -> Result<View> {
                     title: build_home_page_title(web::SITE_NAME),
                     description: "公開済みの記事を読み込めませんでした。"
                         .to_string(),
-                    canonical_path: "/",
+                    canonical_path: "/".to_string(),
                     message: "記事の読み込みに失敗しました"
                 )
             };
@@ -66,7 +72,7 @@ pub(crate) async fn home(cx: &Cx) -> Result<View> {
                     title: build_home_page_title(web::SITE_NAME),
                     description: "公開済みの記事を読み込めませんでした。"
                         .to_string(),
-                    canonical_path: "/",
+                    canonical_path: "/".to_string(),
                     message: "記事の読み込みに失敗しました"
                 )
             }
@@ -97,7 +103,7 @@ async fn home_document(document: HomePageDocument) -> Result {
             title: title,
             description: description,
             canonical_url: canonical_url,
-            current_path: "/",
+            current_path: "/".to_string(),
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-12 px-4 py-8 text-left sm:px-6 sm:py-12"
             >
@@ -274,6 +280,122 @@ async fn article_card(article: &SiteArticleCard) -> Result {
     }
 }
 
+#[route(GET "/{category_name}")]
+pub(crate) async fn category_page(cx: &Cx) -> Result<View> {
+    let category_param = path_param::<CategoryName>(cx);
+    let requested_path = request::uri(cx).path().to_string();
+    let category = match DomainCategory::from_str(category_param) {
+        Ok(category) => category,
+        Err(_) => {
+            return view! { not_found_page(canonical_path: requested_path) };
+        }
+    };
+
+    let snapshot = match request_snapshot(cx).await {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            eprintln!("Category page artifact snapshot failed for {category_param}: {error}");
+            return view! {
+                internal_server_error_page(
+                    title: format!("{category_param} | {}", web::SITE_NAME),
+                    description: format!("{category_param} カテゴリの記事一覧です。"),
+                    canonical_path: requested_path,
+                    message: "カテゴリの読み込みに失敗しました"
+                )
+            };
+        }
+    };
+
+    match snapshot.read_category_document(&category).await {
+        Ok(artifact) => match build_category_page_document(&artifact) {
+            Ok(document) => view! { category_document(document: document) },
+            Err(error) => {
+                eprintln!("Category page artifact is invalid for {category_param}: {error}");
+                view! {
+                    internal_server_error_page(
+                        title: format!("{category_param} | {}", web::SITE_NAME),
+                        description: format!("{category_param} カテゴリの記事一覧です。"),
+                        canonical_path: requested_path,
+                        message: "カテゴリの読み込みに失敗しました"
+                    )
+                }
+            }
+        },
+        Err(error) if error.is_not_found() => {
+            view! { not_found_page(canonical_path: requested_path) }
+        }
+        Err(error) => {
+            eprintln!("Category page artifact read failed for {category_param}: {error}");
+            view! {
+                internal_server_error_page(
+                    title: format!("{category_param} | {}", web::SITE_NAME),
+                    description: format!("{category_param} カテゴリの記事一覧です。"),
+                    canonical_path: requested_path,
+                    message: "カテゴリの読み込みに失敗しました"
+                )
+            }
+        }
+    }
+}
+
+#[component]
+async fn category_document(document: CategoryPageDocument) -> Result {
+    let title = build_category_page_title(&document, web::SITE_NAME);
+    let description = build_category_page_description(&document);
+    let canonical_path = build_category_page_canonical_path(&document);
+    let canonical_url = web::build_site_url(&canonical_path);
+    let page_title = document.title;
+    // The publish pipeline escapes raw Markdown HTML and neutralizes unsafe href schemes before
+    // persisting this fragment. It is therefore the trusted HTML boundary for Topcoat as well.
+    let landing_html = Unescaped::new_unchecked(document.html);
+
+    view! {
+        site_shell(
+            status: StatusCode::OK,
+            title: title,
+            description: description.clone(),
+            canonical_url: canonical_url,
+            current_path: canonical_path,
+            <div
+                class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-6 px-4 py-8 text-left sm:px-6 sm:py-12"
+            >
+                <div
+                    class="flex flex-col gap-3 rounded-xl border border-border/80 bg-gradient-to-b from-card to-secondary/70 p-6 text-card-foreground shadow-sm sm:p-8"
+                >
+                    <p class="m-0 text-sm tracking-[0.16em] text-primary uppercase">
+                        "Category"
+                    </p>
+                    <h1 class="m-0 text-3xl leading-tight font-bold sm:text-4xl">
+                        (page_title)
+                    </h1>
+                    <p class="m-0 leading-7 text-muted-foreground">(description)</p>
+                </div>
+
+                <section
+                    class="content-prose min-w-0 max-w-full rounded-xl border border-border/80 bg-card p-6 sm:p-8"
+                >
+                    (landing_html)
+                </section>
+
+                <div class="grid gap-6">
+                    for section in &document.sections {
+                        <section class="grid gap-4">
+                            <h2 class="m-0 text-xl font-semibold text-foreground">
+                                (&section.heading)
+                            </h2>
+                            <div class="grid gap-4">
+                                for article in &section.articles {
+                                    article_card(article: article)
+                                }
+                            </div>
+                        </section>
+                    }
+                </div>
+            </div>
+        )
+    }
+}
+
 #[route(GET "/about")]
 pub(crate) async fn about(cx: &Cx) -> Result<View> {
     let snapshot = request_snapshot(cx).await?;
@@ -288,20 +410,22 @@ pub(crate) async fn about(cx: &Cx) -> Result<View> {
                     internal_server_error_page(
                         title: format!("About | {}", web::SITE_NAME),
                         description: "About ページです。".to_string(),
-                        canonical_path: "/about",
+                        canonical_path: "/about".to_string(),
                         message: "ページの読み込みに失敗しました"
                     )
                 }
             }
         },
-        Err(error) if error.is_not_found() => view! { not_found_page() },
+        Err(error) if error.is_not_found() => {
+            view! { not_found_page(canonical_path: "/about".to_string()) }
+        }
         Err(error) => {
             eprintln!("About page artifact read failed: {error}");
             view! {
                 internal_server_error_page(
                     title: format!("About | {}", web::SITE_NAME),
                     description: "About ページです。".to_string(),
-                    canonical_path: "/about",
+                    canonical_path: "/about".to_string(),
                     message: "ページの読み込みに失敗しました"
                 )
             }
@@ -325,7 +449,7 @@ async fn about_document(document: StaticPageDocument) -> Result {
             title: title,
             description: description,
             canonical_url: canonical_url,
-            current_path: "/about",
+            current_path: "/about".to_string(),
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-8 px-4 py-8 text-left sm:px-6 sm:py-12"
             >
@@ -358,14 +482,16 @@ async fn about_document(document: StaticPageDocument) -> Result {
 }
 
 #[component]
-async fn not_found_page() -> Result {
+async fn not_found_page(canonical_path: String) -> Result {
+    let canonical_url = web::build_site_url(&canonical_path);
+
     view! {
         site_shell(
             status: StatusCode::NOT_FOUND,
             title: format!("{NOT_FOUND_TITLE} | {}", web::SITE_NAME),
             description: NOT_FOUND_DESCRIPTION.to_string(),
-            canonical_url: web::build_site_url("/about"),
-            current_path: "/about",
+            canonical_url: canonical_url,
+            current_path: canonical_path,
             <div>"ページが見つかりませんでした。"</div>
         )
     }
@@ -375,15 +501,17 @@ async fn not_found_page() -> Result {
 async fn internal_server_error_page(
     title: String,
     description: String,
-    canonical_path: &'static str,
+    canonical_path: String,
     message: &'static str,
 ) -> Result {
+    let canonical_url = web::build_site_url(&canonical_path);
+
     view! {
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
             title: title,
             description: description,
-            canonical_url: web::build_site_url(canonical_path),
+            canonical_url: canonical_url,
             current_path: canonical_path,
             <div
                 class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground"
@@ -400,7 +528,7 @@ async fn site_shell(
     title: String,
     description: String,
     canonical_url: String,
-    current_path: &'static str,
+    current_path: String,
     child: View,
 ) -> Result {
     let year = chrono::Local::now().year();
