@@ -7,10 +7,9 @@ const PAGE_METADATA_SELECTOR = [
   'meta[property^="og:"]',
   'meta[property^="article:"]',
 ].join(",");
-const SHELL_ASSET_SELECTOR = [
-  'link[rel="stylesheet"][href]',
-  'script[type="module"][src]',
-].join(",");
+const SHELL_RUNTIME_SELECTOR = ['link[rel="stylesheet"][href]', "script"].join(
+  ",",
+);
 const SCROLL_STATE_KEY = "okawakScrollPosition";
 
 let activeNavigation;
@@ -96,24 +95,38 @@ function replacePageMetadata(nextDocument) {
     .forEach((element) => document.head.append(document.importNode(element, true)));
 }
 
-function shellAssetSignature(root) {
-  return Array.from(root.querySelectorAll(SHELL_ASSET_SELECTOR))
-    .flatMap((element) => {
-      const value = element.getAttribute(
-        element.tagName === "LINK" ? "href" : "src",
-      );
-      if (!value) return [];
+function shellRuntimeSignature(root, baseUrl) {
+  return Array.from(root.head?.querySelectorAll(SHELL_RUNTIME_SELECTOR) ?? []).map(
+    (element) => {
+      if (element.tagName === "LINK") {
+        return JSON.stringify([
+          "LINK",
+          new URL(element.getAttribute("href"), baseUrl).href,
+          element.getAttribute("media") ?? "",
+          element.getAttribute("integrity") ?? "",
+          element.getAttribute("crossorigin") ?? "",
+        ]);
+      }
 
-      const url = new URL(value, window.location.href);
-      if (url.origin !== window.location.origin) return [];
-      return [`${element.tagName}:${url.pathname}${url.search}`];
-    })
-    .sort();
+      const source = element.getAttribute("src");
+      return JSON.stringify([
+        "SCRIPT",
+        source ? new URL(source, baseUrl).href : "",
+        element.getAttribute("type") ?? "",
+        element.hasAttribute("defer"),
+        element.hasAttribute("async"),
+        element.getAttribute("integrity") ?? "",
+        element.getAttribute("crossorigin") ?? "",
+        element.getAttribute("onload") ?? "",
+        element.textContent ?? "",
+      ]);
+    },
+  );
 }
 
-function shellAssetsMatch(nextDocument) {
-  const current = shellAssetSignature(document);
-  const next = shellAssetSignature(nextDocument);
+function shellRuntimeMatches(nextDocument, destination) {
+  const current = shellRuntimeSignature(document, window.location.href);
+  const next = shellRuntimeSignature(nextDocument, destination.href);
   return (
     current.length === next.length &&
     current.every((asset, index) => asset === next[index])
@@ -216,7 +229,7 @@ async function navigate(url, { history = "push", scroll = "destination" } = {}) 
       fallBackToDocumentNavigation(url);
       return;
     }
-    if (!shellAssetsMatch(nextDocument)) {
+    if (!shellRuntimeMatches(nextDocument, destination)) {
       fallBackToDocumentNavigation(destination);
       return;
     }
@@ -260,6 +273,7 @@ document.addEventListener("click", (event) => {
   const anchor =
     event.target instanceof Element ? event.target.closest("a[href]") : null;
   if (anchor?.getAttribute("href")?.startsWith("#")) {
+    activeNavigation?.abort();
     rememberCurrentScrollPosition();
     return;
   }

@@ -1,6 +1,6 @@
 # Browser E2E
 
-公開サイト全体を対象とする Playwright E2E です。`crates/site/web` 単体ではなく、`crates/site/server` と `crates/site/infra` の artifact reader まで通すため、リポジトリルートに置いています。
+公開サイト全体を対象とする Playwright E2E です。Topcoat移行サーバーと`crates/site/infra`のartifact readerを通し、公開routeとclient-side interactionを検証するため、リポジトリルートに置いています。production entrypointがLeptos SSRの移行期間中も、通常E2Eは先行して`topcoat-server`を対象にします。
 
 依存管理には、web crate と同じく Bun を使います。通常はリポジトリルートから `mise` task を実行してください。
 

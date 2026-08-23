@@ -83,23 +83,24 @@ okawak_blog/
   - local reader
   - S3 reader
 - `crates/site/server`
-  - Axum + Leptos SSR のホスト
-  - reader の生成と Leptos context への注入
+  - production `server` binaryによるAxum + Leptos SSRのホスト
+  - 移行用`topcoat-server` binaryによるTopcoat SSR、Topcoat runtime asset、client-side route遷移のホスト
+  - reader の生成とLeptos contextまたはTopcoat request contextへの注入
   - 互換用の記事一覧 API
   - process liveness (`/api/health`) と artifact readiness (`/api/ready`)
   - release-aware ETag と conditional GET
 - `crates/site/web`
-  - Leptos UI
-  - route 定義
+  - 現行productionのLeptos UIとroute定義
   - Leptos server function による page document の組み立て
   - SSR feature 時のみ `ArtifactReader` 境界を利用
   - metadata / canonical / Open Graph 生成
   - `publish`が生成する`.math-inline` / `.math-display`に対するclient-side KaTeX描画
+  - Topcoat移行中も共有するsite定数、生成コンテンツ用script、Tailwind CSS入力
 - `e2e`
-  - `crates/site/server`、`crates/site/web`、`crates/site/infra` をまたぐ browser E2E
+  - `crates/site/server`と`crates/site/infra`をまたぐTopcoat移行サーバーのbrowser E2E
   - 通常CIではprivate Obsidian submoduleやS3に依存しない固定artifact fixture
   - 実S3の検証は専用Playwright configを使い、ローカル手動確認とrelease公開前smoke testへ分離
-  - Bun で依存を管理し、Playwright + Chromium で公開 route、metadata、hydration を検証
+  - Bunで依存を管理し、Playwright + Chromiumで公開route、metadata、client-side route遷移、Topcoat interactionを検証
 
 `terraform/` は読み取り専用とし、このリポジトリの通常作業では編集しない。
 
@@ -364,6 +365,8 @@ flowchart LR
 `site/web` はこの page contract をもとに metadata と UI を組み立てる。SSR feature では Leptos context から `DynArtifactReader` を受け取り、server function の開始時にsnapshotを1回取得してpage documentを組み立てる。local / S3 などの storage 実装詳細には依存しない。hydrate build は `infra` に依存しない。
 
 公開 route の page document 読み込みは Leptos server function を正式経路とする。`site/server` は reader を生成して context に注入し、SSR と server function をホストする。手書きの `/api/page/*` は持たず、404 と storage error の扱いは各 server function に集約する。`/api/articles` は page document を組み立てない互換 endpoint として維持する。
+
+移行用`topcoat-server`は同じpage contractと`DynArtifactReader`をTopcoat request contextから利用し、公開route、metadata、status、client-side route遷移の互換性を固定artifact E2Eで検証する。移行完了まではproduction entrypointを`server` binaryとし、通常E2Eを先行して`topcoat-server`へ切り替える。
 
 home、about、category、articleの公開routeは`SsrMode::Async`で描画する。title、canonical、Open Graph metadataがartifactの内容に依存するため、非同期resourceの解決前に`<head>`をstreamingしない。各routeではblocking resourceを使い、metadataと本文を同じ`Suspense`境界で組み立てる。
 

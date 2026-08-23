@@ -286,6 +286,37 @@ test("forward navigation aborts a pending back navigation", async ({ page }) => 
   await expect(page.getByText("Fixture home content")).toHaveCount(0);
 });
 
+test("same-page fragment aborts a pending client navigation", async ({ page }) => {
+  await page.goto("/");
+
+  let releaseArticleResponse: () => void = () => {};
+  let markArticleFetchStarted: () => void = () => {};
+  const articleResponseGate = new Promise<void>((resolve) => {
+    releaseArticleResponse = resolve;
+  });
+  const articleFetchStarted = new Promise<void>((resolve) => {
+    markArticleFetchStarted = resolve;
+  });
+  await page.route("**/tech/e2e-article", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] === "1") {
+      markArticleFetchStarted();
+      await articleResponseGate;
+    }
+    await route.continue().catch(() => {});
+  });
+
+  await page.getByRole("link", { name: "E2E Article" }).click();
+  await articleFetchStarted;
+  await page.getByRole("link", { name: "Home fragment section" }).click();
+  releaseArticleResponse();
+
+  await expect(page).toHaveURL(/\/#home-fragment$/);
+  await page.waitForTimeout(200);
+  await expect(page.getByRole("heading", { name: "Home fragment" })).toBeInViewport();
+  await expect(page.getByText("Fixture home content")).toBeVisible();
+  await expect(page.getByText("Article fixture body")).toHaveCount(0);
+});
+
 test("client navigation reloads when shell asset fingerprints change", async ({ page }) => {
   await page.goto("/");
   let documentRequests = 0;
@@ -303,6 +334,35 @@ test("client navigation reloads when shell asset fingerprints change", async ({ 
     const body = currentBody.replace(
       /href="\/pkg\/[^"]+\.css"/,
       'href="/pkg/deployed-shell.css"',
+    );
+    expect(body).not.toBe(currentBody);
+    await route.fulfill({ response, body });
+  });
+
+  await page.getByRole("link", { name: "E2E Article" }).click();
+
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+  await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
+  expect(documentRequests).toBe(1);
+});
+
+test("client navigation reloads when inline shell runtime changes", async ({ page }) => {
+  await page.goto("/");
+  let documentRequests = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentRequests += 1;
+  });
+  await page.route("**/tech/e2e-article", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] !== "1") {
+      await route.continue();
+      return;
+    }
+
+    const response = await route.fetch();
+    const currentBody = await response.text();
+    const body = currentBody.replace(
+      "window.okawakScheduleCodeHighlight = function(root)",
+      "window.okawakScheduleCodeHighlightV2 = function(root)",
     );
     expect(body).not.toBe(currentBody);
     await route.fulfill({ response, body });
