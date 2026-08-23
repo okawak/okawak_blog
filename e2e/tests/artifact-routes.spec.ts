@@ -286,6 +286,61 @@ test("forward navigation aborts a pending back navigation", async ({ page }) => 
   await expect(page.getByText("Fixture home content")).toHaveCount(0);
 });
 
+test("pending popstate keeps the destination scroll state", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => window.scrollTo(0, 400));
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => history.state?.okawakScrollPosition?.y as number | undefined,
+      ),
+    )
+    .toBeGreaterThan(300);
+  await page.getByRole("link", { name: "E2E Article" }).click();
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+  await page.getByRole("main").evaluate((main) => {
+    const spacer = document.createElement("div");
+    spacer.style.height = "120rem";
+    main.append(spacer);
+  });
+
+  let releaseHomeResponse: () => void = () => {};
+  let markHomeFetchStarted: () => void = () => {};
+  const homeResponseGate = new Promise<void>((resolve) => {
+    releaseHomeResponse = resolve;
+  });
+  const homeFetchStarted = new Promise<void>((resolve) => {
+    markHomeFetchStarted = resolve;
+  });
+  await page.route("**/", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] === "1") {
+      markHomeFetchStarted();
+      await homeResponseGate;
+    }
+    await route.continue().catch(() => {});
+  });
+
+  await page.goBack();
+  await homeFetchStarted;
+  const destinationStateBefore = await page.evaluate(
+    () => history.state?.okawakScrollPosition,
+  );
+  await page.evaluate(async () => {
+    window.scrollTo(0, 700);
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+  });
+  const destinationStateAfter = await page.evaluate(
+    () => history.state?.okawakScrollPosition,
+  );
+
+  expect(destinationStateAfter).toEqual(destinationStateBefore);
+  await page.goForward();
+  releaseHomeResponse();
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+});
+
 test("same-page fragment aborts a pending client navigation", async ({ page }) => {
   await page.goto("/");
 
@@ -675,6 +730,24 @@ test("mobile navigation stays in the viewport and exposes its state", async ({ p
   await expect(page).toHaveURL(/\/about$/);
   await expect(navigation).toBeHidden();
   await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+});
+
+test("client popstate closes the retained mobile menu", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const menuButton = page.locator('button[aria-controls="site-header-nav"]');
+  await menuButton.click();
+  await page.getByRole("link", { name: "About", exact: true }).click();
+  await expect(page).toHaveURL(/\/about$/);
+
+  await menuButton.click();
+  await expect(menuButton).toHaveAttribute("aria-expanded", "true");
+  await page.goBack();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText("Fixture home content")).toBeVisible();
+  await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#site-header-nav")).toHaveClass(/\bhidden\b/);
 });
 
 test("home article cards stay within the mobile viewport", async ({ page }) => {

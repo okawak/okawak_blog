@@ -42,6 +42,7 @@ function savedScrollPosition(state) {
 }
 
 function rememberCurrentScrollPosition() {
+  if (!samePage(new URL(window.location.href), renderedLocation)) return;
   window.history.replaceState(
     historyStateWithScroll(currentScrollPosition()),
     "",
@@ -203,6 +204,14 @@ function initializeGeneratedContent(root) {
   window.okawakScheduleCodeHighlight?.(root);
 }
 
+function closeMobileMenu() {
+  document
+    .querySelector(
+      'button[aria-controls="site-header-nav"][aria-expanded="true"]',
+    )
+    ?.click();
+}
+
 function scrollToDestination(destination) {
   if (!destination.hash) {
     window.scrollTo(0, 0);
@@ -282,6 +291,7 @@ async function navigate(url, { history = "push", scroll = "destination" } = {}) 
     syncHeaderNavigation(nextDocument);
     const importedMain = document.importNode(nextMain, true);
     currentMain.replaceWith(importedMain);
+    closeMobileMenu();
     document.documentElement.lang = nextDocument.documentElement.lang || "ja";
     renderedLocation = destination;
 
@@ -347,6 +357,7 @@ window.addEventListener("popstate", (event) => {
     destination.search === renderedLocation.search
   ) {
     activeNavigation?.abort();
+    closeMobileMenu();
     renderedLocation = destination;
     const position = savedScrollPosition(event.state);
     if (position) {
