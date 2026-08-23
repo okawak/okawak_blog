@@ -562,6 +562,54 @@ test("fragment navigation resolves a pending popstate document", async ({ page }
   expect(documentRequests).toBe(1);
 });
 
+test("text fragments resolve against the rendered page during popstate", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "E2E Article" }).click();
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+
+  let releaseHomeResponse: () => void = () => {};
+  let markHomeFetchStarted: () => void = () => {};
+  const homeResponseGate = new Promise<void>((resolve) => {
+    releaseHomeResponse = resolve;
+  });
+  const homeFetchStarted = new Promise<void>((resolve) => {
+    markHomeFetchStarted = resolve;
+  });
+  await page.route("**/", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] === "1") {
+      markHomeFetchStarted();
+      await homeResponseGate;
+    }
+    await route.continue().catch(() => {});
+  });
+
+  await page.goBack();
+  await homeFetchStarted;
+  await page.getByRole("main").evaluate((main) => {
+    const link = document.createElement("a");
+    link.href = "#:~:text=Article%20fixture%20body";
+    link.textContent = "Article text fragment";
+    main.prepend(link);
+  });
+  const articleDocumentRequest = page.waitForRequest(
+    (request) =>
+      request.resourceType() === "document" &&
+      new URL(request.url()).pathname === "/tech/e2e-article",
+  );
+  const fragmentClick = page
+    .getByRole("link", { name: "Article text fragment" })
+    .click();
+  await articleDocumentRequest;
+  releaseHomeResponse();
+  await fragmentClick;
+
+  // Chromium removes the fragment directive from the document-visible URL.
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+  await expect(page.getByText("Article fixture body")).toBeVisible();
+});
+
 test("relative links resolve against the rendered page during popstate", async ({
   page,
 }) => {

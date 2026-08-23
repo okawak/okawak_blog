@@ -71,7 +71,12 @@ function fragmentNavigation(anchor) {
   const browserLocation = new URL(window.location.href);
   if (href.startsWith("#")) {
     const destination = new URL(href, renderedLocation.href);
-    if (hasTextFragmentDirective(destination)) return null;
+    if (
+      hasTextFragmentDirective(destination) &&
+      samePage(browserLocation, renderedLocation)
+    ) {
+      return null;
+    }
     return {
       browserLocation,
       destination,
@@ -79,7 +84,11 @@ function fragmentNavigation(anchor) {
   }
 
   const destination = new URL(href, renderedLocation.href);
-  if (hasTextFragmentDirective(destination)) return null;
+  if (hasTextFragmentDirective(destination)) {
+    return samePage(browserLocation, renderedLocation)
+      ? null
+      : { browserLocation, destination };
+  }
   if (
     destination.origin === browserLocation.origin &&
     destination.hash &&
