@@ -7,8 +7,43 @@ const PAGE_METADATA_SELECTOR = [
   'meta[property^="og:"]',
   'meta[property^="article:"]',
 ].join(",");
+const SCROLL_STATE_KEY = "okawakScrollPosition";
 
 let activeNavigation;
+let renderedLocation = new URL(window.location.href);
+let scrollFrame;
+
+function historyStateWithScroll(position) {
+  const state =
+    window.history.state && typeof window.history.state === "object"
+      ? window.history.state
+      : {};
+  return { ...state, [SCROLL_STATE_KEY]: position };
+}
+
+function currentScrollPosition() {
+  return { x: window.scrollX, y: window.scrollY };
+}
+
+function savedScrollPosition(state) {
+  const position = state?.[SCROLL_STATE_KEY];
+  if (
+    !position ||
+    !Number.isFinite(position.x) ||
+    !Number.isFinite(position.y)
+  ) {
+    return { x: 0, y: 0 };
+  }
+  return position;
+}
+
+function rememberCurrentScrollPosition() {
+  window.history.replaceState(
+    historyStateWithScroll(currentScrollPosition()),
+    "",
+    window.location.href,
+  );
+}
 
 function eligibleAnchor(event) {
   if (
@@ -25,8 +60,10 @@ function eligibleAnchor(event) {
   if (!(event.target instanceof Element)) return null;
 
   const anchor = event.target.closest("a[href]");
+  const href = anchor?.getAttribute("href") ?? "";
   if (
     !anchor ||
+    href.startsWith("#") ||
     anchor.hasAttribute("download") ||
     (anchor.target && anchor.target !== "_self")
   ) {
@@ -107,7 +144,7 @@ function fallBackToDocumentNavigation(url) {
   window.location.assign(url.href);
 }
 
-async function navigate(url, { history = "push", scroll = true } = {}) {
+async function navigate(url, { history = "push", scroll = "destination" } = {}) {
   activeNavigation?.abort();
   const controller = new AbortController();
   activeNavigation = controller;
@@ -143,12 +180,21 @@ async function navigate(url, { history = "push", scroll = true } = {}) {
     const importedMain = document.importNode(nextMain, true);
     currentMain.replaceWith(importedMain);
     document.documentElement.lang = nextDocument.documentElement.lang || "ja";
+    renderedLocation = destination;
 
     if (history === "push") {
-      window.history.pushState(null, "", destination);
+      window.history.pushState(
+        historyStateWithScroll({ x: 0, y: 0 }),
+        "",
+        destination,
+      );
     }
     initializeGeneratedContent(importedMain);
-    if (scroll) scrollToDestination(destination);
+    if (scroll === "destination") {
+      scrollToDestination(destination);
+    } else if (scroll) {
+      window.scrollTo(scroll.x, scroll.y);
+    }
     document.dispatchEvent(
       new CustomEvent("okawak:navigation", {
         detail: { url: destination.href },
@@ -167,9 +213,38 @@ document.addEventListener("click", (event) => {
   if (!url) return;
 
   event.preventDefault();
+  rememberCurrentScrollPosition();
   void navigate(url);
 });
 
-window.addEventListener("popstate", () => {
-  void navigate(new URL(window.location.href), { history: "none", scroll: false });
+window.addEventListener("popstate", (event) => {
+  const destination = new URL(window.location.href);
+  if (
+    destination.pathname === renderedLocation.pathname &&
+    destination.search === renderedLocation.search
+  ) {
+    renderedLocation = destination;
+    return;
+  }
+
+  void navigate(destination, {
+    history: "none",
+    scroll: savedScrollPosition(event.state),
+  });
 });
+
+if ("scrollRestoration" in window.history) {
+  window.history.scrollRestoration = "manual";
+}
+rememberCurrentScrollPosition();
+window.addEventListener(
+  "scroll",
+  () => {
+    if (scrollFrame) return;
+    scrollFrame = window.requestAnimationFrame(() => {
+      scrollFrame = undefined;
+      rememberCurrentScrollPosition();
+    });
+  },
+  { passive: true },
+);

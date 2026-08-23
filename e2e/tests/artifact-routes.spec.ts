@@ -148,7 +148,14 @@ test("home renders artifacts and navigates to an article without a document relo
     if (request.resourceType() === "document") documentRequests += 1;
   });
 
-  await page.getByRole("link", { name: "E2E Article" }).click();
+  const articleLink = page.getByRole("link", { name: "E2E Article" });
+  const homeScrollY = await articleLink.evaluate((link: HTMLAnchorElement) => {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    const scrollY = window.scrollY;
+    link.click();
+    return scrollY;
+  });
+  expect(homeScrollY).toBeGreaterThan(500);
 
   await expect(page).toHaveURL(/\/tech\/e2e-article$/);
   await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
@@ -182,6 +189,9 @@ test("home renders artifacts and navigates to an article without a document relo
     "",
     "1件の記事を1カテゴリで公開しています。",
   );
+  await expect
+    .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - homeScrollY))
+    .toBeLessThanOrEqual(10);
   expect(documentRequests).toBe(0);
   expect(browserErrors).toEqual([]);
 });
@@ -197,6 +207,25 @@ test("client navigation scrolls to a fragment on another page", async ({ page })
   await expect
     .poll(() => heading.evaluate((element) => element.getBoundingClientRect().top))
     .toBeLessThan(200);
+});
+
+test("an empty same-page fragment does not fetch or replace the page", async ({ page }) => {
+  await page.goto("/");
+  const navigationFetchHeaders: Promise<string | null>[] = [];
+  page.on("request", (request) => {
+    if (request.resourceType() === "fetch" && new URL(request.url()).pathname === "/") {
+      navigationFetchHeaders.push(request.headerValue("x-okawak-navigation"));
+    }
+  });
+  const main = page.locator("main");
+  await main.evaluate((element) => element.setAttribute("data-same-page", "true"));
+
+  const link = page.getByRole("link", { name: "Sanitized unsafe link" });
+  await expect(link).toHaveAttribute("href", "#");
+  await link.click();
+
+  await expect(main).toHaveAttribute("data-same-page", "true");
+  expect(await Promise.all(navigationFetchHeaders)).not.toContain("1");
 });
 
 test("server-rendered pages remain navigable without JavaScript", async ({ browser }) => {
