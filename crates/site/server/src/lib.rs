@@ -11,3 +11,9 @@ pub mod handlers;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod http_cache;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod readiness;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod topcoat_runtime;
