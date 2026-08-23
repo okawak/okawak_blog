@@ -7,6 +7,9 @@
 pub use web::*;
 
 #[cfg(not(target_arch = "wasm32"))]
+pub mod article_index;
+
+#[cfg(not(target_arch = "wasm32"))]
 pub mod handlers;
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -1,5 +1,6 @@
 [tools]
 bun = "1.4.0"
+"cargo:topcoat-cli" = "0.6.2"
 "github:leptos-rs/cargo-leptos" = "0.3.7"
 "github:bram209/leptosfmt" = "0.1.33"
 
@@ -23,6 +24,7 @@ mise --version
 bun --version
 cargo leptos --version
 leptosfmt --version
+topcoat fmt --version
 '''
 
 [tasks.web-install]
@@ -101,6 +103,7 @@ git submodule update --remote --checkout --recursive "$obsidian_path"
 description = "Format Rust and Leptos source files"
 run = '''
 cargo fmt --all
+find crates/site/server/src -name '*.rs' -exec topcoat fmt {} +
 find crates/site/web -name '*.rs' -exec leptosfmt {} +
 '''
 
