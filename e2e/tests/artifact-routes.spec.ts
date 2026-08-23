@@ -254,6 +254,67 @@ test("same-page fragment history restores scroll without fetching", async ({ pag
   await expect(heading).toBeInViewport();
 });
 
+test("forward navigation aborts a pending back navigation", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "E2E Article" }).click();
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+
+  let releaseHomeResponse: () => void = () => {};
+  let markHomeFetchStarted: () => void = () => {};
+  const homeResponseGate = new Promise<void>((resolve) => {
+    releaseHomeResponse = resolve;
+  });
+  const homeFetchStarted = new Promise<void>((resolve) => {
+    markHomeFetchStarted = resolve;
+  });
+  await page.route("**/", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] === "1") {
+      markHomeFetchStarted();
+      await homeResponseGate;
+    }
+    await route.continue().catch(() => {});
+  });
+
+  await page.goBack();
+  await homeFetchStarted;
+  await page.goForward();
+  releaseHomeResponse();
+
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+  await page.waitForTimeout(200);
+  await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
+  await expect(page.getByText("Fixture home content")).toHaveCount(0);
+});
+
+test("client navigation reloads when shell asset fingerprints change", async ({ page }) => {
+  await page.goto("/");
+  let documentRequests = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentRequests += 1;
+  });
+  await page.route("**/tech/e2e-article", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] !== "1") {
+      await route.continue();
+      return;
+    }
+
+    const response = await route.fetch();
+    const currentBody = await response.text();
+    const body = currentBody.replace(
+      /href="\/pkg\/[^"]+\.css"/,
+      'href="/pkg/deployed-shell.css"',
+    );
+    expect(body).not.toBe(currentBody);
+    await route.fulfill({ response, body });
+  });
+
+  await page.getByRole("link", { name: "E2E Article" }).click();
+
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+  await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
+  expect(documentRequests).toBe(1);
+});
+
 test("server-rendered pages remain navigable without JavaScript", async ({ browser }) => {
   const context = await browser.newContext({
     baseURL: BASE_URL,
