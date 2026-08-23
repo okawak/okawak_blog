@@ -211,6 +211,33 @@ test("client navigation scrolls to a fragment on another page", async ({ page })
     .toBeLessThan(200);
 });
 
+test("text fragments use document navigation", async ({ page }) => {
+  await page.goto("/");
+  let documentRequests = 0;
+  page.on("request", (request) => {
+    if (
+      request.resourceType() === "document" &&
+      new URL(request.url()).pathname === "/about"
+    ) {
+      documentRequests += 1;
+    }
+  });
+
+  const main = page.locator("main");
+  await main.evaluate((element) => element.setAttribute("data-original", "true"));
+  const aboutLink = page.getByRole("link", { name: "About", exact: true });
+  await aboutLink.evaluate((element) =>
+    element.setAttribute("href", "/about#:~:text=About%20fixture%20body"),
+  );
+  await aboutLink.click();
+
+  // Chromium removes the fragment directive from the document-visible URL.
+  await expect(page).toHaveURL(/\/about$/);
+  await expect(page.getByRole("heading", { name: "Fixture About" })).toBeVisible();
+  await expect(page.locator('main[data-original="true"]')).toHaveCount(0);
+  expect(documentRequests).toBe(1);
+});
+
 test("an empty same-page fragment does not fetch or replace the page", async ({ page }) => {
   await page.goto("/");
   const navigationFetchHeaders: Promise<string | null>[] = [];

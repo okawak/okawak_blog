@@ -54,19 +54,32 @@ function samePage(left, right) {
   return left.pathname === right.pathname && left.search === right.search;
 }
 
+function hasTextFragmentDirective(url) {
+  let fragment = url.hash;
+  try {
+    fragment = decodeURIComponent(fragment);
+  } catch {
+    // Keep the encoded fragment when it contains a malformed escape sequence.
+  }
+  return fragment.includes(":~:text=");
+}
+
 function fragmentNavigation(anchor) {
   if (!anchor) return null;
 
   const href = anchor.getAttribute("href") ?? "";
   const browserLocation = new URL(window.location.href);
   if (href.startsWith("#")) {
+    const destination = new URL(href, renderedLocation.href);
+    if (hasTextFragmentDirective(destination)) return null;
     return {
       browserLocation,
-      destination: new URL(href, renderedLocation.href),
+      destination,
     };
   }
 
   const destination = new URL(anchor.href, browserLocation.href);
+  if (hasTextFragmentDirective(destination)) return null;
   if (
     destination.origin === browserLocation.origin &&
     destination.hash &&
@@ -106,6 +119,7 @@ function eligibleAnchor(event) {
   const url = new URL(href, renderedLocation.href);
   if (
     url.origin !== window.location.origin ||
+    hasTextFragmentDirective(url) ||
     (url.pathname === window.location.pathname &&
       url.search === window.location.search &&
       url.hash)
