@@ -55,7 +55,7 @@ mod tests {
         Ok(())
     }
 
-    #[rstest]
+    #[test]
     fn test_generate_slug_deterministic_and_unique() -> Result<()> {
         let relative_path = PathBuf::from("test/path.md");
         let created = "2025-01-01T00:00:00+09:00";

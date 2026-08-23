@@ -84,14 +84,6 @@ mod tests {
     }
 
     #[test]
-    fn test_math_markup_uses_semantic_classes() {
-        let result = convert_markdown_to_html("Inline $a+b$ and display $$c+d$$.");
-
-        assert!(result.contains(r#"class="math math-inline">a+b</span>"#));
-        assert!(result.contains(r#"class="math math-display">c+d</span>"#));
-    }
-
-    #[test]
     fn test_escaped_math_pipe_inside_table_cell_is_preserved() {
         let markdown = "| Type | Expression |\n| --- | --- |\n| math | $a\\|b$ |";
 
@@ -229,75 +221,14 @@ mod tests {
         assert!(!result.contains("math math-inline"));
     }
 
-    // -----------------------------------------------------------------
-    // Math + code block tests
-    // -----------------------------------------------------------------
-
-    /// Inline code (backtick) containing `$...$` must NOT be converted to a
-    /// math span – the dollar signs are part of the code, not math.
-    #[rstest]
-    fn test_math_not_processed_in_inline_code() {
-        let markdown = "See `$x^2$` for the formula.";
-
-        let result = convert_markdown_to_html(markdown);
-
-        assert!(
-            result.contains("<code>$x^2$</code>"),
-            "inline code content should not be parsed as math; got:\n{result}"
-        );
-        assert!(
-            !result.contains("math math-inline"),
-            "no math span expected inside inline code; got:\n{result}"
-        );
-    }
-
-    /// Fenced code blocks containing `$...$` or `$$...$$` must NOT produce
-    /// any math wrappers.
-    #[rstest]
-    fn test_math_not_processed_in_fenced_code_block() {
-        let markdown = "```\n$x^2$ and $$block$$ formula\n```";
-
-        let result = convert_markdown_to_html(markdown);
-
-        assert!(
-            !result.contains("math math-display"),
-            "fenced code block should not produce display math; got:\n{result}"
-        );
-        assert!(
-            !result.contains("math math-inline"),
-            "fenced code block should not produce inline math; got:\n{result}"
-        );
-        assert!(
-            result.contains("$x^2$"),
-            "dollar signs should remain verbatim in code block; got:\n{result}"
-        );
-    }
-
-    /// Math markers that appear OUTSIDE code elements must still be converted
-    /// even when code elements are present in the same document.
-    #[rstest]
-    fn test_math_processed_in_text_adjacent_to_code() {
-        let markdown = "The formula $a+b$ is useful. Code: `$not_math$`.";
-
-        let result = convert_markdown_to_html(markdown);
-
-        assert!(
-            result.contains(r#"<span class="math math-inline">a+b</span>"#),
-            "math outside code should be converted to math span; got:\n{result}"
-        );
-        assert!(
-            result.contains("<code>$not_math$</code>"),
-            "dollar signs inside inline code should remain untouched; got:\n{result}"
-        );
-    }
-
     #[rstest]
     #[case::inline_code("The formula $a+b$ is useful. Code: `$not_math$`.")]
     #[case::fenced_code(indoc! {r#"
         Before $a$.
 
         ```rust
-        let literal = "$not_math$";
+        let inline = "$not_math$";
+        let display = "$$not_display_math$$";
         ```
 
         After $b$.
@@ -308,5 +239,6 @@ mod tests {
         assert!(result.contains("math math-inline"));
         assert!(result.contains("$not_math$"));
         assert!(!result.contains("<span class=\"math math-inline\">not_math</span>"));
+        assert!(!result.contains("<span class=\"math math-display\">not_display_math</span>"));
     }
 }

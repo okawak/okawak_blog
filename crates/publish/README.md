@@ -162,12 +162,9 @@ cargo test
 ### テスト
 
 ```bash
-# 全テスト実行
-cargo test
+# publish crateの全テスト実行
+cargo test -p publish
 
-# 統合テストのみ
-cargo test --test integration_test
-
-# E2Eテストのみ
-cargo test --test e2e_test
+# publish pipelineの統合テストのみ
+cargo test -p publish --test pipeline_test
 ```

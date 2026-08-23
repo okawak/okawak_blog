@@ -20,12 +20,7 @@ pub async fn publish(obsidian_dir: &Path, output_dir: &Path) -> Result<()> {
     publish_with_bookmark_enricher(obsidian_dir, output_dir, rich_bookmark_enricher()).await
 }
 
-#[tracing::instrument(
-    name = "publish",
-    skip_all,
-    fields(input_dir = %obsidian_dir.display(), output_dir = %output_dir.display()),
-    err
-)]
+#[tracing::instrument(name = "publish", skip_all, err)]
 pub async fn publish_with_bookmark_enricher(
     obsidian_dir: &Path,
     output_dir: &Path,
@@ -34,11 +29,7 @@ pub async fn publish_with_bookmark_enricher(
     validate_obsidian_dir(obsidian_dir)?;
 
     let start_time = std::time::Instant::now();
-    info!("publish started");
-
     let markdown_files = scan_markdown_files(obsidian_dir)?;
-    info!(file_count = markdown_files.len(), "scanned markdown files");
-
     let classified_files = classify_obsidian_files(markdown_files, obsidian_dir);
 
     info!(
@@ -133,28 +124,10 @@ pub async fn publish_with_bookmark_enricher(
     info!(
         article_count = site_documents.article_index.articles.len(),
         category_count = site_documents.category_count(),
-        "wrote site artifacts"
-    );
-
-    let processed_count = site_documents.article_index.articles.len();
-    let duration = start_time.elapsed();
-
-    info!(
-        processed_count,
         skipped_count = skipped,
-        processing_time_ms = duration.as_millis(),
+        processing_time_ms = start_time.elapsed().as_millis(),
         "publish completed"
     );
-
-    if !site_documents.article_index.articles.is_empty() {
-        for article in &site_documents.article_index.articles {
-            info!(
-                title = article.title.as_str(),
-                slug = article.slug.as_str(),
-                "processed article"
-            );
-        }
-    }
 
     Ok(())
 }
@@ -167,17 +140,14 @@ async fn process_article(
     site_output: SiteOutput,
 ) -> Result<domain::ArticleMeta> {
     let article = render_article(parsed_file, link_index, enrich).await?;
-    let (meta, output_file_path) = tokio::task::spawn_blocking(move || {
-        let output_file_path = write_article_page(
+    tokio::task::spawn_blocking(move || {
+        write_article_page(
             &site_output,
             article.meta.category,
             &article.meta.slug,
             article.body.as_str(),
         )?;
-        Ok::<_, PublishError>((article.meta, output_file_path))
+        Ok::<_, PublishError>(article.meta)
     })
-    .await??;
-
-    info!(output_file = %output_file_path.display(), "wrote artifact");
-    Ok(meta)
+    .await?
 }

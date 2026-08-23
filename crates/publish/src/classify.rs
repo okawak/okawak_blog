@@ -3,7 +3,7 @@ use crate::vault::{ContentKind, ObsidianFrontMatter, ParsedObsidianFile, parse_o
 use domain::{Category, PageKey, SectionPath, Slug};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use tracing::{error, warn};
+use tracing::error;
 
 pub(crate) struct ParsedArticleFile {
     pub(crate) category: Category,
@@ -91,7 +91,6 @@ pub(crate) fn classify_obsidian_files(
             }
             Ok(None) => {
                 classified_files.skipped += 1;
-                warn!(file_path = %file_path.display(), "skipped incomplete file");
             }
             Err(error) => {
                 classified_files.errors += 1;

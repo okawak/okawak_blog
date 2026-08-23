@@ -148,6 +148,7 @@ mod tests {
     #[case::javascript("javascript:alert(1)", false)]
     #[case::protocol_relative("//example.com", false)]
     #[case::windows_path(r"articles\example", false)]
+    #[case::empty("", false)]
     fn test_safe_destination(#[case] destination: &str, #[case] expected: bool) {
         assert_eq!(is_safe_destination(destination), expected);
     }

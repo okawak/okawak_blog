@@ -245,27 +245,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_extract_yaml_frontmatter() -> Result<()> {
-        let content = indoc! {r#"
-            ---
-            title: Test
-            key: value
-            ---
-
-            Content here
-        "#};
-
-        let result = extract_yaml_frontmatter(content)?;
-        assert!(result.is_some());
-
-        let yaml = result.unwrap();
-        assert!(yaml.contains("title: Test"));
-        assert!(yaml.contains("key: value"));
-
-        Ok(())
-    }
-
-    #[rstest]
     #[case::closing_at_eof(
         indoc! {r#"
             ---
@@ -328,7 +307,7 @@ mod tests {
         }
     }
 
-    #[rstest]
+    #[test]
     fn test_parse_explicit_kind() {
         let content = indoc! {r#"
             ---

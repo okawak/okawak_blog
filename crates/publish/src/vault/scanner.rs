@@ -50,18 +50,18 @@ mod tests {
     use tempfile::TempDir;
 
     #[rstest]
-    #[case::with_files(vec!["tech/article1.md", "daily/2025-01-01.md"], vec!["README.txt"], 2)]
-    #[case::empty_dir(vec![], vec![], 0)]
-    #[case::non_md_files(vec![], vec!["README.txt", "config.json"], 0)]
+    #[case::with_files(&["tech/article1.md", "daily/2025-01-01.md"], &["README.txt"], 2)]
+    #[case::empty_dir(&[], &[], 0)]
+    #[case::non_md_files(&[], &["README.txt", "config.json"], 0)]
     fn test_scan_files(
-        #[case] md_files: Vec<&str>,
-        #[case] other_files: Vec<&str>,
+        #[case] md_files: &[&str],
+        #[case] other_files: &[&str],
         #[case] expected_count: usize,
     ) -> Result<()> {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path();
 
-        for file_path in &md_files {
+        for file_path in md_files {
             let full_path = base_path.join(file_path);
             if let Some(parent) = full_path.parent() {
                 fs::create_dir_all(parent)?;
@@ -69,7 +69,7 @@ mod tests {
             fs::write(full_path, "# Test Content")?;
         }
 
-        for file_path in &other_files {
+        for file_path in other_files {
             fs::write(base_path.join(file_path), "Other content")?;
         }
 
@@ -80,17 +80,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case("lowercase.md", "# Lowercase")]
-    #[case("uppercase.MD", "# Uppercase")]
-    #[case("mixed.Md", "# Mixed")]
-    fn test_scan_case_insensitive_extensions(
-        #[case] filename: &str,
-        #[case] content: &str,
-    ) -> Result<()> {
+    #[case("lowercase.md")]
+    #[case("uppercase.MD")]
+    #[case("mixed.Md")]
+    fn test_scan_case_insensitive_extensions(#[case] filename: &str) -> Result<()> {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path();
 
-        fs::write(base_path.join(filename), content)?;
+        fs::write(base_path.join(filename), "# Markdown")?;
         fs::write(base_path.join("not_markdown.txt"), "Not markdown")?;
 
         let files = scan_markdown_files(base_path)?;
@@ -99,5 +96,20 @@ mod tests {
         assert_eq!(files[0].file_name().unwrap().to_string_lossy(), filename);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_validate_obsidian_dir_rejects_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file = temp_dir.path().join("vault.md");
+        fs::write(&file, "# Not a directory").unwrap();
+
+        let result = validate_obsidian_dir(&file);
+
+        assert!(matches!(
+            result,
+            Err(PublishError::InvalidSourceDirectory(message))
+                if message.contains("path is not a directory")
+        ));
     }
 }
