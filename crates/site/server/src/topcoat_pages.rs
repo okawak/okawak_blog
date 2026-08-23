@@ -4,18 +4,20 @@ use std::str::FromStr;
 
 use chrono::Datelike;
 use domain::{
-    Category as DomainCategory, CategoryPageDocument, HomePageDocument, PageKey, SiteArticleCard,
-    StaticPageDocument, build_article_path, build_category_page_canonical_path,
-    build_category_page_description, build_category_page_document, build_category_page_title,
-    build_category_path, build_home_page_canonical_path, build_home_page_description,
-    build_home_page_document, build_home_page_title, build_static_page_canonical_path,
-    build_static_page_description, build_static_page_document, build_static_page_title,
+    ArticlePageDocument, Category as DomainCategory, CategoryPageDocument, HomePageDocument,
+    PageKey, SiteArticleCard, Slug, StaticPageDocument, build_article_page_canonical_path,
+    build_article_page_description, build_article_page_document, build_article_page_title,
+    build_article_path, build_category_page_canonical_path, build_category_page_description,
+    build_category_page_document, build_category_page_title, build_category_path,
+    build_home_page_canonical_path, build_home_page_description, build_home_page_document,
+    build_home_page_title, build_static_page_canonical_path, build_static_page_description,
+    build_static_page_document, build_static_page_title, find_article_summary,
 };
 use infra::DynArtifactSnapshot;
 use topcoat::{
     Result,
     context::{Cx, app_context, try_request_context},
-    router::{StatusCode, path_param, request, route},
+    router::{StatusCode, path_param, raw_path_params, request, route},
     view::{Unescaped, View, component, view},
 };
 
@@ -29,6 +31,33 @@ const ABOUT_PAGE_KEY: &str = "about";
 const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
 const STYLESHEET_PATH: &str = "/pkg/web.css";
+
+struct ShellMetadata {
+    title: String,
+    description: String,
+    canonical_url: String,
+    og_type: &'static str,
+}
+
+impl ShellMetadata {
+    fn website(title: String, description: String, canonical_url: String) -> Self {
+        Self {
+            title,
+            description,
+            canonical_url,
+            og_type: "website",
+        }
+    }
+
+    fn article(title: String, description: String, canonical_url: String) -> Self {
+        Self {
+            title,
+            description,
+            canonical_url,
+            og_type: "article",
+        }
+    }
+}
 
 path_param!(category_name);
 
@@ -100,9 +129,7 @@ async fn home_document(document: HomePageDocument) -> Result {
     view! {
         site_shell(
             status: StatusCode::OK,
-            title: title,
-            description: description,
-            canonical_url: canonical_url,
+            metadata: ShellMetadata::website(title, description, canonical_url),
             current_path: "/".to_string(),
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-12 px-4 py-8 text-left sm:px-6 sm:py-12"
@@ -280,6 +307,178 @@ async fn article_card(article: &SiteArticleCard) -> Result {
     }
 }
 
+#[route(GET "/{category_name}/{article_slug}")]
+pub(crate) async fn article_page(cx: &Cx) -> Result<View> {
+    let mut params = raw_path_params(cx);
+    let category_param = params
+        .next()
+        .expect("article route should provide a category path parameter")
+        .1
+        .as_str();
+    let slug_param = params
+        .next()
+        .expect("article route should provide a slug path parameter")
+        .1
+        .as_str();
+    let normalized_slug = normalize_article_slug_param(slug_param);
+    let requested_path = request::uri(cx).path().to_string();
+    let fallback_title = format!("{normalized_slug} | {}", web::SITE_NAME);
+    let fallback_description = format!("{category_param} カテゴリの記事です。");
+    let category = match DomainCategory::from_str(category_param) {
+        Ok(category) => category,
+        Err(_) => return view! { not_found_page(canonical_path: requested_path) },
+    };
+    let slug = match Slug::new(normalized_slug.to_string()) {
+        Ok(slug) => slug,
+        Err(_) => return view! { not_found_page(canonical_path: requested_path) },
+    };
+
+    let snapshot = match request_snapshot(cx).await {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            eprintln!(
+                "Article page artifact snapshot failed for {category_param}/{normalized_slug}: {error}"
+            );
+            return view! {
+                article_internal_server_error_page(
+                    title: fallback_title,
+                    description: fallback_description,
+                    canonical_path: requested_path
+                )
+            };
+        }
+    };
+
+    let document = async {
+        let article_index = snapshot.read_article_index().await?;
+        let Some(summary) = find_article_summary(&article_index, &category, &slug) else {
+            return Ok(None);
+        };
+        let html = match snapshot.read_article_html(&category, &slug).await {
+            Ok(html) => html,
+            Err(error) if error.is_not_found() => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        let document = build_article_page_document(summary, &html)?;
+
+        Ok(Some(document))
+    }
+    .await;
+
+    match document {
+        Ok(Some(document)) => view! { article_document(document: document) },
+        Ok(None) => view! { not_found_page(canonical_path: requested_path) },
+        Err(error) => {
+            eprintln!(
+                "Article page artifact read failed for {category_param}/{normalized_slug}: {error}"
+            );
+            view! {
+                article_internal_server_error_page(
+                    title: fallback_title,
+                    description: fallback_description,
+                    canonical_path: requested_path
+                )
+            }
+        }
+    }
+}
+
+#[component]
+async fn article_document(document: ArticlePageDocument) -> Result {
+    let title = build_article_page_title(&document, web::SITE_NAME);
+    let description = build_article_page_description(&document);
+    let canonical_path = build_article_page_canonical_path(&document);
+    let canonical_url = web::build_site_url(&canonical_path);
+    let article = document.article;
+    let page_title = article.title.as_str().to_string();
+    let category = article.category_display_name;
+    let created_at_label = web::format::format_display_date(&article.created_at);
+    let updated_at_label = web::format::format_display_date(&article.updated_at);
+    let created_at = article.created_at;
+    let updated_at = article.updated_at;
+    let article_description = article.description;
+    let tags = article.tags;
+    // The publish pipeline escapes raw Markdown HTML and neutralizes unsafe href schemes before
+    // persisting this fragment. It is therefore the trusted HTML boundary for Topcoat as well.
+    let html = Unescaped::new_unchecked(document.html);
+
+    view! {
+        site_shell(
+            status: StatusCode::OK,
+            metadata: ShellMetadata::article(title, description, canonical_url),
+            current_path: canonical_path,
+            <article
+                class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-8 px-4 py-8 text-left sm:px-6 sm:py-12"
+            >
+                <header
+                    class="grid gap-3 rounded-2xl border border-border/80 bg-gradient-to-b from-card to-secondary/70 p-6 text-center shadow-[0_18px_42px_rgb(0_0_0/0.24)] sm:p-8"
+                >
+                    <p
+                        class="m-0 text-sm font-bold tracking-[0.12em] text-primary uppercase"
+                    >
+                        (category)
+                    </p>
+                    <h1
+                        class="m-0 text-3xl leading-tight font-bold sm:text-4xl lg:text-5xl"
+                    >
+                        (page_title)
+                    </h1>
+                    <p
+                        class="m-0 flex flex-wrap justify-center gap-x-2 gap-y-1 leading-7 text-muted-foreground"
+                    >
+                        <span>
+                            "公開 "
+                            <time datetime=(created_at.as_str())>
+                                (created_at_label)
+                            </time>
+                        </span>
+                        <span aria-hidden="true">"/"</span>
+                        <span>
+                            "更新 "
+                            <time datetime=(updated_at.as_str())>
+                                (updated_at_label)
+                            </time>
+                        </span>
+                    </p>
+                    if let Some(article_description) = article_description {
+                        <p
+                            class="mx-auto my-0 max-w-3xl leading-8 text-muted-foreground"
+                        >
+                            (article_description)
+                        </p>
+                    }
+                    if !tags.is_empty() {
+                        <ul
+                            class="m-0 flex list-none flex-wrap justify-center gap-2 p-0"
+                            aria-label="タグ"
+                        >
+                            for tag in &tags {
+                                <li>
+                                    <span
+                                        class="inline-flex w-fit items-center rounded-full border border-border bg-background/45 px-3 py-1 text-xs font-normal text-muted-foreground transition-colors focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                    >
+                                        (format!("#{tag}"))
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </header>
+
+                <div
+                    class="content-prose w-full rounded-xl border border-border/80 bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.22)] sm:p-8"
+                >
+                    (html)
+                </div>
+            </article>
+        )
+    }
+}
+
+fn normalize_article_slug_param(slug: &str) -> &str {
+    slug.strip_suffix(".html").unwrap_or(slug)
+}
+
 #[route(GET "/{category_name}")]
 pub(crate) async fn category_page(cx: &Cx) -> Result<View> {
     let category_param = path_param::<CategoryName>(cx);
@@ -352,9 +551,11 @@ async fn category_document(document: CategoryPageDocument) -> Result {
     view! {
         site_shell(
             status: StatusCode::OK,
-            title: title,
-            description: description.clone(),
-            canonical_url: canonical_url,
+            metadata: ShellMetadata::website(
+                title,
+                description.clone(),
+                canonical_url,
+            ),
             current_path: canonical_path,
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-6 px-4 py-8 text-left sm:px-6 sm:py-12"
@@ -446,9 +647,7 @@ async fn about_document(document: StaticPageDocument) -> Result {
     view! {
         site_shell(
             status: StatusCode::OK,
-            title: title,
-            description: description,
-            canonical_url: canonical_url,
+            metadata: ShellMetadata::website(title, description, canonical_url),
             current_path: "/about".to_string(),
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-8 px-4 py-8 text-left sm:px-6 sm:py-12"
@@ -488,11 +687,35 @@ async fn not_found_page(canonical_path: String) -> Result {
     view! {
         site_shell(
             status: StatusCode::NOT_FOUND,
-            title: format!("{NOT_FOUND_TITLE} | {}", web::SITE_NAME),
-            description: NOT_FOUND_DESCRIPTION.to_string(),
-            canonical_url: canonical_url,
+            metadata: ShellMetadata::website(
+                format!("{NOT_FOUND_TITLE} | {}", web::SITE_NAME),
+                NOT_FOUND_DESCRIPTION.to_string(),
+                canonical_url,
+            ),
             current_path: canonical_path,
             <div>"ページが見つかりませんでした。"</div>
+        )
+    }
+}
+
+#[component]
+async fn article_internal_server_error_page(
+    title: String,
+    description: String,
+    canonical_path: String,
+) -> Result {
+    let canonical_url = web::build_site_url(&canonical_path);
+
+    view! {
+        site_shell(
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            metadata: ShellMetadata::article(title, description, canonical_url),
+            current_path: canonical_path,
+            <div
+                class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground"
+            >
+                "記事の読み込みに失敗しました"
+            </div>
         )
     }
 }
@@ -509,9 +732,7 @@ async fn internal_server_error_page(
     view! {
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
-            title: title,
-            description: description,
-            canonical_url: canonical_url,
+            metadata: ShellMetadata::website(title, description, canonical_url),
             current_path: canonical_path,
             <div
                 class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground"
@@ -525,9 +746,7 @@ async fn internal_server_error_page(
 #[component]
 async fn site_shell(
     status: StatusCode,
-    title: String,
-    description: String,
-    canonical_url: String,
+    metadata: ShellMetadata,
     current_path: String,
     child: View,
 ) -> Result {
@@ -535,6 +754,12 @@ async fn site_shell(
     let stylesheet_href = stylesheet_href();
     let math_render_script = Unescaped::new_unchecked(MATH_RENDER_SCRIPT);
     let code_highlight_script = Unescaped::new_unchecked(CODE_HIGHLIGHT_SCRIPT);
+    let ShellMetadata {
+        title,
+        description,
+        canonical_url,
+        og_type,
+    } = metadata;
 
     view! {
         (status)
@@ -549,7 +774,7 @@ async fn site_shell(
                 <meta property="og:title" content=(title)>
                 <meta property="og:description" content=(description)>
                 <meta property="og:url" content=(canonical_url)>
-                <meta property="og:type" content="website">
+                <meta property="og:type" content=(og_type)>
                 <link rel="stylesheet" href=(stylesheet_href)>
                 <link
                     rel="icon"

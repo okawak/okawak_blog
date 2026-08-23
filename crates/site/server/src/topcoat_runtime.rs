@@ -113,6 +113,7 @@ fn create_topcoat_router_with_site_root(
         .route(readiness)
         .route(articles)
         .route(topcoat_pages::home)
+        .route(topcoat_pages::article_page)
         .route(topcoat_pages::category_page)
         .route(topcoat_pages::about)
         // Reuse the current generated asset directory during the parallel-runtime period. The
@@ -714,6 +715,273 @@ mod tests {
         let response = response(
             &router,
             Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn article_renders_the_published_document_as_html() {
+        let router = create_topcoat_router(fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/tech/e2e-article")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(
+            response.content_type.as_deref(),
+            Some("text/html; charset=utf-8")
+        );
+        assert!(response.body.starts_with("<!DOCTYPE html>"));
+        assert!(
+            response
+                .body
+                .contains("<title>E2E Article | ぶくせんの探窟メモ</title>")
+        );
+        assert!(
+            response
+                .body
+                .contains("<meta name=\"description\" content=\"Article fixture description\">")
+        );
+        assert!(
+            response.body.contains(
+                "<link rel=\"canonical\" href=\"https://www.okawak.net/tech/e2e-article\">"
+            )
+        );
+        assert!(
+            response.body.contains(
+                "<meta property=\"og:title\" content=\"E2E Article | ぶくせんの探窟メモ\">"
+            )
+        );
+        assert!(response.body.contains(
+            "<meta property=\"og:description\" content=\"Article fixture description\">"
+        ));
+        assert!(response.body.contains(
+            "<meta property=\"og:url\" content=\"https://www.okawak.net/tech/e2e-article\">"
+        ));
+        assert!(
+            response
+                .body
+                .contains("<meta property=\"og:type\" content=\"article\">")
+        );
+        assert!(response.body.contains(">技術</p>"));
+        assert!(response.body.contains(">E2E Article</h1>"));
+        assert!(response.body.contains("Article fixture description"));
+        assert!(response.body.contains("#rust"));
+        assert!(response.body.contains("2026年1月1日"));
+        assert!(response.body.contains("2026年1月2日"));
+        assert!(response.body.contains(
+            "<h1>Article artifact</h1><p>Article fixture body with <code>inline_code()</code>."
+        ));
+        assert!(response.body.contains("data-testid=\"article-wide-code\""));
+        assert!(!response.body.contains("&lt;h1&gt;Article artifact"));
+    }
+
+    #[tokio::test]
+    async fn article_accepts_html_suffix_and_uses_the_normalized_canonical_url() {
+        let router = create_topcoat_router(fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/tech/e2e-article.html")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert!(
+            response.body.contains(
+                "<link rel=\"canonical\" href=\"https://www.okawak.net/tech/e2e-article\">"
+            )
+        );
+        assert!(!response.body.contains(
+            "<link rel=\"canonical\" href=\"https://www.okawak.net/tech/e2e-article.html\">"
+        ));
+    }
+
+    #[tokio::test]
+    async fn article_returns_not_found_for_invalid_or_missing_documents() {
+        let router = create_topcoat_router(fixture_reader(), false);
+
+        for path in [
+            "/unknown/e2e-article",
+            "/tech/not%20a%20slug",
+            "/tech/missing-article",
+        ] {
+            let response = response(
+                &router,
+                Request::builder().uri(path).body(Body::empty()).unwrap(),
+            )
+            .await;
+
+            assert_eq!(response.status, StatusCode::NOT_FOUND, "{path}");
+            assert!(response.body.contains("ページが見つかりませんでした。"));
+            assert!(response.body.contains(&format!(
+                "<link rel=\"canonical\" href=\"https://www.okawak.net{path}\">"
+            )));
+        }
+
+        let temp_dir = tempdir().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("articles")).unwrap();
+        let fixture_root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/site");
+        std::fs::copy(
+            fixture_root.join("articles/index.json"),
+            temp_dir.path().join("articles/index.json"),
+        )
+        .unwrap();
+        let router =
+            create_topcoat_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/tech/e2e-article")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::NOT_FOUND);
+        assert!(response.body.contains("ページが見つかりませんでした。"));
+    }
+
+    #[tokio::test]
+    async fn article_returns_internal_server_error_for_invalid_artifacts() {
+        let temp_dir = tempdir().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("articles/tech")).unwrap();
+        let fixture_root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/site");
+        std::fs::copy(
+            fixture_root.join("articles/index.json"),
+            temp_dir.path().join("articles/index.json"),
+        )
+        .unwrap();
+        std::fs::write(
+            temp_dir.path().join("articles/tech/e2e-article.html"),
+            "   ",
+        )
+        .unwrap();
+        let router =
+            create_topcoat_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
+        let blank_html_response = response(
+            &router,
+            Request::builder()
+                .uri("/tech/e2e-article")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(
+            blank_html_response.status,
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert!(
+            blank_html_response
+                .body
+                .contains("記事の読み込みに失敗しました")
+        );
+        assert!(
+            blank_html_response
+                .body
+                .contains("<meta property=\"og:type\" content=\"article\">")
+        );
+
+        let empty_dir = tempdir().unwrap();
+        let router =
+            create_topcoat_router(Arc::new(LocalArtifactReader::new(empty_dir.path())), false);
+        let missing_index_response = response(
+            &router,
+            Request::builder()
+                .uri("/tech/e2e-article")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(
+            missing_index_response.status,
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert!(
+            missing_index_response
+                .body
+                .contains("記事の読み込みに失敗しました")
+        );
+    }
+
+    #[tokio::test]
+    async fn article_returns_internal_server_error_page_when_snapshot_fails() {
+        let router = create_topcoat_router(Arc::new(FailingSnapshotReader), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/tech/e2e-article")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(response.body.contains("記事の読み込みに失敗しました"));
+    }
+
+    #[tokio::test]
+    async fn article_supports_release_aware_conditional_get() {
+        let router = create_topcoat_router(validator_reader(fixture_reader()), true);
+        let first = response(
+            &router,
+            Request::builder()
+                .uri("/tech/e2e-article")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        let etag = first
+            .headers
+            .get(header::ETAG)
+            .expect("ETag")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        let cached = response(
+            &router,
+            Request::builder()
+                .uri("/tech/e2e-article")
+                .header(header::IF_NONE_MATCH, etag)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(cached.status, StatusCode::NOT_MODIFIED);
+        assert!(cached.body.is_empty());
+    }
+
+    #[tokio::test]
+    async fn conditional_get_and_article_share_one_snapshot() {
+        let snapshot_calls = Arc::new(AtomicUsize::new(0));
+        let reader = Arc::new(CountingReader {
+            inner: fixture_reader(),
+            snapshot_calls: snapshot_calls.clone(),
+        });
+        let router = create_topcoat_router(validator_reader(reader), true);
+
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/tech/e2e-article")
+                .body(Body::empty())
+                .unwrap(),
         )
         .await;
 
