@@ -1,5 +1,9 @@
 use crate::SITE_NAME;
 use crate::components::{footer::Footer, header::Header};
+use crate::generated_content::{
+    CODE_HIGHLIGHT_SCRIPT, HIGHLIGHT_SCRIPT_URL, HIGHLIGHT_STYLESHEET_URL, KATEX_SCRIPT_INTEGRITY,
+    KATEX_SCRIPT_URL, KATEX_STYLESHEET_INTEGRITY, KATEX_STYLESHEET_URL, MATH_RENDER_SCRIPT,
+};
 use crate::routes::about::AboutPage;
 use crate::routes::article::ArticlePage;
 use crate::routes::category::CategoryPage;
@@ -41,104 +45,28 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 // Load KaTeX from the CDN.
                 <link
                     rel="stylesheet"
-                    href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
-                    integrity="sha384-5TcZemv2l/9On385z///+d7MSYlvIEw9FuZTIdZ14vJLqWphw7e7ZPuOiCHJcFCP"
+                    href=KATEX_STYLESHEET_URL
+                    integrity=KATEX_STYLESHEET_INTEGRITY
                     crossorigin="anonymous"
                 />
                 <script
                     // Load asynchronously.
                     defer
-                    src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"
-                    integrity="sha384-cMkvdD8LoxVzGF/RPUKAcvmm49FQ0oxwDF3BGKtDXcEc+T1b2N+teh/OJfpU0jr6"
+                    src=KATEX_SCRIPT_URL
+                    integrity=KATEX_SCRIPT_INTEGRITY
                     crossorigin="anonymous"
                     onload="window.okawakScheduleMathRender && window.okawakScheduleMathRender();"
                 ></script>
-                <script>
-                    {r#"
-                    window.okawakRenderMath = function(root) {
-                    if (!window.katex) return;
-                    
-                    const scope = root || document.body;
-                    const normalizeExpression = (value) =>
-                    (value || '').replace(/[\u2009\u200A\u200B\u200C\u200D\u2061\u202F\u2060\uFEFF]/g, '');
-                    
-                    scope.querySelectorAll('.math-inline').forEach((element) => {
-                    if (element.dataset.katexRendered === 'true') return;
-                    
-                    const expression = normalizeExpression(element.textContent);
-                    window.katex.render(expression, element, {
-                    displayMode: false,
-                    throwOnError: false,
-                    });
-                    element.dataset.katexRendered = 'true';
-                    });
-                    
-                    scope.querySelectorAll('.math-display').forEach((element) => {
-                    if (element.dataset.katexRendered === 'true') return;
-                    
-                    const expression = normalizeExpression(element.textContent);
-                    window.katex.render(expression, element, {
-                    displayMode: true,
-                    throwOnError: false,
-                    });
-                    element.dataset.katexRendered = 'true';
-                    });
-                    };
-                    
-                    window.okawakScheduleMathRender = function(root) {
-                    let remaining = 200;
-                    const attempt = function() {
-                    if (window.katex && window.okawakRenderMath) {
-                    window.okawakRenderMath(root);
-                    return;
-                    }
-                    
-                    if (remaining > 0) {
-                    remaining -= 1;
-                    window.setTimeout(attempt, 50);
-                    }
-                    };
-                    
-                    attempt();
-                    };
-                    
-                    "#}
-                </script>
+                <script>{MATH_RENDER_SCRIPT}</script>
 
                 // Load highlight.js from the CDN.
-                <link
-                    rel="stylesheet"
-                    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css"
-                />
+                <link rel="stylesheet" href=HIGHLIGHT_STYLESHEET_URL />
                 <script
                     defer
-                    src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"
+                    src=HIGHLIGHT_SCRIPT_URL
                     onload="window.okawakScheduleCodeHighlight && window.okawakScheduleCodeHighlight();"
                 ></script>
-                <script>
-                    {r#"
-                    window.okawakHighlightCode = function(root) {
-                    if (!window.hljs) return;
-                    const scope = root || document.body;
-                    scope.querySelectorAll('.content-prose pre code:not([data-highlighted])')
-                    .forEach((element) => window.hljs.highlightElement(element));
-                    };
-                    window.okawakScheduleCodeHighlight = function(root) {
-                    let remaining = 200;
-                    const attempt = function() {
-                    if (window.hljs && window.okawakHighlightCode) {
-                    window.okawakHighlightCode(root);
-                    return;
-                    }
-                    if (remaining > 0) {
-                    remaining -= 1;
-                    window.setTimeout(attempt, 50);
-                    }
-                    };
-                    attempt();
-                    };
-                    "#}
-                </script>
+                <script>{CODE_HIGHLIGHT_SCRIPT}</script>
                 <AutoReload options=options.clone() />
                 <HydrationScripts options />
                 <MetaTags />

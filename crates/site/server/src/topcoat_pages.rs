@@ -14,6 +14,10 @@ use topcoat::{
 };
 
 use crate::topcoat_runtime::ArtifactReaderContext;
+use web::generated_content::{
+    CODE_HIGHLIGHT_SCRIPT, HIGHLIGHT_SCRIPT_URL, HIGHLIGHT_STYLESHEET_URL, KATEX_SCRIPT_INTEGRITY,
+    KATEX_SCRIPT_URL, KATEX_STYLESHEET_INTEGRITY, KATEX_STYLESHEET_URL, MATH_RENDER_SCRIPT,
+};
 
 const ABOUT_PAGE_KEY: &str = "about";
 const NOT_FOUND_TITLE: &str = "ページが見つかりません";
@@ -136,6 +140,8 @@ async fn site_shell(
 ) -> Result {
     let year = chrono::Local::now().year();
     let stylesheet_href = stylesheet_href();
+    let math_render_script = Unescaped::new_unchecked(MATH_RENDER_SCRIPT);
+    let code_highlight_script = Unescaped::new_unchecked(CODE_HIGHLIGHT_SCRIPT);
 
     view! {
         (status)
@@ -162,6 +168,27 @@ async fn site_shell(
                     rel="stylesheet"
                     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
                 >
+                <link
+                    rel="stylesheet"
+                    href=(KATEX_STYLESHEET_URL)
+                    integrity=(KATEX_STYLESHEET_INTEGRITY)
+                    crossorigin="anonymous"
+                >
+                <script
+                    defer=""
+                    src=(KATEX_SCRIPT_URL)
+                    integrity=(KATEX_SCRIPT_INTEGRITY)
+                    crossorigin="anonymous"
+                    onload="window.okawakScheduleMathRender && window.okawakScheduleMathRender();"
+                ></script>
+                <script>(math_render_script)</script>
+                <link rel="stylesheet" href=(HIGHLIGHT_STYLESHEET_URL)>
+                <script
+                    defer=""
+                    src=(HIGHLIGHT_SCRIPT_URL)
+                    onload="window.okawakScheduleCodeHighlight && window.okawakScheduleCodeHighlight();"
+                ></script>
+                <script>(code_highlight_script)</script>
             </head>
             <body>
                 <div class="flex min-h-dvh flex-col text-foreground">

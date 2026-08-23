@@ -440,6 +440,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn about_shell_initializes_generated_content_renderers() {
+        let router = create_topcoat_router(fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/about")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert!(response.body.contains("katex@0.16.22/dist/katex.min.css"));
+        assert!(response.body.contains("katex@0.16.22/dist/katex.min.js"));
+        assert!(response.body.contains("window.okawakRenderMath"));
+        assert!(response.body.contains("window.okawakScheduleMathRender"));
+        assert!(
+            response
+                .body
+                .contains("if (window.katex && window.okawakRenderMath)")
+        );
+        assert!(
+            response
+                .body
+                .contains("highlight.js/11.11.1/styles/github-dark.min.css")
+        );
+        assert!(
+            response
+                .body
+                .contains("highlight.js/11.11.1/highlight.min.js")
+        );
+        assert!(response.body.contains("window.okawakHighlightCode"));
+        assert!(response.body.contains("window.okawakScheduleCodeHighlight"));
+        assert!(!response.body.contains("window.katex &amp;&amp;"));
+    }
+
+    #[tokio::test]
     async fn about_returns_not_found_page_when_artifact_is_missing() {
         let temp_dir = tempdir().unwrap();
         let router =
