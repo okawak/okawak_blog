@@ -122,11 +122,10 @@ pub async fn publish_with_bookmark_enricher(
     .await??;
 
     let site_root = site_output.root().to_path_buf();
-    let validation =
-        tokio::task::spawn_blocking(move || validate_site_artifacts(site_root)).await??;
+    tokio::task::spawn_blocking(move || validate_site_artifacts(site_root)).await??;
     info!(
-        article_count = validation.article_count,
-        category_count = validation.category_count,
+        article_count = site_documents.article_index.articles.len(),
+        category_count = site_documents.category_count(),
         "validated site artifacts"
     );
 

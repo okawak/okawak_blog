@@ -1,35 +1,29 @@
 use crate::error::{PublishError, Result};
 use domain::{
-    ArticleIndexDocument, Category, CategoryArtifactDocument, PageArtifactDocument,
-    SiteMetadataDocument, Slug,
+    ArticleIndexDocument, Category, CategoryArtifactDocument, HomeFragmentArtifactDocument,
+    PageArtifactDocument, PublishedArticleSummary, SiteMetadata, SiteMetadataDocument,
 };
 use std::{
     collections::HashSet,
-    fs,
+    fs::{self, File},
     path::{Path, PathBuf},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ArtifactValidationSummary {
-    pub(crate) article_count: usize,
-    pub(crate) category_count: usize,
-}
-
 /// Validates that a generated site is complete enough for destructive deployment.
-pub(crate) fn validate_site_artifacts(
-    site_root: impl AsRef<Path>,
-) -> Result<ArtifactValidationSummary> {
+pub(crate) fn validate_site_artifacts(site_root: impl AsRef<Path>) -> Result<()> {
     let site_root = site_root.as_ref();
-    let article_index: ArticleIndexDocument =
-        read_required_json(site_root, Path::new("articles/index.json"))?;
+    let article_index_path = Path::new("articles/index.json");
+    let article_index: ArticleIndexDocument = read_json(site_root, article_index_path)?;
     if article_index.articles.is_empty() {
         return Err(PublishError::ArtifactValidation(
             "articles/index.json must contain at least one article".to_string(),
         ));
     }
 
-    let site_metadata: SiteMetadataDocument =
-        read_required_json(site_root, Path::new("metadata/site.json"))?;
+    let site_metadata_path = Path::new("metadata/site.json");
+    let site_metadata_document: SiteMetadataDocument = read_json(site_root, site_metadata_path)?;
+    let site_metadata = SiteMetadata::try_from(&site_metadata_document)
+        .map_err(|error| invalid_document(site_metadata_path, error))?;
     if site_metadata.total_articles != article_index.articles.len() {
         return Err(PublishError::ArtifactValidation(format!(
             "metadata/site.json total_articles={} does not match articles/index.json count={}",
@@ -38,58 +32,63 @@ pub(crate) fn validate_site_artifacts(
         )));
     }
 
-    let mut article_categories = HashSet::new();
-    for article in &article_index.articles {
-        let category = article.category.parse::<Category>().map_err(|error| {
-            PublishError::ArtifactValidation(format!(
-                "articles/index.json contains invalid category {}: {error}",
-                article.category
-            ))
-        })?;
-        let slug = Slug::new(article.slug.clone()).map_err(|error| {
-            PublishError::ArtifactValidation(format!(
-                "articles/index.json contains invalid slug {}: {error}",
-                article.slug
-            ))
-        })?;
-        let relative_path = PathBuf::from("articles")
-            .join(category.as_str())
-            .join(format!("{}.html", slug.as_str()));
-        read_required_nonempty(site_root, &relative_path)?;
-        article_categories.insert(category);
-    }
+    let article_categories = validate_articles(site_root, article_index_path, &article_index)?;
+    validate_categories(
+        site_root,
+        &article_index,
+        &site_metadata,
+        &article_categories,
+    )?;
+    validate_about(site_root)?;
+    validate_home(site_root)?;
 
-    let metadata_category_names: HashSet<_> = site_metadata
-        .categories
-        .iter()
-        .map(|category| category.category.as_str())
-        .collect();
-    let mut missing_article_categories: Vec<_> = article_categories
-        .iter()
-        .filter(|category| !metadata_category_names.contains(category.as_str()))
-        .map(|category| category.as_str())
-        .collect();
-    if !missing_article_categories.is_empty() {
-        missing_article_categories.sort_unstable();
-        return Err(PublishError::ArtifactValidation(format!(
-            "metadata/site.json is missing article categories: {}",
-            missing_article_categories.join(", "),
-        )));
+    Ok(())
+}
+
+fn validate_articles(
+    site_root: &Path,
+    index_path: &Path,
+    article_index: &ArticleIndexDocument,
+) -> Result<HashSet<Category>> {
+    let mut categories = HashSet::new();
+    for document in &article_index.articles {
+        let article = PublishedArticleSummary::try_from(document)
+            .map_err(|error| invalid_document(index_path, error))?;
+        let relative_path = PathBuf::from("articles")
+            .join(article.category.as_str())
+            .join(format!("{}.html", article.slug.as_str()));
+        ensure_nonempty_file(site_root, &relative_path)?;
+        categories.insert(article.category);
+    }
+    Ok(categories)
+}
+
+fn validate_categories(
+    site_root: &Path,
+    article_index: &ArticleIndexDocument,
+    site_metadata: &SiteMetadata,
+    article_categories: &HashSet<Category>,
+) -> Result<()> {
+    for category in article_categories {
+        if !site_metadata
+            .categories
+            .iter()
+            .any(|metadata| metadata.category == *category)
+        {
+            return Err(PublishError::ArtifactValidation(format!(
+                "metadata/site.json is missing article category {}",
+                category.as_str(),
+            )));
+        }
     }
 
     for category_metadata in &site_metadata.categories {
-        let category = category_metadata
-            .category
-            .parse::<Category>()
-            .map_err(|error| {
-                PublishError::ArtifactValidation(format!(
-                    "metadata/site.json contains invalid category {}: {error}",
-                    category_metadata.category
-                ))
-            })?;
+        let category = category_metadata.category;
         let category_path = PathBuf::from("categories").join(format!("{}.json", category.as_str()));
-        let category_document: CategoryArtifactDocument =
-            read_required_json(site_root, &category_path)?;
+        let category_document: CategoryArtifactDocument = read_json(site_root, &category_path)?;
+        category_document
+            .validate()
+            .map_err(|error| invalid_document(&category_path, error))?;
         if category_document.category != category.as_str() {
             return Err(PublishError::ArtifactValidation(format!(
                 "{} declares category {} instead of {}",
@@ -98,26 +97,11 @@ pub(crate) fn validate_site_artifacts(
                 category.as_str(),
             )));
         }
-        if category_document.title.trim().is_empty() {
-            return Err(PublishError::ArtifactValidation(format!(
-                "required artifact {} contains empty title",
-                category_path.display(),
-            )));
-        }
-        if category_document.html.trim().is_empty() {
-            return Err(PublishError::ArtifactValidation(format!(
-                "required artifact {} contains empty html",
-                category_path.display(),
-            )));
-        }
-
-        let expected_articles: Vec<_> = article_index
+        if !category_document.articles.iter().eq(article_index
             .articles
             .iter()
-            .filter(|article| article.category == category.as_str())
-            .cloned()
-            .collect();
-        if category_document.articles != expected_articles {
+            .filter(|article| article.category == category.as_str()))
+        {
             return Err(PublishError::ArtifactValidation(format!(
                 "{} does not match articles/index.json",
                 category_path.display(),
@@ -133,8 +117,15 @@ pub(crate) fn validate_site_artifacts(
         }
     }
 
+    Ok(())
+}
+
+fn validate_about(site_root: &Path) -> Result<()> {
     let about_path = Path::new("pages/about.json");
-    let about: PageArtifactDocument = read_required_json(site_root, about_path)?;
+    let about: PageArtifactDocument = read_json(site_root, about_path)?;
+    about
+        .validate()
+        .map_err(|error| invalid_document(about_path, error))?;
     if about.page.as_str() != "about" {
         return Err(PublishError::ArtifactValidation(format!(
             "{} declares page {} instead of about",
@@ -142,25 +133,27 @@ pub(crate) fn validate_site_artifacts(
             about.page,
         )));
     }
-    if about.html.trim().is_empty() {
-        return Err(PublishError::ArtifactValidation(format!(
-            "required artifact {} contains empty html",
-            about_path.display(),
-        )));
-    }
-
-    Ok(ArtifactValidationSummary {
-        article_count: article_index.articles.len(),
-        category_count: site_metadata.categories.len(),
-    })
+    Ok(())
 }
 
-fn read_required_json<T: serde::de::DeserializeOwned>(
-    site_root: &Path,
-    relative_path: &Path,
-) -> Result<T> {
-    let contents = read_required_nonempty(site_root, relative_path)?;
-    serde_json::from_str(&contents).map_err(|error| {
+fn validate_home(site_root: &Path) -> Result<()> {
+    let home_path = Path::new("home.json");
+    if !site_root.join(home_path).try_exists()? {
+        return Ok(());
+    }
+    let home: HomeFragmentArtifactDocument = read_json(site_root, home_path)?;
+    home.validate()
+        .map_err(|error| invalid_document(home_path, error))
+}
+
+fn read_json<T: serde::de::DeserializeOwned>(site_root: &Path, relative_path: &Path) -> Result<T> {
+    let file = File::open(site_root.join(relative_path)).map_err(|error| {
+        PublishError::ArtifactValidation(format!(
+            "required artifact {} cannot be read: {error}",
+            relative_path.display()
+        ))
+    })?;
+    serde_json::from_reader(file).map_err(|error| {
         PublishError::ArtifactValidation(format!(
             "{} is not valid artifact JSON: {error}",
             relative_path.display()
@@ -168,7 +161,7 @@ fn read_required_json<T: serde::de::DeserializeOwned>(
     })
 }
 
-fn read_required_nonempty(site_root: &Path, relative_path: &Path) -> Result<String> {
+fn ensure_nonempty_file(site_root: &Path, relative_path: &Path) -> Result<()> {
     let path = site_root.join(relative_path);
     let contents = fs::read_to_string(&path).map_err(|error| {
         PublishError::ArtifactValidation(format!(
@@ -182,7 +175,14 @@ fn read_required_nonempty(site_root: &Path, relative_path: &Path) -> Result<Stri
             relative_path.display()
         )));
     }
-    Ok(contents)
+    Ok(())
+}
+
+fn invalid_document(relative_path: &Path, error: domain::DomainError) -> PublishError {
+    PublishError::ArtifactValidation(format!(
+        "artifact {} is invalid: {error}",
+        relative_path.display()
+    ))
 }
 
 #[cfg(test)]
@@ -192,13 +192,10 @@ mod tests {
     use super::*;
     use domain::{
         ArticleMeta, CategoryLandingBody, CategoryLandingMeta, PageKey, PublishableCategoryLanding,
-        SectionPath, Timestamp, Title,
+        SectionPath, Slug, Timestamp, Title,
     };
+    use rstest::rstest;
     use tempfile::TempDir;
-
-    const ARTICLE_PATH: &str = "site/articles/tech/artifact00001.html";
-    const CATEGORY_PATH: &str = "site/categories/tech.json";
-    const ABOUT_PATH: &str = "site/pages/about.json";
 
     fn write_complete_site() -> TempDir {
         let temp_dir = TempDir::new().unwrap();
@@ -254,10 +251,7 @@ mod tests {
     fn test_validate_site_artifacts_accepts_complete_site() {
         let temp_dir = write_complete_site();
 
-        let summary = validate_site_artifacts(temp_dir.path().join("site")).unwrap();
-
-        assert_eq!(summary.article_count, 1);
-        assert_eq!(summary.category_count, 1);
+        validate_site_artifacts(temp_dir.path().join("site")).unwrap();
     }
 
     #[test]
@@ -275,38 +269,17 @@ mod tests {
         assert!(error.to_string().contains("at least one article"));
     }
 
-    #[test]
-    fn test_validate_site_artifacts_rejects_missing_article_html() {
+    #[rstest]
+    #[case("articles/tech/artifact00001.html")]
+    #[case("categories/tech.json")]
+    #[case("pages/about.json")]
+    fn test_validate_site_artifacts_rejects_missing_required_artifact(#[case] relative_path: &str) {
         let temp_dir = write_complete_site();
-        fs::remove_file(temp_dir.path().join(ARTICLE_PATH)).unwrap();
+        fs::remove_file(temp_dir.path().join("site").join(relative_path)).unwrap();
 
         let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
 
-        assert!(
-            error
-                .to_string()
-                .contains("articles/tech/artifact00001.html")
-        );
-    }
-
-    #[test]
-    fn test_validate_site_artifacts_rejects_missing_category_artifact() {
-        let temp_dir = write_complete_site();
-        fs::remove_file(temp_dir.path().join(CATEGORY_PATH)).unwrap();
-
-        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
-
-        assert!(error.to_string().contains("categories/tech.json"));
-    }
-
-    #[test]
-    fn test_validate_site_artifacts_rejects_missing_about_page() {
-        let temp_dir = write_complete_site();
-        fs::remove_file(temp_dir.path().join(ABOUT_PATH)).unwrap();
-
-        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
-
-        assert!(error.to_string().contains("pages/about.json"));
+        assert!(error.to_string().contains(relative_path));
     }
 
     #[test]
@@ -324,7 +297,27 @@ mod tests {
 
         let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
 
-        assert!(error.to_string().contains("missing article categories"));
+        assert!(error.to_string().contains("missing article category"));
         assert!(error.to_string().contains("tech"));
+    }
+
+    #[test]
+    fn test_validate_site_artifacts_rejects_invalid_home_fragment() {
+        let temp_dir = write_complete_site();
+        fs::write(
+            temp_dir.path().join("site/home.json"),
+            serde_json::to_vec(&HomeFragmentArtifactDocument {
+                title: String::new(),
+                description: None,
+                html: "<p>Home</p>".to_string(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let error = validate_site_artifacts(temp_dir.path().join("site")).unwrap_err();
+
+        assert!(error.to_string().contains("home.json"));
     }
 }

@@ -283,7 +283,7 @@ artifact の意味は次の通り。
 
 `PageArtifactDocument` は固定ページを保持する。homeは完成したpageではなく実行時に記事一覧やmetadataと合成する一部分なので、`HomeFragmentArtifactDocument` として独立させる。
 
-`publish`は描画済みカテゴリを`PublishableCategoryLanding`として組み立てる。frontmatterのtitleと描画済み本文はdomainの値オブジェクトで検証し、descriptionはArticleと同様に入力値を保持する。domainはlandingだけが存在するカテゴリも含めて`CategoryIndex`へ統合し、カテゴリ順、記事順、`SiteMetadata`の集計を確定する。artifact builderはindexと描画済み本文を`CategoryArtifactDocument`へまとめる。Markdown変換、HTML生成、filesystemへの書込みは`publish`に残す。
+`publish`は描画済みカテゴリを`PublishableCategoryLanding`として組み立てる。frontmatterのtitleと描画済み本文はdomainの値オブジェクトで検証し、descriptionはArticleと同様に入力値を保持する。domainはlandingだけが存在するカテゴリも含めて`CategoryIndex`へ統合し、カテゴリ順、記事順、`SiteMetadata`の集計を確定する。artifact document単体のcategory、slug、title、timestamp、HTMLの不変条件もdomainで検証する。artifact builderはindexと描画済み本文を`CategoryArtifactDocument`へまとめ、artifact validationは生成後のfilesystemを読み直して必須ファイルとdocument間の整合性を確認する。Markdown変換、HTML生成、filesystemへの書込みは`publish`に残す。
 
 ### S3 release 契約
 

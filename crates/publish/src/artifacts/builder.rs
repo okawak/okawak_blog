@@ -15,6 +15,12 @@ pub(crate) struct SiteDocuments {
     pub(super) site_metadata: SiteMetadataDocument,
 }
 
+impl SiteDocuments {
+    pub(crate) fn category_count(&self) -> usize {
+        self.category_documents.len()
+    }
+}
+
 pub(crate) fn build_site_documents(
     article_metas: Vec<ArticleMeta>,
     category_landings: Vec<PublishableCategoryLanding>,
