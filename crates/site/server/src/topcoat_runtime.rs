@@ -190,6 +190,18 @@ mod tests {
         snapshot_calls: Arc<AtomicUsize>,
     }
 
+    #[derive(Clone)]
+    struct FailingSnapshotReader;
+
+    #[async_trait]
+    impl ArtifactReader for FailingSnapshotReader {
+        async fn snapshot(&self) -> Result<DynArtifactSnapshot> {
+            Err(infra::InfraError::Io(std::io::Error::other(
+                "snapshot unavailable",
+            )))
+        }
+    }
+
     #[async_trait]
     impl ArtifactReader for CountingReader {
         async fn snapshot(&self) -> Result<DynArtifactSnapshot> {
@@ -482,6 +494,19 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let router =
             create_topcoat_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
+        let response = response(
+            &router,
+            Request::builder().uri("/").body(Body::empty()).unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(response.body.contains("記事の読み込みに失敗しました"));
+    }
+
+    #[tokio::test]
+    async fn home_returns_internal_server_error_page_when_snapshot_fails() {
+        let router = create_topcoat_router(Arc::new(FailingSnapshotReader), false);
         let response = response(
             &router,
             Request::builder().uri("/").body(Body::empty()).unwrap(),

@@ -28,7 +28,21 @@ const STYLESHEET_PATH: &str = "/pkg/web.css";
 
 #[route(GET "/")]
 pub(crate) async fn home(cx: &Cx) -> Result<View> {
-    let snapshot = request_snapshot(cx).await?;
+    let snapshot = match request_snapshot(cx).await {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            eprintln!("Home page artifact snapshot failed: {error}");
+            return view! {
+                internal_server_error_page(
+                    title: build_home_page_title(web::SITE_NAME),
+                    description: "公開済みの記事を読み込めませんでした。"
+                        .to_string(),
+                    canonical_path: "/",
+                    message: "記事の読み込みに失敗しました"
+                )
+            };
+        }
+    };
     let document = async {
         let article_index = snapshot.read_article_index().await?;
         let site_metadata = snapshot.read_site_metadata().await?;
