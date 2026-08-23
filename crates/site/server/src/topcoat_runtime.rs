@@ -113,6 +113,7 @@ fn create_topcoat_router_with_site_root(
         .route(readiness)
         .route(articles)
         .route(topcoat_pages::home)
+        .route(topcoat_pages::category_page)
         .route(topcoat_pages::about)
         // Reuse the current generated asset directory during the parallel-runtime period. The
         // final asset pipeline will replace this compatibility mount before Leptos is removed.
@@ -559,6 +560,160 @@ mod tests {
         let response = response(
             &router,
             Request::builder().uri("/").body(Body::empty()).unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn category_renders_the_published_landing_and_articles_as_html() {
+        let router = create_topcoat_router(fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(
+            response.content_type.as_deref(),
+            Some("text/html; charset=utf-8")
+        );
+        assert!(response.body.starts_with("<!DOCTYPE html>"));
+        assert!(
+            response
+                .body
+                .contains("<title>Fixture Tech | ぶくせんの探窟メモ</title>")
+        );
+        assert!(
+            response
+                .body
+                .contains("<meta name=\"description\" content=\"Category fixture description\">")
+        );
+        assert!(
+            response
+                .body
+                .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/tech\">")
+        );
+        assert!(response.body.contains(
+            "<meta property=\"og:title\" content=\"Fixture Tech | ぶくせんの探窟メモ\">"
+        ));
+        assert!(response.body.contains(
+            "<meta property=\"og:description\" content=\"Category fixture description\">"
+        ));
+        assert!(
+            response
+                .body
+                .contains("<meta property=\"og:url\" content=\"https://www.okawak.net/tech\">")
+        );
+        assert!(response.body.contains("<h2>Tech landing</h2>"));
+        assert!(response.body.contains("rust / async"));
+        assert!(response.body.contains("href=\"/tech/e2e-article\""));
+        assert!(response.body.contains(">E2E Article</h3>"));
+        assert!(response.body.contains("Article fixture description"));
+        assert!(response.body.contains("#rust"));
+        assert!(response.body.contains("2026年1月1日"));
+        assert!(response.body.contains("2026年1月2日"));
+        assert!(!response.body.contains("&lt;h2&gt;Tech landing"));
+    }
+
+    #[tokio::test]
+    async fn category_returns_not_found_for_invalid_or_missing_categories() {
+        let router = create_topcoat_router(fixture_reader(), false);
+
+        for path in ["/unknown", "/daily", "/not%20a%20category"] {
+            let response = response(
+                &router,
+                Request::builder().uri(path).body(Body::empty()).unwrap(),
+            )
+            .await;
+
+            assert_eq!(response.status, StatusCode::NOT_FOUND, "{path}");
+            assert!(response.body.contains("ページが見つかりませんでした。"));
+            assert!(response.body.contains(&format!(
+                "<link rel=\"canonical\" href=\"https://www.okawak.net{path}\">"
+            )));
+        }
+    }
+
+    #[tokio::test]
+    async fn category_returns_internal_server_error_for_invalid_artifact() {
+        let router = create_topcoat_router(fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/physics")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(response.body.contains("カテゴリの読み込みに失敗しました"));
+        assert!(
+            response
+                .body
+                .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/physics\">")
+        );
+    }
+
+    #[tokio::test]
+    async fn category_returns_internal_server_error_page_when_snapshot_fails() {
+        let router = create_topcoat_router(Arc::new(FailingSnapshotReader), false);
+        let response = response(
+            &router,
+            Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(response.body.contains("カテゴリの読み込みに失敗しました"));
+    }
+
+    #[tokio::test]
+    async fn category_supports_release_aware_conditional_get() {
+        let router = create_topcoat_router(validator_reader(fixture_reader()), true);
+        let first = response(
+            &router,
+            Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+        )
+        .await;
+        let etag = first
+            .headers
+            .get(header::ETAG)
+            .expect("ETag")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        let cached = response(
+            &router,
+            Request::builder()
+                .uri("/tech")
+                .header(header::IF_NONE_MATCH, etag)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(cached.status, StatusCode::NOT_MODIFIED);
+        assert!(cached.body.is_empty());
+    }
+
+    #[tokio::test]
+    async fn conditional_get_and_category_share_one_snapshot() {
+        let snapshot_calls = Arc::new(AtomicUsize::new(0));
+        let reader = Arc::new(CountingReader {
+            inner: fixture_reader(),
+            snapshot_calls: snapshot_calls.clone(),
+        });
+        let router = create_topcoat_router(validator_reader(reader), true);
+
+        let response = response(
+            &router,
+            Request::builder().uri("/tech").body(Body::empty()).unwrap(),
         )
         .await;
 
