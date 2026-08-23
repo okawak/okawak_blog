@@ -1,6 +1,6 @@
 {
   "title": "Fixture Home",
   "description": "Home fixture description",
-  "html": "<p>Fixture home content</p>",
+  "html": "<p>Fixture home content</p><p><a href=\"/tech/e2e-article#generated-content\">Generated content section</a></p><p><a href=\"#home-fragment\">Home fragment section</a></p><p><a href=\"#\">Sanitized unsafe link</a></p><div data-testid=\"home-scroll-spacer\" style=\"height: 120rem\"></div><h2 id=\"home-fragment\">Home fragment</h2>",
   "updated_at": "2026-01-02T00:00:00+09:00"
 }

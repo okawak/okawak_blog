@@ -34,7 +34,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "sh e2e/run-server.sh",
+    command: "sh e2e/run-production-server.sh",
     cwd: repoRoot,
     env: {
       ...process.env,

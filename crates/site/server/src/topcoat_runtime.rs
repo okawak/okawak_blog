@@ -142,6 +142,7 @@ fn create_topcoat_router_with_site_root(
 
 #[cfg(test)]
 mod tests {
+    use crate::topcoat_pages;
     use std::{
         path::PathBuf,
         sync::{
@@ -195,12 +196,20 @@ mod tests {
             "/_topcoat/assets",
             Manifest {
                 version: 1,
-                assets: vec![ManifestEntry {
-                    id: topcoat::runtime::SCRIPT.id(),
-                    file: "topcoat-test.js".to_string(),
-                    hash: "test".to_string(),
-                    content_type: "text/javascript".to_string(),
-                }],
+                assets: vec![
+                    ManifestEntry {
+                        id: topcoat::runtime::SCRIPT.id(),
+                        file: "topcoat-test.js".to_string(),
+                        hash: "test".to_string(),
+                        content_type: "text/javascript".to_string(),
+                    },
+                    ManifestEntry {
+                        id: topcoat_pages::CLIENT_NAVIGATION_SCRIPT.id(),
+                        file: "topcoat-navigation-test.js".to_string(),
+                        hash: "test".to_string(),
+                        content_type: "text/javascript".to_string(),
+                    },
+                ],
             },
         )
     }
@@ -496,6 +505,9 @@ mod tests {
         assert_eq!(response.status, StatusCode::OK);
         assert!(response.body.contains(
             "<script type=\"module\" src=\"/_topcoat/assets/topcoat-test.js\"></script>"
+        ));
+        assert!(response.body.contains(
+            "<script type=\"module\" src=\"/_topcoat/assets/topcoat-navigation-test.js\"></script>"
         ));
         assert!(response.body.contains("aria-controls=\"site-header-nav\""));
         assert!(response.body.contains("aria-expanded=\"false\""));

@@ -16,6 +16,7 @@ use domain::{
 use infra::DynArtifactSnapshot;
 use topcoat::{
     Result,
+    asset::{Asset, asset},
     context::{Cx, app_context, try_request_context},
     router::{StatusCode, path_param, raw_path_params, request, route},
     view::{Unescaped, View, component, view},
@@ -31,6 +32,9 @@ const ABOUT_PAGE_KEY: &str = "about";
 const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
 const STYLESHEET_PATH: &str = "/pkg/web.css";
+// Bump when retained shell markup outside `<main>` changes incompatibly.
+const SHELL_VERSION: &str = "topcoat-1";
+pub(crate) const CLIENT_NAVIGATION_SCRIPT: Asset = asset!("./topcoat_navigation.js");
 
 struct ShellMetadata {
     title: String,
@@ -768,6 +772,7 @@ async fn site_shell(
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
+                <meta name="okawak-shell-version" content=(SHELL_VERSION)>
                 <title>(title.clone())</title>
                 <meta name="description" content=(description.clone())>
                 <link rel="canonical" href=(canonical_url.clone())>
@@ -808,6 +813,7 @@ async fn site_shell(
                 ></script>
                 <script>(code_highlight_script)</script>
                 topcoat::runtime::script()
+                <script type="module" src=(CLIENT_NAVIGATION_SCRIPT)></script>
             </head>
             <body>
                 signal menu_open = false;
