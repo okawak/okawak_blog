@@ -127,8 +127,9 @@ cargo leptos serve -p server
 
 [tasks.dev-topcoat-shell]
 description = "Run the transitional Topcoat runtime shell with fixture artifacts"
+depends = ["build-project"]
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "e2e/fixtures/site", OKAWAK_BLOG_TOPCOAT_ADDR = "127.0.0.1:8009" }
-run = "cargo run -p server --bin topcoat-server"
+run = "cargo run -p server --bin topcoat-server --release"
 
 [tasks.clean-project]
 description = "Clean the Cargo build artifacts"

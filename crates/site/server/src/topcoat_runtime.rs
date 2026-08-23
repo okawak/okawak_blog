@@ -1,23 +1,27 @@
 //! Parallel Topcoat runtime shell used during the framework migration.
 
+use std::path::PathBuf;
+
 use infra::{DynArtifactReader, DynArtifactSnapshot};
 use topcoat::{
     Result,
     context::{Cx, app_context, try_request_context},
     router::{
-        Body, LayerFn, LayerFuture, Next, Router, StatusCode, content::Json,
-        error::internal_server_error, request, response::Response, route,
+        Body, LayerFn, LayerFuture, Method, Next, Router, StatusCode, content::Json,
+        error::internal_server_error, request, response::Response, route, tower::TowerRoute,
     },
 };
+use tower_http::services::ServeDir;
 
 use crate::{
     article_index::{read_article_index, read_article_index_from_snapshot},
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
     readiness::check_artifact_readiness,
+    topcoat_pages,
 };
 
 #[derive(Clone)]
-struct ArtifactReaderContext(DynArtifactReader);
+pub(crate) struct ArtifactReaderContext(pub(crate) DynArtifactReader);
 
 #[route(GET "/api/health")]
 async fn health() -> Result<&'static str> {
@@ -90,14 +94,38 @@ pub fn create_topcoat_router(
     artifact_reader: DynArtifactReader,
     validators_enabled: bool,
 ) -> Router {
+    create_topcoat_router_with_site_root(
+        artifact_reader,
+        validators_enabled,
+        PathBuf::from("target/site"),
+    )
+}
+
+fn create_topcoat_router_with_site_root(
+    artifact_reader: DynArtifactReader,
+    validators_enabled: bool,
+    site_root: PathBuf,
+) -> Router {
+    let static_files = ServeDir::new(site_root);
+
     Router::builder()
         .route(health)
         .route(readiness)
         .route(articles)
+        .route(topcoat_pages::about)
+        // Reuse the current generated asset directory during the parallel-runtime period. The
+        // final asset pipeline will replace this compatibility mount before Leptos is removed.
+        .route(TowerRoute::new(
+            Method::GET,
+            "/pkg/{*rest}",
+            static_files.clone(),
+        ))
+        .route(TowerRoute::new(Method::GET, "/favicon.ico", static_files))
         .layer(LayerFn::new(
             Some("/api/articles"),
             artifact_conditional_get,
         ))
+        .layer(LayerFn::new(Some("/about"), artifact_conditional_get))
         .app_context(ArtifactHttpCacheState::new(
             artifact_reader.clone(),
             validators_enabled,
@@ -131,7 +159,7 @@ mod tests {
         Body, HeaderMap, Router, StatusCode, header, request::Request, to_bytes,
     };
 
-    use super::create_topcoat_router;
+    use super::{create_topcoat_router, create_topcoat_router_with_site_root};
 
     struct TestResponse {
         status: StatusCode,
@@ -342,6 +370,244 @@ mod tests {
         .await;
 
         assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn about_renders_the_published_page_as_html() {
+        let router = create_topcoat_router(fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/about")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(
+            response.content_type.as_deref(),
+            Some("text/html; charset=utf-8")
+        );
+        assert!(response.body.starts_with("<!DOCTYPE html>"));
+        assert!(response.body.contains("<html lang=\"ja\">"));
+        assert!(
+            response
+                .body
+                .contains("<title>Fixture About | ぶくせんの探窟メモ</title>")
+        );
+        assert!(
+            response
+                .body
+                .contains("<meta name=\"description\" content=\"About fixture description\">")
+        );
+        assert!(
+            response
+                .body
+                .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/about\">")
+        );
+        assert!(response.body.contains(
+            "<meta property=\"og:title\" content=\"Fixture About | ぶくせんの探窟メモ\">"
+        ));
+        assert!(
+            response.body.contains(
+                "<meta property=\"og:description\" content=\"About fixture description\">"
+            )
+        );
+        assert!(
+            response
+                .body
+                .contains("<meta property=\"og:url\" content=\"https://www.okawak.net/about\">")
+        );
+        assert!(
+            response
+                .body
+                .contains("<meta property=\"og:type\" content=\"website\">")
+        );
+        assert!(
+            response
+                .body
+                .contains("<link rel=\"stylesheet\" href=\"/pkg/web")
+        );
+        assert!(response.body.contains(".css\">"));
+        assert!(response.body.contains(">Fixture About</h1>"));
+        assert!(
+            response
+                .body
+                .contains("<h1>About artifact</h1><p>About fixture body</p>")
+        );
+        assert!(!response.body.contains("&lt;h1&gt;About artifact"));
+    }
+
+    #[tokio::test]
+    async fn about_shell_initializes_generated_content_renderers() {
+        let router = create_topcoat_router(fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/about")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert!(response.body.contains("katex@0.16.22/dist/katex.min.css"));
+        assert!(response.body.contains("katex@0.16.22/dist/katex.min.js"));
+        assert!(response.body.contains("window.okawakRenderMath"));
+        assert!(response.body.contains("window.okawakScheduleMathRender"));
+        assert!(
+            response
+                .body
+                .contains("if (window.katex && window.okawakRenderMath)")
+        );
+        assert!(
+            response
+                .body
+                .contains("highlight.js/11.11.1/styles/github-dark.min.css")
+        );
+        assert!(
+            response
+                .body
+                .contains("highlight.js/11.11.1/highlight.min.js")
+        );
+        assert!(response.body.contains("window.okawakHighlightCode"));
+        assert!(response.body.contains("window.okawakScheduleCodeHighlight"));
+        assert!(!response.body.contains("window.katex &amp;&amp;"));
+    }
+
+    #[tokio::test]
+    async fn about_returns_not_found_page_when_artifact_is_missing() {
+        let temp_dir = tempdir().unwrap();
+        let router =
+            create_topcoat_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/about")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::NOT_FOUND);
+        assert!(
+            response
+                .body
+                .contains("<title>ページが見つかりません | ぶくせんの探窟メモ</title>")
+        );
+        assert!(response.body.contains("ページが見つかりませんでした。"));
+    }
+
+    #[tokio::test]
+    async fn about_returns_internal_server_error_page_for_invalid_artifact() {
+        let temp_dir = tempdir().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("pages")).unwrap();
+        std::fs::write(temp_dir.path().join("pages/about.json"), "not json").unwrap();
+        let router =
+            create_topcoat_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/about")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(response.body.contains("ページの読み込みに失敗しました"));
+    }
+
+    #[tokio::test]
+    async fn about_supports_release_aware_conditional_get() {
+        let router = create_topcoat_router(validator_reader(fixture_reader()), true);
+        let first = response(
+            &router,
+            Request::builder()
+                .uri("/about")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        let etag = first
+            .headers
+            .get(header::ETAG)
+            .expect("ETag")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        let cached = response(
+            &router,
+            Request::builder()
+                .uri("/about")
+                .header(header::IF_NONE_MATCH, etag)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(cached.status, StatusCode::NOT_MODIFIED);
+        assert!(cached.body.is_empty());
+    }
+
+    #[tokio::test]
+    async fn conditional_get_and_about_share_one_snapshot() {
+        let snapshot_calls = Arc::new(AtomicUsize::new(0));
+        let reader = Arc::new(CountingReader {
+            inner: fixture_reader(),
+            snapshot_calls: snapshot_calls.clone(),
+        });
+        let router = create_topcoat_router(validator_reader(reader), true);
+
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/about")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn topcoat_serves_transitional_static_assets() {
+        let temp_dir = tempdir().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("pkg")).unwrap();
+        std::fs::write(temp_dir.path().join("pkg/web.css"), "body { color: red; }").unwrap();
+        std::fs::write(temp_dir.path().join("favicon.ico"), b"icon").unwrap();
+        let router = create_topcoat_router_with_site_root(
+            fixture_reader(),
+            false,
+            temp_dir.path().to_path_buf(),
+        );
+
+        let stylesheet = response(
+            &router,
+            Request::builder()
+                .uri("/pkg/web.css")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        let favicon = response(
+            &router,
+            Request::builder()
+                .uri("/favicon.ico")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(stylesheet.status, StatusCode::OK);
+        assert_eq!(stylesheet.content_type.as_deref(), Some("text/css"));
+        assert_eq!(stylesheet.body, "body { color: red; }");
+        assert_eq!(favicon.status, StatusCode::OK);
+        assert_eq!(favicon.body, "icon");
     }
 
     #[tokio::test]

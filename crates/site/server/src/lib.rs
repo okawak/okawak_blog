@@ -20,3 +20,6 @@ pub mod readiness;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod topcoat_runtime;
+
+#[cfg(not(target_arch = "wasm32"))]
+mod topcoat_pages;
