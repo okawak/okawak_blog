@@ -186,6 +186,19 @@ test("home renders artifacts and navigates to an article without a document relo
   expect(browserErrors).toEqual([]);
 });
 
+test("client navigation scrolls to a fragment on another page", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("link", { name: "Generated content section" }).click();
+
+  await expect(page).toHaveURL(/\/tech\/e2e-article#generated-content$/);
+  const heading = page.getByRole("heading", { name: "Generated content" });
+  await expect(heading).toBeVisible();
+  await expect
+    .poll(() => heading.evaluate((element) => element.getBoundingClientRect().top))
+    .toBeLessThan(200);
+});
+
 test("server-rendered pages remain navigable without JavaScript", async ({ browser }) => {
   const context = await browser.newContext({
     baseURL: BASE_URL,

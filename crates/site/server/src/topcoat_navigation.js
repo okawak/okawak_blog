@@ -81,6 +81,28 @@ function initializeGeneratedContent(root) {
   window.okawakScheduleCodeHighlight?.(root);
 }
 
+function scrollToDestination(destination) {
+  if (!destination.hash) {
+    window.scrollTo(0, 0);
+    return;
+  }
+
+  let fragment = destination.hash.slice(1);
+  try {
+    fragment = decodeURIComponent(fragment);
+  } catch {
+    // Keep the encoded fragment when it contains a malformed escape sequence.
+  }
+
+  const target =
+    document.getElementById(fragment) ?? document.getElementsByName(fragment)[0];
+  if (target) {
+    target.scrollIntoView();
+  } else {
+    window.scrollTo(0, 0);
+  }
+}
+
 function fallBackToDocumentNavigation(url) {
   window.location.assign(url.href);
 }
@@ -115,6 +137,7 @@ async function navigate(url, { history = "push", scroll = true } = {}) {
     }
 
     const destination = new URL(response.url || url.href, window.location.href);
+    if (url.hash && !destination.hash) destination.hash = url.hash;
     replacePageMetadata(nextDocument);
     syncHeaderNavigation(nextDocument);
     const importedMain = document.importNode(nextMain, true);
@@ -124,8 +147,8 @@ async function navigate(url, { history = "push", scroll = true } = {}) {
     if (history === "push") {
       window.history.pushState(null, "", destination);
     }
-    if (scroll) window.scrollTo(0, 0);
     initializeGeneratedContent(importedMain);
+    if (scroll) scrollToDestination(destination);
     document.dispatchEvent(
       new CustomEvent("okawak:navigation", {
         detail: { url: destination.href },

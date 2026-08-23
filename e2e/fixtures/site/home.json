@@ -1,6 +1,6 @@
 {
   "title": "Fixture Home",
   "description": "Home fixture description",
-  "html": "<p>Fixture home content</p>",
+  "html": "<p>Fixture home content</p><p><a href=\"/tech/e2e-article#generated-content\">Generated content section</a></p>",
   "updated_at": "2026-01-02T00:00:00+09:00"
 }
