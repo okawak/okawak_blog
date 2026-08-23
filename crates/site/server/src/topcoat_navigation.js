@@ -48,6 +48,33 @@ function rememberCurrentScrollPosition() {
   );
 }
 
+function samePage(left, right) {
+  return left.pathname === right.pathname && left.search === right.search;
+}
+
+function fragmentNavigation(anchor) {
+  if (!anchor) return null;
+
+  const href = anchor.getAttribute("href") ?? "";
+  const browserLocation = new URL(window.location.href);
+  if (href.startsWith("#")) {
+    return {
+      browserLocation,
+      destination: new URL(href, renderedLocation.href),
+    };
+  }
+
+  const destination = new URL(anchor.href, browserLocation.href);
+  if (
+    destination.origin === browserLocation.origin &&
+    destination.hash &&
+    samePage(destination, browserLocation)
+  ) {
+    return { browserLocation, destination };
+  }
+  return null;
+}
+
 function eligibleAnchor(event) {
   if (
     event.defaultPrevented ||
@@ -272,8 +299,14 @@ async function navigate(url, { history = "push", scroll = "destination" } = {}) 
 document.addEventListener("click", (event) => {
   const anchor =
     event.target instanceof Element ? event.target.closest("a[href]") : null;
-  if (anchor?.getAttribute("href")?.startsWith("#")) {
+  const fragment = fragmentNavigation(anchor);
+  if (fragment) {
     activeNavigation?.abort();
+    if (!samePage(fragment.browserLocation, renderedLocation)) {
+      event.preventDefault();
+      fallBackToDocumentNavigation(fragment.destination);
+      return;
+    }
     rememberCurrentScrollPosition();
     return;
   }

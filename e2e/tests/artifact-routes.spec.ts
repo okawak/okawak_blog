@@ -307,7 +307,11 @@ test("same-page fragment aborts a pending client navigation", async ({ page }) =
 
   await page.getByRole("link", { name: "E2E Article" }).click();
   await articleFetchStarted;
-  await page.getByRole("link", { name: "Home fragment section" }).click();
+  const fragmentLink = page.getByRole("link", { name: "Home fragment section" });
+  await fragmentLink.evaluate((element) =>
+    element.setAttribute("href", "/#home-fragment"),
+  );
+  await fragmentLink.click();
   releaseArticleResponse();
 
   await expect(page).toHaveURL(/\/#home-fragment$/);
@@ -315,6 +319,55 @@ test("same-page fragment aborts a pending client navigation", async ({ page }) =
   await expect(page.getByRole("heading", { name: "Home fragment" })).toBeInViewport();
   await expect(page.getByText("Fixture home content")).toBeVisible();
   await expect(page.getByText("Article fixture body")).toHaveCount(0);
+});
+
+test("fragment navigation resolves a pending popstate document", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "E2E Article" }).click();
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+
+  let releaseHomeResponse: () => void = () => {};
+  let markHomeFetchStarted: () => void = () => {};
+  const homeResponseGate = new Promise<void>((resolve) => {
+    releaseHomeResponse = resolve;
+  });
+  const homeFetchStarted = new Promise<void>((resolve) => {
+    markHomeFetchStarted = resolve;
+  });
+  await page.route("**/", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] === "1") {
+      markHomeFetchStarted();
+      await homeResponseGate;
+    }
+    await route.continue().catch(() => {});
+  });
+  let documentRequests = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentRequests += 1;
+  });
+
+  await page.goBack();
+  await homeFetchStarted;
+  await page.getByRole("main").evaluate((main) => {
+    const link = document.createElement("a");
+    link.href = "#generated-content";
+    link.textContent = "Article fragment";
+    main.prepend(link);
+  });
+  const articleDocumentRequest = page.waitForRequest(
+    (request) =>
+      request.resourceType() === "document" &&
+      new URL(request.url()).pathname === "/tech/e2e-article",
+  );
+  const fragmentClick = page.getByRole("link", { name: "Article fragment" }).click();
+  await articleDocumentRequest;
+  releaseHomeResponse();
+  await fragmentClick;
+
+  await expect(page).toHaveURL(/\/tech\/e2e-article#generated-content$/);
+  await expect(page.getByText("Article fixture body")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Generated content" })).toBeInViewport();
+  expect(documentRequests).toBe(1);
 });
 
 test("client navigation reloads when shell asset fingerprints change", async ({ page }) => {
