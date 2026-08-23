@@ -171,6 +171,18 @@ test("home renders artifacts and navigates to an article without a document relo
     "Article fixture description",
     "article",
   );
+
+  await page.goBack();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText("Fixture home content")).toBeVisible();
+  await expectMetadata(
+    page,
+    SITE_NAME,
+    "",
+    "1件の記事を1カテゴリで公開しています。",
+  );
+  expect(documentRequests).toBe(0);
   expect(browserErrors).toEqual([]);
 });
 

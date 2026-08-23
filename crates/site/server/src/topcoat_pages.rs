@@ -16,6 +16,7 @@ use domain::{
 use infra::DynArtifactSnapshot;
 use topcoat::{
     Result,
+    asset::{Asset, asset},
     context::{Cx, app_context, try_request_context},
     router::{StatusCode, path_param, raw_path_params, request, route},
     view::{Unescaped, View, component, view},
@@ -31,6 +32,7 @@ const ABOUT_PAGE_KEY: &str = "about";
 const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
 const STYLESHEET_PATH: &str = "/pkg/web.css";
+pub(crate) const CLIENT_NAVIGATION_SCRIPT: Asset = asset!("./topcoat_navigation.js");
 
 struct ShellMetadata {
     title: String,
@@ -808,6 +810,7 @@ async fn site_shell(
                 ></script>
                 <script>(code_highlight_script)</script>
                 topcoat::runtime::script()
+                <script type="module" src=(CLIENT_NAVIGATION_SCRIPT)></script>
             </head>
             <body>
                 signal menu_open = false;
