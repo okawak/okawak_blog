@@ -6,7 +6,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use infra::DynArtifactReader;
+use infra::{ArtifactSourceConfig, DynArtifactReader, DynArtifactSnapshot};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
@@ -16,6 +16,14 @@ use std::{
 };
 
 const CACHE_CONTROL_VALUE: &str = "public, max-age=0, must-revalidate";
+
+/// Enables release validators only when an S3 snapshot cache can provide a stable identity.
+pub fn artifact_validators_enabled(config: &ArtifactSourceConfig) -> bool {
+    matches!(
+        config,
+        ArtifactSourceConfig::S3 { cache_ttl, .. } if !cache_ttl.is_zero()
+    )
+}
 
 #[derive(Clone)]
 pub struct ArtifactHttpCacheState {
@@ -28,6 +36,13 @@ pub struct ArtifactHttpCacheState {
 struct ArtifactValidators {
     etag: String,
     last_modified: Option<SystemTime>,
+}
+
+pub(crate) struct ArtifactConditionalGetDecision {
+    snapshot: Option<DynArtifactSnapshot>,
+    validators: Option<ArtifactValidators>,
+    etag_matches: bool,
+    not_modified_since: bool,
 }
 
 impl ArtifactHttpCacheState {
@@ -59,12 +74,19 @@ impl ArtifactHttpCacheState {
         }
     }
 
-    async fn validators_for(&self, uri: &Uri) -> Option<ArtifactValidators> {
+    async fn snapshot_for_request(&self) -> Option<DynArtifactSnapshot> {
         if !self.enabled {
             return None;
         }
 
-        let snapshot = self.artifact_reader.snapshot().await.ok()?;
+        self.artifact_reader.snapshot().await.ok()
+    }
+
+    fn validators_for(
+        &self,
+        snapshot: &DynArtifactSnapshot,
+        uri: &Uri,
+    ) -> Option<ArtifactValidators> {
         let identity = snapshot.cache_identity()?;
         Some(ArtifactValidators {
             etag: build_weak_etag(&self.process_tag, identity, uri),
@@ -74,46 +96,98 @@ impl ArtifactHttpCacheState {
             ),
         })
     }
+
+    pub(crate) async fn conditional_get(
+        &self,
+        method: &Method,
+        uri: &Uri,
+        headers: &HeaderMap,
+    ) -> Option<ArtifactConditionalGetDecision> {
+        if !is_artifact_request(method, uri.path()) {
+            return None;
+        }
+
+        let snapshot = self.snapshot_for_request().await;
+        let validators = snapshot
+            .as_ref()
+            .and_then(|snapshot| self.validators_for(snapshot, uri));
+        let has_if_none_match = headers.contains_key(header::IF_NONE_MATCH);
+        let etag_matches = has_if_none_match
+            && validators
+                .as_ref()
+                .is_some_and(|validators| if_none_match_matches(headers, &validators.etag));
+        let not_modified_since = !has_if_none_match
+            && validators
+                .as_ref()
+                .and_then(|validators| validators.last_modified)
+                .is_some_and(|last_modified| {
+                    if_modified_since_not_modified(headers, last_modified)
+                });
+
+        Some(ArtifactConditionalGetDecision {
+            snapshot,
+            validators,
+            etag_matches,
+            not_modified_since,
+        })
+    }
+}
+
+impl ArtifactConditionalGetDecision {
+    pub(crate) fn snapshot(&self) -> Option<DynArtifactSnapshot> {
+        self.snapshot.clone()
+    }
+
+    pub(crate) fn should_short_circuit(&self) -> bool {
+        self.etag_matches
+    }
+
+    pub(crate) fn should_return_not_modified_after_response(&self, status: StatusCode) -> bool {
+        status == StatusCode::OK && self.not_modified_since
+    }
+
+    pub(crate) fn should_attach_validators(&self, status: StatusCode) -> bool {
+        status == StatusCode::OK && self.validators.is_some()
+    }
+
+    pub(crate) fn insert_headers(&self, headers: &mut HeaderMap) {
+        if let Some(validators) = self.validators.as_ref() {
+            insert_cache_headers(headers, validators);
+        }
+    }
 }
 
 pub async fn artifact_conditional_get(
     State(state): State<ArtifactHttpCacheState>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Response {
-    if !is_artifact_request(request.method(), request.uri().path()) {
+    let Some(conditional_get) = state
+        .conditional_get(request.method(), request.uri(), request.headers())
+        .await
+    else {
         return next.run(request).await;
-    }
+    };
 
-    let validators = state.validators_for(request.uri()).await;
-    let has_if_none_match = request.headers().contains_key(header::IF_NONE_MATCH);
-    if has_if_none_match
-        && let Some(validators) = validators.as_ref()
-        && if_none_match_matches(request.headers(), &validators.etag)
-    {
+    if conditional_get.should_short_circuit() {
         let mut response = StatusCode::NOT_MODIFIED.into_response();
-        insert_cache_headers(response.headers_mut(), validators);
+        conditional_get.insert_headers(response.headers_mut());
         return response;
     }
-    let not_modified_since = !has_if_none_match
-        && validators
-            .as_ref()
-            .and_then(|validators| validators.last_modified)
-            .is_some_and(|last_modified| {
-                if_modified_since_not_modified(request.headers(), last_modified)
-            });
+
+    if let Some(snapshot) = conditional_get.snapshot() {
+        request.extensions_mut().insert(snapshot);
+    }
 
     let mut response = next.run(request).await;
-    if response.status() == StatusCode::OK
-        && let Some(validators) = validators.as_ref()
-    {
-        if not_modified_since {
-            let mut response = StatusCode::NOT_MODIFIED.into_response();
-            insert_cache_headers(response.headers_mut(), validators);
-            return response;
-        }
+    if conditional_get.should_return_not_modified_after_response(response.status()) {
+        let mut response = StatusCode::NOT_MODIFIED.into_response();
+        conditional_get.insert_headers(response.headers_mut());
+        return response;
+    }
 
-        insert_cache_headers(response.headers_mut(), validators);
+    if conditional_get.should_attach_validators(response.status()) {
+        conditional_get.insert_headers(response.headers_mut());
     }
     response
 }
