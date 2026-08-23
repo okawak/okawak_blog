@@ -342,6 +342,15 @@ test("modified fragment clicks do not abort a pending navigation", async ({ page
 
   await page.getByRole("link", { name: "E2E Article" }).click();
   await articleFetchStarted;
+  await page.evaluate(() => {
+    document.addEventListener(
+      "click",
+      (event) => {
+        if ((event as MouseEvent).metaKey) event.preventDefault();
+      },
+      { once: true },
+    );
+  });
   await page
     .getByRole("link", { name: "Home fragment section" })
     .dispatchEvent("click", { button: 0, metaKey: true });
