@@ -6,7 +6,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use infra::{ArtifactSourceConfig, DynArtifactReader};
+use infra::{ArtifactSourceConfig, DynArtifactReader, DynArtifactSnapshot};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
@@ -39,6 +39,7 @@ struct ArtifactValidators {
 }
 
 pub(crate) struct ArtifactConditionalGetDecision {
+    snapshot: Option<DynArtifactSnapshot>,
     validators: Option<ArtifactValidators>,
     etag_matches: bool,
     not_modified_since: bool,
@@ -73,12 +74,19 @@ impl ArtifactHttpCacheState {
         }
     }
 
-    async fn validators_for(&self, uri: &Uri) -> Option<ArtifactValidators> {
+    async fn snapshot_for_request(&self) -> Option<DynArtifactSnapshot> {
         if !self.enabled {
             return None;
         }
 
-        let snapshot = self.artifact_reader.snapshot().await.ok()?;
+        self.artifact_reader.snapshot().await.ok()
+    }
+
+    fn validators_for(
+        &self,
+        snapshot: &DynArtifactSnapshot,
+        uri: &Uri,
+    ) -> Option<ArtifactValidators> {
         let identity = snapshot.cache_identity()?;
         Some(ArtifactValidators {
             etag: build_weak_etag(&self.process_tag, identity, uri),
@@ -99,7 +107,10 @@ impl ArtifactHttpCacheState {
             return None;
         }
 
-        let validators = self.validators_for(uri).await;
+        let snapshot = self.snapshot_for_request().await;
+        let validators = snapshot
+            .as_ref()
+            .and_then(|snapshot| self.validators_for(snapshot, uri));
         let has_if_none_match = headers.contains_key(header::IF_NONE_MATCH);
         let etag_matches = has_if_none_match
             && validators
@@ -114,6 +125,7 @@ impl ArtifactHttpCacheState {
                 });
 
         Some(ArtifactConditionalGetDecision {
+            snapshot,
             validators,
             etag_matches,
             not_modified_since,
@@ -122,6 +134,10 @@ impl ArtifactHttpCacheState {
 }
 
 impl ArtifactConditionalGetDecision {
+    pub(crate) fn snapshot(&self) -> Option<DynArtifactSnapshot> {
+        self.snapshot.clone()
+    }
+
     pub(crate) fn should_short_circuit(&self) -> bool {
         self.etag_matches
     }
@@ -143,7 +159,7 @@ impl ArtifactConditionalGetDecision {
 
 pub async fn artifact_conditional_get(
     State(state): State<ArtifactHttpCacheState>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Response {
     let Some(conditional_get) = state
@@ -157,6 +173,10 @@ pub async fn artifact_conditional_get(
         let mut response = StatusCode::NOT_MODIFIED.into_response();
         conditional_get.insert_headers(response.headers_mut());
         return response;
+    }
+
+    if let Some(snapshot) = conditional_get.snapshot() {
+        request.extensions_mut().insert(snapshot);
     }
 
     let mut response = next.run(request).await;

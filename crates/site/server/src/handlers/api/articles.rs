@@ -2,16 +2,19 @@
 
 use axum::{Extension, Json, http::StatusCode};
 use domain::ArticleIndexDocument;
-use infra::DynArtifactReader;
+use infra::{DynArtifactReader, DynArtifactSnapshot};
 
-use crate::article_index::read_article_index;
+use crate::article_index::{read_article_index, read_article_index_from_snapshot};
 
 pub async fn list_articles(
     Extension(artifact_reader): Extension<DynArtifactReader>,
+    snapshot: Option<Extension<DynArtifactSnapshot>>,
 ) -> Result<Json<ArticleIndexDocument>, StatusCode> {
-    let document = read_article_index(&artifact_reader)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let document = match snapshot {
+        Some(Extension(snapshot)) => read_article_index_from_snapshot(&snapshot).await,
+        None => read_article_index(&artifact_reader).await,
+    }
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(document))
 }
@@ -47,9 +50,10 @@ mod tests {
         )
         .unwrap();
 
-        let Json(document) = list_articles(Extension(Arc::new(LocalArtifactReader::new(
-            temp_dir.path(),
-        ))))
+        let Json(document) = list_articles(
+            Extension(Arc::new(LocalArtifactReader::new(temp_dir.path()))),
+            None,
+        )
         .await
         .unwrap();
 

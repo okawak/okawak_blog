@@ -1,9 +1,9 @@
 //! Parallel Topcoat runtime shell used during the framework migration.
 
-use infra::DynArtifactReader;
+use infra::{DynArtifactReader, DynArtifactSnapshot};
 use topcoat::{
     Result,
-    context::{Cx, app_context},
+    context::{Cx, app_context, try_request_context},
     router::{
         Body, LayerFn, LayerFuture, Next, Router, StatusCode, content::Json,
         error::internal_server_error, request, response::Response, route,
@@ -11,7 +11,7 @@ use topcoat::{
 };
 
 use crate::{
-    article_index::read_article_index,
+    article_index::{read_article_index, read_article_index_from_snapshot},
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
     readiness::check_artifact_readiness,
 };
@@ -40,9 +40,11 @@ async fn readiness(cx: &Cx) -> Result<(StatusCode, &'static str)> {
 #[route(GET "/api/articles")]
 async fn articles(cx: &Cx) -> Result<Json<domain::ArticleIndexDocument>> {
     let artifact_reader = &app_context::<ArtifactReaderContext>(cx).0;
-    let document = read_article_index(artifact_reader)
-        .await
-        .map_err(internal_server_error)?;
+    let document = match try_request_context::<DynArtifactSnapshot>(cx) {
+        Some(snapshot) => read_article_index_from_snapshot(snapshot).await,
+        None => read_article_index(artifact_reader).await,
+    }
+    .map_err(internal_server_error)?;
     Ok(Json(document))
 }
 
@@ -67,7 +69,13 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
             return Ok(not_modified_response(&conditional_get));
         }
 
-        let mut response = next.run(cx, body).await?;
+        let mut response = match conditional_get.snapshot() {
+            Some(snapshot) => {
+                let cx = cx.with(snapshot);
+                next.run(&cx, body).await?
+            }
+            None => next.run(cx, body).await?,
+        };
         if conditional_get.should_return_not_modified_after_response(response.status()) {
             return Ok(not_modified_response(&conditional_get));
         }
@@ -100,7 +108,14 @@ pub fn create_topcoat_router(
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, sync::Arc, time::SystemTime};
+    use std::{
+        path::PathBuf,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::SystemTime,
+    };
 
     use async_trait::async_trait;
     use domain::{
@@ -134,6 +149,20 @@ mod tests {
     #[derive(Clone)]
     struct ValidatorReader {
         inner: DynArtifactReader,
+    }
+
+    #[derive(Clone)]
+    struct CountingReader {
+        inner: DynArtifactReader,
+        snapshot_calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl ArtifactReader for CountingReader {
+        async fn snapshot(&self) -> Result<DynArtifactSnapshot> {
+            self.snapshot_calls.fetch_add(1, Ordering::SeqCst);
+            self.inner.snapshot().await
+        }
     }
 
     #[async_trait]
@@ -435,5 +464,27 @@ mod tests {
         assert_eq!(error_response.status, StatusCode::INTERNAL_SERVER_ERROR);
         assert!(!error_response.headers.contains_key(header::ETAG));
         assert!(!error_response.headers.contains_key(header::CACHE_CONTROL));
+    }
+
+    #[tokio::test]
+    async fn conditional_get_and_articles_share_one_snapshot() {
+        let snapshot_calls = Arc::new(AtomicUsize::new(0));
+        let reader: DynArtifactReader = Arc::new(CountingReader {
+            inner: fixture_reader(),
+            snapshot_calls: Arc::clone(&snapshot_calls),
+        });
+        let router = create_topcoat_router(validator_reader(reader), true);
+
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/api/articles")
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
     }
 }
