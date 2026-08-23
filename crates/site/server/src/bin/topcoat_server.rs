@@ -3,6 +3,7 @@
 use infra::{ArtifactSourceConfig, build_artifact_reader};
 use server::http_cache::artifact_validators_enabled;
 use server::topcoat_runtime::create_topcoat_router;
+use topcoat::asset::AssetBundle;
 
 const DEFAULT_ADDR: &str = "127.0.0.1:8009";
 const ADDR_ENV: &str = "OKAWAK_BLOG_TOPCOAT_ADDR";
@@ -13,7 +14,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let artifact_source = ArtifactSourceConfig::from_env()?;
     let artifact_reader = build_artifact_reader(artifact_source.clone()).await?;
     let validators_enabled = artifact_validators_enabled(&artifact_source);
-    let router = create_topcoat_router(artifact_reader, validators_enabled);
+    let assets = AssetBundle::load()?;
+    let router = create_topcoat_router(artifact_reader, validators_enabled, assets.into());
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     println!("Starting Topcoat migration server on http://{addr}");

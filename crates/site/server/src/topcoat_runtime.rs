@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use infra::{DynArtifactReader, DynArtifactSnapshot};
 use topcoat::{
     Result,
+    asset::{AssetConfig, RouterBuilderAssetExt},
     context::{Cx, app_context, try_request_context},
     router::{
         Body, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode, content::Json,
@@ -93,11 +94,13 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
 pub fn create_topcoat_router(
     artifact_reader: DynArtifactReader,
     validators_enabled: bool,
+    assets: AssetConfig,
 ) -> Router {
     create_topcoat_router_with_site_root(
         artifact_reader,
         validators_enabled,
         PathBuf::from("target/site"),
+        assets,
     )
 }
 
@@ -105,6 +108,7 @@ fn create_topcoat_router_with_site_root(
     artifact_reader: DynArtifactReader,
     validators_enabled: bool,
     site_root: PathBuf,
+    assets: AssetConfig,
 ) -> Router {
     let static_files = ServeDir::new(site_root);
 
@@ -132,6 +136,7 @@ fn create_topcoat_router_with_site_root(
             validators_enabled,
         ))
         .app_context(ArtifactReaderContext(artifact_reader))
+        .assets(assets)
         .build()
 }
 
@@ -156,11 +161,15 @@ mod tests {
         LocalArtifactReader, Result,
     };
     use tempfile::tempdir;
-    use topcoat::router::{
-        Body, HeaderMap, Router, StatusCode, header, request::Request, to_bytes,
+    use topcoat::{
+        asset::{AssetConfig, Manifest, ManifestEntry},
+        router::{Body, HeaderMap, Router, StatusCode, header, request::Request, to_bytes},
     };
 
-    use super::{create_topcoat_router, create_topcoat_router_with_site_root};
+    use super::{
+        create_topcoat_router as create_topcoat_router_with_assets,
+        create_topcoat_router_with_site_root as create_topcoat_router_with_site_root_and_assets,
+    };
 
     struct TestResponse {
         status: StatusCode,
@@ -179,6 +188,41 @@ mod tests {
         Arc::new(LocalArtifactReader::new(
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/empty-site"),
         ))
+    }
+
+    fn test_asset_config() -> AssetConfig {
+        AssetConfig::hosted_at(
+            "/_topcoat/assets",
+            Manifest {
+                version: 1,
+                assets: vec![ManifestEntry {
+                    id: topcoat::runtime::SCRIPT.id(),
+                    file: "topcoat-test.js".to_string(),
+                    hash: "test".to_string(),
+                    content_type: "text/javascript".to_string(),
+                }],
+            },
+        )
+    }
+
+    fn create_topcoat_router(
+        artifact_reader: DynArtifactReader,
+        validators_enabled: bool,
+    ) -> Router {
+        create_topcoat_router_with_assets(artifact_reader, validators_enabled, test_asset_config())
+    }
+
+    fn create_topcoat_router_with_site_root(
+        artifact_reader: DynArtifactReader,
+        validators_enabled: bool,
+        site_root: PathBuf,
+    ) -> Router {
+        create_topcoat_router_with_site_root_and_assets(
+            artifact_reader,
+            validators_enabled,
+            site_root,
+            test_asset_config(),
+        )
     }
 
     #[derive(Clone)]
@@ -438,6 +482,39 @@ mod tests {
         assert!(response.body.contains("2026年1月1日"));
         assert!(response.body.contains("2026年1月2日"));
         assert!(!response.body.contains("&lt;p&gt;Fixture home content"));
+    }
+
+    #[tokio::test]
+    async fn home_shell_exposes_topcoat_mobile_navigation_contract() {
+        let router = create_topcoat_router(fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder().uri("/").body(Body::empty()).unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert!(response.body.contains(
+            "<script type=\"module\" src=\"/_topcoat/assets/topcoat-test.js\"></script>"
+        ));
+        assert!(response.body.contains("aria-controls=\"site-header-nav\""));
+        assert!(response.body.contains("aria-expanded=\"false\""));
+        assert!(
+            response
+                .body
+                .contains("aria-label=\"ナビゲーションメニューを開く\"")
+        );
+        assert!(response.body.contains("data-topcoat-on:click="));
+        assert!(response.body.contains("data-topcoat-bind:aria-expanded="));
+        assert!(response.body.contains("data-topcoat-bind:aria-label="));
+        assert!(response.body.contains("<nav id=\"site-header-nav\""));
+        assert!(response.body.contains("data-topcoat-bind:class="));
+        assert!(response.body.contains("class=\"hidden absolute inset-x-4"));
+        assert!(
+            response
+                .body
+                .contains("aria-label=\"Open okawak GitHub profile\"")
+        );
     }
 
     #[tokio::test]
