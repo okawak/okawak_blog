@@ -321,6 +321,85 @@ test("same-page fragment aborts a pending client navigation", async ({ page }) =
   await expect(page.getByText("Article fixture body")).toHaveCount(0);
 });
 
+test("modified fragment clicks do not abort a pending navigation", async ({ page }) => {
+  await page.goto("/");
+
+  let releaseArticleResponse: () => void = () => {};
+  let markArticleFetchStarted: () => void = () => {};
+  const articleResponseGate = new Promise<void>((resolve) => {
+    releaseArticleResponse = resolve;
+  });
+  const articleFetchStarted = new Promise<void>((resolve) => {
+    markArticleFetchStarted = resolve;
+  });
+  await page.route("**/tech/e2e-article", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] === "1") {
+      markArticleFetchStarted();
+      await articleResponseGate;
+    }
+    await route.continue().catch(() => {});
+  });
+
+  await page.getByRole("link", { name: "E2E Article" }).click();
+  await articleFetchStarted;
+  await page
+    .getByRole("link", { name: "Home fragment section" })
+    .dispatchEvent("click", { button: 0, metaKey: true });
+  releaseArticleResponse();
+
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+  await expect(page.getByText("Article fixture body")).toBeVisible();
+});
+
+test("only the active navigation clears its busy state", async ({ page }) => {
+  await page.goto("/");
+
+  let releaseArticleResponse: () => void = () => {};
+  let markArticleFetchStarted: () => void = () => {};
+  let releaseAboutResponse: () => void = () => {};
+  let markAboutFetchStarted: () => void = () => {};
+  const articleResponseGate = new Promise<void>((resolve) => {
+    releaseArticleResponse = resolve;
+  });
+  const articleFetchStarted = new Promise<void>((resolve) => {
+    markArticleFetchStarted = resolve;
+  });
+  const aboutResponseGate = new Promise<void>((resolve) => {
+    releaseAboutResponse = resolve;
+  });
+  const aboutFetchStarted = new Promise<void>((resolve) => {
+    markAboutFetchStarted = resolve;
+  });
+  await page.route("**/tech/e2e-article", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] === "1") {
+      markArticleFetchStarted();
+      await articleResponseGate;
+    }
+    await route.continue().catch(() => {});
+  });
+  await page.route("**/about", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] === "1") {
+      markAboutFetchStarted();
+      await aboutResponseGate;
+    }
+    await route.continue().catch(() => {});
+  });
+
+  await page.getByRole("link", { name: "E2E Article" }).click();
+  await articleFetchStarted;
+  await page.getByRole("link", { name: "About", exact: true }).click();
+  await aboutFetchStarted;
+  releaseArticleResponse();
+
+  await page.waitForTimeout(200);
+  await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
+
+  releaseAboutResponse();
+  await expect(page).toHaveURL(/\/about$/);
+  await expect(page.getByRole("heading", { name: "Fixture About" })).toBeVisible();
+  await expect(page.getByRole("main")).not.toHaveAttribute("aria-busy", "true");
+});
+
 test("fragment navigation resolves a pending popstate document", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "E2E Article" }).click();
@@ -416,6 +495,35 @@ test("client navigation reloads when inline shell runtime changes", async ({ pag
     const body = currentBody.replace(
       "window.okawakScheduleCodeHighlight = function(root)",
       "window.okawakScheduleCodeHighlightV2 = function(root)",
+    );
+    expect(body).not.toBe(currentBody);
+    await route.fulfill({ response, body });
+  });
+
+  await page.getByRole("link", { name: "E2E Article" }).click();
+
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+  await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
+  expect(documentRequests).toBe(1);
+});
+
+test("client navigation reloads when the shell version changes", async ({ page }) => {
+  await page.goto("/");
+  let documentRequests = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentRequests += 1;
+  });
+  await page.route("**/tech/e2e-article", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] !== "1") {
+      await route.continue();
+      return;
+    }
+
+    const response = await route.fetch();
+    const currentBody = await response.text();
+    const body = currentBody.replace(
+      'name="okawak-shell-version" content="topcoat-1"',
+      'name="okawak-shell-version" content="topcoat-2"',
     );
     expect(body).not.toBe(currentBody);
     await route.fulfill({ response, body });

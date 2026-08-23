@@ -32,6 +32,8 @@ const ABOUT_PAGE_KEY: &str = "about";
 const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
 const STYLESHEET_PATH: &str = "/pkg/web.css";
+// Bump when retained shell markup outside `<main>` changes incompatibly.
+const SHELL_VERSION: &str = "topcoat-1";
 pub(crate) const CLIENT_NAVIGATION_SCRIPT: Asset = asset!("./topcoat_navigation.js");
 
 struct ShellMetadata {
@@ -770,6 +772,7 @@ async fn site_shell(
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
+                <meta name="okawak-shell-version" content=(SHELL_VERSION)>
                 <title>(title.clone())</title>
                 <meta name="description" content=(description.clone())>
                 <link rel="canonical" href=(canonical_url.clone())>

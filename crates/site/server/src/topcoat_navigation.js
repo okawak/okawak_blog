@@ -10,6 +10,7 @@ const PAGE_METADATA_SELECTOR = [
 const SHELL_RUNTIME_SELECTOR = ['link[rel="stylesheet"][href]', "script"].join(
   ",",
 );
+const SHELL_VERSION_SELECTOR = 'meta[name="okawak-shell-version"]';
 const SCROLL_STATE_KEY = "okawakScrollPosition";
 
 let activeNavigation;
@@ -75,28 +76,29 @@ function fragmentNavigation(anchor) {
   return null;
 }
 
-function eligibleAnchor(event) {
+function handlesCurrentTab(event, anchor) {
   if (
     event.defaultPrevented ||
     event.button !== 0 ||
     event.metaKey ||
     event.ctrlKey ||
     event.shiftKey ||
-    event.altKey
+    event.altKey ||
+    !anchor ||
+    anchor.hasAttribute("download") ||
+    (anchor.target && anchor.target !== "_self")
   ) {
-    return null;
+    return false;
   }
+  return true;
+}
 
+function eligibleAnchor(event) {
   if (!(event.target instanceof Element)) return null;
 
   const anchor = event.target.closest("a[href]");
   const href = anchor?.getAttribute("href") ?? "";
-  if (
-    !anchor ||
-    href.startsWith("#") ||
-    anchor.hasAttribute("download") ||
-    (anchor.target && anchor.target !== "_self")
-  ) {
+  if (!handlesCurrentTab(event, anchor) || href.startsWith("#")) {
     return null;
   }
 
@@ -151,12 +153,27 @@ function shellRuntimeSignature(root, baseUrl) {
   );
 }
 
-function shellRuntimeMatches(nextDocument, destination) {
-  const current = shellRuntimeSignature(document, window.location.href);
-  const next = shellRuntimeSignature(nextDocument, destination.href);
+function signaturesMatch(current, next) {
   return (
     current.length === next.length &&
-    current.every((asset, index) => asset === next[index])
+    current.every((value, index) => value === next[index])
+  );
+}
+
+function shellMatches(nextDocument, destination) {
+  const current = shellRuntimeSignature(document, window.location.href);
+  const next = shellRuntimeSignature(nextDocument, destination.href);
+  const currentVersion = document.head.querySelector(
+    SHELL_VERSION_SELECTOR,
+  )?.content;
+  const nextVersion = nextDocument.head.querySelector(
+    SHELL_VERSION_SELECTOR,
+  )?.content;
+  return (
+    currentVersion &&
+    currentVersion === nextVersion &&
+    signaturesMatch(current, next) &&
+    next.length > 0
   );
 }
 
@@ -256,7 +273,7 @@ async function navigate(url, { history = "push", scroll = "destination" } = {}) 
       fallBackToDocumentNavigation(url);
       return;
     }
-    if (!shellRuntimeMatches(nextDocument, destination)) {
+    if (!shellMatches(nextDocument, destination)) {
       fallBackToDocumentNavigation(destination);
       return;
     }
@@ -291,15 +308,19 @@ async function navigate(url, { history = "push", scroll = "destination" } = {}) 
   } catch (error) {
     if (error?.name !== "AbortError") fallBackToDocumentNavigation(url);
   } finally {
-    if (activeNavigation === controller) activeNavigation = undefined;
-    document.querySelector("main")?.removeAttribute("aria-busy");
+    if (activeNavigation === controller) {
+      activeNavigation = undefined;
+      document.querySelector("main")?.removeAttribute("aria-busy");
+    }
   }
 }
 
 document.addEventListener("click", (event) => {
   const anchor =
     event.target instanceof Element ? event.target.closest("a[href]") : null;
-  const fragment = fragmentNavigation(anchor);
+  const fragment = handlesCurrentTab(event, anchor)
+    ? fragmentNavigation(anchor)
+    : null;
   if (fragment) {
     activeNavigation?.abort();
     if (!samePage(fragment.browserLocation, renderedLocation)) {
