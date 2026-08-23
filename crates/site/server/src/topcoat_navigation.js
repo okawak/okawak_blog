@@ -102,7 +102,7 @@ function eligibleAnchor(event) {
     return null;
   }
 
-  const url = new URL(anchor.href, window.location.href);
+  const url = new URL(href, renderedLocation.href);
   if (
     url.origin !== window.location.origin ||
     (url.pathname === window.location.pathname &&

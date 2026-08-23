@@ -34,14 +34,13 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "sh e2e/run-server.sh",
+    command: "sh e2e/run-production-server.sh",
     cwd: repoRoot,
     env: {
       ...process.env,
       OKAWAK_BLOG_ARTIFACT_SOURCE: "s3",
       OKAWAK_BLOG_ARTIFACT_BUCKET: bucket,
       OKAWAK_BLOG_SITE_ORIGIN: baseURL,
-      OKAWAK_BLOG_TOPCOAT_ADDR: "127.0.0.1:8008",
     },
     url: `${baseURL}/api/health`,
     reuseExistingServer: false,

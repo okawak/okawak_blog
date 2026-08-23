@@ -458,6 +458,48 @@ test("fragment navigation resolves a pending popstate document", async ({ page }
   expect(documentRequests).toBe(1);
 });
 
+test("relative links resolve against the rendered page during popstate", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "E2E Article" }).click();
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+  await page.getByRole("main").evaluate((main) => {
+    const link = document.createElement("a");
+    link.href = "next";
+    link.textContent = "Relative next";
+    main.prepend(link);
+  });
+
+  let releaseHomeResponse: () => void = () => {};
+  let markHomeFetchStarted: () => void = () => {};
+  const homeResponseGate = new Promise<void>((resolve) => {
+    releaseHomeResponse = resolve;
+  });
+  const homeFetchStarted = new Promise<void>((resolve) => {
+    markHomeFetchStarted = resolve;
+  });
+  await page.route("**/", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] === "1") {
+      markHomeFetchStarted();
+      await homeResponseGate;
+    }
+    await route.continue().catch(() => {});
+  });
+
+  await page.goBack();
+  await homeFetchStarted;
+  const relativeRequest = page.waitForRequest(
+    (request) => request.headers()["x-okawak-navigation"] === "1",
+  );
+  await page.getByRole("link", { name: "Relative next" }).click();
+  const requestedPath = new URL((await relativeRequest).url()).pathname;
+  releaseHomeResponse();
+
+  expect(requestedPath).toBe("/tech/next");
+  await expect(page).toHaveURL(/\/tech\/next$/);
+});
+
 test("client navigation reloads when shell asset fingerprints change", async ({ page }) => {
   await page.goto("/");
   let documentRequests = 0;
