@@ -4,10 +4,17 @@ use infra::DynArtifactReader;
 use topcoat::{
     Result,
     context::{Cx, app_context},
-    router::{Router, StatusCode, content::Json, error::internal_server_error, route},
+    router::{
+        Body, LayerFn, LayerFuture, Next, Router, StatusCode, content::Json,
+        error::internal_server_error, request, response::Response, route,
+    },
 };
 
-use crate::{article_index::read_article_index, readiness::check_artifact_readiness};
+use crate::{
+    article_index::read_article_index,
+    http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
+    readiness::check_artifact_readiness,
+};
 
 #[derive(Clone)]
 struct ArtifactReaderContext(DynArtifactReader);
@@ -39,46 +46,155 @@ async fn articles(cx: &Cx) -> Result<Json<domain::ArticleIndexDocument>> {
     Ok(Json(document))
 }
 
-pub fn create_topcoat_router(artifact_reader: DynArtifactReader) -> Router {
+fn not_modified_response(conditional_get: &ArtifactConditionalGetDecision) -> Response {
+    let mut response = Response::new(Body::empty());
+    *response.status_mut() = StatusCode::NOT_MODIFIED;
+    conditional_get.insert_headers(response.headers_mut());
+    response
+}
+
+fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
+    Box::pin(async move {
+        let state = app_context::<ArtifactHttpCacheState>(cx);
+        let Some(conditional_get) = state
+            .conditional_get(request::method(cx), request::uri(cx), request::headers(cx))
+            .await
+        else {
+            return next.run(cx, body).await;
+        };
+
+        if conditional_get.should_short_circuit() {
+            return Ok(not_modified_response(&conditional_get));
+        }
+
+        let mut response = next.run(cx, body).await?;
+        if conditional_get.should_return_not_modified_after_response(response.status()) {
+            return Ok(not_modified_response(&conditional_get));
+        }
+        if conditional_get.should_attach_validators(response.status()) {
+            conditional_get.insert_headers(response.headers_mut());
+        }
+        Ok(response)
+    })
+}
+
+pub fn create_topcoat_router(
+    artifact_reader: DynArtifactReader,
+    validators_enabled: bool,
+) -> Router {
     Router::builder()
         .route(health)
         .route(readiness)
         .route(articles)
+        .layer(LayerFn::new(
+            Some("/api/articles"),
+            artifact_conditional_get,
+        ))
+        .app_context(ArtifactHttpCacheState::new(
+            artifact_reader.clone(),
+            validators_enabled,
+        ))
         .app_context(ArtifactReaderContext(artifact_reader))
         .build()
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, sync::Arc};
+    use std::{path::PathBuf, sync::Arc, time::SystemTime};
 
-    use axum::http::{Request, StatusCode};
-    use infra::LocalArtifactReader;
+    use async_trait::async_trait;
+    use domain::{
+        ArticleIndexDocument, Category, CategoryArtifactDocument, HomeFragmentArtifactDocument,
+        PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
+    };
+    use infra::{
+        ArtifactReader, ArtifactSnapshot, DynArtifactReader, DynArtifactSnapshot,
+        LocalArtifactReader, Result,
+    };
     use tempfile::tempdir;
-    use topcoat::router::{Body, to_bytes};
+    use topcoat::router::{
+        Body, HeaderMap, Router, StatusCode, header, request::Request, to_bytes,
+    };
 
     use super::create_topcoat_router;
 
     struct TestResponse {
         status: StatusCode,
+        headers: HeaderMap,
         content_type: Option<String>,
         body: String,
     }
 
-    fn fixture_reader() -> Arc<LocalArtifactReader> {
+    fn fixture_reader() -> DynArtifactReader {
         Arc::new(LocalArtifactReader::new(
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/site"),
         ))
     }
 
-    async fn response(path: &str, reader: Arc<LocalArtifactReader>) -> TestResponse {
-        let router = create_topcoat_router(reader);
-        let request = Request::builder()
-            .uri(path)
-            .body(Body::empty())
-            .expect("request should be valid");
+    #[derive(Clone)]
+    struct ValidatorReader {
+        inner: DynArtifactReader,
+    }
+
+    #[async_trait]
+    impl ArtifactReader for ValidatorReader {
+        async fn snapshot(&self) -> Result<DynArtifactSnapshot> {
+            Ok(Arc::new(ValidatorSnapshot {
+                inner: self.inner.snapshot().await?,
+            }))
+        }
+    }
+
+    struct ValidatorSnapshot {
+        inner: DynArtifactSnapshot,
+    }
+
+    #[async_trait]
+    impl ArtifactSnapshot for ValidatorSnapshot {
+        fn cache_identity(&self) -> Option<&str> {
+            Some("release-1")
+        }
+
+        fn last_modified(&self) -> Option<SystemTime> {
+            self.inner.last_modified().or(Some(SystemTime::UNIX_EPOCH))
+        }
+
+        async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
+            self.inner.read_article_index().await
+        }
+
+        async fn read_category_document(
+            &self,
+            category: &Category,
+        ) -> Result<CategoryArtifactDocument> {
+            self.inner.read_category_document(category).await
+        }
+
+        async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
+            self.inner.read_site_metadata().await
+        }
+
+        async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<String> {
+            self.inner.read_article_html(category, slug).await
+        }
+
+        async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+            self.inner.read_home_fragment().await
+        }
+
+        async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
+            self.inner.read_page_document(page).await
+        }
+    }
+
+    fn validator_reader(inner: DynArtifactReader) -> DynArtifactReader {
+        Arc::new(ValidatorReader { inner })
+    }
+
+    async fn response(router: &Router, request: Request<Body>) -> TestResponse {
         let response = router.handle(request).await;
         let status = response.status();
+        let headers = response.headers().clone();
         let content_type = response.headers().get("content-type").map(|value| {
             value
                 .to_str()
@@ -91,6 +207,7 @@ mod tests {
 
         TestResponse {
             status,
+            headers,
             content_type,
             body: String::from_utf8(body.to_vec()).expect("response body should be UTF-8"),
         }
@@ -99,9 +216,14 @@ mod tests {
     #[tokio::test]
     async fn health_does_not_require_artifacts() {
         let temp_dir = tempdir().expect("temp dir should be created");
+        let router =
+            create_topcoat_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
         let response = response(
-            "/api/health",
-            Arc::new(LocalArtifactReader::new(temp_dir.path())),
+            &router,
+            Request::builder()
+                .uri("/api/health")
+                .body(Body::empty())
+                .expect("request should be valid"),
         )
         .await;
 
@@ -111,7 +233,15 @@ mod tests {
 
     #[tokio::test]
     async fn readiness_succeeds_when_site_metadata_is_readable() {
-        let response = response("/api/ready", fixture_reader()).await;
+        let router = create_topcoat_router(fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/api/ready")
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await;
 
         assert_eq!(response.status, StatusCode::OK);
         assert_eq!(response.body, "READY");
@@ -120,9 +250,14 @@ mod tests {
     #[tokio::test]
     async fn readiness_fails_when_site_metadata_is_missing() {
         let temp_dir = tempdir().expect("temp dir should be created");
+        let router =
+            create_topcoat_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
         let response = response(
-            "/api/ready",
-            Arc::new(LocalArtifactReader::new(temp_dir.path())),
+            &router,
+            Request::builder()
+                .uri("/api/ready")
+                .body(Body::empty())
+                .expect("request should be valid"),
         )
         .await;
 
@@ -132,7 +267,15 @@ mod tests {
 
     #[tokio::test]
     async fn articles_returns_the_published_index_as_json() {
-        let response = response("/api/articles", fixture_reader()).await;
+        let router = create_topcoat_router(fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder()
+                .uri("/api/articles")
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await;
 
         assert_eq!(response.status, StatusCode::OK);
         assert_eq!(response.content_type.as_deref(), Some("application/json"));
@@ -158,12 +301,139 @@ mod tests {
     #[tokio::test]
     async fn articles_returns_internal_server_error_when_index_is_missing() {
         let temp_dir = tempdir().expect("temp dir should be created");
+        let router =
+            create_topcoat_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
         let response = response(
-            "/api/articles",
-            Arc::new(LocalArtifactReader::new(temp_dir.path())),
+            &router,
+            Request::builder()
+                .uri("/api/articles")
+                .body(Body::empty())
+                .expect("request should be valid"),
         )
         .await;
 
         assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn articles_supports_release_aware_conditional_get() {
+        let router = create_topcoat_router(validator_reader(fixture_reader()), true);
+        let first = response(
+            &router,
+            Request::builder()
+                .uri("/api/articles")
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await;
+        let etag = first
+            .headers
+            .get(header::ETAG)
+            .expect("successful artifact response should have an ETag")
+            .clone();
+        let last_modified = first
+            .headers
+            .get(header::LAST_MODIFIED)
+            .expect("successful artifact response should have Last-Modified")
+            .clone();
+
+        assert_eq!(first.status, StatusCode::OK);
+        assert_eq!(
+            first.headers.get(header::CACHE_CONTROL).unwrap(),
+            "public, max-age=0, must-revalidate"
+        );
+        assert!(first.headers.contains_key(header::LAST_MODIFIED));
+
+        let second = response(
+            &router,
+            Request::builder()
+                .uri("/api/articles")
+                .header(header::IF_NONE_MATCH, etag)
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await;
+
+        assert_eq!(second.status, StatusCode::NOT_MODIFIED);
+        assert!(second.body.is_empty());
+        assert!(second.headers.contains_key(header::ETAG));
+        assert!(second.headers.contains_key(header::LAST_MODIFIED));
+
+        let third = response(
+            &router,
+            Request::builder()
+                .uri("/api/articles")
+                .header(header::IF_MODIFIED_SINCE, &last_modified)
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await;
+
+        assert_eq!(third.status, StatusCode::NOT_MODIFIED);
+        assert!(third.body.is_empty());
+
+        let etag_precedence = response(
+            &router,
+            Request::builder()
+                .uri("/api/articles")
+                .header(header::IF_NONE_MATCH, "\"different\"")
+                .header(header::IF_MODIFIED_SINCE, last_modified)
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await;
+
+        assert_eq!(etag_precedence.status, StatusCode::OK);
+        assert!(!etag_precedence.body.is_empty());
+
+        let head = response(
+            &router,
+            Request::builder()
+                .method("HEAD")
+                .uri("/api/articles")
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await;
+
+        assert_eq!(head.status, StatusCode::OK);
+        assert!(head.headers.contains_key(header::ETAG));
+    }
+
+    #[tokio::test]
+    async fn articles_omits_validators_when_disabled_or_unsuccessful() {
+        let disabled = create_topcoat_router(validator_reader(fixture_reader()), false);
+        let disabled_response = response(
+            &disabled,
+            Request::builder()
+                .uri("/api/articles")
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await;
+
+        assert_eq!(disabled_response.status, StatusCode::OK);
+        assert!(!disabled_response.headers.contains_key(header::ETAG));
+        assert!(
+            !disabled_response
+                .headers
+                .contains_key(header::CACHE_CONTROL)
+        );
+
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let missing_reader: DynArtifactReader = Arc::new(LocalArtifactReader::new(temp_dir.path()));
+        let enabled = create_topcoat_router(validator_reader(missing_reader), true);
+        let error_response = response(
+            &enabled,
+            Request::builder()
+                .uri("/api/articles")
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await;
+
+        assert_eq!(error_response.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(!error_response.headers.contains_key(header::ETAG));
+        assert!(!error_response.headers.contains_key(header::CACHE_CONTROL));
     }
 }

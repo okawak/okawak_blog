@@ -5,7 +5,9 @@ use infra::{ArtifactSourceConfig, build_artifact_reader};
 use leptos::prelude::*;
 use leptos_axum::{LeptosRoutes, file_and_error_handler, generate_route_list};
 use server::handlers::create_api_router;
-use server::http_cache::{ArtifactHttpCacheState, artifact_conditional_get};
+use server::http_cache::{
+    ArtifactHttpCacheState, artifact_conditional_get, artifact_validators_enabled,
+};
 use tower_http::services::{ServeDir, ServeFile};
 use web::app::{App, shell};
 
@@ -21,10 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = leptos_options.site_addr;
     let artifact_source = ArtifactSourceConfig::from_env()?;
     let artifact_reader = build_artifact_reader(artifact_source.clone()).await?;
-    let validators_enabled = matches!(
-        &artifact_source,
-        ArtifactSourceConfig::S3 { cache_ttl, .. } if !cache_ttl.is_zero()
-    );
+    let validators_enabled = artifact_validators_enabled(&artifact_source);
 
     println!("Starting Leptos blog server on http://{}", addr);
     println!("Leptos設定読み込み完了: {:?}", addr);
