@@ -187,8 +187,8 @@ fn read_required_nonempty(site_root: &Path, relative_path: &Path) -> Result<Stri
 
 #[cfg(test)]
 mod tests {
-    use super::super::builder::build_site_artifacts;
-    use super::super::writer::{SiteDirectories, write_article_page, write_site_artifacts};
+    use super::super::builder::build_site_documents;
+    use super::super::writer::{SiteOutput, write_article_page, write_site_documents};
     use super::*;
     use domain::{
         ArticleMeta, CategoryLandingBody, CategoryLandingMeta, PageKey, PublishableCategoryLanding,
@@ -202,7 +202,7 @@ mod tests {
 
     fn write_complete_site() -> TempDir {
         let temp_dir = TempDir::new().unwrap();
-        let directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let output = SiteOutput::prepare(temp_dir.path()).unwrap();
         let timestamp = Timestamp::new("2025-01-01T00:00:00+09:00".to_string()).unwrap();
         let article = ArticleMeta {
             slug: Slug::new("artifact00001".to_string()).unwrap(),
@@ -221,7 +221,7 @@ mod tests {
             description: Some("Tech landing".to_string()),
             updated_at: timestamp,
         };
-        let artifacts = build_site_artifacts(
+        let documents = build_site_documents(
             vec![article.clone()],
             vec![PublishableCategoryLanding::new(
                 landing,
@@ -239,13 +239,13 @@ mod tests {
         .unwrap();
 
         write_article_page(
-            &directories,
+            &output,
             article.category,
             &article.slug,
             "<h1>Artifact Test</h1>",
         )
         .unwrap();
-        write_site_artifacts(&directories, &artifacts).unwrap();
+        write_site_documents(&output, &documents).unwrap();
 
         temp_dir
     }
@@ -263,10 +263,10 @@ mod tests {
     #[test]
     fn test_validate_site_artifacts_rejects_empty_article_index() {
         let temp_dir = TempDir::new().unwrap();
-        let directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
-        write_site_artifacts(
-            &directories,
-            &build_site_artifacts(vec![], vec![], vec![], None).unwrap(),
+        let output = SiteOutput::prepare(temp_dir.path()).unwrap();
+        write_site_documents(
+            &output,
+            &build_site_documents(vec![], vec![], vec![], None).unwrap(),
         )
         .unwrap();
 

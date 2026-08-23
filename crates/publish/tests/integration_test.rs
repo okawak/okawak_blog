@@ -1,11 +1,15 @@
 mod test_fixtures;
 
+use domain::{
+    ArticleIndexDocument, CategoryArtifactDocument, HomeFragmentArtifactDocument,
+    PageArtifactDocument, SiteMetadataDocument,
+};
 use indoc::indoc;
 use publish::{BookmarkEnricher, PublishError, publish, publish_with_bookmark_enricher};
 use rstest::rstest;
 use std::{fs, path::Path, sync::Arc};
 use tempfile::TempDir;
-use test_fixtures::{collect_html_files, write_about_page, write_tech_category_landing};
+use test_fixtures::{collect_html_files, read_json, write_about_page, write_tech_category_landing};
 
 fn offline_bookmark_enricher() -> BookmarkEnricher {
     Arc::new(|html: String| {
@@ -116,12 +120,13 @@ async fn test_publish_with_sample_file() {
     assert!(html_content.contains("Test Article"));
     assert!(html_content.contains("This is a test article"));
 
-    let article_index = fs::read_to_string(articles_dir.join("index.json")).unwrap();
-    assert!(article_index.contains("\"articles\""));
-    assert!(article_index.contains("\"category\": \"tech\""));
+    let article_index: ArticleIndexDocument = read_json(articles_dir.join("index.json"));
+    assert_eq!(article_index.articles.len(), 1);
+    assert_eq!(article_index.articles[0].category, "tech");
 
-    let site_metadata = fs::read_to_string(site_root.join("metadata").join("site.json")).unwrap();
-    assert!(site_metadata.contains("\"total_articles\": 1"));
+    let site_metadata: SiteMetadataDocument =
+        read_json(site_root.join("metadata").join("site.json"));
+    assert_eq!(site_metadata.total_articles, 1);
 }
 
 #[tokio::test]
@@ -265,12 +270,16 @@ async fn test_publish_with_static_page_file() {
     let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
-    let page_document =
-        fs::read_to_string(output_dir.join("site").join("pages").join("about.json")).unwrap();
+    let page_document: PageArtifactDocument =
+        read_json(output_dir.join("site").join("pages").join("about.json"));
 
-    assert!(page_document.contains("\"page\": \"about\""));
-    assert!(page_document.contains("\"title\": \"About\""));
-    assert!(page_document.contains("This page is generated from markdown."));
+    assert_eq!(page_document.page.as_str(), "about");
+    assert_eq!(page_document.title, "About");
+    assert!(
+        page_document
+            .html
+            .contains("This page is generated from markdown.")
+    );
 }
 
 #[tokio::test]
@@ -305,11 +314,15 @@ async fn test_publish_with_home_fragment_file() {
     let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
-    let page_document = fs::read_to_string(output_dir.join("site").join("home.json")).unwrap();
+    let home_fragment: HomeFragmentArtifactDocument =
+        read_json(output_dir.join("site").join("home.json"));
 
-    assert!(!page_document.contains("\"page\""));
-    assert!(page_document.contains("\"title\": \"Home\""));
-    assert!(page_document.contains("This fragment is generated from markdown."));
+    assert_eq!(home_fragment.title, "Home");
+    assert!(
+        home_fragment
+            .html
+            .contains("This fragment is generated from markdown.")
+    );
     assert!(!output_dir.join("site/pages/home.json").exists());
 }
 
@@ -392,13 +405,20 @@ async fn test_publish_with_category_landing_file() {
     let result = publish(&obsidian_dir, &output_dir).await;
     assert!(result.is_ok());
 
-    let category_document =
-        fs::read_to_string(output_dir.join("site").join("categories").join("tech.json")).unwrap();
+    let category_document: CategoryArtifactDocument =
+        read_json(output_dir.join("site").join("categories").join("tech.json"));
 
-    assert!(category_document.contains("\"category\": \"tech\""));
-    assert!(category_document.contains("\"title\": \"Tech\""));
-    assert!(category_document.contains("\"description\": \"  Technology landing  \""));
-    assert!(category_document.contains("Welcome to the category landing page."));
+    assert_eq!(category_document.category, "tech");
+    assert_eq!(category_document.title, "Tech");
+    assert_eq!(
+        category_document.description.as_deref(),
+        Some("  Technology landing  ")
+    );
+    assert!(
+        category_document
+            .html
+            .contains("Welcome to the category landing page.")
+    );
 }
 
 #[tokio::test]

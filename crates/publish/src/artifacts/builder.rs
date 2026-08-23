@@ -1,26 +1,26 @@
 use crate::error::Result;
 use domain::{
-    ArticleMeta, CategoryArtifactDocument, HomeFragmentArtifactDocument, PageArtifactDocument,
-    PublishableCategoryLanding, SiteMetadata, build_article_index, build_category_indexes,
-    build_site_metadata,
+    ArticleIndexDocument, ArticleMeta, CategoryArtifactDocument, HomeFragmentArtifactDocument,
+    PageArtifactDocument, PublishableCategoryLanding, SiteMetadataDocument, build_article_index,
+    build_category_indexes, build_site_metadata,
 };
 
-/// Complete artifact bundle produced from validated content.
+/// JSON documents produced from validated content.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SiteArtifacts {
-    pub(crate) article_index: Vec<domain::PublishedArticleSummary>,
+pub(crate) struct SiteDocuments {
+    pub(crate) article_index: ArticleIndexDocument,
     pub(super) category_documents: Vec<CategoryArtifactDocument>,
     pub(super) page_documents: Vec<PageArtifactDocument>,
     pub(super) home_fragment: Option<HomeFragmentArtifactDocument>,
-    pub(super) site_metadata: SiteMetadata,
+    pub(super) site_metadata: SiteMetadataDocument,
 }
 
-pub(crate) fn build_site_artifacts(
+pub(crate) fn build_site_documents(
     article_metas: Vec<ArticleMeta>,
     category_landings: Vec<PublishableCategoryLanding>,
     page_documents: Vec<PageArtifactDocument>,
     home_fragment: Option<HomeFragmentArtifactDocument>,
-) -> Result<SiteArtifacts> {
+) -> Result<SiteDocuments> {
     let category_metas = category_landings
         .iter()
         .map(|landing| landing.meta.clone())
@@ -39,12 +39,12 @@ pub(crate) fn build_site_artifacts(
         })
         .collect::<domain::Result<Vec<_>>>()?;
 
-    Ok(SiteArtifacts {
-        article_index,
+    Ok(SiteDocuments {
+        article_index: ArticleIndexDocument::from(article_index.as_slice()),
         category_documents,
         page_documents,
         home_fragment,
-        site_metadata,
+        site_metadata: SiteMetadataDocument::from(&site_metadata),
     })
 }
 
@@ -92,8 +92,8 @@ mod tests {
     }
 
     #[test]
-    fn test_build_site_artifacts() {
-        let artifacts = build_site_artifacts(
+    fn test_build_site_documents() {
+        let documents = build_site_documents(
             vec![
                 article_meta(
                     "First",
@@ -119,15 +119,15 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(artifacts.article_index.len(), 2);
-        assert_eq!(artifacts.category_documents.len(), 2);
-        assert_eq!(artifacts.site_metadata.total_articles, 2);
-        assert_eq!(artifacts.article_index[0].slug.as_str(), "second000002");
+        assert_eq!(documents.article_index.articles.len(), 2);
+        assert_eq!(documents.category_documents.len(), 2);
+        assert_eq!(documents.site_metadata.total_articles, 2);
+        assert_eq!(documents.article_index.articles[0].slug, "second000002");
     }
 
     #[test]
-    fn test_build_site_artifacts_includes_landing_only_category() {
-        let artifacts = build_site_artifacts(
+    fn test_build_site_documents_includes_landing_only_category() {
+        let documents = build_site_documents(
             vec![],
             vec![publishable_category_landing(Category::Physics, "Physics")],
             vec![],
@@ -135,15 +135,15 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(artifacts.category_documents.len(), 1);
-        assert_eq!(artifacts.category_documents[0].category, "physics");
-        assert_eq!(artifacts.site_metadata.categories.len(), 1);
-        assert_eq!(artifacts.site_metadata.categories[0].article_count, 0);
+        assert_eq!(documents.category_documents.len(), 1);
+        assert_eq!(documents.category_documents[0].category, "physics");
+        assert_eq!(documents.site_metadata.categories.len(), 1);
+        assert_eq!(documents.site_metadata.categories[0].article_count, 0);
     }
 
     #[test]
-    fn test_build_site_artifacts_requires_category_landing() {
-        let result = build_site_artifacts(
+    fn test_build_site_documents_requires_category_landing() {
+        let result = build_site_documents(
             vec![article_meta(
                 "First",
                 "first0000001",

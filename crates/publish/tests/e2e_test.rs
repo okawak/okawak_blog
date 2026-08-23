@@ -1,12 +1,11 @@
 mod test_fixtures;
 
-use domain::ArticleIndexDocument;
+use domain::{ArticleIndexDocument, CategoryArtifactDocument, SiteMetadataDocument};
 use indoc::indoc;
 use publish::publish;
 use std::fs;
 use tempfile::TempDir;
-use test_fixtures::collect_html_files;
-use test_fixtures::{write_about_page, write_tech_category_landing};
+use test_fixtures::{collect_html_files, read_json, write_about_page, write_tech_category_landing};
 
 /// End-to-end test that simulates a realistic Obsidian vault.
 #[tokio::test]
@@ -309,11 +308,13 @@ async fn test_end_to_end_obsidian_processing() {
         );
     }
 
-    let tech_category = fs::read_to_string(site_root.join("categories").join("tech.json")).unwrap();
-    assert!(tech_category.contains("\"category\": \"tech\""));
+    let tech_category: CategoryArtifactDocument =
+        read_json(site_root.join("categories").join("tech.json"));
+    assert_eq!(tech_category.category, "tech");
 
-    let site_metadata = fs::read_to_string(site_root.join("metadata").join("site.json")).unwrap();
-    assert!(site_metadata.contains("\"total_articles\": 3"));
+    let site_metadata: SiteMetadataDocument =
+        read_json(site_root.join("metadata").join("site.json"));
+    assert_eq!(site_metadata.total_articles, 3);
 
     println!(
         "✅ End-to-end test finished: generated {} HTML files",
