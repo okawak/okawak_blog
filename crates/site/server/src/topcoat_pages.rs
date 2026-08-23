@@ -2,8 +2,10 @@
 
 use chrono::Datelike;
 use domain::{
-    PageKey, StaticPageDocument, build_static_page_canonical_path, build_static_page_description,
-    build_static_page_document, build_static_page_title,
+    HomePageDocument, PageKey, SiteArticleCard, StaticPageDocument, build_article_path,
+    build_category_path, build_home_page_canonical_path, build_home_page_description,
+    build_home_page_document, build_home_page_title, build_static_page_canonical_path,
+    build_static_page_description, build_static_page_document, build_static_page_title,
 };
 use infra::DynArtifactSnapshot;
 use topcoat::{
@@ -24,17 +26,257 @@ const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
 const STYLESHEET_PATH: &str = "/pkg/web.css";
 
-#[route(GET "/about")]
-pub(crate) async fn about(cx: &Cx) -> Result<View> {
-    let snapshot = match try_request_context::<DynArtifactSnapshot>(cx) {
-        Some(snapshot) => snapshot.clone(),
-        None => {
-            app_context::<ArtifactReaderContext>(cx)
-                .0
-                .snapshot()
-                .await?
+#[route(GET "/")]
+pub(crate) async fn home(cx: &Cx) -> Result<View> {
+    let snapshot = match request_snapshot(cx).await {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            eprintln!("Home page artifact snapshot failed: {error}");
+            return view! {
+                internal_server_error_page(
+                    title: build_home_page_title(web::SITE_NAME),
+                    description: "公開済みの記事を読み込めませんでした。"
+                        .to_string(),
+                    canonical_path: "/",
+                    message: "記事の読み込みに失敗しました"
+                )
+            };
         }
     };
+    let document = async {
+        let article_index = snapshot.read_article_index().await?;
+        let site_metadata = snapshot.read_site_metadata().await?;
+        let home_fragment = match snapshot.read_home_fragment().await {
+            Ok(fragment) => Some(fragment),
+            Err(error) if error.is_not_found() => None,
+            Err(error) => return Err(error),
+        };
+
+        build_home_page_document(&article_index, &site_metadata, home_fragment.as_ref())
+            .map_err(Into::into)
+    }
+    .await;
+
+    match document {
+        Ok(document) => view! { home_document(document: document) },
+        Err(error) => {
+            eprintln!("Home page artifact read failed: {error}");
+            view! {
+                internal_server_error_page(
+                    title: build_home_page_title(web::SITE_NAME),
+                    description: "公開済みの記事を読み込めませんでした。"
+                        .to_string(),
+                    canonical_path: "/",
+                    message: "記事の読み込みに失敗しました"
+                )
+            }
+        }
+    }
+}
+
+async fn request_snapshot(cx: &Cx) -> Result<DynArtifactSnapshot> {
+    match try_request_context::<DynArtifactSnapshot>(cx) {
+        Some(snapshot) => Ok(snapshot.clone()),
+        None => Ok(app_context::<ArtifactReaderContext>(cx)
+            .0
+            .snapshot()
+            .await?),
+    }
+}
+
+#[component]
+async fn home_document(document: HomePageDocument) -> Result {
+    let title = build_home_page_title(web::SITE_NAME);
+    let description = build_home_page_description(&document);
+    let canonical_url = web::build_site_url(build_home_page_canonical_path());
+    let is_empty = document.articles.is_empty();
+
+    view! {
+        site_shell(
+            status: StatusCode::OK,
+            title: title,
+            description: description,
+            canonical_url: canonical_url,
+            current_path: "/",
+            <div
+                class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-12 px-4 py-8 text-left sm:px-6 sm:py-12"
+            >
+                <section
+                    class="rounded-2xl border border-border/70 bg-gradient-to-br from-card via-card to-secondary/70 px-6 py-10 text-center shadow-[0_18px_42px_rgb(0_0_0/0.28)] sm:px-10"
+                >
+                    <p class="m-0 text-sm tracking-[0.16em] text-primary uppercase">
+                        "Artifact-Driven Blog"
+                    </p>
+                    <h1
+                        class="m-0 mt-4 text-3xl leading-tight font-bold after:mx-auto after:mt-3 after:block after:h-1 after:w-12 after:rounded-full after:bg-primary sm:text-4xl"
+                    >
+                        (web::SITE_NAME)
+                    </h1>
+                    <div class="mx-auto mt-5 max-w-3xl">
+                        <p class="m-0 leading-8 text-muted-foreground">
+                            "気になったことをメモしておくブログです。Obsidian から生成した成果物をもとに、Topcoat で公開ページを組み立てています。"
+                        </p>
+                    </div>
+                </section>
+
+                <section>
+                    <div class="mb-6 grid gap-2">
+                        <h2
+                            class="m-0 text-2xl font-semibold after:mt-2 after:block after:h-1 after:w-12 after:rounded-full after:bg-primary"
+                        >
+                            "最近の記事"
+                        </h2>
+                        <p class="m-0 text-muted-foreground">
+                            "新しい順に、公開済みの記事を紹介します。"
+                        </p>
+                    </div>
+
+                    if is_empty {
+                        <div
+                            class="rounded-xl bg-secondary p-8 text-center text-muted-foreground"
+                        >
+                            "記事がありません"
+                        </div>
+                    } else {
+                        home_page_content(document: document)
+                    }
+                </section>
+            </div>
+        )
+    }
+}
+
+#[component]
+async fn home_page_content(document: HomePageDocument) -> Result {
+    let page_description = build_home_page_description(&document);
+
+    view! {
+        <div class="grid gap-6 lg:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
+            <div
+                class="flex flex-col gap-4 rounded-xl border border-border/80 bg-gradient-to-b from-card to-secondary/70 p-6 text-card-foreground shadow-sm"
+            >
+                match document.fragment.as_ref() {
+                    Some(fragment) => {
+                        <div class="content-prose text-muted-foreground">
+                            (Unescaped::new_unchecked(
+                                fragment.html.clone(),
+                            ))
+                        </div>
+                    }
+                    None => {
+                        <p class="m-0 leading-8 text-muted-foreground">
+                            "公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。"
+                        </p>
+                    }
+                }
+                <p class="m-0 text-lg leading-8">(page_description)</p>
+                <ul class="m-0 flex list-none flex-wrap gap-3 p-0">
+                    for category in &document.categories {
+                        <li>
+                            <span
+                                class="inline-flex w-fit items-center gap-2 rounded-full border border-border bg-background/45 px-3 py-1.5 text-sm font-semibold text-foreground transition-colors focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                            >
+                                <a
+                                    href=(build_category_path(&category.category))
+                                    class="font-semibold text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                >
+                                    (&category.category_display_name)
+                                </a>
+                                <span class="text-xs font-normal text-muted-foreground">
+                                    (format!("{}本", category.article_count))
+                                </span>
+                            </span>
+                        </li>
+                    }
+                </ul>
+            </div>
+
+            <section class="grid content-start gap-4" aria-label="最近の記事">
+                for article in &document.articles {
+                    article_card(article: article)
+                }
+            </section>
+        </div>
+    }
+}
+
+#[component]
+async fn article_card(article: &SiteArticleCard) -> Result {
+    let article_href = build_article_path(&article.category, &article.slug);
+    let description = article
+        .description
+        .as_deref()
+        .unwrap_or("説明はまだありません。");
+    let created_at_label = web::format::format_display_date(&article.created_at);
+    let updated_at_label = web::format::format_display_date(&article.updated_at);
+
+    view! {
+        <article class="min-w-0">
+            <a
+                href=(article_href)
+                class="group block text-inherit no-underline focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                aria-label=(article.title.as_str())
+            >
+                <div
+                    class="flex flex-col gap-3 rounded-xl border border-border/80 bg-card/90 p-5 text-card-foreground shadow-[0_10px_30px_rgb(0_0_0/0.22)] transition-[transform,box-shadow,border-color] duration-300 group-hover:-translate-y-0.5 group-hover:border-primary group-hover:shadow-[0_16px_36px_rgb(0_0_0/0.32)] group-focus-visible:border-primary"
+                >
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground sm:text-sm"
+                    >
+                        <span
+                            class="inline-flex w-fit items-center rounded-md border border-primary/40 bg-background/40 px-2.5 py-0.5 text-xs font-semibold text-primary transition-colors focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                        >
+                            (&article.category_display_name)
+                        </span>
+                        <span class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                            <span>
+                                "公開 "
+                                <time datetime=(article.created_at.as_str())>
+                                    (created_at_label)
+                                </time>
+                            </span>
+                            <span aria-hidden="true">"/"</span>
+                            <span>
+                                "更新 "
+                                <time datetime=(article.updated_at.as_str())>
+                                    (updated_at_label)
+                                </time>
+                            </span>
+                        </span>
+                    </div>
+
+                    <h3
+                        class="m-0 text-xl leading-snug font-semibold transition-colors group-hover:text-primary group-focus-visible:text-primary"
+                    >
+                        (article.title.as_str())
+                    </h3>
+                    <p class="m-0 leading-7 text-muted-foreground">(description)</p>
+
+                    if !article.tags.is_empty() {
+                        <ul
+                            class="m-0 flex list-none flex-wrap gap-2 p-0"
+                            aria-label="タグ"
+                        >
+                            for tag in &article.tags {
+                                <li>
+                                    <span
+                                        class="inline-flex w-fit items-center rounded-md border border-transparent bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/80 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                    >
+                                        (format!("#{tag}"))
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </a>
+        </article>
+    }
+}
+
+#[route(GET "/about")]
+pub(crate) async fn about(cx: &Cx) -> Result<View> {
+    let snapshot = request_snapshot(cx).await?;
     let page = PageKey::new(ABOUT_PAGE_KEY.to_string())?;
 
     match snapshot.read_page_document(&page).await {
@@ -42,13 +284,27 @@ pub(crate) async fn about(cx: &Cx) -> Result<View> {
             Ok(document) => view! { about_document(document: document) },
             Err(error) => {
                 eprintln!("About page artifact is invalid: {error}");
-                view! { internal_server_error_page() }
+                view! {
+                    internal_server_error_page(
+                        title: format!("About | {}", web::SITE_NAME),
+                        description: "About ページです。".to_string(),
+                        canonical_path: "/about",
+                        message: "ページの読み込みに失敗しました"
+                    )
+                }
             }
         },
         Err(error) if error.is_not_found() => view! { not_found_page() },
         Err(error) => {
             eprintln!("About page artifact read failed: {error}");
-            view! { internal_server_error_page() }
+            view! {
+                internal_server_error_page(
+                    title: format!("About | {}", web::SITE_NAME),
+                    description: "About ページです。".to_string(),
+                    canonical_path: "/about",
+                    message: "ページの読み込みに失敗しました"
+                )
+            }
         }
     }
 }
@@ -69,6 +325,7 @@ async fn about_document(document: StaticPageDocument) -> Result {
             title: title,
             description: description,
             canonical_url: canonical_url,
+            current_path: "/about",
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-8 px-4 py-8 text-left sm:px-6 sm:py-12"
             >
@@ -108,23 +365,30 @@ async fn not_found_page() -> Result {
             title: format!("{NOT_FOUND_TITLE} | {}", web::SITE_NAME),
             description: NOT_FOUND_DESCRIPTION.to_string(),
             canonical_url: web::build_site_url("/about"),
+            current_path: "/about",
             <div>"ページが見つかりませんでした。"</div>
         )
     }
 }
 
 #[component]
-async fn internal_server_error_page() -> Result {
+async fn internal_server_error_page(
+    title: String,
+    description: String,
+    canonical_path: &'static str,
+    message: &'static str,
+) -> Result {
     view! {
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
-            title: format!("About | {}", web::SITE_NAME),
-            description: "About ページです。".to_string(),
-            canonical_url: web::build_site_url("/about"),
+            title: title,
+            description: description,
+            canonical_url: web::build_site_url(canonical_path),
+            current_path: canonical_path,
             <div
                 class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground"
             >
-                "ページの読み込みに失敗しました"
+                (message)
             </div>
         )
     }
@@ -136,6 +400,7 @@ async fn site_shell(
     title: String,
     description: String,
     canonical_url: String,
+    current_path: &'static str,
     child: View,
 ) -> Result {
     let year = chrono::Local::now().year();
@@ -210,8 +475,30 @@ async fn site_shell(
                             </a>
                             <nav aria-label="メインナビゲーション">
                                 <ul class="m-0 flex list-none items-center gap-2 p-0">
-                                    <li><a href="/">"ホーム"</a></li>
-                                    <li><a href="/about" aria-current="page">"About"</a></li>
+                                    <li>
+                                        <a
+                                            href="/"
+                                            aria-current=(if current_path == "/" {
+                                                Some("page")
+                                            } else {
+                                                None
+                                            })
+                                        >
+                                            "ホーム"
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a
+                                            href="/about"
+                                            aria-current=(if current_path == "/about" {
+                                                Some("page")
+                                            } else {
+                                                None
+                                            })
+                                        >
+                                            "About"
+                                        </a>
+                                    </li>
                                 </ul>
                             </nav>
                         </div>
