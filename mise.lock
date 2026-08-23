@@ -24,6 +24,10 @@ url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64
 checksum = "sha256:c669e97f6164e1c96e0701748db98dfa77492908cbd8394c7557134a735de381"
 url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-darwin-aarch64.zip"
 
+[[tools."cargo:topcoat-cli"]]
+version = "0.6.2"
+backend = "cargo:topcoat-cli"
+
 [[tools."github:bram209/leptosfmt"]]
 version = "0.1.33"
 backend = "github:bram209/leptosfmt"

@@ -4,14 +4,12 @@ use axum::{Extension, Json, http::StatusCode};
 use domain::ArticleIndexDocument;
 use infra::DynArtifactReader;
 
+use crate::article_index::read_article_index;
+
 pub async fn list_articles(
     Extension(artifact_reader): Extension<DynArtifactReader>,
 ) -> Result<Json<ArticleIndexDocument>, StatusCode> {
-    let document = artifact_reader
-        .snapshot()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .read_article_index()
+    let document = read_article_index(&artifact_reader)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
