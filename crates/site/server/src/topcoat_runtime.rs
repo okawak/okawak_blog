@@ -7,7 +7,7 @@ use topcoat::{
     Result,
     context::{Cx, app_context, try_request_context},
     router::{
-        Body, LayerFn, LayerFuture, Method, Next, Router, StatusCode, content::Json,
+        Body, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode, content::Json,
         error::internal_server_error, request, response::Response, route, tower::TowerRoute,
     },
 };
@@ -112,6 +112,7 @@ fn create_topcoat_router_with_site_root(
         .route(health)
         .route(readiness)
         .route(articles)
+        .route(topcoat_pages::home)
         .route(topcoat_pages::about)
         // Reuse the current generated asset directory during the parallel-runtime period. The
         // final asset pipeline will replace this compatibility mount before Leptos is removed.
@@ -121,11 +122,9 @@ fn create_topcoat_router_with_site_root(
             static_files.clone(),
         ))
         .route(TowerRoute::new(Method::GET, "/favicon.ico", static_files))
-        .layer(LayerFn::new(
-            Some("/api/articles"),
-            artifact_conditional_get,
-        ))
-        .layer(LayerFn::new(Some("/about"), artifact_conditional_get))
+        // The framework-neutral decision filters APIs, static assets, and unsuccessful responses.
+        // One global layer also avoids nested prefix layers acquiring more than one snapshot.
+        .layer(LayerFn::new(None::<&Path>, artifact_conditional_get))
         .app_context(ArtifactHttpCacheState::new(
             artifact_reader.clone(),
             validators_enabled,
@@ -171,6 +170,12 @@ mod tests {
     fn fixture_reader() -> DynArtifactReader {
         Arc::new(LocalArtifactReader::new(
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/site"),
+        ))
+    }
+
+    fn empty_fixture_reader() -> DynArtifactReader {
+        Arc::new(LocalArtifactReader::new(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/empty-site"),
         ))
     }
 
@@ -370,6 +375,170 @@ mod tests {
         .await;
 
         assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn home_renders_the_published_summary_as_html() {
+        let router = create_topcoat_router(fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder().uri("/").body(Body::empty()).unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(
+            response.content_type.as_deref(),
+            Some("text/html; charset=utf-8")
+        );
+        assert!(response.body.starts_with("<!DOCTYPE html>"));
+        assert!(response.body.contains("<title>ぶくせんの探窟メモ</title>"));
+        assert!(response.body.contains(
+            "<meta name=\"description\" content=\"1件の記事を1カテゴリで公開しています。\">"
+        ));
+        assert!(
+            response
+                .body
+                .contains("<link rel=\"canonical\" href=\"https://www.okawak.net\">")
+        );
+        assert!(
+            response
+                .body
+                .contains("<meta property=\"og:title\" content=\"ぶくせんの探窟メモ\">")
+        );
+        assert!(response.body.contains(
+            "<meta property=\"og:description\" content=\"1件の記事を1カテゴリで公開しています。\">"
+        ));
+        assert!(
+            response
+                .body
+                .contains("<meta property=\"og:url\" content=\"https://www.okawak.net\">")
+        );
+        assert!(response.body.contains("<p>Fixture home content</p>"));
+        assert!(response.body.contains("href=\"/\" aria-current=\"page\""));
+        assert!(response.body.contains("href=\"/tech\""));
+        assert!(response.body.contains("href=\"/tech/e2e-article\""));
+        assert!(response.body.contains(">E2E Article</h3>"));
+        assert!(response.body.contains("Article fixture description"));
+        assert!(response.body.contains("#rust"));
+        assert!(response.body.contains("2026年1月1日"));
+        assert!(response.body.contains("2026年1月2日"));
+        assert!(!response.body.contains("&lt;p&gt;Fixture home content"));
+    }
+
+    #[tokio::test]
+    async fn home_renders_empty_state_without_treating_it_as_an_error() {
+        let router = create_topcoat_router(empty_fixture_reader(), false);
+        let response = response(
+            &router,
+            Request::builder().uri("/").body(Body::empty()).unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert!(response.body.contains(
+            "<meta name=\"description\" content=\"0件の記事を0カテゴリで公開しています。\">"
+        ));
+        assert!(response.body.contains("記事がありません"));
+        assert!(!response.body.contains("記事の読み込みに失敗しました"));
+    }
+
+    #[tokio::test]
+    async fn home_uses_fallback_copy_when_optional_fragment_is_missing() {
+        let temp_dir = tempdir().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("articles")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("metadata")).unwrap();
+        let fixture_root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/site");
+        std::fs::copy(
+            fixture_root.join("articles/index.json"),
+            temp_dir.path().join("articles/index.json"),
+        )
+        .unwrap();
+        std::fs::copy(
+            fixture_root.join("metadata/site.json"),
+            temp_dir.path().join("metadata/site.json"),
+        )
+        .unwrap();
+        let router =
+            create_topcoat_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
+
+        let response = response(
+            &router,
+            Request::builder().uri("/").body(Body::empty()).unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert!(
+            response
+                .body
+                .contains("公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。")
+        );
+    }
+
+    #[tokio::test]
+    async fn home_returns_internal_server_error_when_required_artifact_is_missing() {
+        let temp_dir = tempdir().unwrap();
+        let router =
+            create_topcoat_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
+        let response = response(
+            &router,
+            Request::builder().uri("/").body(Body::empty()).unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(response.body.contains("記事の読み込みに失敗しました"));
+    }
+
+    #[tokio::test]
+    async fn home_supports_release_aware_conditional_get() {
+        let router = create_topcoat_router(validator_reader(fixture_reader()), true);
+        let first = response(
+            &router,
+            Request::builder().uri("/").body(Body::empty()).unwrap(),
+        )
+        .await;
+        let etag = first
+            .headers
+            .get(header::ETAG)
+            .expect("ETag")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        let cached = response(
+            &router,
+            Request::builder()
+                .uri("/")
+                .header(header::IF_NONE_MATCH, etag)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(cached.status, StatusCode::NOT_MODIFIED);
+        assert!(cached.body.is_empty());
+    }
+
+    #[tokio::test]
+    async fn conditional_get_and_home_share_one_snapshot() {
+        let snapshot_calls = Arc::new(AtomicUsize::new(0));
+        let reader = Arc::new(CountingReader {
+            inner: fixture_reader(),
+            snapshot_calls: snapshot_calls.clone(),
+        });
+        let router = create_topcoat_router(validator_reader(reader), true);
+
+        let response = response(
+            &router,
+            Request::builder().uri("/").body(Body::empty()).unwrap(),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
