@@ -582,6 +582,56 @@ test("relative links resolve against the rendered page during popstate", async (
   await expect(page).toHaveURL(/\/tech\/next$/);
 });
 
+test("relative fragment links resolve against the rendered page during popstate", async ({
+  page,
+}) => {
+  await page.goto("/about");
+  await page.getByRole("main").evaluate((main) => {
+    const articleLink = document.createElement("a");
+    articleLink.href = "/tech/e2e-article";
+    articleLink.textContent = "Article page";
+    main.prepend(articleLink);
+  });
+  await page.getByRole("link", { name: "Article page" }).click();
+  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+  await page.getByRole("main").evaluate((main) => {
+    const link = document.createElement("a");
+    link.href = "about#section";
+    link.textContent = "Relative fragment";
+    main.prepend(link);
+  });
+
+  let releaseAboutResponse: () => void = () => {};
+  let markAboutFetchStarted: () => void = () => {};
+  const aboutResponseGate = new Promise<void>((resolve) => {
+    releaseAboutResponse = resolve;
+  });
+  const aboutFetchStarted = new Promise<void>((resolve) => {
+    markAboutFetchStarted = resolve;
+  });
+  await page.route("**/about", async (route) => {
+    if (route.request().headers()["x-okawak-navigation"] === "1") {
+      markAboutFetchStarted();
+      await aboutResponseGate;
+    }
+    await route.continue().catch(() => {});
+  });
+
+  await page.goBack();
+  await aboutFetchStarted;
+  const relativeRequest = page.waitForRequest(
+    (request) =>
+      request.headers()["x-okawak-navigation"] === "1" &&
+      new URL(request.url()).pathname === "/tech/about",
+  );
+  await page.getByRole("link", { name: "Relative fragment" }).click();
+  const requestedUrl = new URL((await relativeRequest).url());
+  releaseAboutResponse();
+
+  expect(requestedUrl.pathname).toBe("/tech/about");
+  await expect(page).toHaveURL(/\/tech\/about#section$/);
+});
+
 test("client navigation reloads when shell asset fingerprints change", async ({ page }) => {
   await page.goto("/");
   let documentRequests = 0;

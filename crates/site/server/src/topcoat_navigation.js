@@ -78,7 +78,7 @@ function fragmentNavigation(anchor) {
     };
   }
 
-  const destination = new URL(anchor.href, browserLocation.href);
+  const destination = new URL(href, renderedLocation.href);
   if (hasTextFragmentDirective(destination)) return null;
   if (
     destination.origin === browserLocation.origin &&
