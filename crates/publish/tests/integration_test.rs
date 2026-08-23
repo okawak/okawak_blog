@@ -68,7 +68,22 @@ async fn test_publish_with_empty_directory() {
 
     // A deployable artifact set must contain at least one article.
     let result = publish(&obsidian_dir, &output_dir).await;
-    assert!(result.is_err());
+    assert!(matches!(result, Err(PublishError::NoArticles)));
+}
+
+#[tokio::test]
+async fn test_publish_requires_about_page() {
+    let temp_dir = TempDir::new().unwrap();
+    let obsidian_dir = temp_dir.path().join("obsidian");
+    let output_dir = temp_dir.path().join("dist");
+
+    write_required_article(&obsidian_dir);
+    write_tech_category_landing(&obsidian_dir);
+
+    let result = publish(&obsidian_dir, &output_dir).await;
+
+    assert!(matches!(result, Err(PublishError::MissingAboutPage)));
+    assert!(!output_dir.exists());
 }
 
 #[tokio::test]

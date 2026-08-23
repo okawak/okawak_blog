@@ -174,14 +174,12 @@ impl TryFrom<(&CategoryIndex, &str)> for CategoryArtifactDocument {
 }
 
 impl CategoryArtifactDocument {
-    pub fn validate(&self) -> crate::Result<()> {
+    pub fn validate_landing(&self) -> crate::Result<()> {
         self.category.parse::<Category>()?;
         Title::new(self.title.clone())?;
         validate_html(&self.html)?;
         Timestamp::new(self.updated_at.clone())?;
-        self.articles
-            .iter()
-            .try_for_each(|article| PublishedArticleSummary::try_from(article).map(drop))
+        Ok(())
     }
 }
 
@@ -501,7 +499,7 @@ mod tests {
         assert_eq!(document.description.as_deref(), Some("Technology landing"));
         assert_eq!(document.html, "<p>Technology</p>");
         assert_eq!(document.updated_at, "2025-01-02T00:00:00+09:00");
-        assert!(document.validate().is_ok());
+        assert!(document.validate_landing().is_ok());
     }
 
     #[test]

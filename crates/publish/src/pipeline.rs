@@ -1,6 +1,5 @@
 use crate::artifacts::{
-    SiteOutput, build_site_documents, validate_site_artifacts, write_article_page,
-    write_site_documents,
+    SiteOutput, build_site_documents, write_article_page, write_site_documents,
 };
 use crate::classify::{
     ParsedArticleFile, classify_obsidian_files, ensure_category_landings,
@@ -55,6 +54,16 @@ pub async fn publish_with_bookmark_enricher(
         return Err(PublishError::ContentErrors {
             count: classified_files.errors,
         });
+    }
+    if classified_files.articles.is_empty() {
+        return Err(PublishError::NoArticles);
+    }
+    if !classified_files
+        .pages
+        .iter()
+        .any(|file| file.page.as_str() == "about")
+    {
+        return Err(PublishError::MissingAboutPage);
     }
 
     ensure_unique_page_keys(&classified_files.pages)?;
@@ -121,12 +130,10 @@ pub async fn publish_with_bookmark_enricher(
     })
     .await??;
 
-    let site_root = site_output.root().to_path_buf();
-    tokio::task::spawn_blocking(move || validate_site_artifacts(site_root)).await??;
     info!(
         article_count = site_documents.article_index.articles.len(),
         category_count = site_documents.category_count(),
-        "validated site artifacts"
+        "wrote site artifacts"
     );
 
     let processed_count = site_documents.article_index.articles.len();

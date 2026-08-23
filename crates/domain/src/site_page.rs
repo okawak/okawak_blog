@@ -248,7 +248,7 @@ pub fn build_article_page_document(
 pub fn build_category_page_document(
     artifact: &CategoryArtifactDocument,
 ) -> Result<CategoryPageDocument> {
-    artifact.validate()?;
+    artifact.validate_landing()?;
     let category = Category::from_str(&artifact.category)?;
 
     let articles = artifact

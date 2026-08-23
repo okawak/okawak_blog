@@ -31,9 +31,6 @@ pub enum PublishError {
     #[error("failed to parse file content: {0}")]
     Parse(String),
 
-    #[error("artifact validation failed: {0}")]
-    ArtifactValidation(String),
-
     #[error("domain validation failed: {0}")]
     Domain(#[from] domain::DomainError),
 
@@ -42,4 +39,10 @@ pub enum PublishError {
 
     #[error("missing category landing: {category}")]
     MissingCategoryLanding { category: domain::Category },
+
+    #[error("publish requires at least one article")]
+    NoArticles,
+
+    #[error("publish requires the about page")]
+    MissingAboutPage,
 }
