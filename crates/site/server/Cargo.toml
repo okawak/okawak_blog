@@ -5,10 +5,15 @@ authors.workspace = true
 description.workspace = true
 edition.workspace = true
 license.workspace = true
+default-run = "server"
 
 [[bin]]
 name = "server"
 path = "src/main.rs"
+
+[[bin]]
+name = "topcoat-server"
+path = "src/bin/topcoat_server.rs"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -31,6 +36,7 @@ web = { path = "../web", features = ["ssr"], optional = true }
 axum.workspace = true
 httpdate.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+topcoat.workspace = true
 tower-http = { workspace = true, features = ["fs"] }
 leptos = { workspace = true, features = ["ssr"] }
 leptos_axum.workspace = true
@@ -48,6 +54,9 @@ tempfile.workspace = true
 tower = { workspace = true, features = ["util"] }
 
 [package.metadata.leptos]
+# Keep cargo-leptos on the production Leptos binary while the Topcoat binary is developed in parallel.
+bin-target = "server"
+
 # The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
 output-name = "web"
 
