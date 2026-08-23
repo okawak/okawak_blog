@@ -32,7 +32,7 @@ function savedScrollPosition(state) {
     !Number.isFinite(position.x) ||
     !Number.isFinite(position.y)
   ) {
-    return { x: 0, y: 0 };
+    return null;
   }
   return position;
 }
@@ -121,7 +121,7 @@ function initializeGeneratedContent(root) {
 function scrollToDestination(destination) {
   if (!destination.hash) {
     window.scrollTo(0, 0);
-    return;
+    return null;
   }
 
   let fragment = destination.hash.slice(1);
@@ -135,8 +135,22 @@ function scrollToDestination(destination) {
     document.getElementById(fragment) ?? document.getElementsByName(fragment)[0];
   if (target) {
     target.scrollIntoView();
+    return target;
   } else {
     window.scrollTo(0, 0);
+    return null;
+  }
+}
+
+function focusNavigationTarget(main, fragmentTarget) {
+  const target = fragmentTarget ?? main;
+  const needsTabIndex = target.tabIndex < 0 && !target.hasAttribute("tabindex");
+  if (needsTabIndex) target.setAttribute("tabindex", "-1");
+  target.focus({ preventScroll: true });
+  if (needsTabIndex) {
+    target.addEventListener("blur", () => target.removeAttribute("tabindex"), {
+      once: true,
+    });
   }
 }
 
@@ -190,11 +204,13 @@ async function navigate(url, { history = "push", scroll = "destination" } = {}) 
       );
     }
     initializeGeneratedContent(importedMain);
+    let fragmentTarget = null;
     if (scroll === "destination") {
-      scrollToDestination(destination);
+      fragmentTarget = scrollToDestination(destination);
     } else if (scroll) {
       window.scrollTo(scroll.x, scroll.y);
     }
+    focusNavigationTarget(importedMain, fragmentTarget);
     document.dispatchEvent(
       new CustomEvent("okawak:navigation", {
         detail: { url: destination.href },
@@ -209,6 +225,13 @@ async function navigate(url, { history = "push", scroll = "destination" } = {}) 
 }
 
 document.addEventListener("click", (event) => {
+  const anchor =
+    event.target instanceof Element ? event.target.closest("a[href]") : null;
+  if (anchor?.getAttribute("href")?.startsWith("#")) {
+    rememberCurrentScrollPosition();
+    return;
+  }
+
   const url = eligibleAnchor(event);
   if (!url) return;
 
@@ -224,12 +247,18 @@ window.addEventListener("popstate", (event) => {
     destination.search === renderedLocation.search
   ) {
     renderedLocation = destination;
+    const position = savedScrollPosition(event.state);
+    if (position) {
+      window.scrollTo(position.x, position.y);
+    } else {
+      scrollToDestination(destination);
+    }
     return;
   }
 
   void navigate(destination, {
     history: "none",
-    scroll: savedScrollPosition(event.state),
+    scroll: savedScrollPosition(event.state) ?? { x: 0, y: 0 },
   });
 });
 

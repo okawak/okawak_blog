@@ -159,6 +159,7 @@ test("home renders artifacts and navigates to an article without a document relo
 
   await expect(page).toHaveURL(/\/tech\/e2e-article$/);
   await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
+  await expect(page.locator("main")).toBeFocused();
   await expect(page.locator("main .content-prose")).toContainText("Article fixture body");
   await expectFormattedFixtureDates(page);
   const articleWidths = await page.locator("main article").evaluate((article) => {
@@ -204,6 +205,7 @@ test("client navigation scrolls to a fragment on another page", async ({ page })
   await expect(page).toHaveURL(/\/tech\/e2e-article#generated-content$/);
   const heading = page.getByRole("heading", { name: "Generated content" });
   await expect(heading).toBeVisible();
+  await expect(heading).toBeFocused();
   await expect
     .poll(() => heading.evaluate((element) => element.getBoundingClientRect().top))
     .toBeLessThan(200);
@@ -226,6 +228,30 @@ test("an empty same-page fragment does not fetch or replace the page", async ({ 
 
   await expect(main).toHaveAttribute("data-same-page", "true");
   expect(await Promise.all(navigationFetchHeaders)).not.toContain("1");
+});
+
+test("same-page fragment history restores scroll without fetching", async ({ page }) => {
+  await page.goto("/");
+  const link = page.getByRole("link", { name: "Home fragment section" });
+  const originalScrollY = await link.evaluate((element: HTMLAnchorElement) => {
+    window.scrollTo(0, 500);
+    element.click();
+    return 500;
+  });
+
+  await expect(page).toHaveURL(/\/#home-fragment$/);
+  const heading = page.getByRole("heading", { name: "Home fragment" });
+  await expect(heading).toBeInViewport();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect
+    .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - originalScrollY))
+    .toBeLessThanOrEqual(10);
+
+  await page.goForward();
+  await expect(page).toHaveURL(/\/#home-fragment$/);
+  await expect(heading).toBeInViewport();
 });
 
 test("server-rendered pages remain navigable without JavaScript", async ({ browser }) => {
