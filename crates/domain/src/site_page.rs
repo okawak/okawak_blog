@@ -2,8 +2,8 @@
 
 use crate::{
     ArticleIndexDocument, ArticleSummaryDocument, Category, CategoryArtifactDocument, DomainError,
-    HomeFragmentArtifactDocument, PageArtifactDocument, PageKey, Result, SectionPath,
-    SiteMetadataDocument, Slug, Title,
+    HomeFragmentArtifactDocument, PageArtifactDocument, PageKey, PublishedArticleSummary, Result,
+    SectionPath, SiteMetadataDocument, Slug, Title,
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -25,20 +25,21 @@ pub struct SiteArticleCard {
 impl TryFrom<&ArticleSummaryDocument> for SiteArticleCard {
     type Error = DomainError;
 
-    fn try_from(summary: &ArticleSummaryDocument) -> Result<Self> {
-        let category = Category::from_str(&summary.category)?;
+    fn try_from(document: &ArticleSummaryDocument) -> Result<Self> {
+        let summary = PublishedArticleSummary::try_from(document)?;
+        let category = summary.category;
 
         Ok(Self {
-            slug: Slug::new(summary.slug.clone())?,
-            title: Title::new(summary.title.clone())?,
+            slug: summary.slug,
+            title: summary.title,
             category,
             category_display_name: category.display_name().to_string(),
-            section_path: summary.section_path.clone(),
-            description: summary.description.clone(),
-            tags: summary.tags.clone(),
+            section_path: summary.section_path,
+            description: summary.description,
+            tags: summary.tags,
             priority: summary.priority,
-            created_at: summary.created_at.clone(),
-            updated_at: summary.updated_at.clone(),
+            created_at: summary.created_at.to_string(),
+            updated_at: summary.updated_at.to_string(),
         })
     }
 }
@@ -194,18 +195,19 @@ pub fn build_home_page_document(
         .iter()
         .map(SiteArticleCard::try_from)
         .collect::<Result<Vec<_>>>()?;
+    let site_metadata = crate::SiteMetadata::try_from(site_metadata)?;
     let categories = site_metadata
         .categories
-        .iter()
+        .into_iter()
         .map(|category| {
-            let parsed = Category::from_str(&category.category)?;
-            Ok(SiteCategorySummary {
-                category: parsed,
-                category_display_name: parsed.display_name().to_string(),
+            let category_name = category.category;
+            SiteCategorySummary {
+                category: category_name,
+                category_display_name: category_name.display_name().to_string(),
                 article_count: category.article_count,
-            })
+            }
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect();
 
     Ok(HomePageDocument {
         total_articles: site_metadata.total_articles,
@@ -220,21 +222,12 @@ pub fn build_home_page_document(
 pub fn build_home_fragment_document(
     artifact: &HomeFragmentArtifactDocument,
 ) -> Result<HomeFragmentDocument> {
-    let title = artifact.title.trim();
-    let html = artifact.html.trim();
-
-    if title.is_empty() {
-        return Err(DomainError::validation("title"));
-    }
-
-    if html.is_empty() {
-        return Err(DomainError::validation("html"));
-    }
+    artifact.validate()?;
 
     Ok(HomeFragmentDocument {
-        title: title.to_string(),
+        title: artifact.title.trim().to_string(),
         description: artifact.description.clone(),
-        html: html.to_string(),
+        html: artifact.html.trim().to_string(),
     })
 }
 
@@ -255,15 +248,8 @@ pub fn build_article_page_document(
 pub fn build_category_page_document(
     artifact: &CategoryArtifactDocument,
 ) -> Result<CategoryPageDocument> {
+    artifact.validate_landing()?;
     let category = Category::from_str(&artifact.category)?;
-    let title = artifact.title.trim();
-    if title.is_empty() {
-        return Err(DomainError::validation("title"));
-    }
-    let html = artifact.html.trim();
-    if html.is_empty() {
-        return Err(DomainError::validation("html"));
-    }
 
     let articles = artifact
         .articles
@@ -274,7 +260,7 @@ pub fn build_category_page_document(
 
     Ok(CategoryPageDocument {
         category,
-        title: title.to_string(),
+        title: artifact.title.trim().to_string(),
         category_display_name: category.display_name().to_string(),
         description: artifact.description.clone(),
         html: artifact.html.clone(),
@@ -284,20 +270,11 @@ pub fn build_category_page_document(
 }
 
 pub fn build_static_page_document(artifact: &PageArtifactDocument) -> Result<StaticPageDocument> {
-    let title = artifact.title.trim();
-    let html = artifact.html.trim();
-
-    if title.is_empty() {
-        return Err(DomainError::validation("title"));
-    }
-
-    if html.is_empty() {
-        return Err(DomainError::validation("html"));
-    }
+    artifact.validate()?;
 
     Ok(StaticPageDocument {
         page: artifact.page.clone(),
-        title: title.to_string(),
+        title: artifact.title.trim().to_string(),
         description: artifact.description.clone(),
         html: artifact.html.clone(),
     })

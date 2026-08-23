@@ -24,10 +24,6 @@ impl SiteOutput {
 
         Ok(Self { root })
     }
-
-    pub(crate) fn root(&self) -> &Path {
-        &self.root
-    }
 }
 
 pub(crate) fn write_article_page(

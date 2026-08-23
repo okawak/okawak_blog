@@ -1,6 +1,9 @@
 //! Shared artifact contract persisted by publish and read by site/server.
 
-use crate::{CategoryIndex, PageKey, PublishedArticleSummary, SectionPath, SiteMetadata};
+use crate::{
+    Category, CategoryIndex, CategoryMetadata, PageKey, PublishedArticleSummary, SectionPath,
+    SiteMetadata, Slug, Timestamp, Title,
+};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
@@ -101,6 +104,24 @@ impl From<&PublishedArticleSummary> for ArticleSummaryDocument {
     }
 }
 
+impl TryFrom<&ArticleSummaryDocument> for PublishedArticleSummary {
+    type Error = crate::DomainError;
+
+    fn try_from(document: &ArticleSummaryDocument) -> crate::Result<Self> {
+        Ok(Self {
+            slug: Slug::new(document.slug.clone())?,
+            title: Title::new(document.title.clone())?,
+            category: document.category.parse::<Category>()?,
+            section_path: document.section_path.clone(),
+            description: document.description.clone(),
+            tags: document.tags.clone(),
+            priority: document.priority,
+            created_at: Timestamp::new(document.created_at.clone())?,
+            updated_at: Timestamp::new(document.updated_at.clone())?,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ArticleIndexDocument {
     pub articles: Vec<ArticleSummaryDocument>,
@@ -152,6 +173,16 @@ impl TryFrom<(&CategoryIndex, &str)> for CategoryArtifactDocument {
     }
 }
 
+impl CategoryArtifactDocument {
+    pub fn validate_landing(&self) -> crate::Result<()> {
+        self.category.parse::<Category>()?;
+        Title::new(self.title.clone())?;
+        validate_html(&self.html)?;
+        Timestamp::new(self.updated_at.clone())?;
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CategoryMetadataDocument {
     pub category: String,
@@ -164,6 +195,28 @@ pub struct SiteMetadataDocument {
     pub categories: Vec<CategoryMetadataDocument>,
 }
 
+impl TryFrom<&SiteMetadataDocument> for SiteMetadata {
+    type Error = crate::DomainError;
+
+    fn try_from(document: &SiteMetadataDocument) -> crate::Result<Self> {
+        let categories = document
+            .categories
+            .iter()
+            .map(|category| {
+                Ok(CategoryMetadata {
+                    category: category.category.parse::<Category>()?,
+                    article_count: category.article_count,
+                })
+            })
+            .collect::<crate::Result<Vec<_>>>()?;
+
+        Ok(Self {
+            total_articles: document.total_articles,
+            categories,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PageArtifactDocument {
     pub page: PageKey,
@@ -174,6 +227,15 @@ pub struct PageArtifactDocument {
     pub updated_at: String,
 }
 
+impl PageArtifactDocument {
+    pub fn validate(&self) -> crate::Result<()> {
+        Title::new(self.title.clone())?;
+        validate_html(&self.html)?;
+        Timestamp::new(self.updated_at.clone())?;
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HomeFragmentArtifactDocument {
     pub title: String,
@@ -181,6 +243,15 @@ pub struct HomeFragmentArtifactDocument {
     pub description: Option<String>,
     pub html: String,
     pub updated_at: String,
+}
+
+impl HomeFragmentArtifactDocument {
+    pub fn validate(&self) -> crate::Result<()> {
+        Title::new(self.title.clone())?;
+        validate_html(&self.html)?;
+        Timestamp::new(self.updated_at.clone())?;
+        Ok(())
+    }
 }
 
 impl From<&SiteMetadata> for SiteMetadataDocument {
@@ -197,6 +268,13 @@ impl From<&SiteMetadata> for SiteMetadataDocument {
                 .collect(),
         }
     }
+}
+
+fn validate_html(html: &str) -> crate::Result<()> {
+    if html.trim().is_empty() {
+        return Err(crate::DomainError::validation("html"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -280,12 +358,17 @@ mod tests {
             updated_at: Timestamp::new("2025-01-02T00:00:00+09:00".to_string()).unwrap(),
         };
 
-        let json = serde_json::to_string(&ArticleSummaryDocument::from(&summary)).unwrap();
+        let document = ArticleSummaryDocument::from(&summary);
+        let json = serde_json::to_string(&document).unwrap();
 
         assert!(json.contains("\"title\":\"Test Output\""));
         assert!(json.contains("\"slug\":\"abc123def456\""));
         assert!(json.contains("\"category\":\"tech\""));
         assert!(json.contains("\"section_path\":[\"block\"]"));
+        assert_eq!(
+            PublishedArticleSummary::try_from(&document).unwrap(),
+            summary
+        );
     }
 
     #[test]
@@ -326,8 +409,25 @@ mod tests {
     }
 
     #[test]
+    fn test_article_summary_document_rejects_invalid_value_objects() {
+        let document = ArticleSummaryDocument {
+            slug: "invalid/slug".to_string(),
+            title: "Article".to_string(),
+            category: "tech".to_string(),
+            section_path: SectionPath::default(),
+            description: None,
+            tags: vec![],
+            priority: None,
+            created_at: "2025-01-01T00:00:00+09:00".to_string(),
+            updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+        };
+
+        assert!(PublishedArticleSummary::try_from(&document).is_err());
+    }
+
+    #[test]
     fn test_page_artifact_document_serialization() {
-        let document = PageArtifactDocument {
+        let mut document = PageArtifactDocument {
             page: PageKey::new("about".to_string()).unwrap(),
             title: "About".to_string(),
             description: Some("About this site".to_string()),
@@ -340,11 +440,15 @@ mod tests {
         assert!(json.contains("\"page\":\"about\""));
         assert!(json.contains("\"title\":\"About\""));
         assert!(json.contains("\"html\":\"<h1>About</h1>\""));
+        assert!(document.validate().is_ok());
+
+        document.html.clear();
+        assert!(document.validate().is_err());
     }
 
     #[test]
     fn test_home_fragment_artifact_document_serialization() {
-        let document = HomeFragmentArtifactDocument {
+        let mut document = HomeFragmentArtifactDocument {
             title: "Home".to_string(),
             description: Some("Home introduction".to_string()),
             html: "<p>Welcome</p>".to_string(),
@@ -356,6 +460,23 @@ mod tests {
         assert!(!json.contains("\"page\""));
         assert!(json.contains("\"title\":\"Home\""));
         assert!(json.contains("\"html\":\"<p>Welcome</p>\""));
+        assert!(document.validate().is_ok());
+
+        document.title.clear();
+        assert!(document.validate().is_err());
+    }
+
+    #[test]
+    fn test_site_metadata_document_validates_categories() {
+        let document = SiteMetadataDocument {
+            total_articles: 0,
+            categories: vec![CategoryMetadataDocument {
+                category: "unknown".to_string(),
+                article_count: 0,
+            }],
+        };
+
+        assert!(SiteMetadata::try_from(&document).is_err());
     }
 
     #[test]
@@ -378,6 +499,7 @@ mod tests {
         assert_eq!(document.description.as_deref(), Some("Technology landing"));
         assert_eq!(document.html, "<p>Technology</p>");
         assert_eq!(document.updated_at, "2025-01-02T00:00:00+09:00");
+        assert!(document.validate_landing().is_ok());
     }
 
     #[test]

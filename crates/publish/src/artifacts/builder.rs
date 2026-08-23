@@ -15,12 +15,25 @@ pub(crate) struct SiteDocuments {
     pub(super) site_metadata: SiteMetadataDocument,
 }
 
+impl SiteDocuments {
+    pub(crate) fn category_count(&self) -> usize {
+        self.category_documents.len()
+    }
+}
+
 pub(crate) fn build_site_documents(
     article_metas: Vec<ArticleMeta>,
     category_landings: Vec<PublishableCategoryLanding>,
     page_documents: Vec<PageArtifactDocument>,
     home_fragment: Option<HomeFragmentArtifactDocument>,
 ) -> Result<SiteDocuments> {
+    page_documents
+        .iter()
+        .try_for_each(PageArtifactDocument::validate)?;
+    if let Some(home_fragment) = &home_fragment {
+        home_fragment.validate()?;
+    }
+
     let category_metas = category_landings
         .iter()
         .map(|landing| landing.meta.clone())
@@ -154,6 +167,41 @@ mod tests {
             vec![],
             vec![],
             None,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_build_site_documents_validates_page_documents() {
+        let result = build_site_documents(
+            vec![],
+            vec![],
+            vec![PageArtifactDocument {
+                page: domain::PageKey::new("about".to_string()).unwrap(),
+                title: "About".to_string(),
+                description: None,
+                html: String::new(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            }],
+            None,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_build_site_documents_validates_home_fragment() {
+        let result = build_site_documents(
+            vec![],
+            vec![],
+            vec![],
+            Some(HomeFragmentArtifactDocument {
+                title: "Home".to_string(),
+                description: None,
+                html: "<p>Home</p>".to_string(),
+                updated_at: "invalid".to_string(),
+            }),
         );
 
         assert!(result.is_err());
