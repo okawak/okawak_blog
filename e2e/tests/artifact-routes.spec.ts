@@ -281,6 +281,28 @@ test("same-page fragment history restores scroll without fetching", async ({ pag
   await expect(heading).toBeInViewport();
 });
 
+test("initial load restores a saved manual scroll position", async ({ page }) => {
+  await page.goto("/");
+  const savedScrollY = 500;
+  await page.evaluate((y) => {
+    const state =
+      window.history.state && typeof window.history.state === "object"
+        ? window.history.state
+        : {};
+    window.history.replaceState(
+      { ...state, okawakScrollPosition: { x: 0, y } },
+      "",
+      window.location.href,
+    );
+  }, savedScrollY);
+
+  await page.reload();
+
+  await expect
+    .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - savedScrollY))
+    .toBeLessThanOrEqual(10);
+});
+
 test("forward navigation aborts a pending back navigation", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "E2E Article" }).click();

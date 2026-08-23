@@ -388,8 +388,12 @@ window.addEventListener("popstate", (event) => {
   });
 });
 
+const initialScrollPosition = savedScrollPosition(window.history.state);
 if ("scrollRestoration" in window.history) {
   window.history.scrollRestoration = "manual";
+}
+if (initialScrollPosition) {
+  window.scrollTo(initialScrollPosition.x, initialScrollPosition.y);
 }
 rememberCurrentScrollPosition();
 window.addEventListener(
