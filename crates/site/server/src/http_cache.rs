@@ -285,6 +285,8 @@ fn is_static_path(path: &str) -> bool {
         || path.starts_with("/pkg/")
         || path == "/assets"
         || path.starts_with("/assets/")
+        || path == "/_topcoat/assets"
+        || path.starts_with("/_topcoat/assets/")
         || path == "/favicon.ico"
 }
 
@@ -454,6 +456,10 @@ mod tests {
         assert!(!is_artifact_request(&Method::GET, "/api/server-fn"));
         assert!(!is_artifact_request(&Method::GET, "/pkg/web.js"));
         assert!(!is_artifact_request(&Method::GET, "/assets/logo.png"));
+        assert!(!is_artifact_request(
+            &Method::GET,
+            "/_topcoat/assets/topcoat.js"
+        ));
         assert!(!is_artifact_request(&Method::GET, "/favicon.ico"));
     }
 
