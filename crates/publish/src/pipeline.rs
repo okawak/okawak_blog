@@ -1,6 +1,6 @@
 use crate::artifacts::{
-    SiteDirectories, build_site_artifacts, validate_site_artifacts, write_article_page,
-    write_site_artifacts,
+    SiteOutput, build_site_documents, validate_site_artifacts, write_article_page,
+    write_site_documents,
 };
 use crate::classify::{
     ParsedArticleFile, classify_obsidian_files, ensure_category_landings,
@@ -71,7 +71,7 @@ pub async fn publish_with_bookmark_enricher(
         ..
     } = classified_files;
 
-    let site_directories = SiteDirectories::prepare(output_dir)?;
+    let site_output = SiteOutput::prepare(output_dir)?;
 
     const CONCURRENT_LIMIT: usize = 4;
 
@@ -82,7 +82,7 @@ pub async fn publish_with_bookmark_enricher(
                 parsed_file,
                 &link_index,
                 Arc::clone(&enrich),
-                site_directories.clone(),
+                site_output.clone(),
             )
         })
         .buffer_unordered(CONCURRENT_LIMIT)
@@ -108,20 +108,20 @@ pub async fn publish_with_bookmark_enricher(
         .await;
     let category_landings = category_results.into_iter().collect::<Result<Vec<_>>>()?;
 
-    let site_artifacts = build_site_artifacts(
+    let site_documents = build_site_documents(
         article_metas,
         category_landings,
         page_documents,
         home_fragment,
     )?;
-    let site_directories_for_write = site_directories.clone();
-    let site_artifacts = tokio::task::spawn_blocking(move || {
-        write_site_artifacts(&site_directories_for_write, &site_artifacts)?;
-        Ok::<_, PublishError>(site_artifacts)
+    let site_output_for_write = site_output.clone();
+    let site_documents = tokio::task::spawn_blocking(move || {
+        write_site_documents(&site_output_for_write, &site_documents)?;
+        Ok::<_, PublishError>(site_documents)
     })
     .await??;
 
-    let site_root = output_dir.join("site");
+    let site_root = site_output.root().to_path_buf();
     let validation =
         tokio::task::spawn_blocking(move || validate_site_artifacts(site_root)).await??;
     info!(
@@ -130,7 +130,7 @@ pub async fn publish_with_bookmark_enricher(
         "validated site artifacts"
     );
 
-    let processed_count = site_artifacts.article_index.len();
+    let processed_count = site_documents.article_index.articles.len();
     let duration = start_time.elapsed();
 
     info!(
@@ -140,8 +140,8 @@ pub async fn publish_with_bookmark_enricher(
         "publish completed"
     );
 
-    if !site_artifacts.article_index.is_empty() {
-        for article in &site_artifacts.article_index {
+    if !site_documents.article_index.articles.is_empty() {
+        for article in &site_documents.article_index.articles {
             info!(
                 title = article.title.as_str(),
                 slug = article.slug.as_str(),
@@ -158,12 +158,12 @@ async fn process_article(
     parsed_file: ParsedArticleFile,
     link_index: &links::Index,
     enrich: BookmarkEnricher,
-    site_directories: SiteDirectories,
+    site_output: SiteOutput,
 ) -> Result<domain::ArticleMeta> {
     let article = render_article(parsed_file, link_index, enrich).await?;
     let (meta, output_file_path) = tokio::task::spawn_blocking(move || {
         let output_file_path = write_article_page(
-            &site_directories,
+            &site_output,
             article.meta.category,
             &article.meta.slug,
             article.body.as_str(),

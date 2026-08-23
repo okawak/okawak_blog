@@ -1,7 +1,8 @@
 #![allow(dead_code, reason = "shared by integration test crates")]
 
+use serde::de::DeserializeOwned;
 use std::{
-    fs,
+    fs::{self, File},
     path::{Path, PathBuf},
 };
 
@@ -20,6 +21,10 @@ pub(crate) fn collect_html_files(root: &Path) -> Vec<PathBuf> {
     }
 
     html_files
+}
+
+pub(crate) fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> T {
+    serde_json::from_reader(File::open(path).unwrap()).unwrap()
 }
 
 pub(crate) fn write_about_page(obsidian_dir: &Path) {

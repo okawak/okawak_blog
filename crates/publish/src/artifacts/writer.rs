@@ -1,103 +1,95 @@
-use super::builder::SiteArtifacts;
+use super::builder::SiteDocuments;
 use crate::error::Result;
 
-use domain::{ArticleIndexDocument, Category, SiteMetadataDocument, Slug};
+use domain::{Category, Slug};
 use serde::Serialize;
 use std::{
     fs::{self, File},
-    io::BufWriter,
+    io::{BufWriter, Write},
     path::{Path, PathBuf},
 };
 
-/// Output directories for generated local site artifacts.
+/// Prepared root directory for generated site artifacts.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SiteDirectories {
-    home_fragment_path: PathBuf,
-    articles_dir: PathBuf,
-    categories_dir: PathBuf,
-    metadata_dir: PathBuf,
-    pages_dir: PathBuf,
+pub(crate) struct SiteOutput {
+    root: PathBuf,
 }
 
-impl SiteDirectories {
+impl SiteOutput {
     pub(crate) fn prepare(output_dir: impl AsRef<Path>) -> Result<Self> {
-        let site_root = output_dir.as_ref().join("site");
-        let site_directories = Self {
-            home_fragment_path: site_root.join("home.json"),
-            articles_dir: site_root.join("articles"),
-            categories_dir: site_root.join("categories"),
-            metadata_dir: site_root.join("metadata"),
-            pages_dir: site_root.join("pages"),
-        };
+        let root = output_dir.as_ref().join("site");
+        for directory in ["articles", "categories", "metadata", "pages"] {
+            fs::create_dir_all(root.join(directory))?;
+        }
 
-        fs::create_dir_all(&site_directories.articles_dir)?;
-        fs::create_dir_all(&site_directories.categories_dir)?;
-        fs::create_dir_all(&site_directories.metadata_dir)?;
-        fs::create_dir_all(&site_directories.pages_dir)?;
+        Ok(Self { root })
+    }
 
-        Ok(site_directories)
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
     }
 }
 
 pub(crate) fn write_article_page(
-    site_directories: &SiteDirectories,
+    site_output: &SiteOutput,
     category: Category,
     slug: &Slug,
     html: &str,
 ) -> Result<PathBuf> {
-    let article_dir = site_directories.articles_dir.join(category.as_str());
+    let article_dir = site_output.root.join("articles").join(category.as_str());
     fs::create_dir_all(&article_dir)?;
     let output_file_path = article_dir.join(format!("{}.html", slug.as_str()));
     fs::write(&output_file_path, html)?;
     Ok(output_file_path)
 }
 
-pub(crate) fn write_site_artifacts(
-    site_directories: &SiteDirectories,
-    site_artifacts: &SiteArtifacts,
+pub(crate) fn write_site_documents(
+    site_output: &SiteOutput,
+    site_documents: &SiteDocuments,
 ) -> Result<()> {
-    write_json_pretty(
-        &site_directories.articles_dir.join("index.json"),
-        &ArticleIndexDocument::from(site_artifacts.article_index.as_slice()),
+    write_json(
+        &site_output.root.join("articles/index.json"),
+        &site_documents.article_index,
     )?;
-    for category_document in &site_artifacts.category_documents {
-        write_json_pretty(
-            &site_directories
-                .categories_dir
-                .join(format!("{}.json", category_document.category)),
+    for category_document in &site_documents.category_documents {
+        write_json(
+            &site_output
+                .root
+                .join(format!("categories/{}.json", category_document.category)),
             category_document,
         )?;
     }
-    for page_document in &site_artifacts.page_documents {
-        write_json_pretty(
-            &site_directories
-                .pages_dir
-                .join(format!("{}.json", page_document.page)),
+    for page_document in &site_documents.page_documents {
+        write_json(
+            &site_output
+                .root
+                .join(format!("pages/{}.json", page_document.page)),
             page_document,
         )?;
     }
-    if let Some(home_fragment) = &site_artifacts.home_fragment {
-        write_json_pretty(&site_directories.home_fragment_path, home_fragment)?;
+    if let Some(home_fragment) = &site_documents.home_fragment {
+        write_json(&site_output.root.join("home.json"), home_fragment)?;
     }
 
-    write_json_pretty(
-        &site_directories.metadata_dir.join("site.json"),
-        &SiteMetadataDocument::from(&site_artifacts.site_metadata),
+    write_json(
+        &site_output.root.join("metadata/site.json"),
+        &site_documents.site_metadata,
     )?;
 
     Ok(())
 }
 
-fn write_json_pretty(path: &Path, value: &impl Serialize) -> Result<()> {
+fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     let file = File::create(path)?;
-    let writer = BufWriter::new(file);
-    serde_json::to_writer_pretty(writer, value)?;
+    let mut writer = BufWriter::new(file);
+    serde_json::to_writer(&mut writer, value)?;
+    writer.flush()?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::builder::build_site_artifacts;
+    use super::super::builder::build_site_documents;
     use super::*;
     use domain::{
         ArticleMeta, CategoryLandingMeta, HomeFragmentArtifactDocument, PageArtifactDocument,
@@ -131,9 +123,9 @@ mod tests {
     #[test]
     fn test_write_local_artifacts() {
         let temp_dir = TempDir::new().unwrap();
-        let directories = SiteDirectories::prepare(temp_dir.path()).unwrap();
+        let output = SiteOutput::prepare(temp_dir.path()).unwrap();
         let article = article_meta();
-        let artifacts = build_site_artifacts(
+        let documents = build_site_documents(
             vec![article.clone()],
             vec![domain::PublishableCategoryLanding::new(
                 category_landing(),
@@ -156,23 +148,26 @@ mod tests {
         .unwrap();
 
         let article_path = write_article_page(
-            &directories,
+            &output,
             article.category,
             &article.slug,
             "<h1>Artifact Test</h1>",
         )
         .unwrap();
-        write_site_artifacts(&directories, &artifacts).unwrap();
+        write_site_documents(&output, &documents).unwrap();
 
         for path in [
             article_path,
-            directories.articles_dir.join("index.json"),
-            directories.categories_dir.join("tech.json"),
-            directories.pages_dir.join("about.json"),
-            directories.home_fragment_path.clone(),
-            directories.metadata_dir.join("site.json"),
+            output.root.join("articles/index.json"),
+            output.root.join("categories/tech.json"),
+            output.root.join("pages/about.json"),
+            output.root.join("home.json"),
+            output.root.join("metadata/site.json"),
         ] {
             assert!(path.exists(), "{} should exist", path.display());
         }
+
+        let article_index = fs::read_to_string(output.root.join("articles/index.json")).unwrap();
+        assert!(article_index.starts_with("{\"articles\":["));
     }
 }
