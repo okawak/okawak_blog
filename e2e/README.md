@@ -2,7 +2,7 @@
 
 公開サイト全体を対象とする Playwright E2E です。productionと同じTopcoat serverと`crates/site/infra`のartifact readerを通し、公開routeとclient-side interactionを検証するため、リポジトリルートに置いています。
 
-依存管理には、web crate と同じく Bun を使います。通常はリポジトリルートから `mise` task を実行してください。
+E2Eの依存管理にはBunを使います。通常はリポジトリルートから`mise` taskを実行してください。
 
 ```bash
 # 初回準備（依存と Chromium をインストール）
