@@ -35,7 +35,7 @@ export default defineConfig({
       OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT: fixtureRoot,
       OKAWAK_BLOG_E2E_REUSE_BUILD: "true",
       OKAWAK_BLOG_SITE_ORIGIN: baseURL,
-      OKAWAK_BLOG_TOPCOAT_ADDR: "127.0.0.1:8008",
+      OKAWAK_BLOG_ADDR: "127.0.0.1:8008",
     },
     url: `${baseURL}/api/health`,
     reuseExistingServer: false,

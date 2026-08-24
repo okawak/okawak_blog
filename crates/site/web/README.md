@@ -11,4 +11,4 @@ browser E2E は web crate 単体ではなく、server と artifact reader を含
 - theme tokenとbase styleは`style/tailwind.css`をsource of truthにする
 - artifactの`inner_html`は`.content-prose`で囲み、`style/content.css`のplain CSSだけを適用する
 
-現行productionのLeptos buildは`style/tailwind.css`を`cargo-leptos`でcompileします。移行用Topcoat runtimeは同じ入力をTopcoatのstandalone Tailwind build integrationで生成し、Topcoat asset bundleから配信します。通常Topcoat E2EはNode / BunのCSS build toolへ依存しません。Sass、Stylance、CSS moduleの生成工程はありません。production用web依存のinstall・更新確認はrepository rootの`mise run web-*`を使い、`mise run build-project`は`web-install`を先に実行します。
+productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Topcoat asset bundleから配信します。build、通常E2E、S3 smokeは`cargo-leptos`やNode / BunのCSS build toolへ依存せず、Leptos JavaScript / WebAssemblyを生成しません。Sass、Stylance、CSS moduleの生成工程はありません。完全撤去まで残るlegacy Leptos依存のinstall・更新確認にはrepository rootの`mise run web-*`を使います。

@@ -58,7 +58,8 @@ tower = { workspace = true, features = ["util"] }
 topcoat = { workspace = true, default-features = false, features = ["tailwind"] }
 
 [package.metadata.leptos]
-# Keep cargo-leptos on the production Leptos binary while the Topcoat binary is developed in parallel.
+# Keep legacy cargo-leptos pointed at the old binary until the Leptos source is removed.
+# Production build and deployment use `topcoat-server`.
 bin-target = "server"
 
 # The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
