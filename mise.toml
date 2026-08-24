@@ -80,8 +80,8 @@ git submodule update --remote --checkout --recursive "$obsidian_path"
 description = "Format Rust and Topcoat source files"
 run = '''
 cargo fmt --all
-find crates/site/server/src -name '*.rs' -exec topcoat fmt {} +
-find crates/site/web/src -name '*.rs' -exec topcoat fmt {} +
+find crates/site/server -name '*.rs' -exec topcoat fmt {} +
+find crates/site/web -name '*.rs' -exec topcoat fmt {} +
 '''
 
 [tasks.dev]
