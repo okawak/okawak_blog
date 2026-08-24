@@ -66,7 +66,7 @@ curl --fail http://127.0.0.1:8008/api/ready
 
 ## Runtime logging
 
-serverは`tracing`でstructured logを標準出力へ記録し、systemd journalから確認します。log filterは`RUST_LOG`で指定し、未指定または有効なdirectiveがない場合は`info`を使います。本番unitは`RUST_LOG=info`を明示します。`debug`のようなlevelに加えて、`server=debug,topcoat=warn`のようなtarget別filterも指定できます。不正なdirectiveは無視します。
+`site/server`の起動情報とreadiness failureは`tracing` eventとして標準出力へ記録し、systemd journalから確認します。log filterは`RUST_LOG`で指定し、未指定または有効なdirectiveがない場合は`info`を使います。本番unitは`RUST_LOG=info`を明示します。`debug`のようなlevelに加えて、`server=debug,topcoat=warn`のようなtarget別filterも指定できます。不正なdirectiveは無視します。`RUST_LOG`が制御するのは`tracing` eventであり、`site/infra`と`site/web`に残る既存の標準エラー出力はこの設定の対象外です。
 
 ## Artifact cache
 
