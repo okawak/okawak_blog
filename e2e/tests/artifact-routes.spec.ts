@@ -111,11 +111,13 @@ test("site declares and serves its favicon", async ({ page, request }) => {
   await expect(iconLink).toHaveCount(1);
   await expect(iconLink).toHaveAttribute(
     "href",
-    "/favicon.ico?v=f544a69c",
+    /^\/_topcoat\/assets\/favicon-[a-f0-9]+\.ico$/,
   );
   await expect(iconLink).toHaveAttribute("sizes", "16x16 32x32 48x48");
 
-  const response = await request.get("/favicon.ico?v=f544a69c");
+  const faviconHref = await iconLink.getAttribute("href");
+  expect(faviconHref).not.toBeNull();
+  const response = await request.get(faviconHref!);
   expect(response.status()).toBe(200);
   expect(response.headers()["content-type"]).toMatch(/^image\//);
   expect((await response.body()).byteLength).toBeGreaterThan(0);
@@ -717,8 +719,8 @@ test("client navigation reloads when shell asset fingerprints change", async ({ 
     const response = await route.fetch();
     const currentBody = await response.text();
     const body = currentBody.replace(
-      /href="\/pkg\/[^"]+\.css"/,
-      'href="/pkg/deployed-shell.css"',
+      /href="\/_topcoat\/assets\/[^"]+\.css"/,
+      'href="/_topcoat/assets/deployed-shell.css"',
     );
     expect(body).not.toBe(currentBody);
     await route.fulfill({ response, body });

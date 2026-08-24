@@ -54,6 +54,9 @@ serde_json.workspace = true
 tempfile.workspace = true
 tower = { workspace = true, features = ["util"] }
 
+[build-dependencies]
+topcoat = { workspace = true, default-features = false, features = ["tailwind"] }
+
 [package.metadata.leptos]
 # Keep cargo-leptos on the production Leptos binary while the Topcoat binary is developed in parallel.
 bin-target = "server"
