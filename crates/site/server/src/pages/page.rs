@@ -27,7 +27,7 @@ pub async fn about(cx: &Cx) -> Result<View> {
             tracing::error!(%error, page = ABOUT_PAGE_KEY, "static page artifact read failed");
             view! {
                 internal_server_error_page(
-                    title: format!("About | {}", web::SITE_NAME),
+                    title: format!("About | {}", crate::SITE_NAME),
                     description: "About ページです。".to_string(),
                     canonical_path: "/about".to_string(),
                     message: "ページの読み込みに失敗しました"
@@ -39,9 +39,9 @@ pub async fn about(cx: &Cx) -> Result<View> {
 
 #[component]
 async fn about_document(document: StaticPageDocument) -> Result {
-    let title = build_static_page_title(&document, web::SITE_NAME);
+    let title = build_static_page_title(&document, crate::SITE_NAME);
     let description = build_static_page_description(&document);
-    let canonical_url = web::build_site_url(&build_static_page_canonical_path(&document));
+    let canonical_url = crate::build_site_url(&build_static_page_canonical_path(&document));
     let page_title = document.title;
     // The publish pipeline escapes raw Markdown HTML and neutralizes unsafe href schemes before
     // persisting this fragment. It is therefore the trusted HTML boundary for Topcoat as well.

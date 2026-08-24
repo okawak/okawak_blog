@@ -13,10 +13,11 @@ use topcoat::{
 
 use crate::{
     api::{ArtifactReaderContext, articles, health, readiness},
+    artifact_page_loader::ArtifactPageLoader,
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
-    page_loader::ArtifactPageLoader,
+    page_loader::PageLoaderContext,
+    pages,
 };
-use web::{PageLoaderContext, pages};
 
 fn not_modified_response(conditional_get: &ArtifactConditionalGetDecision) -> Response {
     let mut response = Response::new(Body::empty());

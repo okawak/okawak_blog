@@ -8,7 +8,7 @@ mod page;
 
 use topcoat::context::{Cx, app_context, try_request_context};
 
-use crate::PageLoaderContext;
+use crate::page_loader::PageLoaderContext;
 
 pub use article::article_page;
 pub use category::category_page;

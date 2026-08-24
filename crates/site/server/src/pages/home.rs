@@ -23,7 +23,7 @@ pub async fn home(cx: &Cx) -> Result<View> {
             tracing::error!(%error, "home page artifact read failed");
             view! {
                 internal_server_error_page(
-                    title: build_home_page_title(web::SITE_NAME),
+                    title: build_home_page_title(crate::SITE_NAME),
                     description: "公開済みの記事を読み込めませんでした。"
                         .to_string(),
                     canonical_path: "/".to_string(),
@@ -36,9 +36,9 @@ pub async fn home(cx: &Cx) -> Result<View> {
 
 #[component]
 async fn home_document(document: HomePageDocument) -> Result {
-    let title = build_home_page_title(web::SITE_NAME);
+    let title = build_home_page_title(crate::SITE_NAME);
     let description = build_home_page_description(&document);
-    let canonical_url = web::build_site_url(build_home_page_canonical_path());
+    let canonical_url = crate::build_site_url(build_home_page_canonical_path());
     let is_empty = document.articles.is_empty();
 
     view! {
@@ -58,7 +58,7 @@ async fn home_document(document: HomePageDocument) -> Result {
                     <h1
                         class="m-0 mt-4 text-3xl leading-tight font-bold after:mx-auto after:mt-3 after:block after:h-1 after:w-12 after:rounded-full after:bg-primary sm:text-4xl"
                     >
-                        (web::SITE_NAME)
+                        (crate::SITE_NAME)
                     </h1>
                     <div class="mx-auto mt-5 max-w-3xl">
                         <p class="m-0 leading-8 text-muted-foreground">

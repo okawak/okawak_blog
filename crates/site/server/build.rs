@@ -4,8 +4,7 @@ fn main() {
 
     // `assets::STYLESHEET` registers the stylesheet rendered by this build integration.
     topcoat::tailwind::BuildConfig::new()
-        .input("crates/site/web/style/tailwind.css")
-        .cwd("../../..")
+        .input("style/tailwind.css")
         .version("4.3.3")
         .render()
         .expect("Topcoat should build the site Tailwind stylesheet");

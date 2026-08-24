@@ -11,7 +11,7 @@ mise_bun_version="$(sed -nE 's/^bun = "([^"]+)"$/\1/p' mise.toml)"
 topcoat_cli_version="$(sed -nE 's/^"cargo:topcoat-cli" = "([^"]+)"$/\1/p' mise.toml)"
 topcoat_framework_version="$(sed -nE 's/^topcoat = \{ version = "=([^"]+)".*/\1/p' Cargo.toml)"
 tailwind_version="$(sed -nE 's/^TOPCOAT_TAILWIND_VERSION = "([^"]+)"$/\1/p' mise.toml)"
-topcoat_tailwind_version="$(sed -nE 's/^[[:space:]]*\.version\("([^"]+)"\)$/\1/p' crates/site/web/build.rs)"
+topcoat_tailwind_version="$(sed -nE 's/^[[:space:]]*\.version\("([^"]+)"\)$/\1/p' crates/site/server/build.rs)"
 
 for version in "$mise_bun_version" "$topcoat_cli_version" "$topcoat_framework_version" "$tailwind_version" "$topcoat_tailwind_version"; do
   [ -n "$version" ] || fail "required version is missing from project configuration"

@@ -43,13 +43,13 @@ impl ShellMetadata {
 
 #[component]
 pub(crate) async fn not_found_page(canonical_path: String) -> Result {
-    let canonical_url = web::build_site_url(&canonical_path);
+    let canonical_url = crate::build_site_url(&canonical_path);
 
     view! {
         site_shell(
             status: StatusCode::NOT_FOUND,
             metadata: ShellMetadata::website(
-                format!("{NOT_FOUND_TITLE} | {}", web::SITE_NAME),
+                format!("{NOT_FOUND_TITLE} | {}", crate::SITE_NAME),
                 NOT_FOUND_DESCRIPTION.to_string(),
                 canonical_url,
             ),
@@ -65,7 +65,7 @@ pub(crate) async fn article_internal_server_error_page(
     description: String,
     canonical_path: String,
 ) -> Result {
-    let canonical_url = web::build_site_url(&canonical_path);
+    let canonical_url = crate::build_site_url(&canonical_path);
 
     view! {
         site_shell(
@@ -88,7 +88,7 @@ pub(crate) async fn internal_server_error_page(
     canonical_path: String,
     message: &'static str,
 ) -> Result {
-    let canonical_url = web::build_site_url(&canonical_path);
+    let canonical_url = crate::build_site_url(&canonical_path);
 
     view! {
         site_shell(
@@ -263,7 +263,7 @@ window.okawakScheduleCodeHighlight = function(root) {
                                 <h1
                                     class="m-0 truncate text-xl leading-tight font-bold sm:text-2xl"
                                 >
-                                    (web::SITE_NAME)
+                                    (crate::SITE_NAME)
                                 </h1>
                             </a>
 

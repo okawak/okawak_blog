@@ -43,7 +43,7 @@ pub async fn category_page(cx: &Cx) -> Result<View> {
             );
             view! {
                 internal_server_error_page(
-                    title: format!("{category_param} | {}", web::SITE_NAME),
+                    title: format!("{category_param} | {}", crate::SITE_NAME),
                     description: format!("{category_param} カテゴリの記事一覧です。"),
                     canonical_path: requested_path,
                     message: "カテゴリの読み込みに失敗しました"
@@ -55,10 +55,10 @@ pub async fn category_page(cx: &Cx) -> Result<View> {
 
 #[component]
 async fn category_document(document: CategoryPageDocument) -> Result {
-    let title = build_category_page_title(&document, web::SITE_NAME);
+    let title = build_category_page_title(&document, crate::SITE_NAME);
     let description = build_category_page_description(&document);
     let canonical_path = build_category_page_canonical_path(&document);
-    let canonical_url = web::build_site_url(&canonical_path);
+    let canonical_url = crate::build_site_url(&canonical_path);
     let page_title = document.title;
     // The publish pipeline escapes raw Markdown HTML and neutralizes unsafe href schemes before
     // persisting this fragment. It is therefore the trusted HTML boundary for Topcoat as well.

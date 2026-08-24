@@ -72,8 +72,7 @@ okawak_blog/
 │   ├── publish/              # publish CLIと内部module
 │   └── site/
 │       ├── infra/            # artifact reader、source設定、cache
-│       ├── server/           # runtime、API、readerとUIのcomposition
-│       └── web/              # Topcoat UI、route、metadata、application asset
+│       └── server/           # Topcoat application、runtime、UI、API、reader composition
 ├── e2e/                      # 公開サイト全体の browser E2E
 ├── docs/
 │   └── architecture/
@@ -86,9 +85,8 @@ okawak_blog/
 - `crates/domain`: 公開成果物契約、site page contract、純粋関数を中心にした共有ドメイン層
 - `crates/publish`: `pipeline` moduleが、`vault`によるObsidian入力、`render`によるMarkdown変換とbookmark enrichment、`artifacts`による成果物生成を統括する単一の`publish` crate。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
 - `crates/site/infra`: storage非依存のartifact reader契約と、local / S3実装、source設定、cache。HTTP runtimeやUIには依存しない
-- `crates/site/server`: production runtime、reader生成・注入、API、page loader、release-aware ETag / Last-Modifiedを構成するcomposition root
-- `crates/site/web`: storage非依存のpage load契約、Topcoat UI / route / metadata、style、client navigationとcontent enhancement
-- `e2e`: server / web / artifact reader をまたぐ、固定 artifact ベースの browser E2E
+- `crates/site/server`: production `server` binaryを持つ単一のTopcoat application crate。storage非依存のpage load契約、UI / route / metadata、style、client navigation、reader生成・注入、API、release-aware ETag / Last-Modifiedを構成する
+- `e2e`: server / artifact readerをまたぐ、固定artifactベースのbrowser E2E
 
 ## 公開成果物のイメージ
 
@@ -202,7 +200,7 @@ mise run versions-check
 
 共通実行tool（Bun、Topcoat CLI）は`mise.toml`をsource of truthとし、`mise.lock`にはmacOS arm64、GitHub Actions Linux x64、VPSが識別するLinux platform aliasの解決済みrelease assetを記録します。Rust toolchainは`rust-toolchain.toml`、Cargo / Bun依存は各manifestとlockfile、GitHub Actionsはworkflow内の最新major指定を正とします。
 
-web UIはTopcoat componentとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/site/web/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
+site UIはTopcoat componentとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/site/server/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
 
 private Obsidian repoを使う`publish`側の開発では、`mise run dev-local`がsubmoduleをremoteの最新commitへ同期してから`publish`を実行します。生成先の`crates/publish/dist/site`を既存のlocal readerでそのまま配信し、未公開content、Markdown変換、UIを一続きで確認します。`mise run dev`はGitHub Actionsが公開したS3 artifactを読み、本番相当のreader経路を確認します。同期だけを行う場合は`mise run sync-obsidian`を使います。自動同期はsubmodule内に未commit差分がある場合は停止し、merge commitを作らずremote revisionをcheckoutします。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
@@ -245,7 +243,6 @@ mise run e2e-install-browser
 mise run test
 mise run test-domain
 mise run test-server
-mise run test-web
 mise run test-e2e
 mise run test-e2e-s3
 mise run clippy
