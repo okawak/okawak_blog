@@ -2,7 +2,7 @@
 
 ## 目的
 
-`okawak_blog` は、Obsidian で書いた Markdown を公開成果物へ変換し、それを Leptos SSR で配信するための静的コンテンツ公開基盤 + SSR 表示基盤である。
+`okawak_blog` は、Obsidian で書いた Markdown を公開成果物へ変換し、それを Topcoat SSR で配信するための静的コンテンツ公開基盤 + SSR 表示基盤である。
 
 このリポジトリは一般的なブログ CMS ではない。主役は常駐 API サーバーではなく、`publish`による公開成果物生成パイプラインである。
 
@@ -83,21 +83,16 @@ okawak_blog/
   - local reader
   - S3 reader
 - `crates/site/server`
-  - production `server` binaryによるAxum + Leptos SSRのホスト
-  - 移行用`topcoat-server` binaryによるTopcoat SSR、Topcoat runtime asset、client-side route遷移のホスト
-  - reader の生成とLeptos contextまたはTopcoat request contextへの注入
+  - production `topcoat-server` binaryによるTopcoat SSR、Topcoat runtime asset、client-side route遷移のホスト
+  - reader の生成とTopcoat app / request contextへの注入
   - 互換用の記事一覧 API
   - process liveness (`/api/health`) と artifact readiness (`/api/ready`)
   - release-aware ETag と conditional GET
 - `crates/site/web`
-  - 現行productionのLeptos UIとroute定義
-  - Leptos server function による page document の組み立て
-  - SSR feature 時のみ `ArtifactReader` 境界を利用
-  - metadata / canonical / Open Graph 生成
-  - `publish`が生成する`.math-inline` / `.math-display`に対するclient-side KaTeX描画
-  - Topcoat移行中も共有するsite定数、生成コンテンツ用script、Tailwind CSS入力
+  - Topcoatと共有するsite定数、生成コンテンツ用script、Tailwind CSS入力
+  - 完全撤去まで残るlegacy Leptos UI、route、server function
 - `e2e`
-  - `crates/site/server`と`crates/site/infra`をまたぐTopcoat移行サーバーのbrowser E2E
+  - `crates/site/server`と`crates/site/infra`をまたぐproduction Topcoat serverのbrowser E2E
   - 通常CIではprivate Obsidian submoduleやS3に依存しない固定artifact fixture
   - 実S3の検証は専用Playwright configを使い、ローカル手動確認とrelease公開前smoke testへ分離
   - Bunで依存を管理し、Playwright + Chromiumで公開route、metadata、client-side route遷移、Topcoat interactionを検証
@@ -362,13 +357,11 @@ flowchart LR
 - `StaticPageDocument`
   - `about` などの固定ページ用contract
 
-`site/web` はこの page contract をもとに metadata と UI を組み立てる。SSR feature では Leptos context から `DynArtifactReader` を受け取り、server function の開始時にsnapshotを1回取得してpage documentを組み立てる。local / S3 などの storage 実装詳細には依存しない。hydrate build は `infra` に依存しない。
+`site/server`のTopcoat pageはこのpage contractをもとにmetadataとUIを組み立てる。`DynArtifactReader`はTopcoat app contextへ登録し、各requestのconditional GET判定とpage document構築で同じsnapshotをrequest contextから共有する。local / S3などのstorage実装詳細はpage componentへ持ち込まない。
 
-公開 route の page document 読み込みは Leptos server function を正式経路とする。`site/server` は reader を生成して context に注入し、SSR と server function をホストする。手書きの `/api/page/*` は持たず、404 と storage error の扱いは各 server function に集約する。`/api/articles` は page document を組み立てない互換 endpoint として維持する。
+公開routeのpage document読取はTopcoat async componentを正式経路とする。手書きの`/api/page/*`は持たず、404とstorage errorのstatus / error viewをroute境界で統一する。`/api/articles`はpage documentを組み立てない互換endpointとして維持する。
 
-移行用`topcoat-server`は同じpage contractと`DynArtifactReader`をTopcoat request contextから利用し、公開route、metadata、status、client-side route遷移の互換性を固定artifact E2Eで検証する。移行完了まではproduction entrypointを`server` binaryとし、通常E2Eを先行して`topcoat-server`へ切り替える。
-
-home、about、category、articleの公開routeは`SsrMode::Async`で描画する。title、canonical、Open Graph metadataがartifactの内容に依存するため、非同期resourceの解決前に`<head>`をstreamingしない。各routeではblocking resourceを使い、metadataと本文を同じ`Suspense`境界で組み立てる。
+production `topcoat-server`はhome、about、category、articleをSSRし、title、canonical、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。legacy Leptos route / server functionは完全撤去までsourceに残るが、production build、通常E2E、S3 smokeのentrypointには使わない。
 
 ## UI styling境界
 
@@ -385,7 +378,7 @@ home、about、category、articleの公開routeは`SsrMode::Async`で描画す�
   - article、about、category landing、home fragmentの生成HTMLだけを`.content-prose`配下で整形するplain CSS
   - heading、code、table、image、bookmark、math spanとKaTeX描画結果など`publish` artifactの表現を担当する
 
-現行productionのLeptos buildは`cargo-leptos`の`tailwind-input-file`からCSSを生成する。移行用Topcoat runtimeは同じ入力をTopcoatのstandalone Tailwind build integrationで生成し、Topcoat asset bundleからcontent-hash付きURLで配信する。通常fixture E2Eと`dev-topcoat-shell`は`cargo leptos build`もNode / BunのCSS build toolも実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、どちらのruntimeでもRust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
+productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、CSS、JavaScript、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`は`cargo leptos build`もNode / BunのCSS build toolも実行せず、Leptos loader / WebAssemblyを生成・配信しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
 
 ## Reader 経路
 
@@ -454,7 +447,7 @@ Obsidian submodule
   -> local reader
 ```
 
-`dev-local`はprivate Obsidian submoduleに未commit差分がないことを確認してremoteの最新commitをcheckoutし、`publish`の通常の厳格モードが成功した場合だけLeptos serverを起動する。同期時にlocal merge commitは作らない。同期または`publish`に失敗した場合はserverを起動しない。local readerにはmemory cacheを適用しないため、生成済みartifactの更新を即時に読める。ただし起動中にsource Markdownを変更した場合、`publish`の再実行は明示的に行う。
+`dev-local`はprivate Obsidian submoduleに未commit差分がないことを確認してremoteの最新commitをcheckoutし、`publish`の通常の厳格モードとTopcoat asset bundle生成が成功した場合だけTopcoat serverを起動する。同期時にlocal merge commitは作らない。同期、`publish`、bundleのいずれかに失敗した場合はserverを起動しない。local readerにはmemory cacheを適用しないため、生成済みartifactの更新を即時に読める。ただし起動中にsource Markdownを変更した場合、`publish`の再実行は明示的に行う。
 
 AWS認証、immutable release pointer、S3 cacheを含む本番相当のreader境界はS3用taskで確認する。
 
@@ -479,6 +472,8 @@ Obsidian submodule
   -> Cloudflare Tunnel
   -> Browser
 ```
+
+application deployはTopcoat release binaryとasset bundleを同じrelease単位で扱う。`build-deployment`は稼働中のdirectoryへ書かず、`target/release/topcoat-server`と`target/assets-staged`を生成する。activationはservice停止中にbinaryを`bin/okawak_blog`、bundleをbinary隣接の`bin/assets`へ切り替える。stagingはmanifest内のCSS、JavaScript、faviconと各参照fileを検証し、WebAssemblyを拒否する。起動後のhealth / readinessが失敗した場合は旧binaryと旧bundleを復元し、失敗bundleを`bin/assets.failed`へ保存する。
 
 `cloudflared`はVPSからCloudflareへ外向き接続し、originの80/443は公開しない。public hostnameとTunnel routeはCloudflare Dashboardで管理し、OCI TerraformはReserved Public IP、SSH用ingress、Tunnel用egressなどのOCI resourceだけを管理する。S3 upload は Rust アプリに持たせず、workflow の責務として扱う。
 

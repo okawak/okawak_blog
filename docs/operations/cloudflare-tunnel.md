@@ -2,7 +2,7 @@
 
 ## 現行構成
 
-VPSのLeptos SSR serverは`127.0.0.1:8008`で待ち受け、`cloudflared`が外向きTunnel経由でCloudflareへ接続します。VPSの80/443はInternetへ公開しません。
+VPSのTopcoat SSR serverは`127.0.0.1:8008`で待ち受け、`cloudflared`が外向きTunnel経由でCloudflareへ接続します。VPSの80/443はInternetへ公開しません。
 
 ```text
 Browser
