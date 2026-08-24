@@ -1,3 +1,5 @@
+#![warn(unreachable_pub)]
+
 //! Artifact storage boundary for the site runtime.
 
 mod cache;

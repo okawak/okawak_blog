@@ -1,3 +1,5 @@
+#![warn(unreachable_pub)]
+
 extern crate self as web;
 
 mod article_card;
