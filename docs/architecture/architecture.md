@@ -79,9 +79,13 @@ okawak_blog/
   - `ObsidianFrontMatter`と`ContentKind`は`publish`入力形式として内部に保持する
   - `publish`固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
 - `crates/site/infra`
-  - `ArtifactReader` 境界
-  - local reader
-  - S3 reader
+  - `contract` moduleによる`ArtifactReader` / `ArtifactSnapshot`境界
+  - `local` moduleによるfilesystem reader
+  - `s3` moduleによるS3 readerとimmutable release解決
+  - `cache` moduleによるsnapshot / artifact cache
+  - `config` moduleによるsource設定とreader composition
+  - `error` moduleによるstorage / config error境界
+  - `lib.rs`はmodule宣言とcrate外向けAPIのre-exportに限定する
 - `crates/site/server`
   - production `topcoat-server` binaryによるTopcoat SSR、Topcoat runtime asset、client-side route遷移のホスト
   - reader の生成とTopcoat app / request contextへの注入
