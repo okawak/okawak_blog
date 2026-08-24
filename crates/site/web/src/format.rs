@@ -1,7 +1,7 @@
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime};
 
 /// Formats an artifact date for human-readable presentation.
-pub fn format_display_date(value: &str) -> String {
+pub(crate) fn format_display_date(value: &str) -> String {
     let date = DateTime::parse_from_rfc3339(value)
         .map(|date_time| date_time.date_naive())
         .or_else(|_| NaiveDate::parse_from_str(value, "%Y-%m-%d"))

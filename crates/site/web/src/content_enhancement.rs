@@ -1,18 +1,19 @@
 //! Progressive enhancement resources for generated artifact content.
 
-pub const KATEX_STYLESHEET_URL: &str =
+pub(crate) const KATEX_STYLESHEET_URL: &str =
     "https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css";
-pub const KATEX_STYLESHEET_INTEGRITY: &str =
+pub(crate) const KATEX_STYLESHEET_INTEGRITY: &str =
     "sha384-5TcZemv2l/9On385z///+d7MSYlvIEw9FuZTIdZ14vJLqWphw7e7ZPuOiCHJcFCP";
-pub const KATEX_SCRIPT_URL: &str = "https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js";
-pub const KATEX_SCRIPT_INTEGRITY: &str =
+pub(crate) const KATEX_SCRIPT_URL: &str =
+    "https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js";
+pub(crate) const KATEX_SCRIPT_INTEGRITY: &str =
     "sha384-cMkvdD8LoxVzGF/RPUKAcvmm49FQ0oxwDF3BGKtDXcEc+T1b2N+teh/OJfpU0jr6";
-pub const HIGHLIGHT_STYLESHEET_URL: &str =
+pub(crate) const HIGHLIGHT_STYLESHEET_URL: &str =
     "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css";
-pub const HIGHLIGHT_SCRIPT_URL: &str =
+pub(crate) const HIGHLIGHT_SCRIPT_URL: &str =
     "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js";
 
-pub const MATH_RENDER_SCRIPT: &str = r#"
+pub(crate) const MATH_RENDER_SCRIPT: &str = r#"
 window.okawakRenderMath = function(root) {
 if (!window.katex) return;
 
@@ -61,7 +62,7 @@ attempt();
 };
 "#;
 
-pub const CODE_HIGHLIGHT_SCRIPT: &str = r#"
+pub(crate) const CODE_HIGHLIGHT_SCRIPT: &str = r#"
 window.okawakHighlightCode = function(root) {
 if (!window.hljs) return;
 const scope = root || document.body;

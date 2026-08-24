@@ -1,3 +1,5 @@
+#![warn(unreachable_pub)]
+
 //! Site runtime composition and HTTP boundary.
 
 mod api;
