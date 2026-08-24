@@ -1,4 +1,4 @@
-//! Topcoat SSR pages introduced route by route during the migration.
+//! Topcoat SSR pages and shared site shell.
 
 use std::str::FromStr;
 
@@ -6,14 +6,12 @@ use chrono::Datelike;
 use domain::{
     ArticlePageDocument, Category as DomainCategory, CategoryPageDocument, HomePageDocument,
     PageKey, SiteArticleCard, Slug, StaticPageDocument, build_article_page_canonical_path,
-    build_article_page_description, build_article_page_document, build_article_page_title,
-    build_article_path, build_category_page_canonical_path, build_category_page_description,
-    build_category_page_document, build_category_page_title, build_category_path,
-    build_home_page_canonical_path, build_home_page_description, build_home_page_document,
+    build_article_page_description, build_article_page_title, build_article_path,
+    build_category_page_canonical_path, build_category_page_description, build_category_page_title,
+    build_category_path, build_home_page_canonical_path, build_home_page_description,
     build_home_page_title, build_static_page_canonical_path, build_static_page_description,
-    build_static_page_document, build_static_page_title, find_article_summary,
+    build_static_page_title,
 };
-use infra::DynArtifactSnapshot;
 use topcoat::{
     Result,
     asset::{Asset, asset},
@@ -22,10 +20,13 @@ use topcoat::{
     view::{Unescaped, View, component, view},
 };
 
-use crate::topcoat_runtime::ArtifactReaderContext;
-use web::generated_content::{
-    CODE_HIGHLIGHT_SCRIPT, HIGHLIGHT_SCRIPT_URL, HIGHLIGHT_STYLESHEET_URL, KATEX_SCRIPT_INTEGRITY,
-    KATEX_SCRIPT_URL, KATEX_STYLESHEET_INTEGRITY, KATEX_STYLESHEET_URL, MATH_RENDER_SCRIPT,
+use crate::{
+    PageLoaderContext,
+    generated_content::{
+        CODE_HIGHLIGHT_SCRIPT, HIGHLIGHT_SCRIPT_URL, HIGHLIGHT_STYLESHEET_URL,
+        KATEX_SCRIPT_INTEGRITY, KATEX_SCRIPT_URL, KATEX_STYLESHEET_INTEGRITY, KATEX_STYLESHEET_URL,
+        MATH_RENDER_SCRIPT,
+    },
 };
 
 const ABOUT_PAGE_KEY: &str = "about";
@@ -33,9 +34,9 @@ const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
 // Bump when retained shell markup outside `<main>` changes incompatibly.
 const SHELL_VERSION: &str = "topcoat-1";
-pub(crate) const CLIENT_NAVIGATION_SCRIPT: Asset = asset!("./topcoat_navigation.js");
-pub(crate) const STYLESHEET: Asset = topcoat::tailwind::stylesheet!();
-pub(crate) const FAVICON: Asset = asset!("../../web/public/favicon.ico", rename: "favicon");
+pub const CLIENT_NAVIGATION_SCRIPT: Asset = asset!("./topcoat_navigation.js");
+pub const STYLESHEET: Asset = topcoat::tailwind::stylesheet!();
+pub const FAVICON: Asset = asset!("../public/favicon.ico", rename: "favicon");
 
 struct ShellMetadata {
     title: String,
@@ -67,37 +68,8 @@ impl ShellMetadata {
 path_param!(category_name);
 
 #[route(GET "/")]
-pub(crate) async fn home(cx: &Cx) -> Result<View> {
-    let snapshot = match request_snapshot(cx).await {
-        Ok(snapshot) => snapshot,
-        Err(error) => {
-            eprintln!("Home page artifact snapshot failed: {error}");
-            return view! {
-                internal_server_error_page(
-                    title: build_home_page_title(web::SITE_NAME),
-                    description: "公開済みの記事を読み込めませんでした。"
-                        .to_string(),
-                    canonical_path: "/".to_string(),
-                    message: "記事の読み込みに失敗しました"
-                )
-            };
-        }
-    };
-    let document = async {
-        let article_index = snapshot.read_article_index().await?;
-        let site_metadata = snapshot.read_site_metadata().await?;
-        let home_fragment = match snapshot.read_home_fragment().await {
-            Ok(fragment) => Some(fragment),
-            Err(error) if error.is_not_found() => None,
-            Err(error) => return Err(error),
-        };
-
-        build_home_page_document(&article_index, &site_metadata, home_fragment.as_ref())
-            .map_err(Into::into)
-    }
-    .await;
-
-    match document {
+pub async fn home(cx: &Cx) -> Result<View> {
+    match page_loader(cx).0.load_home().await {
         Ok(document) => view! { home_document(document: document) },
         Err(error) => {
             eprintln!("Home page artifact read failed: {error}");
@@ -114,14 +86,9 @@ pub(crate) async fn home(cx: &Cx) -> Result<View> {
     }
 }
 
-async fn request_snapshot(cx: &Cx) -> Result<DynArtifactSnapshot> {
-    match try_request_context::<DynArtifactSnapshot>(cx) {
-        Some(snapshot) => Ok(snapshot.clone()),
-        None => Ok(app_context::<ArtifactReaderContext>(cx)
-            .0
-            .snapshot()
-            .await?),
-    }
+fn page_loader(cx: &Cx) -> &PageLoaderContext {
+    try_request_context::<PageLoaderContext>(cx)
+        .unwrap_or_else(|| app_context::<PageLoaderContext>(cx))
 }
 
 #[component]
@@ -313,7 +280,7 @@ async fn article_card(article: &SiteArticleCard) -> Result {
 }
 
 #[route(GET "/{category_name}/{article_slug}")]
-pub(crate) async fn article_page(cx: &Cx) -> Result<View> {
+pub async fn article_page(cx: &Cx) -> Result<View> {
     let mut params = raw_path_params(cx);
     let category_param = params
         .next()
@@ -338,39 +305,7 @@ pub(crate) async fn article_page(cx: &Cx) -> Result<View> {
         Err(_) => return view! { not_found_page(canonical_path: requested_path) },
     };
 
-    let snapshot = match request_snapshot(cx).await {
-        Ok(snapshot) => snapshot,
-        Err(error) => {
-            eprintln!(
-                "Article page artifact snapshot failed for {category_param}/{normalized_slug}: {error}"
-            );
-            return view! {
-                article_internal_server_error_page(
-                    title: fallback_title,
-                    description: fallback_description,
-                    canonical_path: requested_path
-                )
-            };
-        }
-    };
-
-    let document = async {
-        let article_index = snapshot.read_article_index().await?;
-        let Some(summary) = find_article_summary(&article_index, &category, &slug) else {
-            return Ok(None);
-        };
-        let html = match snapshot.read_article_html(&category, &slug).await {
-            Ok(html) => html,
-            Err(error) if error.is_not_found() => return Ok(None),
-            Err(error) => return Err(error),
-        };
-        let document = build_article_page_document(summary, &html)?;
-
-        Ok(Some(document))
-    }
-    .await;
-
-    match document {
+    match page_loader(cx).0.load_article(&category, &slug).await {
         Ok(Some(document)) => view! { article_document(document: document) },
         Ok(None) => view! { not_found_page(canonical_path: requested_path) },
         Err(error) => {
@@ -485,7 +420,7 @@ fn normalize_article_slug_param(slug: &str) -> &str {
 }
 
 #[route(GET "/{category_name}")]
-pub(crate) async fn category_page(cx: &Cx) -> Result<View> {
+pub async fn category_page(cx: &Cx) -> Result<View> {
     let category_param = path_param::<CategoryName>(cx);
     let requested_path = request::uri(cx).path().to_string();
     let category = match DomainCategory::from_str(category_param) {
@@ -495,37 +430,9 @@ pub(crate) async fn category_page(cx: &Cx) -> Result<View> {
         }
     };
 
-    let snapshot = match request_snapshot(cx).await {
-        Ok(snapshot) => snapshot,
-        Err(error) => {
-            eprintln!("Category page artifact snapshot failed for {category_param}: {error}");
-            return view! {
-                internal_server_error_page(
-                    title: format!("{category_param} | {}", web::SITE_NAME),
-                    description: format!("{category_param} カテゴリの記事一覧です。"),
-                    canonical_path: requested_path,
-                    message: "カテゴリの読み込みに失敗しました"
-                )
-            };
-        }
-    };
-
-    match snapshot.read_category_document(&category).await {
-        Ok(artifact) => match build_category_page_document(&artifact) {
-            Ok(document) => view! { category_document(document: document) },
-            Err(error) => {
-                eprintln!("Category page artifact is invalid for {category_param}: {error}");
-                view! {
-                    internal_server_error_page(
-                        title: format!("{category_param} | {}", web::SITE_NAME),
-                        description: format!("{category_param} カテゴリの記事一覧です。"),
-                        canonical_path: requested_path,
-                        message: "カテゴリの読み込みに失敗しました"
-                    )
-                }
-            }
-        },
-        Err(error) if error.is_not_found() => {
+    match page_loader(cx).0.load_category(&category).await {
+        Ok(Some(document)) => view! { category_document(document: document) },
+        Ok(None) => {
             view! { not_found_page(canonical_path: requested_path) }
         }
         Err(error) => {
@@ -603,26 +510,12 @@ async fn category_document(document: CategoryPageDocument) -> Result {
 }
 
 #[route(GET "/about")]
-pub(crate) async fn about(cx: &Cx) -> Result<View> {
-    let snapshot = request_snapshot(cx).await?;
+pub async fn about(cx: &Cx) -> Result<View> {
     let page = PageKey::new(ABOUT_PAGE_KEY.to_string())?;
 
-    match snapshot.read_page_document(&page).await {
-        Ok(artifact) => match build_static_page_document(&artifact) {
-            Ok(document) => view! { about_document(document: document) },
-            Err(error) => {
-                eprintln!("About page artifact is invalid: {error}");
-                view! {
-                    internal_server_error_page(
-                        title: format!("About | {}", web::SITE_NAME),
-                        description: "About ページです。".to_string(),
-                        canonical_path: "/about".to_string(),
-                        message: "ページの読み込みに失敗しました"
-                    )
-                }
-            }
-        },
-        Err(error) if error.is_not_found() => {
+    match page_loader(cx).0.load_static_page(&page).await {
+        Ok(Some(document)) => view! { about_document(document: document) },
+        Ok(None) => {
             view! { not_found_page(canonical_path: "/about".to_string()) }
         }
         Err(error) => {

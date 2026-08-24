@@ -1,4 +1,6 @@
-//! Parallel Topcoat runtime shell used during the framework migration.
+//! Topcoat runtime router and HTTP integration.
+
+use std::sync::Arc;
 
 use infra::{DynArtifactReader, DynArtifactSnapshot};
 use topcoat::{
@@ -14,12 +16,13 @@ use topcoat::{
 use crate::{
     article_index::{read_article_index, read_article_index_from_snapshot},
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
+    page_loader::ArtifactPageLoader,
     readiness::check_artifact_readiness,
-    topcoat_pages,
 };
+use web::{PageLoaderContext, topcoat_pages};
 
 #[derive(Clone)]
-pub(crate) struct ArtifactReaderContext(pub(crate) DynArtifactReader);
+struct ArtifactReaderContext(DynArtifactReader);
 
 #[route(GET "/api/health")]
 async fn health() -> Result<&'static str> {
@@ -73,7 +76,10 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
 
         let mut response = match conditional_get.snapshot() {
             Some(snapshot) => {
-                let cx = cx.with(snapshot);
+                let page_loader = PageLoaderContext(Arc::new(ArtifactPageLoader::from_snapshot(
+                    snapshot.clone(),
+                )));
+                let cx = cx.with(snapshot).with(page_loader);
                 next.run(&cx, body).await?
             }
             None => next.run(cx, body).await?,
@@ -108,6 +114,9 @@ pub fn create_topcoat_router(
             artifact_reader.clone(),
             validators_enabled,
         ))
+        .app_context(PageLoaderContext(Arc::new(
+            ArtifactPageLoader::from_reader(artifact_reader.clone()),
+        )))
         .app_context(ArtifactReaderContext(artifact_reader))
         .assets(assets)
         .build()
@@ -115,7 +124,6 @@ pub fn create_topcoat_router(
 
 #[cfg(test)]
 mod tests {
-    use crate::topcoat_pages;
     use std::{
         path::PathBuf,
         sync::{
@@ -124,6 +132,7 @@ mod tests {
         },
         time::SystemTime,
     };
+    use web::topcoat_pages;
 
     use async_trait::async_trait;
     use domain::{

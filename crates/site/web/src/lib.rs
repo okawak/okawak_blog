@@ -1,41 +1,55 @@
-#![recursion_limit = "512"]
+extern crate self as web;
 
-pub mod app;
-pub mod components;
-pub mod error;
 pub mod format;
 pub mod generated_content;
-pub mod routes;
+pub mod topcoat_pages;
+
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use domain::{
+    ArticlePageDocument, Category, CategoryPageDocument, HomePageDocument, PageKey, Slug,
+    StaticPageDocument,
+};
 
 pub const SITE_NAME: &str = "ぶくせんの探窟メモ";
 pub const SITE_ORIGIN: &str = "https://www.okawak.net";
-#[cfg(not(target_arch = "wasm32"))]
 const SITE_ORIGIN_ENV: &str = "OKAWAK_BLOG_SITE_ORIGIN";
 
-// Re-export functions and types used on the server side.
-pub use app::{App, shell};
-pub use error::FrontendError;
+pub type PageLoadResult<T> = Result<T, String>;
+
+#[async_trait]
+pub trait PageLoader: Send + Sync {
+    async fn load_home(&self) -> PageLoadResult<HomePageDocument>;
+
+    async fn load_article(
+        &self,
+        category: &Category,
+        slug: &Slug,
+    ) -> PageLoadResult<Option<ArticlePageDocument>>;
+
+    async fn load_category(
+        &self,
+        category: &Category,
+    ) -> PageLoadResult<Option<CategoryPageDocument>>;
+
+    async fn load_static_page(&self, page: &PageKey) -> PageLoadResult<Option<StaticPageDocument>>;
+}
+
+pub type DynPageLoader = Arc<dyn PageLoader>;
+
+#[derive(Clone)]
+pub struct PageLoaderContext(pub DynPageLoader);
 
 pub fn build_site_url(path: &str) -> String {
     join_site_url(&resolved_site_origin(), path)
 }
 
 fn resolved_site_origin() -> String {
-    #[cfg(target_arch = "wasm32")]
-    {
-        web_sys::window()
-            .and_then(|window| window.location().origin().ok())
-            .filter(|origin| !origin.is_empty())
-            .unwrap_or_else(|| SITE_ORIGIN.to_string())
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        std::env::var(SITE_ORIGIN_ENV)
-            .ok()
-            .filter(|origin| !origin.is_empty())
-            .unwrap_or_else(|| SITE_ORIGIN.to_string())
-    }
+    std::env::var(SITE_ORIGIN_ENV)
+        .ok()
+        .filter(|origin| !origin.is_empty())
+        .unwrap_or_else(|| SITE_ORIGIN.to_string())
 }
 
 fn join_site_url(origin: &str, path: &str) -> String {
@@ -47,17 +61,6 @@ fn join_site_url(origin: &str, path: &str) -> String {
     } else {
         format!("{normalized_origin}/{normalized_path}")
     }
-}
-
-// Client-side hydration entry point.
-#[cfg(feature = "hydrate")]
-#[wasm_bindgen::prelude::wasm_bindgen]
-pub fn hydrate() {
-    use crate::app::*;
-    // Forward panic output to the browser console.
-    console_error_panic_hook::set_once();
-    // Hydrate the body using the App component.
-    leptos::mount::hydrate_body(App);
 }
 
 #[cfg(test)]

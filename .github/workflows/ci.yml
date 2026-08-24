@@ -35,7 +35,6 @@ jobs:
         run: |
           rustup show
           rustup component add clippy
-          rustup target add wasm32-unknown-unknown
 
       - name: Validate service scripts
         run: mise run test-service
@@ -55,12 +54,6 @@ jobs:
 
       - name: Lint workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Check web SSR
-        run: cargo check -p web --features ssr
-
-      - name: Check web hydration
-        run: cargo check -p web --lib --target wasm32-unknown-unknown --features hydrate
 
   browser-e2e:
     needs: verify

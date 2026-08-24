@@ -1,14 +1,19 @@
 # site/web
 
-Leptosによる公開UIとSSR routeを提供するcrateです。Markdown変換は行わず、SSR時に`ArtifactReader`から公開artifactを読み取ってhome、about、category、articleを表示します。
+Topcoatによる公開UI、SSR route、metadataを提供するcrateです。Markdown変換やartifact読取は行わず、storage非依存の`PageLoader`からdomainのpage documentを受け取ってhome、about、category、articleを表示します。`PageLoader`のartifact-backed実装、runtimeの起動、reader注入、API、HTTP cacheは`site/server`が担当します。
 
-browser E2E は web crate 単体ではなく、server と artifact reader を含む公開サイト全体を対象とするため、リポジトリルートの [`e2e/`](../../../e2e/README.md) に置いています。
+browser E2Eはweb crate単体ではなく、serverとartifact readerを含む公開サイト全体を対象とするため、repository rootの[`e2e/`](../../../e2e/README.md)に置いています。
 
-## スタイリング
+## UIとassetの境界
 
-- Rust/UI由来のprimitiveは`src/components/ui/`に置く
-- site固有のcomponentとroute layoutはTailwind classで構成する
-- theme tokenとbase styleは`style/tailwind.css`をsource of truthにする
-- artifactの`inner_html`は`.content-prose`で囲み、`style/content.css`のplain CSSだけを適用する
+- `src/topcoat_pages.rs`: Topcoat route / component、site shell、metadata
+- `src/topcoat_navigation.js`: client-side navigationとmobile menu
+- `src/generated_content.rs`: artifact本文へ適用するKaTeX / highlight.jsの初期化
+- `style/tailwind.css`: theme token、site chrome、Tailwind CSS入力
+- `style/content.css`: `.content-prose`配下の生成HTML用plain CSS
 
-productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Topcoat asset bundleから配信します。build、通常E2E、S3 smokeは`cargo-leptos`やNode / BunのCSS build toolへ依存せず、Leptos JavaScript / WebAssemblyを生成しません。Sass、Stylance、CSS moduleの生成工程はありません。完全撤去まで残るlegacy Leptos依存のinstall・更新確認にはrepository rootの`mise run web-*`を使います。
+productionは`style/tailwind.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、site navigation JavaScript、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。
+
+KaTeX、highlight.js、Font Awesome、Noto Sans JPはversion固定またはURL固定のCDN資産として維持します。KaTeXにはSRIを付与します。これらは数式・syntax highlight・icon・fontの段階的な装飾であり、SSR本文とnavigationの基本機能は外部CDNの成功に依存しません。
+
+Sass、Stylance、CSS module、Node / BunによるCSS生成工程はありません。buildにはrepository rootの`mise run build-project`、確認には`mise run test-web`と`mise run test-e2e`を使います。

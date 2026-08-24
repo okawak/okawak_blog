@@ -1,5 +1,0 @@
-# Oracle Linux 9 VPS only, until the legacy Leptos tool definition is removed.
-# Copy this file to mise.local.toml so production setup skips cargo-leptos.
-
-[settings]
-disable_tools = ["github:leptos-rs/cargo-leptos"]

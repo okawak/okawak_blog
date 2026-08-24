@@ -1,7 +1,6 @@
 fn main() {
     println!("cargo:rerun-if-changed=src");
-    println!("cargo:rerun-if-changed=../web/src");
-    println!("cargo:rerun-if-changed=../web/style");
+    println!("cargo:rerun-if-changed=style");
 
     topcoat::tailwind::BuildConfig::new()
         .input("crates/site/web/style/tailwind.css")
