@@ -23,7 +23,7 @@ use topcoat::{
     router::{Body, HeaderMap, Router, StatusCode, header, request::Request, to_bytes},
 };
 
-use super::create_router as create_router_with_assets;
+use server::router::create_router as create_router_with_assets;
 
 struct TestResponse {
     status: StatusCode,

@@ -93,6 +93,7 @@ okawak_blog/
   - `router` moduleによるroute / layer / assetのcomposition
   - `page_loader` moduleによるartifactとstorage非依存page contractの接続
   - `http_cache` moduleによるrelease-aware ETagとconditional GET
+  - `tests/router.rs`による公開routerのcrate外integration test
 - `crates/site/web`
   - Topcoat UI component、公開route、metadata、site定数
   - client-side navigationと生成コンテンツ用script、Tailwind CSS入力、favicon asset

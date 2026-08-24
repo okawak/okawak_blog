@@ -86,7 +86,3 @@ pub fn create_router(
         .assets(assets)
         .build()
 }
-
-#[cfg(test)]
-#[path = "router_tests.rs"]
-mod tests;
