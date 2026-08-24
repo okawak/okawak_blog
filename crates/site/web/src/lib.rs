@@ -4,7 +4,6 @@ extern crate self as web;
 
 mod article_card;
 pub mod assets;
-mod content_enhancement;
 mod format;
 mod page_loader;
 pub mod pages;

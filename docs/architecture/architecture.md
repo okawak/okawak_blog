@@ -219,7 +219,7 @@ Publish/
       async/
         future.md
     web/
-      leptos.md
+      topcoat.md
 ```
 
 この場合:
@@ -231,7 +231,7 @@ Publish/
   - `kind=article`
   - `category=tech`
   - `section_path=["rust", "async"]`
-- `tech/web/leptos.md`
+- `tech/web/topcoat.md`
   - `kind=article`
   - `category=tech`
   - `section_path=["web"]`
@@ -376,13 +376,15 @@ production `server`はhome、about、category、articleをSSRし、title、canon
 - `src/page_loader.rs`
   - storage非依存のpage load portを定義する
 - `src/pages.rs`
-  - Topcoat routeとpage固有componentでhome、about、category、articleを構成する
+  - page loader contextの取得を共有し、公開routeをre-exportする
+- `src/pages/{home,article,category,page}.rs`
+  - page種別ごとにTopcoat routeと固有componentを構成する
 - `src/article_card.rs`
   - listing route間で共有する記事cardを構成する
 - `src/shell.rs`
-  - site chrome、metadata、error view、responsive navigationを構成する
-- `src/assets.rs` / `src/navigation.js` / `src/content_enhancement.rs`
-  - application asset登録、client-side navigation、生成contentのprogressive enhancementを分離する
+  - site chrome、metadata、error view、responsive navigationと、生成contentのKaTeX / highlight.js progressive enhancementをshell resourceとして構成する
+- `src/assets.rs` / `src/navigation.js`
+  - application asset登録とclient-side navigationを分離する
 - `style/tailwind.css`
   - semantic color、radius、typography、site layout tokenとbase styleのsource of truth
 - `style/content.css`
@@ -390,6 +392,8 @@ production `server`はhome、about、category、articleをSSRし、title、canon
   - heading、code、table、image、bookmark、math spanとKaTeX描画結果など`publish` artifactの表現を担当する
 
 productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Tailwind CSS、Topcoat runtime、site navigation JavaScript、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。生成コンテンツのKaTeXとhighlight.js、iconのFont Awesome、fontのNoto Sans JPはversion固定またはURL固定のCDN資産として維持し、KaTeXにはSRIを付与する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`はNode / BunのCSS build toolを実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
+
+`site/web/build.rs`は`style/tailwind.css`をTopcoatのstylesheet assetへ変換するために維持する。Rustと`view!` macroの書式はrepository rootの`mise run format`から`cargo fmt`と`topcoat fmt`を順に適用する。
 
 ## Reader 経路
 
