@@ -375,7 +375,7 @@ production `server`はhome、about、category、articleをSSRし、title、canon
 
 - `src/page_loader.rs`
   - storage非依存のpage load portを定義する
-- `src/pages/mod.rs`
+- `src/pages.rs`
   - page loader contextの取得を共有し、公開routeをre-exportする
 - `src/pages/{home,article,category,page}.rs`
   - page種別ごとにTopcoat routeと固有componentを構成する

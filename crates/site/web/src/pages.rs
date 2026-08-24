@@ -2,7 +2,7 @@
 
 mod article;
 mod category;
-#[path = "home.rs"]
+#[path = "pages/home.rs"]
 mod home_page;
 mod page;
 

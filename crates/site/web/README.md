@@ -7,7 +7,7 @@ browser E2Eはweb crate単体ではなく、serverとartifact readerを含む公
 ## UIとassetの境界
 
 - `src/page_loader.rs`: storage非依存のpage load port
-- `src/pages/mod.rs`: 公開routeのre-exportとpage loader contextの共有
+- `src/pages.rs`: 公開routeのre-exportとpage loader contextの共有
 - `src/pages/{home,article,category,page}.rs`: page種別ごとのrouteと固有component
 - `src/article_card.rs`: 一覧routeが共有する記事card
 - `src/shell.rs`: HTML shell、metadata、error view
