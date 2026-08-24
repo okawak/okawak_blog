@@ -372,8 +372,16 @@ production `site-server`はhome、about、category、articleをSSRし、title、
 
 `site/web`のUIはTopcoat componentとTailwind CSSを主系にする。
 
-- `src/topcoat_pages.rs`
-  - Topcoat route / componentでsite chrome、page layout、responsive design、metadataを構成する
+- `src/page_loader.rs`
+  - storage非依存のpage load portを定義する
+- `src/pages.rs`
+  - Topcoat routeとpage固有componentでhome、about、category、articleを構成する
+- `src/article_card.rs`
+  - listing route間で共有する記事cardを構成する
+- `src/shell.rs`
+  - site chrome、metadata、error view、responsive navigationを構成する
+- `src/assets.rs` / `src/navigation.js` / `src/content_enhancement.rs`
+  - application asset登録、client-side navigation、生成contentのprogressive enhancementを分離する
 - `style/tailwind.css`
   - semantic color、radius、typography、site layout tokenとbase styleのsource of truth
 - `style/content.css`

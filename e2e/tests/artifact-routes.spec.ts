@@ -777,8 +777,8 @@ test("client navigation reloads when the shell version changes", async ({ page }
     const response = await route.fetch();
     const currentBody = await response.text();
     const body = currentBody.replace(
-      'name="okawak-shell-version" content="topcoat-1"',
-      'name="okawak-shell-version" content="topcoat-2"',
+      'name="okawak-shell-version" content="site-1"',
+      'name="okawak-shell-version" content="site-2"',
     );
     expect(body).not.toBe(currentBody);
     await route.fulfill({ response, body });

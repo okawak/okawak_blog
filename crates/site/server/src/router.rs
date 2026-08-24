@@ -16,7 +16,7 @@ use crate::{
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
     page_loader::ArtifactPageLoader,
 };
-use web::{PageLoaderContext, topcoat_pages};
+use web::{PageLoaderContext, pages};
 
 fn not_modified_response(conditional_get: &ArtifactConditionalGetDecision) -> Response {
     let mut response = Response::new(Body::empty());
@@ -41,9 +41,9 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
 
         let mut response = match conditional_get.snapshot() {
             Some(snapshot) => {
-                let page_loader = PageLoaderContext(Arc::new(ArtifactPageLoader::from_snapshot(
-                    snapshot.clone(),
-                )));
+                let page_loader = PageLoaderContext::new(Arc::new(
+                    ArtifactPageLoader::from_snapshot(snapshot.clone()),
+                ));
                 let cx = cx.with(snapshot).with(page_loader);
                 next.run(&cx, body).await?
             }
@@ -68,10 +68,10 @@ pub fn create_router(
         .route(health)
         .route(readiness)
         .route(articles)
-        .route(topcoat_pages::home)
-        .route(topcoat_pages::article_page)
-        .route(topcoat_pages::category_page)
-        .route(topcoat_pages::about)
+        .route(pages::home)
+        .route(pages::article_page)
+        .route(pages::category_page)
+        .route(pages::about)
         // The framework-neutral decision filters APIs, static assets, and unsuccessful responses.
         // One global layer also avoids nested prefix layers acquiring more than one snapshot.
         .layer(LayerFn::new(None::<&Path>, artifact_conditional_get))
@@ -79,7 +79,7 @@ pub fn create_router(
             artifact_reader.clone(),
             validators_enabled,
         ))
-        .app_context(PageLoaderContext(Arc::new(
+        .app_context(PageLoaderContext::new(Arc::new(
             ArtifactPageLoader::from_reader(artifact_reader.clone()),
         )))
         .app_context(ArtifactReaderContext(artifact_reader))

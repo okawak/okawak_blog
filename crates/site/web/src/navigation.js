@@ -1,4 +1,4 @@
-// Topcoat 0.6.2 does not ship a client router. Keep this site layer small and
+// Topcoat 0.6.2 does not ship a client router. Keep this application layer small and
 // replace it when Topcoat provides first-class navigation.
 const PAGE_METADATA_SELECTOR = [
   "title",

@@ -1,4 +1,4 @@
-//! Shared browser resources for build-time generated content.
+//! Progressive enhancement resources for generated artifact content.
 
 pub const KATEX_STYLESHEET_URL: &str =
     "https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css";
