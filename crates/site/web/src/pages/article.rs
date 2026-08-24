@@ -48,8 +48,11 @@ pub async fn article_page(cx: &Cx) -> Result<View> {
         Ok(Some(document)) => view! { article_document(document: document) },
         Ok(None) => view! { not_found_page(canonical_path: requested_path) },
         Err(error) => {
-            eprintln!(
-                "Article page artifact read failed for {category_param}/{normalized_slug}: {error}"
+            tracing::error!(
+                %error,
+                category = category_param,
+                slug = normalized_slug,
+                "article page artifact read failed"
             );
             view! {
                 article_internal_server_error_page(

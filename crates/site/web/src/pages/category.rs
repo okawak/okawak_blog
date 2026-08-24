@@ -36,7 +36,11 @@ pub async fn category_page(cx: &Cx) -> Result<View> {
             view! { not_found_page(canonical_path: requested_path) }
         }
         Err(error) => {
-            eprintln!("Category page artifact read failed for {category_param}: {error}");
+            tracing::error!(
+                %error,
+                category = category_param,
+                "category page artifact read failed"
+            );
             view! {
                 internal_server_error_page(
                     title: format!("{category_param} | {}", web::SITE_NAME),
