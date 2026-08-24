@@ -24,7 +24,7 @@ pub async fn about(cx: &Cx) -> Result<View> {
             view! { not_found_page(canonical_path: "/about".to_string()) }
         }
         Err(error) => {
-            eprintln!("About page artifact read failed: {error}");
+            tracing::error!(%error, page = ABOUT_PAGE_KEY, "static page artifact read failed");
             view! {
                 internal_server_error_page(
                     title: format!("About | {}", web::SITE_NAME),

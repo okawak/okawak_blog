@@ -20,7 +20,7 @@ pub async fn home(cx: &Cx) -> Result<View> {
     match page_loader(cx).loader().load_home().await {
         Ok(document) => view! { home_document(document: document) },
         Err(error) => {
-            eprintln!("Home page artifact read failed: {error}");
+            tracing::error!(%error, "home page artifact read failed");
             view! {
                 internal_server_error_page(
                     title: build_home_page_title(web::SITE_NAME),

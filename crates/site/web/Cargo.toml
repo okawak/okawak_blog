@@ -11,6 +11,7 @@ async-trait.workspace = true
 domain = { path = "../../domain" }
 chrono = { workspace = true, features = ["serde"] }
 topcoat.workspace = true
+tracing.workspace = true
 
 [build-dependencies]
 topcoat = { workspace = true, default-features = false, features = ["tailwind"] }
