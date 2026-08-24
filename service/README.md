@@ -64,6 +64,10 @@ curl --fail http://127.0.0.1:8008/api/ready
 - `/api/health`: process liveness。artifactの状態は確認しません。
 - `/api/ready`: configured `ArtifactReader`からsite metadataを読めた場合だけ`200 OK`を返します。直前のimmutable releaseでcache済みmetadataを配信できる場合も`200 OK`です。利用可能なsnapshotがない初回起動時やmetadataを読めない場合は`503 Service Unavailable`です。
 
+## Runtime logging
+
+serverは`tracing`でstructured logを標準出力へ記録し、systemd journalから確認します。log filterは`RUST_LOG`で指定し、未指定または空の場合は`info`を使います。本番unitは`RUST_LOG=info`を明示します。`debug`のようなlevelに加えて、`server=debug,topcoat=warn`のようなtarget別filterも指定できます。不正なfilterの場合はconfiguration errorとしてserverを起動しません。
+
 ## Artifact cache
 
 本番のS3 readerは、release snapshotとそのimmutable artifactをprocess memoryでcacheします。
