@@ -7,7 +7,7 @@ PROJECT_NAME = "okawak_blog"
 SERVICE_NAME = "okawak_blog"
 SERVICE_FILE = "service/okawak_blog.service"
 BIN_DIR = "./bin"
-TARGET_BIN = "./target/release/site-server"
+TARGET_BIN = "./target/release/server"
 TARGET_ASSET_DIR = "./target/release/assets"
 DEPLOY_STAGED_ASSETS = "./target/assets-staged"
 TOPCOAT_TAILWIND_VERSION = "4.3.3"
@@ -89,8 +89,8 @@ description = "Run the local Topcoat development server with S3 artifacts"
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "s3", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008", OKAWAK_BLOG_ADDR = "127.0.0.1:8008" }
 run = '''
 : "${OKAWAK_BLOG_ARTIFACT_BUCKET:?OKAWAK_BLOG_ARTIFACT_BUCKET is required}"
-topcoat asset bundle --package server --bin site-server
-./target/debug/site-server
+topcoat asset bundle --package server --bin server
+./target/debug/server
 '''
 
 [tasks.dev-local]
@@ -99,17 +99,17 @@ env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT =
 run = '''
 mise run sync-obsidian
 cargo run -p publish
-topcoat asset bundle --package server --bin site-server
-./target/debug/site-server
+topcoat asset bundle --package server --bin server
+./target/debug/server
 '''
 
 [tasks.dev-fixture]
 description = "Run the Topcoat runtime with fixture artifacts"
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "e2e/fixtures/site", OKAWAK_BLOG_ADDR = "127.0.0.1:8009" }
 run = '''
-topcoat asset bundle --package server --bin site-server --release
+topcoat asset bundle --package server --bin server --release
 # Asset IDs are tied to the exact binary scanned by the bundler.
-./target/release/site-server
+./target/release/server
 '''
 
 [tasks.clean-project]
@@ -119,17 +119,17 @@ run = "cargo clean"
 [tasks.build-project]
 description = "Build the integrated Topcoat binary and asset bundle for deployment"
 depends = ["check-deps"]
-run = "topcoat asset bundle --package server --bin site-server --release"
+run = "topcoat asset bundle --package server --bin server --release"
 
 [tasks.build-deployment]
 description = "Build a production release outside the live site directory"
 depends = ["check-deps"]
-run = "topcoat asset bundle --package server --bin site-server --release --out \"$DEPLOY_STAGED_ASSETS\""
+run = "topcoat asset bundle --package server --bin server --release --out \"$DEPLOY_STAGED_ASSETS\""
 
 [tasks.build-server]
 description = "Build the Topcoat server binary only"
 depends = ["check-deps"]
-run = "cargo build --release -p server --bin site-server"
+run = "cargo build --release -p server --bin server"
 
 [tasks.pull]
 description = "Pull the latest changes from origin/main"

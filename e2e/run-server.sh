@@ -2,8 +2,8 @@
 set -eu
 
 if [ "${OKAWAK_BLOG_E2E_REUSE_BUILD:-false}" != "true" ] \
-  || [ ! -x ./target/debug/site-server ] \
+  || [ ! -x ./target/debug/server ] \
   || [ ! -s ./target/debug/assets/manifest.toml ]; then
-  topcoat asset bundle --package server --bin site-server
+  topcoat asset bundle --package server --bin server
 fi
-exec ./target/debug/site-server
+exec ./target/debug/server

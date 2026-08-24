@@ -5,11 +5,6 @@ authors.workspace = true
 description.workspace = true
 edition.workspace = true
 license.workspace = true
-default-run = "site-server"
-
-[[bin]]
-name = "site-server"
-path = "src/main.rs"
 
 [dependencies]
 async-trait.workspace = true
