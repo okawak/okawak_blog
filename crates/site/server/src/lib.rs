@@ -1,11 +1,9 @@
-//! Topcoat blog server library.
+//! Site runtime composition and HTTP boundary.
 
-pub mod article_index;
+mod api;
 
 pub mod http_cache;
 
 mod page_loader;
 
-pub mod readiness;
-
-pub mod topcoat_runtime;
+pub mod router;

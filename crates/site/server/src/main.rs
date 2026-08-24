@@ -1,8 +1,8 @@
-//! Production entry point for the Topcoat SSR server.
+//! Production entry point for the site server.
 
 use infra::{ArtifactSourceConfig, build_artifact_reader};
 use server::http_cache::artifact_validators_enabled;
-use server::topcoat_runtime::create_topcoat_router;
+use server::router::create_router;
 use topcoat::asset::AssetBundle;
 
 const DEFAULT_ADDR: &str = "127.0.0.1:8008";
@@ -15,10 +15,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let artifact_reader = build_artifact_reader(artifact_source.clone()).await?;
     let validators_enabled = artifact_validators_enabled(&artifact_source);
     let assets = AssetBundle::load()?;
-    let router = create_topcoat_router(artifact_reader, validators_enabled, assets.into());
+    let router = create_router(artifact_reader, validators_enabled, assets.into());
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
-    println!("Starting Topcoat blog server on http://{addr}");
+    println!("Starting site server on http://{addr}");
     println!("Artifact source: {}", artifact_source.kind());
 
     topcoat::serve(listener, router).await?;
