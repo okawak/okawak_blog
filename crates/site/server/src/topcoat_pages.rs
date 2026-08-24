@@ -31,10 +31,11 @@ use web::generated_content::{
 const ABOUT_PAGE_KEY: &str = "about";
 const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
-const STYLESHEET_PATH: &str = "/pkg/web.css";
 // Bump when retained shell markup outside `<main>` changes incompatibly.
 const SHELL_VERSION: &str = "topcoat-1";
 pub(crate) const CLIENT_NAVIGATION_SCRIPT: Asset = asset!("./topcoat_navigation.js");
+pub(crate) const STYLESHEET: Asset = topcoat::tailwind::stylesheet!();
+pub(crate) const FAVICON: Asset = asset!("../../web/public/favicon.ico", rename: "favicon");
 
 struct ShellMetadata {
     title: String,
@@ -755,7 +756,6 @@ async fn site_shell(
     child: View,
 ) -> Result {
     let year = chrono::Local::now().year();
-    let stylesheet_href = stylesheet_href();
     let math_render_script = Unescaped::new_unchecked(MATH_RENDER_SCRIPT);
     let code_highlight_script = Unescaped::new_unchecked(CODE_HIGHLIGHT_SCRIPT);
     let ShellMetadata {
@@ -780,10 +780,10 @@ async fn site_shell(
                 <meta property="og:description" content=(description)>
                 <meta property="og:url" content=(canonical_url)>
                 <meta property="og:type" content=(og_type)>
-                <link rel="stylesheet" href=(stylesheet_href)>
+                <link rel="stylesheet" href=(STYLESHEET)>
                 <link
                     rel="icon"
-                    href="/favicon.ico?v=f544a69c"
+                    href=(FAVICON)
                     type="image/x-icon"
                     sizes="16x16 32x32 48x48"
                 >
@@ -971,29 +971,5 @@ async fn site_shell(
                 </div>
             </body>
         </html>
-    }
-}
-
-fn stylesheet_href() -> String {
-    let hash = std::env::current_exe()
-        .ok()
-        .and_then(|executable| executable.parent().map(std::path::Path::to_owned))
-        .and_then(|directory| {
-            [directory.join("hash.txt"), directory.join("../hash.txt")]
-                .into_iter()
-                .find_map(|path| std::fs::read_to_string(path).ok())
-        })
-        .and_then(|hashes| {
-            hashes.lines().find_map(|line| {
-                let (name, hash) = line.trim().split_once(':')?;
-                (name == "css")
-                    .then(|| hash.trim().to_string())
-                    .filter(|hash| !hash.is_empty())
-            })
-        });
-
-    match hash {
-        Some(hash) => format!("/pkg/web.{hash}.css"),
-        None => STYLESHEET_PATH.to_string(),
     }
 }

@@ -385,7 +385,7 @@ home、about、category、articleの公開routeは`SsrMode::Async`で描画す�
   - article、about、category landing、home fragmentの生成HTMLだけを`.content-prose`配下で整形するplain CSS
   - heading、code、table、image、bookmark、math spanとKaTeX描画結果など`publish` artifactの表現を担当する
 
-`cargo-leptos`は`tailwind-input-file`からCSSを生成する。Sass、Stylance、routeごとのCSS module生成工程は持たない。これによりRust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
+現行productionのLeptos buildは`cargo-leptos`の`tailwind-input-file`からCSSを生成する。移行用Topcoat runtimeは同じ入力をTopcoatのstandalone Tailwind build integrationで生成し、Topcoat asset bundleからcontent-hash付きURLで配信する。通常fixture E2Eと`dev-topcoat-shell`は`cargo leptos build`もNode / BunのCSS build toolも実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、どちらのruntimeでもRust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
 
 ## Reader 経路
 

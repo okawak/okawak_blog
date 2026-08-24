@@ -1,18 +1,15 @@
 //! Parallel Topcoat runtime shell used during the framework migration.
 
-use std::path::PathBuf;
-
 use infra::{DynArtifactReader, DynArtifactSnapshot};
 use topcoat::{
     Result,
     asset::{AssetConfig, RouterBuilderAssetExt},
     context::{Cx, app_context, try_request_context},
     router::{
-        Body, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode, content::Json,
-        error::internal_server_error, request, response::Response, route, tower::TowerRoute,
+        Body, LayerFn, LayerFuture, Next, Path, Router, StatusCode, content::Json,
+        error::internal_server_error, request, response::Response, route,
     },
 };
-use tower_http::services::ServeDir;
 
 use crate::{
     article_index::{read_article_index, read_article_index_from_snapshot},
@@ -96,22 +93,6 @@ pub fn create_topcoat_router(
     validators_enabled: bool,
     assets: AssetConfig,
 ) -> Router {
-    create_topcoat_router_with_site_root(
-        artifact_reader,
-        validators_enabled,
-        PathBuf::from("target/site"),
-        assets,
-    )
-}
-
-fn create_topcoat_router_with_site_root(
-    artifact_reader: DynArtifactReader,
-    validators_enabled: bool,
-    site_root: PathBuf,
-    assets: AssetConfig,
-) -> Router {
-    let static_files = ServeDir::new(site_root);
-
     Router::builder()
         .route(health)
         .route(readiness)
@@ -120,14 +101,6 @@ fn create_topcoat_router_with_site_root(
         .route(topcoat_pages::article_page)
         .route(topcoat_pages::category_page)
         .route(topcoat_pages::about)
-        // Reuse the current generated asset directory during the parallel-runtime period. The
-        // final asset pipeline will replace this compatibility mount before Leptos is removed.
-        .route(TowerRoute::new(
-            Method::GET,
-            "/pkg/{*rest}",
-            static_files.clone(),
-        ))
-        .route(TowerRoute::new(Method::GET, "/favicon.ico", static_files))
         // The framework-neutral decision filters APIs, static assets, and unsuccessful responses.
         // One global layer also avoids nested prefix layers acquiring more than one snapshot.
         .layer(LayerFn::new(None::<&Path>, artifact_conditional_get))
@@ -167,10 +140,7 @@ mod tests {
         router::{Body, HeaderMap, Router, StatusCode, header, request::Request, to_bytes},
     };
 
-    use super::{
-        create_topcoat_router as create_topcoat_router_with_assets,
-        create_topcoat_router_with_site_root as create_topcoat_router_with_site_root_and_assets,
-    };
+    use super::create_topcoat_router as create_topcoat_router_with_assets;
 
     struct TestResponse {
         status: StatusCode,
@@ -209,6 +179,18 @@ mod tests {
                         hash: "test".to_string(),
                         content_type: "text/javascript".to_string(),
                     },
+                    ManifestEntry {
+                        id: topcoat_pages::STYLESHEET.id(),
+                        file: "tailwind-test.css".to_string(),
+                        hash: "test".to_string(),
+                        content_type: "text/css".to_string(),
+                    },
+                    ManifestEntry {
+                        id: topcoat_pages::FAVICON.id(),
+                        file: "favicon-test.ico".to_string(),
+                        hash: "test".to_string(),
+                        content_type: "image/x-icon".to_string(),
+                    },
                 ],
             },
         )
@@ -219,19 +201,6 @@ mod tests {
         validators_enabled: bool,
     ) -> Router {
         create_topcoat_router_with_assets(artifact_reader, validators_enabled, test_asset_config())
-    }
-
-    fn create_topcoat_router_with_site_root(
-        artifact_reader: DynArtifactReader,
-        validators_enabled: bool,
-        site_root: PathBuf,
-    ) -> Router {
-        create_topcoat_router_with_site_root_and_assets(
-            artifact_reader,
-            validators_enabled,
-            site_root,
-            test_asset_config(),
-        )
     }
 
     #[derive(Clone)]
@@ -1133,9 +1102,11 @@ mod tests {
         assert!(
             response
                 .body
-                .contains("<link rel=\"stylesheet\" href=\"/pkg/web")
+                .contains("<link rel=\"stylesheet\" href=\"/_topcoat/assets/tailwind-test.css\">")
         );
-        assert!(response.body.contains(".css\">"));
+        assert!(response.body.contains(
+            "<link rel=\"icon\" href=\"/_topcoat/assets/favicon-test.ico\" type=\"image/x-icon\""
+        ));
         assert!(response.body.contains(">Fixture About</h1>"));
         assert!(
             response
@@ -1278,42 +1249,6 @@ mod tests {
 
         assert_eq!(response.status, StatusCode::OK);
         assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn topcoat_serves_transitional_static_assets() {
-        let temp_dir = tempdir().unwrap();
-        std::fs::create_dir_all(temp_dir.path().join("pkg")).unwrap();
-        std::fs::write(temp_dir.path().join("pkg/web.css"), "body { color: red; }").unwrap();
-        std::fs::write(temp_dir.path().join("favicon.ico"), b"icon").unwrap();
-        let router = create_topcoat_router_with_site_root(
-            fixture_reader(),
-            false,
-            temp_dir.path().to_path_buf(),
-        );
-
-        let stylesheet = response(
-            &router,
-            Request::builder()
-                .uri("/pkg/web.css")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await;
-        let favicon = response(
-            &router,
-            Request::builder()
-                .uri("/favicon.ico")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await;
-
-        assert_eq!(stylesheet.status, StatusCode::OK);
-        assert_eq!(stylesheet.content_type.as_deref(), Some("text/css"));
-        assert_eq!(stylesheet.body, "body { color: red; }");
-        assert_eq!(favicon.status, StatusCode::OK);
-        assert_eq!(favicon.body, "icon");
     }
 
     #[tokio::test]
