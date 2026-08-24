@@ -23,6 +23,7 @@ Environment=OKAWAK_BLOG_ARTIFACT_BUCKET=okawak-blog-resources-bucket
 Environment=OKAWAK_BLOG_ARTIFACT_CACHE_TTL_SECONDS=5
 Environment=OKAWAK_BLOG_SITE_ORIGIN=https://www.okawak.net
 Environment=OKAWAK_BLOG_ADDR=127.0.0.1:8008
+Environment=RUST_LOG=info
 
 StateDirectory=okawak_blog
 StateDirectoryMode=0700

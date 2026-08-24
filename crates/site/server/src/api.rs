@@ -26,7 +26,7 @@ pub(crate) async fn readiness(cx: &Cx) -> Result<(StatusCode, &'static str)> {
     match ready {
         Ok(_) => Ok((StatusCode::OK, "READY")),
         Err(error) => {
-            eprintln!("Artifact readiness check failed: {error}");
+            tracing::warn!(%error, "artifact readiness check failed");
             Ok((StatusCode::SERVICE_UNAVAILABLE, "NOT READY"))
         }
     }
