@@ -89,8 +89,8 @@ okawak_blog/
   - process liveness (`/api/health`) と artifact readiness (`/api/ready`)
   - release-aware ETag と conditional GET
 - `crates/site/web`
-  - Topcoatと共有するsite定数、生成コンテンツ用script、Tailwind CSS入力
-  - 完全撤去まで残るlegacy Leptos UI、route、server function
+  - Topcoat UI component、公開route、metadata、site定数
+  - client-side navigationと生成コンテンツ用script、Tailwind CSS入力、favicon asset
 - `e2e`
   - `crates/site/server`と`crates/site/infra`をまたぐproduction Topcoat serverのbrowser E2E
   - 通常CIではprivate Obsidian submoduleやS3に依存しない固定artifact fixture
@@ -357,28 +357,25 @@ flowchart LR
 - `StaticPageDocument`
   - `about` などの固定ページ用contract
 
-`site/server`のTopcoat pageはこのpage contractをもとにmetadataとUIを組み立てる。`DynArtifactReader`はTopcoat app contextへ登録し、各requestのconditional GET判定とpage document構築で同じsnapshotをrequest contextから共有する。local / S3などのstorage実装詳細はpage componentへ持ち込まない。
+`site/web`のTopcoat pageはこのpage contractをもとにmetadataとUIを組み立てる。`site/server`は`DynArtifactReader`をTopcoat app contextへ登録し、各requestのconditional GET判定とpage document構築で同じsnapshotをrequest contextから共有する。local / S3などのstorage実装詳細はpage componentへ持ち込まない。
 
 公開routeのpage document読取はTopcoat async componentを正式経路とする。手書きの`/api/page/*`は持たず、404とstorage errorのstatus / error viewをroute境界で統一する。`/api/articles`はpage documentを組み立てない互換endpointとして維持する。
 
-production `topcoat-server`はhome、about、category、articleをSSRし、title、canonical、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。legacy Leptos route / server functionは完全撤去までsourceに残るが、production build、通常E2E、S3 smokeのentrypointには使わない。
+production `topcoat-server`はhome、about、category、articleをSSRし、title、canonical、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。
 
 ## UI styling境界
 
-`site/web`のUIはRust/UI由来のprimitiveとTailwind CSSを主系にする。
+`site/web`のUIはTopcoat componentとTailwind CSSを主系にする。
 
-- `src/components/ui/`
-  - Rust/UI registry由来の汎用primitive
-  - site固有のlayoutや文言を持たない
-- `src/components/`と`src/routes/`
-  - Tailwind classでsite chrome、page layout、responsive designを構成する
+- `src/topcoat_pages.rs`
+  - Topcoat route / componentでsite chrome、page layout、responsive design、metadataを構成する
 - `style/tailwind.css`
   - semantic color、radius、typography、site layout tokenとbase styleのsource of truth
 - `style/content.css`
   - article、about、category landing、home fragmentの生成HTMLだけを`.content-prose`配下で整形するplain CSS
   - heading、code、table、image、bookmark、math spanとKaTeX描画結果など`publish` artifactの表現を担当する
 
-productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、CSS、JavaScript、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`は`cargo leptos build`もNode / BunのCSS build toolも実行せず、Leptos loader / WebAssemblyを生成・配信しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
+productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Tailwind CSS、Topcoat runtime、site navigation JavaScript、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。生成コンテンツのKaTeXとhighlight.js、iconのFont Awesome、fontのNoto Sans JPはversion固定またはURL固定のCDN資産として維持し、KaTeXにはSRIを付与する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`はNode / BunのCSS build toolを実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
 
 ## Reader 経路
 
@@ -421,7 +418,7 @@ AWS SDK標準retry後もsnapshot更新に失敗した場合、cache identityを�
 
 `site/server`はprocess instance、release snapshot identity、request URIからweak ETagを生成し、release生成時刻とprocess起動時刻の新しい方をHTTP-dateへ変換した`Last-Modified`を付与する。process起動時刻も含めることで、artifactが同じでもserver / UI更新後のrepresentationを日付validatorだけで再利用させない。対象はartifact-backedなGET / HEAD responseと`/api/articles`で、matching `If-None-Match`にはbodyをrenderせず`304 Not Modified`を返す。`If-Modified-Since`はresourceが存在することをhandlerの成功responseで確認してからbodyを破棄して304へ変換するため、未知のURIやerror responseを誤って304にしない。両方がある場合はRFC 9110に従って`If-None-Match`を優先し、不正または複数の`If-Modified-Since`は無視する。成功responseには`Cache-Control: public, max-age=0, must-revalidate`を付け、browserやproxyへ毎回のrevalidationを要求する。
 
-validatorは`current.json`からimmutable release identityと生成時刻を取得でき、snapshot cache TTLが`0`でない場合だけ有効にする。local reader、legacy root、release prefixを直接読む公開前smoke test、TTL=`0`ではrequest内で同じsnapshotを保証できないため付与しない。health / readiness、static asset、server function、404 / error responseも対象外とする。process再起動時はETagを変え、artifactが同じでもserver / UI変更後の古いrepresentationを再利用させない。stale fallback中は同じsnapshot metadataとprocess instanceを使うためvalidatorも維持する。
+validatorは`current.json`からimmutable release identityと生成時刻を取得でき、snapshot cache TTLが`0`でない場合だけ有効にする。local reader、legacy root、release prefixを直接読む公開前smoke test、TTL=`0`ではrequest内で同じsnapshotを保証できないため付与しない。health / readiness、static asset、404 / error responseも対象外とする。process再起動時はETagを変え、artifactが同じでもserver / UI変更後の古いrepresentationを再利用させない。stale fallback中は同じsnapshot metadataとprocess instanceを使うためvalidatorも維持する。
 
 本番のAWS SDKは`AWS_CONFIG_FILE=/etc/okawak_blog/aws/config`のprofileから`aws_signing_helper credential-process`を実行し、IAM Roles AnywhereのX.509 identityを期限付きrole credentialへ交換する。helper、config、end-entity certificate、private keyはroot管理pathへ置き、`ProtectHome=true`を維持する。SDK標準のcredential refreshを使い、application独自のtimerやcredential管理責務を`site/infra`へ持ち込まない。
 

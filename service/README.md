@@ -6,32 +6,28 @@
 
 ## VPS build tool
 
-production buildはTopcoat CLIを使い、`cargo-leptos`、Leptos hydration JavaScript、WebAssemblyを生成しません。Topcoat CLIのversionは`mise.toml`と`mise.lock`でframeworkと同じ0.6.2へ固定します。
-
-Leptos完全撤去までの間は、Oracle Linux 9で実行できない旧`cargo-leptos`のmise tool定義だけがrepositoryに残ります。本番VPSではrepository固有のlocal configでそのtoolを無効化します。sourceからの`cargo-leptos` installは不要です。
+production buildはTopcoat CLIを使います。Topcoat CLIのversionは`mise.toml`と`mise.lock`でframeworkと同じ0.6.2へ固定します。
 
 VPSの運用userで次を実行します。
 
 ```bash
 cd /opt/okawak_blog
-install -m 0644 mise.local.toml.example mise.local.toml
 mise settings set locked true
 ```
 
-`mise.local.toml`はGit管理外です。`[settings].disable_tools`は移行中に残るmise配布版の`cargo-leptos`だけを無効化します。`mise settings set locked true`は運用userのglobal settingへ保存され、tracked `mise.lock`以外の解決を継続的に禁止します。
+`mise settings set locked true`は運用userのglobal settingへ保存され、tracked `mise.lock`以外の解決を継続的に禁止します。
 
 新しいSSH sessionで設定と選択binaryを確認します。
 
 ```bash
 cd /opt/okawak_blog
-mise settings get disable_tools
 mise settings get locked
 topcoat fmt --version
 mise run check-deps
 git status --short
 ```
 
-Topcoat CLIが0.6.2で、`mise run check-deps`が成功し、Git差分が空であれば正常です。`mise run build-project`とproduction用のstaged buildはTopcoatのstandalone Tailwind integrationを使うため、`cargo-leptos`やBun package installへ依存しません。
+Topcoat CLIが0.6.2で、`mise run check-deps`が成功し、Git差分が空であれば正常です。`mise run build-project`とproduction用のstaged buildはTopcoatのstandalone Tailwind integrationを使い、Bun package installへ依存しません。
 
 `mise run production-deploy`は稼働中のasset directoryを直接buildしません。`target/assets-staged`にhash付きCSS / JavaScript / faviconを揃え、service停止後に`bin/okawak_blog`と、Topcoatがbinaryの隣から読む`bin/assets`を同じreleaseへ切り替えます。stagingはWebAssemblyを拒否します。起動後のhealth / readinessが失敗した場合は旧binaryと旧assetsを復元し、調査用の失敗bundleを`bin/assets.failed`へ残します。
 

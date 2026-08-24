@@ -1,4 +1,4 @@
-//! Topcoat SSR pages introduced route by route during the migration.
+//! Topcoat SSR pages and shared site shell.
 
 use std::str::FromStr;
 
@@ -22,10 +22,13 @@ use topcoat::{
     view::{Unescaped, View, component, view},
 };
 
-use crate::topcoat_runtime::ArtifactReaderContext;
-use web::generated_content::{
-    CODE_HIGHLIGHT_SCRIPT, HIGHLIGHT_SCRIPT_URL, HIGHLIGHT_STYLESHEET_URL, KATEX_SCRIPT_INTEGRITY,
-    KATEX_SCRIPT_URL, KATEX_STYLESHEET_INTEGRITY, KATEX_STYLESHEET_URL, MATH_RENDER_SCRIPT,
+use crate::{
+    ArtifactReaderContext,
+    generated_content::{
+        CODE_HIGHLIGHT_SCRIPT, HIGHLIGHT_SCRIPT_URL, HIGHLIGHT_STYLESHEET_URL,
+        KATEX_SCRIPT_INTEGRITY, KATEX_SCRIPT_URL, KATEX_STYLESHEET_INTEGRITY, KATEX_STYLESHEET_URL,
+        MATH_RENDER_SCRIPT,
+    },
 };
 
 const ABOUT_PAGE_KEY: &str = "about";
@@ -33,9 +36,9 @@ const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
 // Bump when retained shell markup outside `<main>` changes incompatibly.
 const SHELL_VERSION: &str = "topcoat-1";
-pub(crate) const CLIENT_NAVIGATION_SCRIPT: Asset = asset!("./topcoat_navigation.js");
-pub(crate) const STYLESHEET: Asset = topcoat::tailwind::stylesheet!();
-pub(crate) const FAVICON: Asset = asset!("../../web/public/favicon.ico", rename: "favicon");
+pub const CLIENT_NAVIGATION_SCRIPT: Asset = asset!("./topcoat_navigation.js");
+pub const STYLESHEET: Asset = topcoat::tailwind::stylesheet!();
+pub const FAVICON: Asset = asset!("../public/favicon.ico", rename: "favicon");
 
 struct ShellMetadata {
     title: String,
@@ -67,7 +70,7 @@ impl ShellMetadata {
 path_param!(category_name);
 
 #[route(GET "/")]
-pub(crate) async fn home(cx: &Cx) -> Result<View> {
+pub async fn home(cx: &Cx) -> Result<View> {
     let snapshot = match request_snapshot(cx).await {
         Ok(snapshot) => snapshot,
         Err(error) => {
@@ -313,7 +316,7 @@ async fn article_card(article: &SiteArticleCard) -> Result {
 }
 
 #[route(GET "/{category_name}/{article_slug}")]
-pub(crate) async fn article_page(cx: &Cx) -> Result<View> {
+pub async fn article_page(cx: &Cx) -> Result<View> {
     let mut params = raw_path_params(cx);
     let category_param = params
         .next()
@@ -485,7 +488,7 @@ fn normalize_article_slug_param(slug: &str) -> &str {
 }
 
 #[route(GET "/{category_name}")]
-pub(crate) async fn category_page(cx: &Cx) -> Result<View> {
+pub async fn category_page(cx: &Cx) -> Result<View> {
     let category_param = path_param::<CategoryName>(cx);
     let requested_path = request::uri(cx).path().to_string();
     let category = match DomainCategory::from_str(category_param) {
@@ -603,7 +606,7 @@ async fn category_document(document: CategoryPageDocument) -> Result {
 }
 
 #[route(GET "/about")]
-pub(crate) async fn about(cx: &Cx) -> Result<View> {
+pub async fn about(cx: &Cx) -> Result<View> {
     let snapshot = request_snapshot(cx).await?;
     let page = PageKey::new(ABOUT_PAGE_KEY.to_string())?;
 

@@ -93,7 +93,7 @@ cargo run -p publish
 cargo run --release -p publish
 ```
 
-repository rootの`mise run dev-local`はprivate Obsidian submoduleをremoteの最新状態へ同期し、通常の`publish`で生成したlocal artifactをLeptos開発サーバーで配信します。
+repository rootの`mise run dev-local`はprivate Obsidian submoduleをremoteの最新状態へ同期し、通常の`publish`で生成したlocal artifactをTopcoat開発サーバーで配信します。
 
 ### ディレクトリ構成
 

@@ -1,8 +1,6 @@
 [tools]
 bun = "1.4.0"
 "cargo:topcoat-cli" = "0.6.2"
-"github:leptos-rs/cargo-leptos" = "0.3.7"
-"github:bram209/leptosfmt" = "0.1.33"
 
 [env]
 PROJECT_NAME = "okawak_blog"
@@ -12,7 +10,7 @@ BIN_DIR = "./bin"
 TARGET_BIN = "./target/release/topcoat-server"
 TARGET_ASSET_DIR = "./target/release/assets"
 DEPLOY_STAGED_ASSETS = "./target/assets-staged"
-LEPTOS_TAILWIND_VERSION = "v4.3.3"
+TOPCOAT_TAILWIND_VERSION = "4.3.3"
 
 [tasks.check-deps]
 description = "Check if the production Topcoat build tools are installed"
@@ -27,30 +25,9 @@ actual_topcoat_version="$(topcoat fmt --version | awk '{print $2}')"
 [ "$actual_topcoat_version" = "$expected_topcoat_version" ]
 '''
 
-[tasks.web-install]
-description = "Install web package.json dependencies with bun"
-run = '''
-cd crates/site/web
-bun install --frozen-lockfile
-'''
-
 [tasks.versions-check]
 description = "Check shared tool and build helper version consistency"
 run = "bash scripts/check_tool_versions.sh"
-
-[tasks.web-update]
-description = "Update web package.json dependencies within their declared version ranges with bun"
-run = '''
-cd crates/site/web
-bun update
-'''
-
-[tasks.web-outdated]
-description = "Show outdated web package.json dependencies with bun"
-run = '''
-cd crates/site/web
-bun outdated
-'''
 
 [tasks.e2e-install]
 description = "Install root E2E dependencies with bun"
@@ -100,11 +77,11 @@ git submodule update --remote --checkout --recursive "$obsidian_path"
 '''
 
 [tasks.format]
-description = "Format Rust and Leptos source files"
+description = "Format Rust and Topcoat source files"
 run = '''
 cargo fmt --all
 find crates/site/server/src -name '*.rs' -exec topcoat fmt {} +
-find crates/site/web -name '*.rs' -exec leptosfmt {} +
+find crates/site/web/src -name '*.rs' -exec topcoat fmt {} +
 '''
 
 [tasks.dev]
@@ -306,9 +283,6 @@ echo "Common commands:"
 echo "  mise run dev"
 echo "  mise run dev-local"
 echo "  mise run build-project"
-echo "  mise run web-install"
-echo "  mise run web-update"
-echo "  mise run web-outdated"
 echo "  mise run e2e-install"
 echo "  mise run e2e-update"
 echo "  mise run e2e-outdated"

@@ -6,9 +6,7 @@ updates:
       interval: weekly
 
   - package-ecosystem: bun
-    directories:
-      - "/crates/site/web"
-      - "/e2e"
+    directory: "/e2e"
     schedule:
       interval: weekly
 

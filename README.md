@@ -73,7 +73,7 @@ okawak_blog/
 │   └── site/
 │       ├── infra/            # Topcoat サーバー側の S3 / cache / runtime adapter
 │       ├── server/           # 公開成果物を読む統合バックエンド
-│       └── web/              # 移行中の共有style/scriptとlegacy Leptos UI
+│       └── web/              # Topcoat UI、route、metadata、style/script
 ├── e2e/                      # 公開サイト全体の browser E2E
 ├── docs/
 │   └── architecture/
@@ -87,7 +87,7 @@ okawak_blog/
 - `crates/publish`: `pipeline` moduleが、`vault`によるObsidian入力、`render`によるMarkdown変換とbookmark enrichment、`artifacts`による成果物生成を統括する単一の`publish` crate。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
 - `crates/site/infra`: Topcoat サーバーが公開成果物を読むための S3 / cache / runtime adapter。開発と本番はS3 readerを使い、local readerは自動test用に残す
 - `crates/site/server`: S3 上の成果物を読んで配信し、release-aware ETag / Last-Modifiedを扱う統合バックエンド
-- `crates/site/web`: Topcoatと共有するstyle / generated content script、および完全撤去までのlegacy Leptos UI
+- `crates/site/web`: Topcoat UI / route / metadata、style、generated content script
 - `e2e`: server / web / artifact reader をまたぐ、固定 artifact ベースの browser E2E
 
 ## 公開成果物のイメージ
@@ -200,15 +200,13 @@ mise install
 mise run versions-check
 ```
 
-共通実行tool（Bun、Topcoat CLI、完全撤去までのcargo-leptos / leptosfmt）は`mise.toml`をsource of truthとし、`mise.lock`にはmacOS arm64、GitHub Actions Linux x64、VPSが識別するLinux platform aliasの解決済みrelease assetを記録します。Rust toolchainは`rust-toolchain.toml`、Cargo / Bun依存は各manifestとlockfile、GitHub Actionsはworkflow内の最新major指定を正とします。
+共通実行tool（Bun、Topcoat CLI）は`mise.toml`をsource of truthとし、`mise.lock`にはmacOS arm64、GitHub Actions Linux x64、VPSが識別するLinux platform aliasの解決済みrelease assetを記録します。Rust toolchainは`rust-toolchain.toml`、Cargo / Bun依存は各manifestとlockfile、GitHub Actionsはworkflow内の最新major指定を正とします。
 
-web UIはRust/UI由来のprimitiveとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/site/web/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
+web UIはTopcoat componentとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/site/web/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
 
 private Obsidian repoを使う`publish`側の開発では、`mise run dev-local`がsubmoduleをremoteの最新commitへ同期してから`publish`を実行します。生成先の`crates/publish/dist/site`を既存のlocal readerでそのまま配信し、未公開content、Markdown変換、UIを一続きで確認します。`mise run dev`はGitHub Actionsが公開したS3 artifactを読み、本番相当のreader経路を確認します。同期だけを行う場合は`mise run sync-obsidian`を使います。自動同期はsubmodule内に未commit差分がある場合は停止し、merge commitを作らずremote revisionをcheckoutします。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
-`crates/site/web/package.json` の依存のインストール/更新確認は root から `mise run web-install` / `mise run web-update` / `mise run web-outdated` で行えます。
-
-production CSSはTopcoatのstandalone Tailwind integrationで生成し、そのversionを`mise.toml`の`LEPTOS_TAILWIND_VERSION`、Topcoat build script、移行中のBun / cargo-leptos設定間で一致させます。`mise run versions-check`がこれらとE2EのBun versionを照合し、GitHub Actionsは`jdx/mise-action`経由で同じlocked toolchainを導入します。
+production CSSはTopcoatのstandalone Tailwind integrationで生成し、そのversionを`mise.toml`の`TOPCOAT_TAILWIND_VERSION`とTopcoat build scriptで一致させます。`mise run versions-check`がこれらとTopcoat CLI / framework、E2EのBun versionを照合し、GitHub Actionsは`jdx/mise-action`経由で同じlocked toolchainを導入します。
 
 共通toolを更新するときは、`mise.toml`のversionを更新して`mise lock --platform macos-arm64,linux-x64`を実行します。Bun package、Rust crate、Rust toolchain、GitHub Actionsの更新はそれぞれの標準manifestとDependabotで管理します。
 browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-install-browser`、実行は `mise run test-e2e` を使ってください。E2E は root の `e2e/` に置き、通常CIではprivate Obsidian submoduleやS3に依存しない固定artifactで実行します。S3への公開はGitHub Actionsの`Publish Obsidian to S3`を`main`から手動実行します。workflowは対象commitのRust CI成功と最新`main`であることを先に確認し、immutable releaseを実S3 smoke testで検証します。pointer切替直前にも最新`main`を再確認してから`current.json`を更新します。ローカルからS3へ直接syncする経路は標準の公開手順にしません。
@@ -229,7 +227,9 @@ browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-
 
 `OKAWAK_BLOG_ARTIFACT_BUCKET`は必須で、任意のprefixやAWS credentialとともに実行時に渡します。固定fixtureを使う`test-e2e`は、外部状態に依存しないCI回帰テストとして別に維持します。`mise run build-project`はdeploy用のbuildで、artifactやprivate submoduleには依存しません。
 
-production deployは`mise run build-deployment`で`target/release/topcoat-server`と`target/assets-staged`を生成します。`mise run quick-deploy`はservice停止中にbinaryとcontent-hash付きasset bundleを同じreleaseへ切り替え、health / readinessが失敗した場合は両方を旧releaseへ戻します。Topcoat runtimeはLeptos JavaScript / WebAssemblyを生成・配信しません。
+production deployは`mise run build-deployment`で`target/release/topcoat-server`と`target/assets-staged`を生成します。`mise run quick-deploy`はservice停止中にbinaryとcontent-hash付きasset bundleを同じreleaseへ切り替え、health / readinessが失敗した場合は両方を旧releaseへ戻します。
+
+Topcoat asset bundleはTailwind CSS、Topcoat runtime、site navigation JavaScript、faviconをcontent-hash付きlocal URLで配信します。生成コンテンツの描画に必要なKaTeXとhighlight.js、Font Awesome、Noto Sans JPはversion固定またはURL固定の外部CDN資産として維持します。KaTeXはSRIを付与し、いずれもsiteのSSR可用性を左右する必須runtimeにはしません。
 
 主要コマンドは以下です。
 
@@ -241,9 +241,6 @@ mise run pull-with-submodules
 mise run dev
 mise run dev-local
 mise run format
-mise run web-install
-mise run web-update
-mise run web-outdated
 mise run e2e-install-browser
 mise run test
 mise run test-domain

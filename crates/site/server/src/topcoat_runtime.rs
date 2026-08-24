@@ -1,4 +1,4 @@
-//! Parallel Topcoat runtime shell used during the framework migration.
+//! Topcoat runtime router and HTTP integration.
 
 use infra::{DynArtifactReader, DynArtifactSnapshot};
 use topcoat::{
@@ -15,11 +15,8 @@ use crate::{
     article_index::{read_article_index, read_article_index_from_snapshot},
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
     readiness::check_artifact_readiness,
-    topcoat_pages,
 };
-
-#[derive(Clone)]
-pub(crate) struct ArtifactReaderContext(pub(crate) DynArtifactReader);
+use web::{ArtifactReaderContext, topcoat_pages};
 
 #[route(GET "/api/health")]
 async fn health() -> Result<&'static str> {
@@ -115,7 +112,6 @@ pub fn create_topcoat_router(
 
 #[cfg(test)]
 mod tests {
-    use crate::topcoat_pages;
     use std::{
         path::PathBuf,
         sync::{
@@ -124,6 +120,7 @@ mod tests {
         },
         time::SystemTime,
     };
+    use web::topcoat_pages;
 
     use async_trait::async_trait;
     use domain::{
