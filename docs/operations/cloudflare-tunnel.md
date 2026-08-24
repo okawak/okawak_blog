@@ -165,7 +165,7 @@ curl --fail --output /dev/null \
 curl --fail https://www.okawak.net/api/ready
 ```
 
-DashboardではTunnelが`Healthy`で、connectorが接続済みであることを確認します。ブラウザではhome、category、article、戻る・進む操作を確認し、WASM初期化errorがないことも確認します。
+DashboardではTunnelが`Healthy`で、connectorが接続済みであることを確認します。ブラウザではhome、category、article、戻る・進む操作を確認し、Topcoat client runtimeのerrorがないことも確認します。
 
 ## 障害対応
 
