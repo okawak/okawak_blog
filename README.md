@@ -71,9 +71,9 @@ okawak_blog/
 │   ├── domain/               # 公開成果物契約と純粋ルール
 │   ├── publish/              # publish CLIと内部module
 │   └── site/
-│       ├── infra/            # Topcoat サーバー側の S3 / cache / runtime adapter
-│       ├── server/           # 公開成果物を読む統合バックエンド
-│       └── web/              # Topcoat UI、route、metadata、style/script
+│       ├── infra/            # artifact reader、source設定、cache
+│       ├── server/           # runtime、API、readerとUIのcomposition
+│       └── web/              # Topcoat UI、route、metadata、application asset
 ├── e2e/                      # 公開サイト全体の browser E2E
 ├── docs/
 │   └── architecture/
@@ -85,9 +85,9 @@ okawak_blog/
 
 - `crates/domain`: 公開成果物契約、site page contract、純粋関数を中心にした共有ドメイン層
 - `crates/publish`: `pipeline` moduleが、`vault`によるObsidian入力、`render`によるMarkdown変換とbookmark enrichment、`artifacts`による成果物生成を統括する単一の`publish` crate。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
-- `crates/site/infra`: Topcoat サーバーが公開成果物を読むための S3 / cache / runtime adapter。開発と本番はS3 readerを使い、local readerは自動test用に残す
-- `crates/site/server`: S3 上の成果物を読んで配信し、release-aware ETag / Last-Modifiedを扱う統合バックエンド
-- `crates/site/web`: Topcoat UI / route / metadata、style、generated content script
+- `crates/site/infra`: storage非依存のartifact reader契約と、local / S3実装、source設定、cache。HTTP runtimeやUIには依存しない
+- `crates/site/server`: production runtime、reader生成・注入、API、page loader、release-aware ETag / Last-Modifiedを構成するcomposition root
+- `crates/site/web`: storage非依存のpage load契約、Topcoat UI / route / metadata、style、client navigationとcontent enhancement
 - `e2e`: server / web / artifact reader をまたぐ、固定 artifact ベースの browser E2E
 
 ## 公開成果物のイメージ

@@ -6,9 +6,13 @@ browser E2Eはweb crate単体ではなく、serverとartifact readerを含む公
 
 ## UIとassetの境界
 
-- `src/topcoat_pages.rs`: Topcoat route / component、site shell、metadata
-- `src/topcoat_navigation.js`: client-side navigationとmobile menu
-- `src/generated_content.rs`: artifact本文へ適用するKaTeX / highlight.jsの初期化
+- `src/page_loader.rs`: storage非依存のpage load port
+- `src/pages.rs`: 公開routeとpage固有component
+- `src/article_card.rs`: 一覧routeが共有する記事card
+- `src/shell.rs`: HTML shell、metadata、error view
+- `src/assets.rs`: application所有のbundle asset登録
+- `src/navigation.js`: client-side navigationとmobile menu
+- `src/content_enhancement.rs`: artifact本文へ適用するKaTeX / highlight.jsの初期化
 - `style/tailwind.css`: theme token、site chrome、Tailwind CSS入力
 - `style/content.css`: `.content-prose`配下の生成HTML用plain CSS
 
