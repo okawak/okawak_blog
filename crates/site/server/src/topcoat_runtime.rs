@@ -1,5 +1,7 @@
 //! Topcoat runtime router and HTTP integration.
 
+use std::sync::Arc;
+
 use infra::{DynArtifactReader, DynArtifactSnapshot};
 use topcoat::{
     Result,
@@ -14,9 +16,13 @@ use topcoat::{
 use crate::{
     article_index::{read_article_index, read_article_index_from_snapshot},
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
+    page_loader::ArtifactPageLoader,
     readiness::check_artifact_readiness,
 };
-use web::{ArtifactReaderContext, topcoat_pages};
+use web::{PageLoaderContext, topcoat_pages};
+
+#[derive(Clone)]
+struct ArtifactReaderContext(DynArtifactReader);
 
 #[route(GET "/api/health")]
 async fn health() -> Result<&'static str> {
@@ -70,7 +76,10 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
 
         let mut response = match conditional_get.snapshot() {
             Some(snapshot) => {
-                let cx = cx.with(snapshot);
+                let page_loader = PageLoaderContext(Arc::new(ArtifactPageLoader::from_snapshot(
+                    snapshot.clone(),
+                )));
+                let cx = cx.with(snapshot).with(page_loader);
                 next.run(&cx, body).await?
             }
             None => next.run(cx, body).await?,
@@ -105,6 +114,9 @@ pub fn create_topcoat_router(
             artifact_reader.clone(),
             validators_enabled,
         ))
+        .app_context(PageLoaderContext(Arc::new(
+            ArtifactPageLoader::from_reader(artifact_reader.clone()),
+        )))
         .app_context(ArtifactReaderContext(artifact_reader))
         .assets(assets)
         .build()

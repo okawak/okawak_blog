@@ -7,8 +7,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+async-trait.workspace = true
 domain = { path = "../../domain" }
-infra = { path = "../infra" }
 chrono = { workspace = true, features = ["serde"] }
 topcoat.workspace = true
 

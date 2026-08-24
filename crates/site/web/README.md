@@ -1,6 +1,6 @@
 # site/web
 
-Topcoatによる公開UI、SSR route、metadataを提供するcrateです。Markdown変換は行わず、SSR時に`ArtifactReader`から公開artifactを読み取ってhome、about、category、articleを表示します。storageの実装詳細は`site/infra`、runtimeの起動とreader注入、API、HTTP cacheは`site/server`が担当します。
+Topcoatによる公開UI、SSR route、metadataを提供するcrateです。Markdown変換やartifact読取は行わず、storage非依存の`PageLoader`からdomainのpage documentを受け取ってhome、about、category、articleを表示します。`PageLoader`のartifact-backed実装、runtimeの起動、reader注入、API、HTTP cacheは`site/server`が担当します。
 
 browser E2Eはweb crate単体ではなく、serverとartifact readerを含む公開サイト全体を対象とするため、repository rootの[`e2e/`](../../../e2e/README.md)に置いています。
 

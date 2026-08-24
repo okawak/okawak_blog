@@ -16,7 +16,7 @@
 4. render module が単一の`pulldown-cmark` event pipeline内でWikiLinkを解決・安全化し、MarkdownのHTML変換とbookmark enrichmentを行う
 5. artifacts module が `site/` 配下の HTML / JSON を組み立てる
 6. GitHub Actions が artifact を immutable release として S3 に配置し、`current.json` を最後に切り替える
-7. `crates/site/server` と `crates/site/web` が `crates/site/infra` 経由で release snapshot を読んで SSR する
+7. `crates/site/server` が `crates/site/infra` 経由でrelease snapshotからpage documentを組み立て、`crates/site/web`がSSRする
 
 Markdown から HTML への変換はビルド時に完了させる。ランタイムは artifact の読取、ルーティング、メタ情報の付与に集中する。
 
@@ -31,8 +31,8 @@ flowchart LR
     G --> H[GitHub Actions upload]
     H --> I[S3]
     I --> J[crates/site/infra]
-    J --> L[crates/site/web SSR]
-    K[crates/site/server] --> L
+    J --> K[crates/site/server]
+    K --> L[crates/site/web SSR]
     L --> M[Browser]
 ```
 
@@ -357,7 +357,7 @@ flowchart LR
 - `StaticPageDocument`
   - `about` などの固定ページ用contract
 
-`site/web`のTopcoat pageはこのpage contractをもとにmetadataとUIを組み立てる。`site/server`は`DynArtifactReader`をTopcoat app contextへ登録し、各requestのconditional GET判定とpage document構築で同じsnapshotをrequest contextから共有する。local / S3などのstorage実装詳細はpage componentへ持ち込まない。
+`site/web`のTopcoat pageはstorage非依存の`PageLoader`からこのpage contractを受け取り、metadataとUIを組み立てる。`site/server`は`ArtifactPageLoader`としてartifact読取とpage document構築を実装し、conditional GETが取得したsnapshotをrequest contextのloaderへ渡す。validatorを使わないrequestでもloader内でsnapshotを1回だけ取得する。local / S3 readerと`DynArtifactSnapshot`は`site/server`よりUI側へ持ち込まない。
 
 公開routeのpage document読取はTopcoat async componentを正式経路とする。手書きの`/api/page/*`は持たず、404とstorage errorのstatus / error viewをroute境界で統一する。`/api/articles`はpage documentを組み立てない互換endpointとして維持する。
 
