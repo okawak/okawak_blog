@@ -426,7 +426,7 @@ reader 側の設定は主に次の env で切り替える。
 
 `OKAWAK_BLOG_SITE_ORIGIN` は canonical / Open Graph 用の absolute URL 生成に使う。
 
-production `server`はprocess起動時に`tracing` subscriberを初期化する。log filterは`RUST_LOG`から読み、未指定または空の場合は`info`を使う。不正なfilterはconfiguration errorとして起動を停止する。subscriber設定は`site/server`に閉じ、domain、publish、infraはprocess-wideなlog設定を所有しない。
+production `server`はprocess起動時に`tracing` subscriberを初期化する。log filterは`RUST_LOG`からlossyに読み、未指定または有効なdirectiveがない場合は`info`を使う。subscriber設定は`site/server`のbinary entrypointに閉じ、domain、publish、infraはprocess-wideなlog設定を所有しない。
 
 cacheはrelease snapshot単位で所有する。TTL経過後に`current.json`を再確認し、release identityが同じならartifact cacheを保持する。identityが変わった場合だけ新しいcacheへ切り替わり、既存requestが保持する古いsnapshotはそのrequestの完了まで有効である。legacy rootにはidentityを付けず、TTLごとにcacheを作り直す。
 

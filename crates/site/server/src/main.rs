@@ -1,18 +1,26 @@
 //! Production entry point for the site server.
 
-mod logging;
-
 use infra::{ArtifactSourceConfig, build_artifact_reader};
 use server::http_cache::artifact_validators_enabled;
 use server::router::create_router;
 use topcoat::asset::AssetBundle;
+use tracing_subscriber::{
+    EnvFilter, filter::LevelFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt,
+};
 
 const DEFAULT_ADDR: &str = "127.0.0.1:8008";
 const ADDR_ENV: &str = "OKAWAK_BLOG_ADDR";
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    logging::init()?;
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
 
     let addr = std::env::var(ADDR_ENV).unwrap_or_else(|_| DEFAULT_ADDR.to_string());
     let artifact_source = ArtifactSourceConfig::from_env()?;
