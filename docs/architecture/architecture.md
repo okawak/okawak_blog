@@ -219,7 +219,7 @@ Publish/
       async/
         future.md
     web/
-      leptos.md
+      topcoat.md
 ```
 
 この場合:
@@ -231,7 +231,7 @@ Publish/
   - `kind=article`
   - `category=tech`
   - `section_path=["rust", "async"]`
-- `tech/web/leptos.md`
+- `tech/web/topcoat.md`
   - `kind=article`
   - `category=tech`
   - `section_path=["web"]`

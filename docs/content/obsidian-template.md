@@ -24,7 +24,7 @@ Publish/
       async.md
       ownership.md
     web/
-      leptos.md
+      topcoat.md
   daily/
     landing.md
     diary/
