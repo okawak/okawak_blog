@@ -106,8 +106,8 @@ prepare_case() {
   printf 'unit\n' >"$case_dir/service.service"
   printf 'old binary\n' >"$case_dir/bin/okawak_blog"
   printf 'old asset\n' >"$case_dir/bin/assets/old.css"
-  printf '#!/usr/bin/env bash\necho new binary\n' >"$case_dir/target/release/topcoat-server"
-  chmod +x "$case_dir/bin/okawak_blog" "$case_dir/target/release/topcoat-server"
+  printf '#!/usr/bin/env bash\necho new binary\n' >"$case_dir/target/release/site-server"
+  chmod +x "$case_dir/bin/okawak_blog" "$case_dir/target/release/site-server"
   : >"$case_dir/systemctl.log"
 }
 
@@ -119,7 +119,7 @@ run_activation() {
     REPO_ROOT="$case_dir" \
     SERVICE_FILE="$case_dir/service.service" \
     SYSTEMD_UNIT_DIR="$case_dir/systemd" \
-    TARGET_BIN="$case_dir/target/release/topcoat-server" \
+    TARGET_BIN="$case_dir/target/release/site-server" \
     BIN_DIR="$case_dir/bin" \
     DEPLOY_STAGED_ASSETS="$case_dir/target/assets-staged" \
     DEPLOY_PROBE_ATTEMPTS=1 \
@@ -132,7 +132,7 @@ run_activation() {
 success_case="$test_root/success"
 prepare_case "$success_case"
 run_activation "$success_case" false
-cmp -s "$success_case/target/release/topcoat-server" "$success_case/bin/okawak_blog" \
+cmp -s "$success_case/target/release/site-server" "$success_case/bin/okawak_blog" \
   || fail "successful activation did not install the new binary"
 [[ -f "$success_case/bin/assets/tailwind-new.css" ]] \
   || fail "successful activation did not install the new assets"

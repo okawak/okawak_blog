@@ -5,11 +5,11 @@ authors.workspace = true
 description.workspace = true
 edition.workspace = true
 license.workspace = true
-default-run = "topcoat-server"
+default-run = "site-server"
 
 [[bin]]
-name = "topcoat-server"
-path = "src/bin/topcoat_server.rs"
+name = "site-server"
+path = "src/main.rs"
 
 [dependencies]
 async-trait.workspace = true
