@@ -7,14 +7,7 @@ use topcoat::{
     view::{Unescaped, View, component, view},
 };
 
-use crate::{
-    assets::{FAVICON, NAVIGATION_SCRIPT, STYLESHEET},
-    content_enhancement::{
-        CODE_HIGHLIGHT_SCRIPT, HIGHLIGHT_SCRIPT_URL, HIGHLIGHT_STYLESHEET_URL,
-        KATEX_SCRIPT_INTEGRITY, KATEX_SCRIPT_URL, KATEX_STYLESHEET_INTEGRITY, KATEX_STYLESHEET_URL,
-        MATH_RENDER_SCRIPT,
-    },
-};
+use crate::assets::{FAVICON, NAVIGATION_SCRIPT, STYLESHEET};
 
 const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
@@ -119,8 +112,80 @@ pub(crate) async fn site_shell(
     child: View,
 ) -> Result {
     let year = chrono::Local::now().year();
-    let math_render_script = Unescaped::new_unchecked(MATH_RENDER_SCRIPT);
-    let code_highlight_script = Unescaped::new_unchecked(CODE_HIGHLIGHT_SCRIPT);
+    let math_render_script = Unescaped::new_unchecked(
+        r#"
+window.okawakRenderMath = function(root) {
+  if (!window.katex) return;
+
+  const scope = root || document.body;
+  const normalizeExpression = (value) =>
+    (value || '').replace(/[\u2009\u200A\u200B\u200C\u200D\u2061\u202F\u2060\uFEFF]/g, '');
+
+  scope.querySelectorAll('.math-inline').forEach((element) => {
+    if (element.dataset.katexRendered === 'true') return;
+
+    const expression = normalizeExpression(element.textContent);
+    window.katex.render(expression, element, {
+      displayMode: false,
+      throwOnError: false,
+    });
+    element.dataset.katexRendered = 'true';
+  });
+
+  scope.querySelectorAll('.math-display').forEach((element) => {
+    if (element.dataset.katexRendered === 'true') return;
+
+    const expression = normalizeExpression(element.textContent);
+    window.katex.render(expression, element, {
+      displayMode: true,
+      throwOnError: false,
+    });
+    element.dataset.katexRendered = 'true';
+  });
+};
+
+window.okawakScheduleMathRender = function(root) {
+  let remaining = 200;
+  const attempt = function() {
+    if (window.katex && window.okawakRenderMath) {
+      window.okawakRenderMath(root);
+      return;
+    }
+
+    if (remaining > 0) {
+      remaining -= 1;
+      window.setTimeout(attempt, 50);
+    }
+  };
+
+  attempt();
+};
+"#,
+    );
+    let code_highlight_script = Unescaped::new_unchecked(
+        r#"
+window.okawakHighlightCode = function(root) {
+  if (!window.hljs) return;
+  const scope = root || document.body;
+  scope.querySelectorAll('.content-prose pre code:not([data-highlighted])')
+    .forEach((element) => window.hljs.highlightElement(element));
+};
+window.okawakScheduleCodeHighlight = function(root) {
+  let remaining = 200;
+  const attempt = function() {
+    if (window.hljs && window.okawakHighlightCode) {
+      window.okawakHighlightCode(root);
+      return;
+    }
+    if (remaining > 0) {
+      remaining -= 1;
+      window.setTimeout(attempt, 50);
+    }
+  };
+  attempt();
+};
+"#,
+    );
     let ShellMetadata {
         title,
         description,
@@ -156,22 +221,25 @@ pub(crate) async fn site_shell(
                 >
                 <link
                     rel="stylesheet"
-                    href=(KATEX_STYLESHEET_URL)
-                    integrity=(KATEX_STYLESHEET_INTEGRITY)
+                    href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
+                    integrity="sha384-5TcZemv2l/9On385z///+d7MSYlvIEw9FuZTIdZ14vJLqWphw7e7ZPuOiCHJcFCP"
                     crossorigin="anonymous"
                 >
                 <script
                     defer=""
-                    src=(KATEX_SCRIPT_URL)
-                    integrity=(KATEX_SCRIPT_INTEGRITY)
+                    src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"
+                    integrity="sha384-cMkvdD8LoxVzGF/RPUKAcvmm49FQ0oxwDF3BGKtDXcEc+T1b2N+teh/OJfpU0jr6"
                     crossorigin="anonymous"
                     onload="window.okawakScheduleMathRender && window.okawakScheduleMathRender();"
                 ></script>
                 <script>(math_render_script)</script>
-                <link rel="stylesheet" href=(HIGHLIGHT_STYLESHEET_URL)>
+                <link
+                    rel="stylesheet"
+                    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css"
+                >
                 <script
                     defer=""
-                    src=(HIGHLIGHT_SCRIPT_URL)
+                    src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"
                     onload="window.okawakScheduleCodeHighlight && window.okawakScheduleCodeHighlight();"
                 ></script>
                 <script>(code_highlight_script)</script>

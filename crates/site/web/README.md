@@ -10,10 +10,9 @@ browser E2Eはweb crate単体ではなく、serverとartifact readerを含む公
 - `src/pages.rs`: 公開routeのre-exportとpage loader contextの共有
 - `src/pages/{home,article,category,page}.rs`: page種別ごとのrouteと固有component
 - `src/article_card.rs`: 一覧routeが共有する記事card
-- `src/shell.rs`: HTML shell、metadata、error view
+- `src/shell.rs`: HTML shell、metadata、error view、生成contentのprogressive enhancement
 - `src/assets.rs`: application所有のbundle asset登録
 - `src/navigation.js`: client-side navigationとmobile menu
-- `src/content_enhancement.rs`: artifact本文へ適用するKaTeX / highlight.jsの初期化
 - `style/tailwind.css`: theme token、site chrome、Tailwind CSS入力
 - `style/content.css`: `.content-prose`配下の生成HTML用plain CSS
 - `build.rs`: `style/tailwind.css`をTopcoatのstylesheet assetへ変換するbuild integration

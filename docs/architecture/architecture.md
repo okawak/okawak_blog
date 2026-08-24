@@ -382,9 +382,9 @@ production `server`はhome、about、category、articleをSSRし、title、canon
 - `src/article_card.rs`
   - listing route間で共有する記事cardを構成する
 - `src/shell.rs`
-  - site chrome、metadata、error view、responsive navigationを構成する
-- `src/assets.rs` / `src/navigation.js` / `src/content_enhancement.rs`
-  - application asset登録、client-side navigation、生成contentのprogressive enhancementを分離する
+  - site chrome、metadata、error view、responsive navigationと、生成contentのKaTeX / highlight.js progressive enhancementをshell resourceとして構成する
+- `src/assets.rs` / `src/navigation.js`
+  - application asset登録とclient-side navigationを分離する
 - `style/tailwind.css`
   - semantic color、radius、typography、site layout tokenとbase styleのsource of truth
 - `style/content.css`
