@@ -87,7 +87,7 @@ okawak_blog/
   - `error` moduleによるstorage / config error境界
   - `lib.rs`はmodule宣言とcrate外向けAPIのre-exportに限定する
 - `crates/site/server`
-  - production `site-server` binaryによるTopcoat SSR、Topcoat runtime asset、client-side route遷移のホスト
+  - production `server` binaryによるTopcoat SSR、Topcoat runtime asset、client-side route遷移のホスト
   - reader の生成とTopcoat app / request contextへの注入
   - `api` moduleによる互換記事一覧API、process liveness、artifact readiness
   - `router` moduleによるroute / layer / assetのcomposition
@@ -367,7 +367,7 @@ flowchart LR
 
 公開routeのpage document読取はTopcoat async componentを正式経路とする。手書きの`/api/page/*`は持たず、404とstorage errorのstatus / error viewをroute境界で統一する。`/api/articles`はpage documentを組み立てない互換endpointとして維持する。
 
-production `site-server`はhome、about、category、articleをSSRし、title、canonical、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。
+production `server`はhome、about、category、articleをSSRし、title、canonical、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。
 
 ## UI styling境界
 
@@ -484,7 +484,7 @@ Obsidian submodule
   -> Browser
 ```
 
-application deployはTopcoat release binaryとasset bundleを同じrelease単位で扱う。`build-deployment`は稼働中のdirectoryへ書かず、`target/release/site-server`と`target/assets-staged`を生成する。activationはservice停止中にbinaryを`bin/okawak_blog`、bundleをbinary隣接の`bin/assets`へ切り替える。stagingはmanifest内のCSS、JavaScript、faviconと各参照fileを検証し、WebAssemblyを拒否する。起動後のhealth / readinessが失敗した場合は旧binaryと旧bundleを復元し、失敗bundleを`bin/assets.failed`へ保存する。
+application deployはTopcoat release binaryとasset bundleを同じrelease単位で扱う。`build-deployment`は稼働中のdirectoryへ書かず、`target/release/server`と`target/assets-staged`を生成する。activationはservice停止中にbinaryを`bin/okawak_blog`、bundleをbinary隣接の`bin/assets`へ切り替える。stagingはmanifest内のCSS、JavaScript、faviconと各参照fileを検証し、WebAssemblyを拒否する。起動後のhealth / readinessが失敗した場合は旧binaryと旧bundleを復元し、失敗bundleを`bin/assets.failed`へ保存する。
 
 `cloudflared`はVPSからCloudflareへ外向き接続し、originの80/443は公開しない。public hostnameとTunnel routeはCloudflare Dashboardで管理し、OCI TerraformはReserved Public IP、SSH用ingress、Tunnel用egressなどのOCI resourceだけを管理する。S3 upload は Rust アプリに持たせず、workflow の責務として扱う。
 

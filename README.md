@@ -227,7 +227,7 @@ browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-
 
 `OKAWAK_BLOG_ARTIFACT_BUCKET`は必須で、任意のprefixやAWS credentialとともに実行時に渡します。固定fixtureを使う`test-e2e`は、外部状態に依存しないCI回帰テストとして別に維持します。`mise run build-project`はdeploy用のbuildで、artifactやprivate submoduleには依存しません。
 
-production deployは`mise run build-deployment`で`target/release/site-server`と`target/assets-staged`を生成します。`mise run quick-deploy`はservice停止中にbinaryとcontent-hash付きasset bundleを同じreleaseへ切り替え、health / readinessが失敗した場合は両方を旧releaseへ戻します。
+production deployは`mise run build-deployment`で`target/release/server`と`target/assets-staged`を生成します。`mise run quick-deploy`はservice停止中にbinaryとcontent-hash付きasset bundleを同じreleaseへ切り替え、health / readinessが失敗した場合は両方を旧releaseへ戻します。
 
 Topcoat asset bundleはTailwind CSS、Topcoat runtime、site navigation JavaScript、faviconをcontent-hash付きlocal URLで配信します。生成コンテンツの描画に必要なKaTeXとhighlight.js、Font Awesome、Noto Sans JPはversion固定またはURL固定の外部CDN資産として維持します。KaTeXはSRIを付与し、いずれもsiteのSSR可用性を左右する必須runtimeにはしません。
 
