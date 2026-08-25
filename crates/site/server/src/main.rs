@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 use infra::{ArtifactSourceConfig, build_artifact_reader};
+use server::app::create_router;
 use server::http_cache::artifact_validators_enabled;
-use server::router::create_router;
 use topcoat::asset::AssetBundle;
 use tracing_subscriber::{EnvFilter, filter::LevelFilter};
 

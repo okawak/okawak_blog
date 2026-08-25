@@ -90,8 +90,9 @@ okawak_blog/
   - client-side navigationと生成コンテンツ用script、Tailwind CSS入力、favicon asset
   - Topcoat SSR、Topcoat runtime asset、client-side route遷移のホスト
   - reader の生成とTopcoat app / request contextへの注入
-  - `api` moduleによる互換記事一覧API、process liveness、artifact readiness
-  - `router` moduleによるroute / layer / assetのcomposition
+  - `app.rs`をrootにした`module_router!()`のmodule-derived route tree
+  - `app/api` moduleによる互換記事一覧API、process liveness、artifact readiness
+  - `app` moduleによるglobal layer / app context / assetのcomposition
   - `page_loader` moduleによるstorage非依存page load contract
   - `artifact_page_loader` moduleによるartifact readerとpage load contractの接続
   - UI moduleは`infra`を直接利用せず、`PageLoaderContext`を経由する
@@ -364,6 +365,8 @@ flowchart LR
 
 公開routeのpage document読取はTopcoat async componentを正式経路とする。手書きの`/api/page/*`は持たず、404とstorage errorのstatus / error viewをroute境界で統一する。`/api/articles`はpage documentを組み立てない互換endpointとして維持する。
 
+公開routeは`site/server/src/app.rs`をrootとするTopcoat `module_router!()`から登録する。`/about`と`/api/*`はstatic module、`/{category_name}`と`/{category_name}/{article_slug}`は`path_param!()`を宣言するnested moduleとしてURL構造へ対応させる。route moduleはfile moduleで構成し、`mod.rs`を使わない。release-aware conditional GETはmodule pathに依存しないglobal layerとして`app.rs`で明示的に登録する。
+
 production `server`はhome、about、category、articleをSSRし、title、canonical、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。
 
 ## UI styling境界
@@ -372,10 +375,12 @@ production `server`はhome、about、category、articleをSSRし、title、canon
 
 - `src/page_loader.rs`
   - storage非依存のpage load portを定義する
-- `src/pages.rs`
-  - page loader contextの取得を共有し、公開routeをre-exportする
-- `src/pages/{home,article,category,page}.rs`
-  - page種別ごとにTopcoat routeと固有componentを構成する
+- `src/app.rs`
+  - `module_router!()`のroot、home page、page loader context取得、application compositionを構成する
+- `src/app/about.rs`、`src/app/category_name.rs`、`src/app/category_name/article_slug.rs`
+  - module-derived pathとpage種別ごとの固有componentを構成する
+- `src/app/api.rs`、`src/app/api/*.rs`
+  - URL構造に対応するAPI route treeを構成する
 - `src/article_card.rs`
   - listing route間で共有する記事cardを構成する
 - `src/shell.rs`

@@ -7,16 +7,18 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 ## applicationとruntimeの境界
 
 - `src/main.rs`: process設定、tracing subscriber、reader、listenerの初期化
-- `src/router.rs`: route、global layer、app context、assetのcomposition
-- `src/api.rs`: health、readiness、互換記事一覧API
+- `src/app.rs`: `module_router!()`を呼ぶroute tree root。home route、global layer、app context、assetのcomposition
+- `src/app/api.rs`と`src/app/api/*.rs`: URL構造に対応するhealth、readiness、互換記事一覧API
 - `src/http_cache.rs`: release-aware validatorとconditional GET
 - `src/page_loader.rs`: storage非依存のpage load port
 - `src/artifact_page_loader.rs`: artifact readerをpage load portへ接続するadapter
 
 ## UIとassetの境界
 
-- `src/pages.rs`: 公開routeのre-exportとpage loader contextの共有
-- `src/pages/{home,article,category,page}.rs`: page種別ごとのrouteと固有component
+- `src/app.rs`: `/`のhome pageとpage loader contextの共有
+- `src/app/about.rs`: `/about`の固定page
+- `src/app/category_name.rs`: `/{category_name}`のcategory page
+- `src/app/category_name/article_slug.rs`: `/{category_name}/{article_slug}`のarticle page
 - `src/article_card.rs`: 一覧routeが共有する記事card
 - `src/shell.rs`: HTML shell、metadata、error view、生成contentのprogressive enhancement
 - `src/assets.rs`: application所有のbundle asset登録
@@ -24,6 +26,8 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 - `style/tailwind.css`: theme token、site chrome、Tailwind CSS入力
 - `style/content.css`: `.content-prose`配下の生成HTML用plain CSS
 - `build.rs`: `style/tailwind.css`をTopcoatのstylesheet assetへ変換するbuild integration
+
+routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`path_param!()`で宣言し、route moduleに`mod.rs`は使いません。
 
 productionはpackage直下の`build.rs`から`style/tailwind.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、site navigation JavaScript、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。
 
