@@ -16,8 +16,10 @@ use topcoat::{
     asset::{AssetConfig, RouterBuilderAssetExt},
     context::{Cx, app_context, try_request_context},
     router::{
-        Body, LayerFn, LayerFuture, Next, Path, Router, StatusCode, page, request,
-        response::Response,
+        Body, LayerFn, LayerFuture, Next, Path, Router, StatusCode,
+        error::NotFoundError,
+        page, request,
+        response::{IntoResponse, Response},
     },
     view::{Unescaped, View, component, view},
 };
@@ -27,7 +29,7 @@ use crate::{
     artifact_page_loader::ArtifactPageLoader,
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
     page_loader::PageLoaderContext,
-    shell::{ShellMetadata, internal_server_error_page, site_shell},
+    shell::{ShellMetadata, internal_server_error_page, not_found_page, site_shell},
 };
 
 #[page]
@@ -52,6 +54,33 @@ async fn home(cx: &Cx) -> Result<View> {
 fn page_loader(cx: &Cx) -> &PageLoaderContext {
     try_request_context::<PageLoaderContext>(cx)
         .unwrap_or_else(|| app_context::<PageLoaderContext>(cx))
+}
+
+fn is_under_path(path: &str, prefix: &str) -> bool {
+    path == prefix
+        || path
+            .strip_prefix(prefix)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn is_site_page_path(path: &str) -> bool {
+    !is_under_path(path, "/api") && !is_under_path(path, "/_topcoat/assets")
+}
+
+fn render_unmatched_path<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
+    Box::pin(async move {
+        match next.run(cx, body).await {
+            Err(error)
+                if error.downcast_ref::<NotFoundError>().is_some()
+                    && is_site_page_path(request::uri(cx).path()) =>
+            {
+                let canonical_path = request::uri(cx).path().to_string();
+                let page = view! { cx => not_found_page(canonical_path: canonical_path) }?;
+                page.into_response(cx)
+            }
+            response => response,
+        }
+    })
 }
 
 fn not_modified_response(conditional_get: &ArtifactConditionalGetDecision) -> Response {
@@ -104,6 +133,7 @@ pub fn create_router(
         // The framework-neutral decision filters APIs, static assets, and unsuccessful responses.
         // One global layer also avoids nested prefix layers acquiring more than one snapshot.
         .layer(LayerFn::new(None::<&Path>, artifact_conditional_get))
+        .layer(LayerFn::new(None::<&Path>, render_unmatched_path))
         .app_context(ArtifactHttpCacheState::new(
             artifact_reader.clone(),
             validators_enabled,

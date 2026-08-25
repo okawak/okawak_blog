@@ -248,6 +248,65 @@ async fn page_routes_reject_unsupported_methods() {
 }
 
 #[tokio::test]
+async fn unmatched_paths_render_the_site_not_found_page() {
+    let router = create_router(fixture_reader(), true);
+    let response = response(
+        &router,
+        Request::builder()
+            .uri("/unknown/nested/path?ignored=true")
+            .body(Body::empty())
+            .expect("request should be valid"),
+    )
+    .await;
+
+    assert_eq!(response.status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        response.content_type.as_deref(),
+        Some("text/html; charset=utf-8")
+    );
+    assert!(
+        response
+            .body
+            .contains("<title>ページが見つかりません | ぶくせんの探窟メモ</title>")
+    );
+    assert!(
+        response.body.contains(
+            "<link rel=\"canonical\" href=\"https://www.okawak.net/unknown/nested/path\">"
+        )
+    );
+    assert!(response.body.contains(
+        "<meta property=\"og:url\" content=\"https://www.okawak.net/unknown/nested/path\">"
+    ));
+    assert!(response.body.contains("ページが見つかりませんでした。"));
+    assert!(response.headers.get(header::ETAG).is_none());
+    assert!(response.headers.get(header::LAST_MODIFIED).is_none());
+}
+
+#[tokio::test]
+async fn unmatched_api_and_asset_paths_keep_plain_not_found_responses() {
+    let router = create_router(fixture_reader(), true);
+
+    for path in ["/api/unknown/extra", "/_topcoat/assets/unknown.js"] {
+        let response = response(
+            &router,
+            Request::builder()
+                .uri(path)
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await;
+
+        assert_eq!(response.status, StatusCode::NOT_FOUND, "{path}");
+        assert_eq!(
+            response.content_type.as_deref(),
+            Some("text/plain; charset=utf-8"),
+            "{path}"
+        );
+        assert_eq!(response.body, "not found", "{path}");
+    }
+}
+
+#[tokio::test]
 async fn readiness_succeeds_when_site_metadata_is_readable() {
     let router = create_router(fixture_reader(), false);
     let response = response(

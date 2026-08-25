@@ -470,7 +470,7 @@ test("generated article content stays readable on mobile", async ({ page }) => {
   expect(pageHasNoHorizontalOverflow).toBe(true);
 });
 
-test("missing article and category return 404 pages", async ({ page }) => {
+test("missing content and unmatched paths return 404 pages", async ({ page }) => {
   const articleResponse = await page.goto("/tech/missing-article");
 
   expect(articleResponse?.status()).toBe(404);
@@ -482,6 +482,12 @@ test("missing article and category return 404 pages", async ({ page }) => {
   expect(categoryResponse?.status()).toBe(404);
   await expect(page.getByText("ページが見つかりませんでした。")).toBeVisible();
   await expectNotFoundMetadata(page, "/statistics");
+
+  const unmatchedResponse = await page.goto("/unknown/nested/path");
+
+  expect(unmatchedResponse?.status()).toBe(404);
+  await expect(page.getByText("ページが見つかりませんでした。")).toBeVisible();
+  await expectNotFoundMetadata(page, "/unknown/nested/path");
 });
 
 test("artifact read errors return 500 responses", async ({ request }) => {
