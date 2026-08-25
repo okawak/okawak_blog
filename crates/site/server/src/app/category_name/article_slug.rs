@@ -7,26 +7,20 @@ use domain::{
 use topcoat::{
     Result,
     context::Cx,
-    router::{StatusCode, raw_path_params, request, route},
+    router::{StatusCode, page, path_param, request},
     view::{Unescaped, View, component, view},
 };
 
-use super::page_loader;
+use super::super::page_loader;
+use super::CategoryName;
 use crate::shell::{ShellMetadata, article_internal_server_error_page, not_found_page, site_shell};
 
-#[route(GET "/{category_name}/{article_slug}")]
-pub async fn article_page(cx: &Cx) -> Result<View> {
-    let mut params = raw_path_params(cx);
-    let category_param = params
-        .next()
-        .expect("article route should provide a category path parameter")
-        .1
-        .as_str();
-    let slug_param = params
-        .next()
-        .expect("article route should provide a slug path parameter")
-        .1
-        .as_str();
+path_param!(article_slug);
+
+#[page]
+async fn article_page(cx: &Cx) -> Result<View> {
+    let category_param = path_param::<CategoryName>(cx);
+    let slug_param = path_param::<ArticleSlug>(cx);
     let normalized_slug = normalize_article_slug_param(slug_param);
     let requested_path = request::uri(cx).path().to_string();
     let fallback_title = format!("{normalized_slug} | {}", crate::SITE_NAME);

@@ -1,22 +1,37 @@
+//! Topcoat route tree root and application router composition.
+
+mod about;
+mod api;
+mod category_name;
+
+use std::sync::Arc;
+
 use domain::{
     HomePageDocument, build_category_path, build_home_page_canonical_path,
     build_home_page_description, build_home_page_title,
 };
+use infra::DynArtifactReader;
 use topcoat::{
     Result,
-    context::Cx,
-    router::{StatusCode, route},
+    asset::{AssetConfig, RouterBuilderAssetExt},
+    context::{Cx, app_context, try_request_context},
+    router::{
+        Body, LayerFn, LayerFuture, Next, Path, Router, StatusCode, page, request,
+        response::Response,
+    },
     view::{Unescaped, View, component, view},
 };
 
-use super::page_loader;
 use crate::{
     article_card::article_card,
+    artifact_page_loader::ArtifactPageLoader,
+    http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
+    page_loader::PageLoaderContext,
     shell::{ShellMetadata, internal_server_error_page, site_shell},
 };
 
-#[route(GET "/")]
-pub async fn home(cx: &Cx) -> Result<View> {
+#[page]
+async fn home(cx: &Cx) -> Result<View> {
     match page_loader(cx).loader().load_home().await {
         Ok(document) => view! { home_document(document: document) },
         Err(error) => {
@@ -32,6 +47,73 @@ pub async fn home(cx: &Cx) -> Result<View> {
             }
         }
     }
+}
+
+fn page_loader(cx: &Cx) -> &PageLoaderContext {
+    try_request_context::<PageLoaderContext>(cx)
+        .unwrap_or_else(|| app_context::<PageLoaderContext>(cx))
+}
+
+fn not_modified_response(conditional_get: &ArtifactConditionalGetDecision) -> Response {
+    let mut response = Response::new(Body::empty());
+    *response.status_mut() = StatusCode::NOT_MODIFIED;
+    conditional_get.insert_headers(response.headers_mut());
+    response
+}
+
+fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
+    Box::pin(async move {
+        let state = app_context::<ArtifactHttpCacheState>(cx);
+        let Some(conditional_get) = state
+            .conditional_get(request::method(cx), request::uri(cx), request::headers(cx))
+            .await
+        else {
+            return next.run(cx, body).await;
+        };
+
+        if conditional_get.should_short_circuit() {
+            return Ok(not_modified_response(&conditional_get));
+        }
+
+        let mut response = match conditional_get.snapshot() {
+            Some(snapshot) => {
+                let page_loader = PageLoaderContext::new(Arc::new(
+                    ArtifactPageLoader::from_snapshot(snapshot.clone()),
+                ));
+                let cx = cx.with(snapshot).with(page_loader);
+                next.run(&cx, body).await?
+            }
+            None => next.run(cx, body).await?,
+        };
+        if conditional_get.should_return_not_modified_after_response(response.status()) {
+            return Ok(not_modified_response(&conditional_get));
+        }
+        if conditional_get.should_attach_validators(response.status()) {
+            conditional_get.insert_headers(response.headers_mut());
+        }
+        Ok(response)
+    })
+}
+
+pub fn create_router(
+    artifact_reader: DynArtifactReader,
+    validators_enabled: bool,
+    assets: AssetConfig,
+) -> Router {
+    topcoat::router::module_router!()
+        // The framework-neutral decision filters APIs, static assets, and unsuccessful responses.
+        // One global layer also avoids nested prefix layers acquiring more than one snapshot.
+        .layer(LayerFn::new(None::<&Path>, artifact_conditional_get))
+        .app_context(ArtifactHttpCacheState::new(
+            artifact_reader.clone(),
+            validators_enabled,
+        ))
+        .app_context(PageLoaderContext::new(Arc::new(
+            ArtifactPageLoader::from_reader(artifact_reader.clone()),
+        )))
+        .app_context(api::ArtifactReaderContext(artifact_reader))
+        .assets(assets)
+        .build()
 }
 
 #[component]

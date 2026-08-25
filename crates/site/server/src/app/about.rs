@@ -5,7 +5,7 @@ use domain::{
 use topcoat::{
     Result,
     context::Cx,
-    router::{StatusCode, route},
+    router::{StatusCode, page},
     view::{Unescaped, View, component, view},
 };
 
@@ -14,8 +14,8 @@ use crate::shell::{ShellMetadata, internal_server_error_page, not_found_page, si
 
 const ABOUT_PAGE_KEY: &str = "about";
 
-#[route(GET "/about")]
-pub async fn about(cx: &Cx) -> Result<View> {
+#[page]
+async fn about(cx: &Cx) -> Result<View> {
     let page = PageKey::new(ABOUT_PAGE_KEY.to_string())?;
 
     match page_loader(cx).loader().load_static_page(&page).await {

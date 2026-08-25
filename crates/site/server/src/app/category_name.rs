@@ -1,3 +1,5 @@
+mod article_slug;
+
 use std::str::FromStr;
 
 use domain::{
@@ -7,7 +9,7 @@ use domain::{
 use topcoat::{
     Result,
     context::Cx,
-    router::{StatusCode, path_param, request, route},
+    router::{StatusCode, page, path_param, request},
     view::{Unescaped, View, component, view},
 };
 
@@ -19,8 +21,8 @@ use crate::{
 
 path_param!(category_name);
 
-#[route(GET "/{category_name}")]
-pub async fn category_page(cx: &Cx) -> Result<View> {
+#[page]
+async fn category_page(cx: &Cx) -> Result<View> {
     let category_param = path_param::<CategoryName>(cx);
     let requested_path = request::uri(cx).path().to_string();
     let category = match Category::from_str(category_param) {

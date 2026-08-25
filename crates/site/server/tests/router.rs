@@ -18,10 +18,10 @@ use std::{
 use tempfile::tempdir;
 use topcoat::{
     asset::{AssetConfig, Manifest, ManifestEntry},
-    router::{Body, HeaderMap, Router, StatusCode, header, request::Request, to_bytes},
+    router::{Body, HeaderMap, Method, Router, StatusCode, header, request::Request, to_bytes},
 };
 
-use server::{assets, router::create_router as create_router_with_assets};
+use server::{app::create_router as create_router_with_assets, assets};
 
 struct TestResponse {
     status: StatusCode,
@@ -204,6 +204,53 @@ async fn health_does_not_require_artifacts() {
 
     assert_eq!(response.status, StatusCode::OK);
     assert_eq!(response.body, "OK");
+}
+
+#[tokio::test]
+async fn static_routes_take_precedence_over_dynamic_page_routes() {
+    let router = create_router(fixture_reader(), false);
+
+    let about = response(
+        &router,
+        Request::builder()
+            .uri("/about")
+            .body(Body::empty())
+            .expect("request should be valid"),
+    )
+    .await;
+    assert_eq!(about.status, StatusCode::OK);
+    assert!(
+        about
+            .body
+            .contains("<title>Fixture About | ぶくせんの探窟メモ</title>")
+    );
+
+    let health = response(
+        &router,
+        Request::builder()
+            .uri("/api/health")
+            .body(Body::empty())
+            .expect("request should be valid"),
+    )
+    .await;
+    assert_eq!(health.status, StatusCode::OK);
+    assert_eq!(health.body, "OK");
+}
+
+#[tokio::test]
+async fn page_routes_reject_unsupported_methods() {
+    let router = create_router(fixture_reader(), false);
+    let response = response(
+        &router,
+        Request::builder()
+            .method(Method::POST)
+            .uri("/about")
+            .body(Body::empty())
+            .expect("request should be valid"),
+    )
+    .await;
+
+    assert_eq!(response.status, StatusCode::METHOD_NOT_ALLOWED);
 }
 
 #[tokio::test]

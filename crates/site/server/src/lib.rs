@@ -2,9 +2,10 @@
 
 //! Topcoat site application, runtime composition, and HTTP boundary.
 
-mod api;
 mod article_card;
 mod artifact_page_loader;
+
+pub mod app;
 
 pub mod assets;
 
@@ -13,10 +14,6 @@ mod format;
 pub mod http_cache;
 
 mod page_loader;
-
-pub mod pages;
-
-pub mod router;
 
 mod shell;
 
