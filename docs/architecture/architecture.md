@@ -16,7 +16,7 @@
 4. render module が単一の`pulldown-cmark` event pipeline内でWikiLinkを解決・安全化し、MarkdownのHTML変換とbookmark enrichmentを行う
 5. artifacts module が `site/` 配下の HTML / JSON を組み立てる
 6. GitHub Actions が artifact を immutable release として S3 に配置し、`current.json` を最後に切り替える
-7. `crates/site/server` が `crates/site/infra` 経由でrelease snapshotからpage documentを組み立て、`crates/site/web`がSSRする
+7. `crates/site/server` が `crates/site/infra` 経由でrelease snapshotからpage documentを組み立て、TopcoatでSSRする
 
 Markdown から HTML への変換はビルド時に完了させる。ランタイムは artifact の読取、ルーティング、メタ情報の付与に集中する。
 
@@ -31,9 +31,8 @@ flowchart LR
     G --> H[GitHub Actions upload]
     H --> I[S3]
     I --> J[crates/site/infra]
-    J --> K[crates/site/server]
-    K --> L[crates/site/web SSR]
-    L --> M[Browser]
+    J --> K[crates/site/server Topcoat application]
+    K --> M[Browser]
 ```
 
 ## ワークスペース構成
@@ -45,8 +44,7 @@ okawak_blog/
 │   ├── publish/
 │   └── site/
 │       ├── infra/
-│       ├── server/
-│       └── web/
+│       └── server/
 ├── e2e/
 ├── docs/
 │   └── architecture/
@@ -87,16 +85,18 @@ okawak_blog/
   - `error` moduleによるstorage / config error境界
   - `lib.rs`はmodule宣言とcrate外向けAPIのre-exportに限定する
 - `crates/site/server`
-  - production `server` binaryによるTopcoat SSR、Topcoat runtime asset、client-side route遷移のホスト
+  - production `server` binaryを持つ単一のTopcoat application crate
+  - Topcoat UI component、公開route、metadata、site定数
+  - client-side navigationと生成コンテンツ用script、Tailwind CSS入力、favicon asset
+  - Topcoat SSR、Topcoat runtime asset、client-side route遷移のホスト
   - reader の生成とTopcoat app / request contextへの注入
   - `api` moduleによる互換記事一覧API、process liveness、artifact readiness
   - `router` moduleによるroute / layer / assetのcomposition
-  - `page_loader` moduleによるartifactとstorage非依存page contractの接続
+  - `page_loader` moduleによるstorage非依存page load contract
+  - `artifact_page_loader` moduleによるartifact readerとpage load contractの接続
+  - UI moduleは`infra`を直接利用せず、`PageLoaderContext`を経由する
   - `http_cache` moduleによるrelease-aware ETagとconditional GET
   - `tests/router.rs`による公開routerのcrate外integration test
-- `crates/site/web`
-  - Topcoat UI component、公開route、metadata、site定数
-  - client-side navigationと生成コンテンツ用script、Tailwind CSS入力、favicon asset
 - `e2e`
   - `crates/site/server`と`crates/site/infra`をまたぐproduction Topcoat serverのbrowser E2E
   - 通常CIではprivate Obsidian submoduleやS3に依存しない固定artifact fixture
@@ -122,8 +122,7 @@ flowchart TB
 
     subgraph Site["crates/site/*"]
         S1[infra]
-        S2[server]
-        S3[web]
+        S2[server Topcoat application]
     end
 
     Publish --> Domain
@@ -132,8 +131,6 @@ flowchart TB
     P2 --> P3
     P3 --> P4
     S2 --> S1
-    S2 --> S3
-    S3 -. "SSR feature only" .-> S1
 ```
 
 ## コンテンツモデル
@@ -363,7 +360,7 @@ flowchart LR
 - `StaticPageDocument`
   - `about` などの固定ページ用contract
 
-`site/web`のTopcoat pageはstorage非依存の`PageLoader`からこのpage contractを受け取り、metadataとUIを組み立てる。`site/server`は`ArtifactPageLoader`としてartifact読取とpage document構築を実装し、conditional GETが取得したsnapshotをrequest contextのloaderへ渡す。validatorを使わないrequestでもloader内でsnapshotを1回だけ取得する。local / S3 readerと`DynArtifactSnapshot`は`site/server`よりUI側へ持ち込まない。
+`site/server`のTopcoat pageはstorage非依存の`PageLoader`からこのpage contractを受け取り、metadataとUIを組み立てる。同じcrate内の`ArtifactPageLoader`だけがartifact読取とpage document構築を実装し、conditional GETが取得したsnapshotをrequest contextのloaderへ渡す。validatorを使わないrequestでもloader内でsnapshotを1回だけ取得する。local / S3 readerと`DynArtifactSnapshot`をpage / component moduleへ持ち込まない。
 
 公開routeのpage document読取はTopcoat async componentを正式経路とする。手書きの`/api/page/*`は持たず、404とstorage errorのstatus / error viewをroute境界で統一する。`/api/articles`はpage documentを組み立てない互換endpointとして維持する。
 
@@ -371,7 +368,7 @@ production `server`はhome、about、category、articleをSSRし、title、canon
 
 ## UI styling境界
 
-`site/web`のUIはTopcoat componentとTailwind CSSを主系にする。
+`site/server`のUIはTopcoat componentとTailwind CSSを主系にする。
 
 - `src/page_loader.rs`
   - storage非依存のpage load portを定義する
@@ -393,7 +390,7 @@ production `server`はhome、about、category、articleをSSRし、title、canon
 
 productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Tailwind CSS、Topcoat runtime、site navigation JavaScript、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。生成コンテンツのKaTeXとhighlight.js、iconのFont Awesome、fontのNoto Sans JPはversion固定またはURL固定のCDN資産として維持し、KaTeXにはSRIを付与する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`はNode / BunのCSS build toolを実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
 
-`site/web/build.rs`は`style/tailwind.css`をTopcoatのstylesheet assetへ変換するために維持する。Rustと`view!` macroの書式はrepository rootの`mise run format`から`cargo fmt`と`topcoat fmt`を順に適用する。
+`site/server/build.rs`はapplication package内の`style/tailwind.css`をTopcoatのstylesheet assetへ変換するために維持する。Rustと`view!` macroの書式はrepository rootの`mise run format`から`cargo fmt`と`topcoat fmt`を順に適用する。
 
 ## Reader 経路
 
@@ -430,7 +427,7 @@ reader 側の設定は主に次の env で切り替える。
 
 `OKAWAK_BLOG_SITE_ORIGIN` は canonical / Open Graph 用の absolute URL 生成に使う。
 
-production `server`はprocess起動時に`tracing` subscriberを初期化する。log filterは`RUST_LOG`からlossyに読み、未指定または有効なdirectiveがない場合は`info`を使う。`site/web`はpage document読取失敗を構造化eventとして発行するがsubscriberを初期化しない。subscriber設定は`site/server`のbinary entrypointに閉じ、domain、publish、infraはprocess-wideなlog設定を所有しない。
+production `server`はprocess起動時に`tracing` subscriberを初期化する。log filterは`RUST_LOG`からlossyに読み、未指定または有効なdirectiveがない場合は`info`を使う。同じapplication crateのpage handlerはpage document読取失敗を構造化eventとして発行する。subscriber設定は`site/server`のbinary entrypointに閉じ、domain、publish、infraはprocess-wideなlog設定を所有しない。
 
 cacheはrelease snapshot単位で所有する。TTL経過後に`current.json`を再確認し、release identityが同じならartifact cacheを保持する。identityが変わった場合だけ新しいcacheへ切り替わり、既存requestが保持する古いsnapshotはそのrequestの完了まで有効である。legacy rootにはidentityを付けず、TTLごとにcacheを作り直す。
 

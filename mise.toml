@@ -81,7 +81,6 @@ description = "Format Rust and Topcoat source files"
 run = '''
 cargo fmt --all
 find crates/site/server -name '*.rs' -exec topcoat fmt {} +
-find crates/site/web -name '*.rs' -exec topcoat fmt {} +
 '''
 
 [tasks.dev]
@@ -228,10 +227,6 @@ run = "cargo test -p domain"
 [tasks.test-server]
 description = "Run server tests"
 run = "cargo test -p server"
-
-[tasks.test-web]
-description = "Run web tests"
-run = "cargo test -p web"
 
 [tasks.test-e2e]
 description = "Run artifact-driven browser E2E with bun and Chromium"

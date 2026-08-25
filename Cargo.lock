@@ -2800,6 +2800,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
  "domain",
  "httpdate",
  "infra",
@@ -2809,7 +2810,6 @@ dependencies = [
  "topcoat",
  "tracing",
  "tracing-subscriber",
- "web",
 ]
 
 [[package]]
@@ -3934,17 +3934,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ef64dbcc55df09c7e5a46182d181c2cfa3e925f3da937ea764728b4bbb9dcbf"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "web"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "domain",
- "topcoat",
- "tracing",
 ]
 
 [[package]]

@@ -1,13 +1,3 @@
-use std::{
-    path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-    time::SystemTime,
-};
-use web::assets;
-
 use async_trait::async_trait;
 use domain::{
     ArticleIndexDocument, Category, CategoryArtifactDocument, HomeFragmentArtifactDocument,
@@ -17,13 +7,21 @@ use infra::{
     ArtifactReader, ArtifactSnapshot, DynArtifactReader, DynArtifactSnapshot, LocalArtifactReader,
     Result,
 };
+use std::{
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::SystemTime,
+};
 use tempfile::tempdir;
 use topcoat::{
     asset::{AssetConfig, Manifest, ManifestEntry},
     router::{Body, HeaderMap, Router, StatusCode, header, request::Request, to_bytes},
 };
 
-use server::router::create_router as create_router_with_assets;
+use server::{assets, router::create_router as create_router_with_assets};
 
 struct TestResponse {
     status: StatusCode,

@@ -29,7 +29,7 @@ pub async fn article_page(cx: &Cx) -> Result<View> {
         .as_str();
     let normalized_slug = normalize_article_slug_param(slug_param);
     let requested_path = request::uri(cx).path().to_string();
-    let fallback_title = format!("{normalized_slug} | {}", web::SITE_NAME);
+    let fallback_title = format!("{normalized_slug} | {}", crate::SITE_NAME);
     let fallback_description = format!("{category_param} カテゴリの記事です。");
     let category = match Category::from_str(category_param) {
         Ok(category) => category,
@@ -67,15 +67,15 @@ pub async fn article_page(cx: &Cx) -> Result<View> {
 
 #[component]
 async fn article_document(document: ArticlePageDocument) -> Result {
-    let title = build_article_page_title(&document, web::SITE_NAME);
+    let title = build_article_page_title(&document, crate::SITE_NAME);
     let description = build_article_page_description(&document);
     let canonical_path = build_article_page_canonical_path(&document);
-    let canonical_url = web::build_site_url(&canonical_path);
+    let canonical_url = crate::build_site_url(&canonical_path);
     let article = document.article;
     let page_title = article.title.as_str().to_string();
     let category = article.category_display_name;
-    let created_at_label = web::format::format_display_date(&article.created_at);
-    let updated_at_label = web::format::format_display_date(&article.updated_at);
+    let created_at_label = crate::format::format_display_date(&article.created_at);
+    let updated_at_label = crate::format::format_display_date(&article.updated_at);
     let created_at = article.created_at;
     let updated_at = article.updated_at;
     let article_description = article.description;

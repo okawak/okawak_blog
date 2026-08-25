@@ -9,14 +9,17 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+chrono = { workspace = true, features = ["serde"] }
 domain = { path = "../../domain" }
 infra = { path = "../infra" }
-web = { path = "../web" }
 httpdate.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 topcoat.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[build-dependencies]
+topcoat = { workspace = true, default-features = false, features = ["tailwind"] }
 
 [dev-dependencies]
 serde_json.workspace = true
