@@ -1,7 +1,6 @@
 [tools]
 bun = "1.4.0"
-"github:leptos-rs/cargo-leptos" = "0.3.7"
-"github:bram209/leptosfmt" = "0.1.33"
+"cargo:topcoat-cli" = "0.6.2"
 
 [env]
 PROJECT_NAME = "okawak_blog"
@@ -9,46 +8,26 @@ SERVICE_NAME = "okawak_blog"
 SERVICE_FILE = "service/okawak_blog.service"
 BIN_DIR = "./bin"
 TARGET_BIN = "./target/release/server"
-TARGET_HASH_FILE = "./target/release/hash.txt"
-DEPLOY_STAGED_SITE = "./target/site-staged"
-LEPTOS_TAILWIND_VERSION = "v4.3.3"
+TARGET_ASSET_DIR = "./target/release/assets"
+DEPLOY_STAGED_ASSETS = "./target/assets-staged"
+TOPCOAT_TAILWIND_VERSION = "4.3.3"
 
 [tasks.check-deps]
-description = "Check if required tools are installed"
-depends = ["versions-check"]
+description = "Check if the production Topcoat build tools are installed"
 run = '''
 set -e
 echo "Checking dependencies..."
 mise --version
-bun --version
-cargo leptos --version
-leptosfmt --version
-'''
-
-[tasks.web-install]
-description = "Install web package.json dependencies with bun"
-run = '''
-cd crates/site/web
-bun install --frozen-lockfile
+cargo --version
+topcoat fmt --version
+expected_topcoat_version="$(sed -nE 's/^"cargo:topcoat-cli" = "([^"]+)"$/\1/p' mise.toml)"
+actual_topcoat_version="$(topcoat fmt --version | awk '{print $2}')"
+[ "$actual_topcoat_version" = "$expected_topcoat_version" ]
 '''
 
 [tasks.versions-check]
 description = "Check shared tool and build helper version consistency"
 run = "bash scripts/check_tool_versions.sh"
-
-[tasks.web-update]
-description = "Update web package.json dependencies within their declared version ranges with bun"
-run = '''
-cd crates/site/web
-bun update
-'''
-
-[tasks.web-outdated]
-description = "Show outdated web package.json dependencies with bun"
-run = '''
-cd crates/site/web
-bun outdated
-'''
 
 [tasks.e2e-install]
 description = "Install root E2E dependencies with bun"
@@ -98,28 +77,38 @@ git submodule update --remote --checkout --recursive "$obsidian_path"
 '''
 
 [tasks.format]
-description = "Format Rust and Leptos source files"
+description = "Format Rust and Topcoat source files"
 run = '''
 cargo fmt --all
-find crates/site/web -name '*.rs' -exec leptosfmt {} +
+find crates/site/server -name '*.rs' -exec topcoat fmt {} +
 '''
 
 [tasks.dev]
-description = "Run the local Leptos development server with S3 artifacts"
-env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "s3", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
+description = "Run the local Topcoat development server with S3 artifacts"
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "s3", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008", OKAWAK_BLOG_ADDR = "127.0.0.1:8008" }
 run = '''
 : "${OKAWAK_BLOG_ARTIFACT_BUCKET:?OKAWAK_BLOG_ARTIFACT_BUCKET is required}"
-cargo leptos serve -p server
+topcoat asset bundle --package server --bin server
+./target/debug/server
 '''
 
 [tasks.dev-local]
 description = "Publish the local Obsidian source and serve its generated artifacts"
-depends = ["web-install"]
-env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008" }
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008", OKAWAK_BLOG_ADDR = "127.0.0.1:8008" }
 run = '''
 mise run sync-obsidian
 cargo run -p publish
-cargo leptos serve -p server
+topcoat asset bundle --package server --bin server
+./target/debug/server
+'''
+
+[tasks.dev-fixture]
+description = "Run the Topcoat runtime with fixture artifacts"
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "e2e/fixtures/site", OKAWAK_BLOG_ADDR = "127.0.0.1:8009" }
+run = '''
+topcoat asset bundle --package server --bin server --release
+# Asset IDs are tied to the exact binary scanned by the bundler.
+./target/release/server
 '''
 
 [tasks.clean-project]
@@ -127,21 +116,19 @@ description = "Clean the Cargo build artifacts"
 run = "cargo clean"
 
 [tasks.build-project]
-description = "Build the integrated Leptos project for deployment"
-depends = ["check-deps", "web-install"]
-run = "cargo leptos build -p server --release"
+description = "Build the integrated Topcoat binary and asset bundle for deployment"
+depends = ["check-deps"]
+run = "topcoat asset bundle --package server --bin server --release"
 
 [tasks.build-deployment]
 description = "Build a production release outside the live site directory"
-depends = ["check-deps", "web-install"]
-run = '''
-LEPTOS_SITE_ROOT="$DEPLOY_STAGED_SITE" cargo leptos build -p server --release
-'''
+depends = ["check-deps"]
+run = "topcoat asset bundle --package server --bin server --release --out \"$DEPLOY_STAGED_ASSETS\""
 
 [tasks.build-server]
-description = "Build the server binary only"
+description = "Build the Topcoat server binary only"
 depends = ["check-deps"]
-run = "cargo build --release -p server"
+run = "cargo build --release -p server --bin server"
 
 [tasks.pull]
 description = "Pull the latest changes from origin/main"
@@ -167,11 +154,12 @@ sudo cp -f "$SERVICE_FILE" "/etc/systemd/system/$SERVICE_NAME.service"
 '''
 
 [tasks.bin]
-description = "Copy the existing built server binary and asset hash manifest into ./bin"
+description = "Copy the existing Topcoat server binary and asset bundle into ./bin"
 run = '''
 sudo mkdir -p "$BIN_DIR"
-sudo cp "$TARGET_BIN" "$BIN_DIR/$SERVICE_NAME"
-sudo cp "$TARGET_HASH_FILE" "$BIN_DIR/hash.txt"
+sudo install -m 0755 "$TARGET_BIN" "$BIN_DIR/$SERVICE_NAME"
+sudo rm -rf -- "$BIN_DIR/assets"
+sudo cp -R "$TARGET_ASSET_DIR" "$BIN_DIR/assets"
 sudo chown -R root:root "$BIN_DIR"
 '''
 
@@ -225,6 +213,13 @@ run = "echo 'ci-flow completed'"
 description = "Run tests for all workspace crates"
 run = "cargo test --workspace"
 
+[tasks.test-service]
+description = "Validate systemd units and staged deployment rollback"
+run = '''
+bash service/tests/systemd_units_test.sh
+bash service/tests/staged_deployment_test.sh
+'''
+
 [tasks.test-domain]
 description = "Run domain layer tests"
 run = "cargo test -p domain"
@@ -232,10 +227,6 @@ run = "cargo test -p domain"
 [tasks.test-server]
 description = "Run server tests"
 run = "cargo test -p server"
-
-[tasks.test-web]
-description = "Run web tests"
-run = "cargo test -p web"
 
 [tasks.test-e2e]
 description = "Run artifact-driven browser E2E with bun and Chromium"
@@ -287,9 +278,6 @@ echo "Common commands:"
 echo "  mise run dev"
 echo "  mise run dev-local"
 echo "  mise run build-project"
-echo "  mise run web-install"
-echo "  mise run web-update"
-echo "  mise run web-outdated"
 echo "  mise run e2e-install"
 echo "  mise run e2e-update"
 echo "  mise run e2e-outdated"

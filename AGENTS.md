@@ -9,7 +9,7 @@
 
 ## リポジトリの位置付け
 
-`okawak_blog` は、private な Obsidian Markdown を公開 artifact へ変換し、Leptos SSR で配信する静的コンテンツ公開基盤である。主役は常駐 API や CMS ではなく、ビルド時の`publish` pipelineである。
+`okawak_blog` は、private な Obsidian Markdown を公開 artifact へ変換し、Topcoat SSR で配信する静的コンテンツ公開基盤である。主役は常駐 API や CMS ではなく、ビルド時の`publish` pipelineである。
 
 参照優先順位:
 
@@ -29,11 +29,10 @@
 
 依存と配置の境界:
 
-- `crates/domain`: 公開コンテンツの純粋なdomain model・ルールと、`publish` / readerが共有する契約。I/O、`async`、AWS SDK、Axum、Leptos を持ち込まない。WASM 互換を意識する
+- `crates/domain`: 公開コンテンツの純粋なdomain model・ルールと、`publish` / readerが共有する契約。I/O、`async`、AWS SDK、HTTP frameworkを持ち込まない
 - `crates/publish`: 単一の`publish` crate。`lib.rs`は内部module宣言とcrate外向けAPIのre-exportに限定する。`pipeline` moduleが公開処理をorchestrationし、`vault` moduleをローカル入力境界、`links` moduleを公開URL索引とWikiLink event解決の境界、`render` moduleをcontent描画の境界、`artifacts` moduleをartifact構築・書込み・validationの境界とする。`render`内ではcontent kind別の組み立て、共通本文処理、Markdown event生成とHTML変換、URLとraw HTMLの安全化、bookmark構文・card生成とOGP metadata取得を分離する。`publish`専用処理をcrate外へ公開せず、外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に絞る
 - `crates/site/infra`: server が artifact を読む外部境界（local / S3、設定、将来のcache）。vault読取、Markdown変換、uploadを置かない
-- `crates/site/server`: Axum + Leptos SSR host、reader注入、API、health/readiness、release-aware conditional GET
-- `crates/site/web`: Leptos UI / route / metadataと、artifact内のmath spanに対するKaTeX描画。SSR時もstorage実装へ直接依存しない
+- `crates/site/server`: production `server` binaryを持つ単一のTopcoat application crate。`src/app.rs`を`module_router!()`のroute tree rootとし、`app/`のfile moduleをURL構造へ対応させて`mod.rs`は使わない。page / component / metadata / style / generated content script、reader注入、API、health/readiness、release-aware conditional GETを所有する。UI moduleはstorage実装へ直接依存せず、storage非依存の`PageLoader`契約を経由する
 - `e2e`: repository root直下のbrowser E2E。通常CIはprivate submoduleやAWSに依存しないfixtureで検証し、実S3 smoke testはローカル手動確認とupload workflowの公開前gateに使う
 - `service`: systemd、Cloudflare Tunnel、運用補助
 - `terraform`: 読み取り専用。編集せず、このdirectoryでcommandを実行しない
@@ -76,7 +75,7 @@
 - `OKAWAK_BLOG_ARTIFACT_SOURCE=s3`
 - `OKAWAK_BLOG_ARTIFACT_BUCKET`（実行時に必須）
 
-`publish`側の同期だけが必要な場合は`mise run sync-obsidian`を使う。同期は未commit差分がある場合に停止し、cleanならmerge commitを作らずremoteの最新commitをcheckoutする。`dev-local`はsubmoduleの同期または`publish`の厳格モードが失敗した場合、serverを起動しない。web / E2Eの依存操作もrootの`web-*` / `e2e-*` taskを使う。S3の手動確認は`dev` / `test-e2e-s3`を使い、本番runtimeのS3設定とcredentialsは`service/okawak_blog.service`および`service/README.md`を参照する。
+`publish`側の同期だけが必要な場合は`mise run sync-obsidian`を使う。同期は未commit差分がある場合に停止し、cleanならmerge commitを作らずremoteの最新commitをcheckoutする。`dev-local`はsubmoduleの同期または`publish`の厳格モードが失敗した場合、serverを起動しない。E2Eの依存操作はrootの`e2e-*` taskを使う。S3の手動確認は`dev` / `test-e2e-s3`を使い、本番runtimeのS3設定とcredentialsは`service/okawak_blog.service`および`service/README.md`を参照する。
 
 - `/api/health`: process liveness
 - `/api/ready`: artifact reader readiness

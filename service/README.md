@@ -1,39 +1,35 @@
 # Runtime service
 
-本番のLeptos SSR serverは`okawak_blog.service`で起動し、S3 artifact readerを使います。
+本番のTopcoat SSR serverは`okawak_blog.service`で起動し、S3 artifact readerを使います。
 
 本番環境の構成順序は[本番環境の初期構築](../docs/operations/production-setup.md)、IAM Roles Anywhereの検証、certificate更新、障害切り分けは[AWS runtime認証](../docs/operations/aws-runtime-auth.md)を一次手順とします。
 
-## VPS build tool override
+## VPS build tool
 
-Oracle Linux 9のglibcでは、miseのGitHub backendが配布する`cargo-leptos 0.3.7`を実行できません。本番VPSだけは同じversionをsourceからbuildし、repository固有のlocal configでmise配布版を無効化します。CIと開発端末は`mise.toml`と`mise.lock`のGNU版を引き続き使用します。
+production buildはTopcoat CLIを使います。Topcoat CLIのversionは`mise.toml`と`mise.lock`でframeworkと同じ0.6.2へ固定します。
 
 VPSの運用userで次を実行します。
 
 ```bash
-cargo install --locked cargo-leptos --version 0.3.7
 cd /opt/okawak_blog
-install -m 0644 mise.local.toml.example mise.local.toml
 mise settings set locked true
 ```
 
-`mise.local.toml`はGit管理外です。`[settings].disable_tools`はmise配布版の`cargo-leptos`だけを無効化します。`mise settings set locked true`は運用userのglobal settingへ保存され、tracked `mise.lock`以外の解決を継続的に禁止します。lockfileにmusl用entryが含まれていても、musl版を選択する設定ではありません。
+`mise settings set locked true`は運用userのglobal settingへ保存され、tracked `mise.lock`以外の解決を継続的に禁止します。
 
 新しいSSH sessionで設定と選択binaryを確認します。
 
 ```bash
 cd /opt/okawak_blog
-mise settings get disable_tools
 mise settings get locked
-command -v cargo-leptos
-cargo leptos --version
+topcoat fmt --version
 mise run check-deps
 git status --short
 ```
 
-`command -v cargo-leptos`がmiseのinstall directoryではなく運用userのCargo bin directoryを示し、versionが`0.3.7`、Git差分が空であれば正常です。`mise run build-project`とproduction用のstaged buildは`web-install`にも依存するため、fresh checkoutでもBun依存を個別に導入する必要はありません。
+Topcoat CLIが0.6.2で、`mise run check-deps`が成功し、Git差分が空であれば正常です。`mise run build-project`とproduction用のstaged buildはTopcoatのstandalone Tailwind integrationを使い、Bun package installへ依存しません。
 
-`mise run production-deploy`は稼働中の`target/site`を直接buildしません。`target/site-staged`にhash付きCSS / JavaScript / WebAssemblyを揃え、service停止後にsite、binary、binaryと同じdirectoryでLeptosが読む`bin/hash.txt`を同じreleaseへ切り替えます。起動後のhealth / readinessが失敗した場合は旧releaseを復元し、調査用の失敗siteを`target/site-failed`へ残します。
+`mise run production-deploy`は稼働中のasset directoryを直接buildしません。`target/assets-staged`にhash付きCSS / JavaScript / faviconを揃え、service停止後に`bin/okawak_blog`と、Topcoatがbinaryの隣から読む`bin/assets`を同じreleaseへ切り替えます。stagingはWebAssemblyを拒否します。起動後のhealth / readinessが失敗した場合は旧binaryと旧assetsを復元し、調査用の失敗bundleを`bin/assets.failed`へ残します。
 
 ## AWS credentials
 
@@ -67,6 +63,10 @@ curl --fail http://127.0.0.1:8008/api/ready
 
 - `/api/health`: process liveness。artifactの状態は確認しません。
 - `/api/ready`: configured `ArtifactReader`からsite metadataを読めた場合だけ`200 OK`を返します。直前のimmutable releaseでcache済みmetadataを配信できる場合も`200 OK`です。利用可能なsnapshotがない初回起動時やmetadataを読めない場合は`503 Service Unavailable`です。
+
+## Runtime logging
+
+`site/server`の起動情報、readiness failure、page document読取失敗は`tracing` eventとして標準出力へ記録し、systemd journalから確認します。log filterは`RUST_LOG`で指定し、未指定または有効なdirectiveがない場合は`info`を使います。本番unitは`RUST_LOG=info`を明示します。`debug`のようなlevelに加えて、`server=debug,topcoat=warn`のようなtarget別filterも指定できます。不正なdirectiveは無視します。`RUST_LOG`が制御するのは`tracing` eventであり、`site/infra`に残る既存の標準エラー出力はこの設定の対象外です。
 
 ## Artifact cache
 

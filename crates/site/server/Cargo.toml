@@ -6,90 +6,21 @@ description.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[[bin]]
-name = "server"
-path = "src/main.rs"
-
-[lib]
-crate-type = ["cdylib", "rlib"]
-name = "server"
-
 [dependencies]
-# 内部依存
+anyhow.workspace = true
+async-trait.workspace = true
+chrono = { workspace = true, features = ["serde"] }
 domain = { path = "../../domain" }
-
-# ターゲット別依存関係
-
-# WASM用依存関係
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-web = { path = "../web", features = ["hydrate"] }
-
-# Native用依存関係
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 infra = { path = "../infra" }
-web = { path = "../web", features = ["ssr"], optional = true }
-axum.workspace = true
 httpdate.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-tower-http = { workspace = true, features = ["fs"] }
-leptos = { workspace = true, features = ["ssr"] }
-leptos_axum.workspace = true
+topcoat.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
-[features]
-default = ["ssr"]
-ssr = ["dep:web"]
-hydrate = ["web/hydrate"]
+[build-dependencies]
+topcoat = { workspace = true, default-features = false, features = ["tailwind"] }
 
 [dev-dependencies]
-async-trait.workspace = true
-serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
-tower = { workspace = true, features = ["util"] }
-
-[package.metadata.leptos]
-# The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
-output-name = "web"
-
-# Version the generated CSS, JavaScript, and WebAssembly filenames together.
-# This prevents a browser from combining files from different deployments.
-hash-files = true
-
-
-# The site root folder is where cargo-leptos generate all output. WARNING: all content of this folder will be erased on a rebuild. Use it in your server setup.
-site-root = "target/site"
-
-# The site-root relative folder where all compiled output (JS, WASM and CSS) is written
-# Defaults to pkg
-site-pkg-dir = "pkg"
-
-# Tailwind input is compiled and optimized into <site-root>/<site-pkg>/web.css.
-tailwind-input-file = "../web/style/tailwind.css"
-
-# Assets source dir. All files found here will be copied and synchronized to site-root.
-# The assets-dir cannot have a sub directory with the same name/path as site-pkg-dir.
-assets-dir = "../web/public"
-
-# The IP and port (ex: 127.0.0.1:3000) where the server serves the content. Use it in your server setup.
-site-addr = "127.0.0.1:8008"
-
-# The port to use for automatic reload monitoring
-reload-port = 3001
-
-#  The browserlist query used for optimizing the CSS.
-browserquery = "defaults"
-
-# The features to use when compiling the bin target
-bin-features = ["ssr"]
-
-# If the --no-default-features flag should be used when compiling the bin target
-bin-default-features = false
-
-# The features to use when compiling the lib target (in the front-end lib)
-lib-features = ["hydrate"]
-
-# If the --no-default-features flag should be used when compiling the lib target
-lib-default-features = false
-
-# The profile to use for the lib target when compiling for release
-lib-profile-release = "wasm-release"

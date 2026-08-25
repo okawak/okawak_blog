@@ -2,7 +2,7 @@
 
 ## 目的
 
-`okawak_blog` は、Obsidian で書いた Markdown を公開成果物へ変換し、それを Leptos SSR で配信するための静的コンテンツ公開基盤 + SSR 表示基盤である。
+`okawak_blog` は、Obsidian で書いた Markdown を公開成果物へ変換し、それを Topcoat SSR で配信するための静的コンテンツ公開基盤 + SSR 表示基盤である。
 
 このリポジトリは一般的なブログ CMS ではない。主役は常駐 API サーバーではなく、`publish`による公開成果物生成パイプラインである。
 
@@ -16,7 +16,7 @@
 4. render module が単一の`pulldown-cmark` event pipeline内でWikiLinkを解決・安全化し、MarkdownのHTML変換とbookmark enrichmentを行う
 5. artifacts module が `site/` 配下の HTML / JSON を組み立てる
 6. GitHub Actions が artifact を immutable release として S3 に配置し、`current.json` を最後に切り替える
-7. `crates/site/server` と `crates/site/web` が `crates/site/infra` 経由で release snapshot を読んで SSR する
+7. `crates/site/server` が `crates/site/infra` 経由でrelease snapshotからpage documentを組み立て、TopcoatでSSRする
 
 Markdown から HTML への変換はビルド時に完了させる。ランタイムは artifact の読取、ルーティング、メタ情報の付与に集中する。
 
@@ -31,9 +31,8 @@ flowchart LR
     G --> H[GitHub Actions upload]
     H --> I[S3]
     I --> J[crates/site/infra]
-    J --> L[crates/site/web SSR]
-    K[crates/site/server] --> L
-    L --> M[Browser]
+    J --> K[crates/site/server Topcoat application]
+    K --> M[Browser]
 ```
 
 ## ワークスペース構成
@@ -45,8 +44,7 @@ okawak_blog/
 │   ├── publish/
 │   └── site/
 │       ├── infra/
-│       ├── server/
-│       └── web/
+│       └── server/
 ├── e2e/
 ├── docs/
 │   └── architecture/
@@ -79,27 +77,32 @@ okawak_blog/
   - `ObsidianFrontMatter`と`ContentKind`は`publish`入力形式として内部に保持する
   - `publish`固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
 - `crates/site/infra`
-  - `ArtifactReader` 境界
-  - local reader
-  - S3 reader
+  - `contract` moduleによる`ArtifactReader` / `ArtifactSnapshot`境界
+  - `local` moduleによるfilesystem reader
+  - `s3` moduleによるS3 readerとimmutable release解決
+  - `cache` moduleによるsnapshot / artifact cache
+  - `config` moduleによるsource設定とreader composition
+  - `error` moduleによるstorage / config error境界
+  - `lib.rs`はmodule宣言とcrate外向けAPIのre-exportに限定する
 - `crates/site/server`
-  - Axum + Leptos SSR のホスト
-  - reader の生成と Leptos context への注入
-  - 互換用の記事一覧 API
-  - process liveness (`/api/health`) と artifact readiness (`/api/ready`)
-  - release-aware ETag と conditional GET
-- `crates/site/web`
-  - Leptos UI
-  - route 定義
-  - Leptos server function による page document の組み立て
-  - SSR feature 時のみ `ArtifactReader` 境界を利用
-  - metadata / canonical / Open Graph 生成
-  - `publish`が生成する`.math-inline` / `.math-display`に対するclient-side KaTeX描画
+  - production `server` binaryを持つ単一のTopcoat application crate
+  - Topcoat UI component、公開route、metadata、site定数
+  - 生成コンテンツ用script、Tailwind CSS入力、favicon asset
+  - Topcoat SSR、Topcoat runtime asset、ブラウザ標準のfull-page navigation
+  - reader の生成とTopcoat app / request contextへの注入
+  - `app.rs`をrootにした`module_router!()`のmodule-derived route tree
+  - `app/api` moduleによる互換記事一覧API、process liveness、artifact readiness
+  - `app` moduleによるglobal layer / app context / assetのcomposition
+  - `page_loader` moduleによるstorage非依存page load contract
+  - `artifact_page_loader` moduleによるartifact readerとpage load contractの接続
+  - UI moduleは`infra`を直接利用せず、`PageLoaderContext`を経由する
+  - `http_cache` moduleによるrelease-aware ETagとconditional GET
+  - `tests/router.rs`による公開routerのcrate外integration test
 - `e2e`
-  - `crates/site/server`、`crates/site/web`、`crates/site/infra` をまたぐ browser E2E
+  - `crates/site/server`と`crates/site/infra`をまたぐproduction Topcoat serverのbrowser E2E
   - 通常CIではprivate Obsidian submoduleやS3に依存しない固定artifact fixture
   - 実S3の検証は専用Playwright configを使い、ローカル手動確認とrelease公開前smoke testへ分離
-  - Bun で依存を管理し、Playwright + Chromium で公開 route、metadata、hydration を検証
+  - Bunで依存を管理し、Playwright + Chromiumで公開route、metadata、full-page navigation、Topcoat interactionを検証
 
 `terraform/` は読み取り専用とし、このリポジトリの通常作業では編集しない。
 
@@ -120,8 +123,7 @@ flowchart TB
 
     subgraph Site["crates/site/*"]
         S1[infra]
-        S2[server]
-        S3[web]
+        S2[server Topcoat application]
     end
 
     Publish --> Domain
@@ -130,8 +132,6 @@ flowchart TB
     P2 --> P3
     P3 --> P4
     S2 --> S1
-    S2 --> S3
-    S3 -. "SSR feature only" .-> S1
 ```
 
 ## コンテンツモデル
@@ -217,7 +217,7 @@ Publish/
       async/
         future.md
     web/
-      leptos.md
+      topcoat.md
 ```
 
 この場合:
@@ -229,7 +229,7 @@ Publish/
   - `kind=article`
   - `category=tech`
   - `section_path=["rust", "async"]`
-- `tech/web/leptos.md`
+- `tech/web/topcoat.md`
   - `kind=article`
   - `category=tech`
   - `section_path=["web"]`
@@ -361,28 +361,41 @@ flowchart LR
 - `StaticPageDocument`
   - `about` などの固定ページ用contract
 
-`site/web` はこの page contract をもとに metadata と UI を組み立てる。SSR feature では Leptos context から `DynArtifactReader` を受け取り、server function の開始時にsnapshotを1回取得してpage documentを組み立てる。local / S3 などの storage 実装詳細には依存しない。hydrate build は `infra` に依存しない。
+`site/server`のTopcoat pageはstorage非依存の`PageLoader`からこのpage contractを受け取り、metadataとUIを組み立てる。同じcrate内の`ArtifactPageLoader`だけがartifact読取とpage document構築を実装し、conditional GETが取得したsnapshotをrequest contextのloaderへ渡す。validatorを使わないrequestでもloader内でsnapshotを1回だけ取得する。local / S3 readerと`DynArtifactSnapshot`をpage / component moduleへ持ち込まない。
 
-公開 route の page document 読み込みは Leptos server function を正式経路とする。`site/server` は reader を生成して context に注入し、SSR と server function をホストする。手書きの `/api/page/*` は持たず、404 と storage error の扱いは各 server function に集約する。`/api/articles` は page document を組み立てない互換 endpoint として維持する。
+公開routeのpage document読取はTopcoat async componentを正式経路とする。手書きの`/api/page/*`は持たず、404とstorage errorのstatus / error viewをroute境界で統一する。`/api/articles`はpage documentを組み立てない互換endpointとして維持する。
 
-home、about、category、articleの公開routeは`SsrMode::Async`で描画する。title、canonical、Open Graph metadataがartifactの内容に依存するため、非同期resourceの解決前に`<head>`をstreamingしない。各routeではblocking resourceを使い、metadataと本文を同じ`Suspense`境界で組み立てる。
+公開routeは`site/server/src/app.rs`をrootとするTopcoat `module_router!()`から登録する。`/about`と`/api/*`はstatic module、`/{category_name}`と`/{category_name}/{article_slug}`は`path_param!()`を宣言するnested moduleとしてURL構造へ対応させる。route moduleはfile moduleで構成し、`mod.rs`を使わない。release-aware conditional GETはmodule pathに依存しないglobal layerとして`app.rs`で明示的に登録する。
+
+production `server`はhome、about、category、articleをSSRし、title、canonical、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。
 
 ## UI styling境界
 
-`site/web`のUIはRust/UI由来のprimitiveとTailwind CSSを主系にする。
+`site/server`のUIはTopcoat componentとTailwind CSSを主系にする。
 
-- `src/components/ui/`
-  - Rust/UI registry由来の汎用primitive
-  - site固有のlayoutや文言を持たない
-- `src/components/`と`src/routes/`
-  - Tailwind classでsite chrome、page layout、responsive designを構成する
+- `src/page_loader.rs`
+  - storage非依存のpage load portを定義する
+- `src/app.rs`
+  - `module_router!()`のroot、home page、page loader context取得、application compositionを構成する
+- `src/app/about.rs`、`src/app/category_name.rs`、`src/app/category_name/article_slug.rs`
+  - module-derived pathとpage種別ごとの固有componentを構成する
+- `src/app/api.rs`、`src/app/api/*.rs`
+  - URL構造に対応するAPI route treeを構成する
+- `src/article_card.rs`
+  - listing route間で共有する記事cardを構成する
+- `src/shell.rs`
+  - site chrome、metadata、error view、responsive navigationと、生成contentのKaTeX / highlight.js progressive enhancementをshell resourceとして構成する
+- `src/assets.rs`
+  - application所有のstylesheetとfavicon assetを登録する
 - `style/tailwind.css`
   - semantic color、radius、typography、site layout tokenとbase styleのsource of truth
 - `style/content.css`
   - article、about、category landing、home fragmentの生成HTMLだけを`.content-prose`配下で整形するplain CSS
   - heading、code、table、image、bookmark、math spanとKaTeX描画結果など`publish` artifactの表現を担当する
 
-`cargo-leptos`は`tailwind-input-file`からCSSを生成する。Sass、Stylance、routeごとのCSS module生成工程は持たない。これによりRust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
+productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Tailwind CSS、Topcoat runtime、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。公開linkは独自client routerを持たず、ブラウザ標準のfull-page navigationを使う。mobile menuはTopcoat runtimeのsignalとevent expressionで構成する。生成コンテンツのKaTeXとhighlight.js、iconのFont Awesome、fontのNoto Sans JPはversion固定またはURL固定のCDN資産として維持し、KaTeXにはSRIを付与する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`はNode / BunのCSS build toolを実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
+
+`site/server/build.rs`はapplication package内の`style/tailwind.css`をTopcoatのstylesheet assetへ変換するために維持する。Rustと`view!` macroの書式はrepository rootの`mise run format`から`cargo fmt`と`topcoat fmt`を順に適用する。
 
 ## Reader 経路
 
@@ -419,13 +432,15 @@ reader 側の設定は主に次の env で切り替える。
 
 `OKAWAK_BLOG_SITE_ORIGIN` は canonical / Open Graph 用の absolute URL 生成に使う。
 
+production `server`はprocess起動時に`tracing` subscriberを初期化する。log filterは`RUST_LOG`からlossyに読み、未指定または有効なdirectiveがない場合は`info`を使う。同じapplication crateのpage handlerはpage document読取失敗を構造化eventとして発行する。subscriber設定は`site/server`のbinary entrypointに閉じ、domain、publish、infraはprocess-wideなlog設定を所有しない。
+
 cacheはrelease snapshot単位で所有する。TTL経過後に`current.json`を再確認し、release identityが同じならartifact cacheを保持する。identityが変わった場合だけ新しいcacheへ切り替わり、既存requestが保持する古いsnapshotはそのrequestの完了まで有効である。legacy rootにはidentityを付けず、TTLごとにcacheを作り直す。
 
 AWS SDK標準retry後もsnapshot更新に失敗した場合、cache identityを持つ直前のimmutable releaseをprocessの存続中は期限なく返す。fallback時も最終確認時刻を更新し、次のTTLまではS3への再試行を抑える。運用中に`current.json`が消えた場合もlegacy rootへdowngradeせず、直前のimmutable releaseを維持する。初回取得失敗、TTL=`0`、legacy snapshotにはfallbackしない。artifactは必要時にmemory cacheするため、stale snapshot内でも未取得objectのS3 readが失敗すればそのrequestはerrorになる。全artifactのeager preloadは行わない。
 
 `site/server`はprocess instance、release snapshot identity、request URIからweak ETagを生成し、release生成時刻とprocess起動時刻の新しい方をHTTP-dateへ変換した`Last-Modified`を付与する。process起動時刻も含めることで、artifactが同じでもserver / UI更新後のrepresentationを日付validatorだけで再利用させない。対象はartifact-backedなGET / HEAD responseと`/api/articles`で、matching `If-None-Match`にはbodyをrenderせず`304 Not Modified`を返す。`If-Modified-Since`はresourceが存在することをhandlerの成功responseで確認してからbodyを破棄して304へ変換するため、未知のURIやerror responseを誤って304にしない。両方がある場合はRFC 9110に従って`If-None-Match`を優先し、不正または複数の`If-Modified-Since`は無視する。成功responseには`Cache-Control: public, max-age=0, must-revalidate`を付け、browserやproxyへ毎回のrevalidationを要求する。
 
-validatorは`current.json`からimmutable release identityと生成時刻を取得でき、snapshot cache TTLが`0`でない場合だけ有効にする。local reader、legacy root、release prefixを直接読む公開前smoke test、TTL=`0`ではrequest内で同じsnapshotを保証できないため付与しない。health / readiness、static asset、server function、404 / error responseも対象外とする。process再起動時はETagを変え、artifactが同じでもserver / UI変更後の古いrepresentationを再利用させない。stale fallback中は同じsnapshot metadataとprocess instanceを使うためvalidatorも維持する。
+validatorは`current.json`からimmutable release identityと生成時刻を取得でき、snapshot cache TTLが`0`でない場合だけ有効にする。local reader、legacy root、release prefixを直接読む公開前smoke test、TTL=`0`ではrequest内で同じsnapshotを保証できないため付与しない。health / readiness、static asset、404 / error responseも対象外とする。process再起動時はETagを変え、artifactが同じでもserver / UI変更後の古いrepresentationを再利用させない。stale fallback中は同じsnapshot metadataとprocess instanceを使うためvalidatorも維持する。
 
 本番のAWS SDKは`AWS_CONFIG_FILE=/etc/okawak_blog/aws/config`のprofileから`aws_signing_helper credential-process`を実行し、IAM Roles AnywhereのX.509 identityを期限付きrole credentialへ交換する。helper、config、end-entity certificate、private keyはroot管理pathへ置き、`ProtectHome=true`を維持する。SDK標準のcredential refreshを使い、application独自のtimerやcredential管理責務を`site/infra`へ持ち込まない。
 
@@ -451,7 +466,7 @@ Obsidian submodule
   -> local reader
 ```
 
-`dev-local`はprivate Obsidian submoduleに未commit差分がないことを確認してremoteの最新commitをcheckoutし、`publish`の通常の厳格モードが成功した場合だけLeptos serverを起動する。同期時にlocal merge commitは作らない。同期または`publish`に失敗した場合はserverを起動しない。local readerにはmemory cacheを適用しないため、生成済みartifactの更新を即時に読める。ただし起動中にsource Markdownを変更した場合、`publish`の再実行は明示的に行う。
+`dev-local`はprivate Obsidian submoduleに未commit差分がないことを確認してremoteの最新commitをcheckoutし、`publish`の通常の厳格モードとTopcoat asset bundle生成が成功した場合だけTopcoat serverを起動する。同期時にlocal merge commitは作らない。同期、`publish`、bundleのいずれかに失敗した場合はserverを起動しない。local readerにはmemory cacheを適用しないため、生成済みartifactの更新を即時に読める。ただし起動中にsource Markdownを変更した場合、`publish`の再実行は明示的に行う。
 
 AWS認証、immutable release pointer、S3 cacheを含む本番相当のreader境界はS3用taskで確認する。
 
@@ -476,6 +491,8 @@ Obsidian submodule
   -> Cloudflare Tunnel
   -> Browser
 ```
+
+application deployはTopcoat release binaryとasset bundleを同じrelease単位で扱う。`build-deployment`は稼働中のdirectoryへ書かず、`target/release/server`と`target/assets-staged`を生成する。activationはservice停止中にbinaryを`bin/okawak_blog`、bundleをbinary隣接の`bin/assets`へ切り替える。stagingはmanifest内のCSS、JavaScript、faviconと各参照fileを検証し、WebAssemblyを拒否する。起動後のhealth / readinessが失敗した場合は旧binaryと旧bundleを復元し、失敗bundleを`bin/assets.failed`へ保存する。
 
 `cloudflared`はVPSからCloudflareへ外向き接続し、originの80/443は公開しない。public hostnameとTunnel routeはCloudflare Dashboardで管理し、OCI TerraformはReserved Public IP、SSH用ingress、Tunnel用egressなどのOCI resourceだけを管理する。S3 upload は Rust アプリに持たせず、workflow の責務として扱う。
 

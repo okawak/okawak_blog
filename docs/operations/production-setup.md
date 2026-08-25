@@ -65,7 +65,7 @@ OCI Terraformは現在local stateを使います。stateとbackupをrepository�
 
 ## 4. VPSへapplicationを配置する
 
-VPSのOS、SSH、一般的なbuild tool、運用userの準備手順はこの文書の対象外です。repositoryが`/opt/okawak_blog`にあり、[runtime serviceのVPS build tool override](../../service/README.md#vps-build-tool-override)が有効であることを前提とします。
+VPSのOS、SSH、一般的なbuild tool、運用userの準備手順はこの文書の対象外です。repositoryが`/opt/okawak_blog`にあり、[runtime serviceのVPS build tool設定](../../service/README.md#vps-build-tool)が有効であることを前提とします。
 
 IAM Roles Anywhereのhelper、AWS config、client certificate、private keyを先に配置します。[AWS runtime認証](./aws-runtime-auth.md)のVPS手順でcaller identityとS3 readを確認します。
 
@@ -82,9 +82,9 @@ curl --fail http://127.0.0.1:8008/api/health
 curl --fail http://127.0.0.1:8008/api/ready
 ```
 
-`production-deploy`は`origin/main`をpullし、web依存をinstallしてから、liveの`target/site`とは別の`target/site-staged`へrelease buildします。CSS、JavaScript、WebAssemblyには同じbuildで生成したhash付きファイル名を使います。staging bundleが完成した後だけapplication serviceを停止し、site directory、server binary、`bin/hash.txt`を切り替えて起動します。起動後はhealth / readinessを確認し、失敗時は直前のsiteとbinaryを復元します。これによりbuild途中のassetを稼働中serverが配信せず、異なるbuildのJavaScriptとWebAssemblyが同じURLを共有しません。Cloudflare Tunnelは独立したserviceとして維持します。
+`production-deploy`は`origin/main`をpullし、Topcoat release binaryをbuildして、稼働中の`bin/assets`とは別の`target/assets-staged`へcontent-hash付きCSS、JavaScript、faviconを生成します。staging bundleはmanifest参照とfile実体を検証し、WebAssemblyを拒否します。bundleが完成した後だけapplication serviceを停止し、`bin/okawak_blog`と`bin/assets`を同じreleaseへ切り替えて起動します。起動後はhealth / readinessを確認し、失敗時は直前のbinaryとasset bundleを復元します。Cloudflare Tunnelは独立したserviceとして維持します。
 
-失敗したstaging siteを保存できた場合は`target/site-failed`へ残します。原因を確認して不要になった後に削除してから、`mise run production-deploy`を再実行します。
+失敗したasset bundleを保存できた場合は`bin/assets.failed`へ残します。原因を確認して不要になった後に削除してから、`mise run production-deploy`を再実行します。
 
 ## 5. Cloudflare Tunnelを構築する
 
@@ -124,7 +124,7 @@ curl --fail https://www.okawak.net/api/ready
 - apexと`www`のPublished applicationが同じlocalhost originを指す
 - DNSがProxiedでTunnel IDを指す
 
-ブラウザでhome、category、article、CSS、client-side navigationを確認し、consoleにWASM初期化errorがないことを確認します。
+ブラウザでhome、category、article、CSS、full-page navigation、mobile menuを確認し、consoleにTopcoat client runtimeのerrorがないことを確認します。
 
 ## 7. 定常運用
 

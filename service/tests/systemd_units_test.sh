@@ -9,6 +9,8 @@ grep -qx 'User=okawak' "$service_unit"
 grep -qx 'Environment=AWS_PROFILE=blog-s3' "$service_unit"
 grep -qx 'Environment=AWS_CONFIG_FILE=/etc/okawak_blog/aws/config' "$service_unit"
 grep -qx 'Environment=AWS_EC2_METADATA_DISABLED=true' "$service_unit"
+grep -qx 'Environment=OKAWAK_BLOG_ADDR=127.0.0.1:8008' "$service_unit"
+grep -qx 'Environment=RUST_LOG=info' "$service_unit"
 if grep -q '^Environment=AWS_SHARED_CREDENTIALS_FILE=' "$service_unit"; then
   echo "production service must not use static AWS credentials" >&2
   exit 1

@@ -2,33 +2,31 @@
 
 set -Eeuo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$repo_root"
 
 service_name="${SERVICE_NAME:-okawak_blog}"
 service_file="${SERVICE_FILE:-service/okawak_blog.service}"
+systemd_unit_dir="${SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
 target_bin="${TARGET_BIN:-./target/release/server}"
-target_hash_file="${TARGET_HASH_FILE:-./target/release/hash.txt}"
 bin_dir="${BIN_DIR:-./bin}"
-staged_site="${DEPLOY_STAGED_SITE:-./target/site-staged}"
-live_site="./target/site"
-rollback_site="./target/site-rollback"
-failed_site="./target/site-failed"
+staged_assets="${DEPLOY_STAGED_ASSETS:-./target/assets-staged}"
+live_assets="$bin_dir/assets"
+rollback_assets="$bin_dir/assets.rollback"
+failed_assets="$bin_dir/assets.failed"
 installed_bin="$bin_dir/$service_name"
 rollback_bin="$bin_dir/$service_name.rollback"
-installed_hash_file="$bin_dir/hash.txt"
-rollback_hash_file="$bin_dir/hash.txt.rollback"
+probe_attempts="${DEPLOY_PROBE_ATTEMPTS:-15}"
 
 service_was_active=false
-live_site_moved=false
-site_swapped=false
+live_assets_moved=false
+assets_swapped=false
 binary_change_started=false
 had_installed_bin=false
-had_installed_hash_file=false
 
 fail() {
   echo "staged-deploy: $*" >&2
-  exit 1
+  return 1
 }
 
 path_exists() {
@@ -51,22 +49,17 @@ rollback() {
     else
       sudo rm -f "$installed_bin"
     fi
-    if [[ "$had_installed_hash_file" == true ]]; then
-      sudo mv -f "$rollback_hash_file" "$installed_hash_file"
-    else
-      sudo rm -f "$installed_hash_file"
-    fi
   else
-    sudo rm -f "$rollback_bin" "$rollback_hash_file"
+    sudo rm -f "$rollback_bin"
   fi
 
-  if [[ "$site_swapped" == true ]]; then
-    if ! path_exists "$failed_site"; then
-      mv "$live_site" "$failed_site"
+  if [[ "$assets_swapped" == true ]]; then
+    if ! path_exists "$failed_assets"; then
+      sudo mv "$live_assets" "$failed_assets"
     fi
   fi
-  if [[ "$live_site_moved" == true ]]; then
-    mv "$rollback_site" "$live_site"
+  if [[ "$live_assets_moved" == true ]]; then
+    sudo mv "$rollback_assets" "$live_assets"
   fi
 
   sudo systemctl daemon-reload
@@ -74,24 +67,38 @@ rollback() {
     sudo systemctl start "$service_name.service"
   fi
 
-  echo "staged-deploy: failed release is preserved at $failed_site when available" >&2
+  echo "staged-deploy: failed asset bundle is preserved at $failed_assets when available" >&2
   exit "$status"
 }
 
-path_exists "$staged_site" || fail "staged site is missing: $staged_site"
-[[ -d "$staged_site/pkg" ]] || fail "staged pkg directory is missing"
-[[ -f "$staged_site/favicon.ico" ]] || fail "staged favicon is missing"
+path_exists "$staged_assets" || fail "staged asset bundle is missing: $staged_assets"
+[[ -f "$staged_assets/manifest.toml" ]] || fail "asset manifest is missing"
 [[ -x "$target_bin" ]] || fail "server binary is missing: $target_bin"
-[[ -f "$target_hash_file" ]] || fail "asset hash manifest is missing: $target_hash_file"
-find "$staged_site/pkg" -maxdepth 1 -type f -name '*.js' -print -quit | grep -q . \
-  || fail "staged JavaScript bundle is missing"
-find "$staged_site/pkg" -maxdepth 1 -type f -name '*.wasm' -print -quit | grep -q . \
-  || fail "staged WebAssembly bundle is missing"
+grep -q '^content_type = "text/css"$' "$staged_assets/manifest.toml" \
+  || fail "staged CSS asset is missing"
+grep -q '^content_type = "text/javascript"$' "$staged_assets/manifest.toml" \
+  || fail "staged JavaScript asset is missing"
+grep -q '^content_type = "image/x-icon"$' "$staged_assets/manifest.toml" \
+  || fail "staged favicon asset is missing"
+if find "$staged_assets" -maxdepth 1 -type f -name '*.wasm' -print -quit | grep -q . \
+  || grep -q '^content_type = "application/wasm"$' "$staged_assets/manifest.toml"; then
+  fail "staged asset bundle must not contain WebAssembly"
+fi
 
-path_exists "$rollback_site" && fail "rollback site already exists: $rollback_site"
-path_exists "$failed_site" && fail "failed site already exists: $failed_site"
+asset_count=0
+while IFS= read -r asset_file; do
+  [[ -n "$asset_file" ]] || continue
+  [[ "$asset_file" != */* && "$asset_file" != "." && "$asset_file" != ".." ]] \
+    || fail "asset manifest contains an unsafe filename: $asset_file"
+  [[ -f "$staged_assets/$asset_file" ]] \
+    || fail "manifest asset is missing: $asset_file"
+  ((asset_count += 1))
+done < <(sed -nE 's/^file = "([^"]+)"$/\1/p' "$staged_assets/manifest.toml")
+((asset_count > 0)) || fail "asset manifest contains no files"
+
+path_exists "$rollback_assets" && fail "rollback asset bundle already exists: $rollback_assets"
+path_exists "$failed_assets" && fail "failed asset bundle already exists: $failed_assets"
 path_exists "$rollback_bin" && fail "rollback binary already exists: $rollback_bin"
-path_exists "$rollback_hash_file" && fail "rollback hash manifest already exists: $rollback_hash_file"
 
 if sudo systemctl is-active --quiet "$service_name.service"; then
   service_was_active=true
@@ -100,35 +107,31 @@ fi
 trap 'rollback $? $LINENO' ERR
 
 sudo install -o root -g root -m 0644 \
-  "$service_file" "/etc/systemd/system/$service_name.service"
+  "$service_file" "$systemd_unit_dir/$service_name.service"
 sudo systemctl daemon-reload
 sudo systemctl stop "$service_name.service"
 
-if path_exists "$live_site"; then
-  mv "$live_site" "$rollback_site"
-  live_site_moved=true
-fi
-mv "$staged_site" "$live_site"
-site_swapped=true
-
 sudo mkdir -p "$bin_dir"
+if path_exists "$live_assets"; then
+  sudo mv "$live_assets" "$rollback_assets"
+  live_assets_moved=true
+fi
+sudo mv "$staged_assets" "$live_assets"
+assets_swapped=true
+sudo chown -R root:root "$live_assets"
+
 if path_exists "$installed_bin"; then
   sudo cp -p "$installed_bin" "$rollback_bin"
   had_installed_bin=true
 fi
-if path_exists "$installed_hash_file"; then
-  sudo cp -p "$installed_hash_file" "$rollback_hash_file"
-  had_installed_hash_file=true
-fi
 binary_change_started=true
 sudo install -o root -g root -m 0755 "$target_bin" "$installed_bin"
-sudo install -o root -g root -m 0644 "$target_hash_file" "$installed_hash_file"
 
 sudo systemctl daemon-reload
 sudo systemctl start "$service_name.service"
 
 ready=false
-for _ in {1..15}; do
+for ((attempt = 1; attempt <= probe_attempts; attempt += 1)); do
   if curl --fail --silent --show-error --output /dev/null \
     http://127.0.0.1:8008/api/health \
     && curl --fail --silent --show-error --output /dev/null \
@@ -141,14 +144,11 @@ done
 [[ "$ready" == true ]] || fail "health/readiness checks did not pass"
 
 trap - ERR
-if [[ "$live_site_moved" == true ]]; then
-  rm -rf -- "$rollback_site"
+if [[ "$live_assets_moved" == true ]]; then
+  sudo rm -rf -- "$rollback_assets"
 fi
 if [[ "$had_installed_bin" == true ]]; then
   sudo rm -f "$rollback_bin"
-fi
-if [[ "$had_installed_hash_file" == true ]]; then
-  sudo rm -f "$rollback_hash_file"
 fi
 
 echo "staged-deploy: release activated and health/readiness checks passed"
