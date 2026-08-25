@@ -123,7 +123,7 @@ test("site declares and serves its favicon", async ({ page, request }) => {
   expect((await response.body()).byteLength).toBeGreaterThan(0);
 });
 
-test("home renders artifacts and navigates to an article without a document reload", async ({ page }) => {
+test("home renders artifacts and uses full-page navigation", async ({ page }) => {
   const browserErrors = captureBrowserErrors(page);
 
   const response = await page.goto("/");
@@ -145,23 +145,21 @@ test("home renders artifacts and navigates to an article without a document relo
     "1件の記事を1カテゴリで公開しています。",
   );
 
-  let documentRequests = 0;
-  page.on("request", (request) => {
-    if (request.resourceType() === "document") documentRequests += 1;
-  });
+  await page
+    .locator("main")
+    .evaluate((element) => element.setAttribute("data-document", "home"));
+  const articleDocumentRequest = page.waitForRequest(
+    (request) =>
+      request.resourceType() === "document" &&
+      new URL(request.url()).pathname === "/tech/e2e-article",
+  );
 
-  const articleLink = page.getByRole("link", { name: "E2E Article" });
-  const homeScrollY = await articleLink.evaluate((link: HTMLAnchorElement) => {
-    window.scrollTo(0, document.documentElement.scrollHeight);
-    const scrollY = window.scrollY;
-    link.click();
-    return scrollY;
-  });
-  expect(homeScrollY).toBeGreaterThan(500);
+  await page.getByRole("link", { name: "E2E Article" }).click();
+  await articleDocumentRequest;
 
   await expect(page).toHaveURL(/\/tech\/e2e-article$/);
   await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
-  await expect(page.locator("main")).toBeFocused();
+  await expect(page.locator('main[data-document="home"]')).toHaveCount(0);
   await expect(page.locator("main .content-prose")).toContainText("Article fixture body");
   await expectFormattedFixtureDates(page);
   const articleWidths = await page.locator("main article").evaluate((article) => {
@@ -173,7 +171,6 @@ test("home renders artifacts and navigates to an article without a document relo
     };
   });
   expect(articleWidths.prose).toBeCloseTo(articleWidths.header, 0);
-  expect(documentRequests).toBe(0);
   await expectMetadata(
     page,
     `E2E Article | ${SITE_NAME}`,
@@ -192,22 +189,27 @@ test("home renders artifacts and navigates to an article without a document relo
     "",
     "1件の記事を1カテゴリで公開しています。",
   );
-  await expect
-    .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - homeScrollY))
-    .toBeLessThanOrEqual(10);
-  expect(documentRequests).toBe(0);
   expect(browserErrors).toEqual([]);
 });
 
-test("client navigation scrolls to a fragment on another page", async ({ page }) => {
+test("cross-page fragments use document navigation", async ({ page }) => {
   await page.goto("/");
+  await page
+    .locator("main")
+    .evaluate((element) => element.setAttribute("data-document", "home"));
+  const articleDocumentRequest = page.waitForRequest(
+    (request) =>
+      request.resourceType() === "document" &&
+      new URL(request.url()).pathname === "/tech/e2e-article",
+  );
 
   await page.getByRole("link", { name: "Generated content section" }).click();
+  await articleDocumentRequest;
 
   await expect(page).toHaveURL(/\/tech\/e2e-article#generated-content$/);
+  await expect(page.locator('main[data-document="home"]')).toHaveCount(0);
   const heading = page.getByRole("heading", { name: "Generated content" });
   await expect(heading).toBeVisible();
-  await expect(heading).toBeFocused();
   await expect
     .poll(() => heading.evaluate((element) => element.getBoundingClientRect().top))
     .toBeLessThan(200);
@@ -215,15 +217,11 @@ test("client navigation scrolls to a fragment on another page", async ({ page })
 
 test("text fragments use document navigation", async ({ page }) => {
   await page.goto("/");
-  let documentRequests = 0;
-  page.on("request", (request) => {
-    if (
+  const aboutDocumentRequest = page.waitForRequest(
+    (request) =>
       request.resourceType() === "document" &&
-      new URL(request.url()).pathname === "/about"
-    ) {
-      documentRequests += 1;
-    }
-  });
+      new URL(request.url()).pathname === "/about",
+  );
 
   const main = page.locator("main");
   await main.evaluate((element) => element.setAttribute("data-original", "true"));
@@ -232,563 +230,29 @@ test("text fragments use document navigation", async ({ page }) => {
     element.setAttribute("href", "/about#:~:text=About%20fixture%20body"),
   );
   await aboutLink.click();
+  await aboutDocumentRequest;
 
   // Chromium removes the fragment directive from the document-visible URL.
   await expect(page).toHaveURL(/\/about$/);
   await expect(page.getByRole("heading", { name: "Fixture About" })).toBeVisible();
   await expect(page.locator('main[data-original="true"]')).toHaveCount(0);
-  expect(documentRequests).toBe(1);
 });
 
-test("an empty same-page fragment does not fetch or replace the page", async ({ page }) => {
+test("same-page fragments keep the current document", async ({ page }) => {
   await page.goto("/");
-  const navigationFetchHeaders: Promise<string | null>[] = [];
+  let documentRequests = 0;
   page.on("request", (request) => {
-    if (request.resourceType() === "fetch" && new URL(request.url()).pathname === "/") {
-      navigationFetchHeaders.push(request.headerValue("x-okawak-navigation"));
-    }
+    if (request.resourceType() === "document") documentRequests += 1;
   });
   const main = page.locator("main");
   await main.evaluate((element) => element.setAttribute("data-same-page", "true"));
 
-  const link = page.getByRole("link", { name: "Sanitized unsafe link" });
-  await expect(link).toHaveAttribute("href", "#");
-  await link.click();
+  await page.getByRole("link", { name: "Home fragment section" }).click();
 
+  await expect(page).toHaveURL(/\/#home-fragment$/);
   await expect(main).toHaveAttribute("data-same-page", "true");
-  expect(await Promise.all(navigationFetchHeaders)).not.toContain("1");
-});
-
-test("same-page fragment history restores scroll without fetching", async ({ page }) => {
-  await page.goto("/");
-  const link = page.getByRole("link", { name: "Home fragment section" });
-  const originalScrollY = await link.evaluate((element: HTMLAnchorElement) => {
-    window.scrollTo(0, 500);
-    element.click();
-    return 500;
-  });
-
-  await expect(page).toHaveURL(/\/#home-fragment$/);
-  const heading = page.getByRole("heading", { name: "Home fragment" });
-  await expect(heading).toBeInViewport();
-
-  await page.goBack();
-  await expect(page).toHaveURL(/\/$/);
-  await expect
-    .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - originalScrollY))
-    .toBeLessThanOrEqual(10);
-
-  await page.goForward();
-  await expect(page).toHaveURL(/\/#home-fragment$/);
-  await expect(heading).toBeInViewport();
-});
-
-test("initial load restores a saved manual scroll position", async ({ page }) => {
-  await page.goto("/");
-  const savedScrollY = 500;
-  await page.evaluate((y) => {
-    const state =
-      window.history.state && typeof window.history.state === "object"
-        ? window.history.state
-        : {};
-    window.history.replaceState(
-      { ...state, okawakScrollPosition: { x: 0, y } },
-      "",
-      window.location.href,
-    );
-  }, savedScrollY);
-
-  await page.reload();
-
-  await expect
-    .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - savedScrollY))
-    .toBeLessThanOrEqual(10);
-});
-
-test("forward navigation aborts a pending back navigation", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "E2E Article" }).click();
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-
-  let releaseHomeResponse: () => void = () => {};
-  let markHomeFetchStarted: () => void = () => {};
-  const homeResponseGate = new Promise<void>((resolve) => {
-    releaseHomeResponse = resolve;
-  });
-  const homeFetchStarted = new Promise<void>((resolve) => {
-    markHomeFetchStarted = resolve;
-  });
-  await page.route("**/", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] === "1") {
-      markHomeFetchStarted();
-      await homeResponseGate;
-    }
-    await route.continue().catch(() => {});
-  });
-
-  await page.goBack();
-  await homeFetchStarted;
-  await page.goForward();
-  releaseHomeResponse();
-
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-  await page.waitForTimeout(200);
-  await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
-  await expect(page.getByText("Fixture home content")).toHaveCount(0);
-});
-
-test("pending popstate keeps the destination scroll state", async ({ page }) => {
-  await page.goto("/");
-  await page.evaluate(() => window.scrollTo(0, 400));
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => history.state?.okawakScrollPosition?.y as number | undefined,
-      ),
-    )
-    .toBeGreaterThan(300);
-  await page.getByRole("link", { name: "E2E Article" }).click();
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-  await page.getByRole("main").evaluate((main) => {
-    const spacer = document.createElement("div");
-    spacer.style.height = "120rem";
-    main.append(spacer);
-  });
-
-  let releaseHomeResponse: () => void = () => {};
-  let markHomeFetchStarted: () => void = () => {};
-  const homeResponseGate = new Promise<void>((resolve) => {
-    releaseHomeResponse = resolve;
-  });
-  const homeFetchStarted = new Promise<void>((resolve) => {
-    markHomeFetchStarted = resolve;
-  });
-  await page.route("**/", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] === "1") {
-      markHomeFetchStarted();
-      await homeResponseGate;
-    }
-    await route.continue().catch(() => {});
-  });
-
-  await page.goBack();
-  await homeFetchStarted;
-  const destinationStateBefore = await page.evaluate(
-    () => history.state?.okawakScrollPosition,
-  );
-  await page.evaluate(async () => {
-    window.scrollTo(0, 700);
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
-  });
-  const destinationStateAfter = await page.evaluate(
-    () => history.state?.okawakScrollPosition,
-  );
-
-  expect(destinationStateAfter).toEqual(destinationStateBefore);
-  await page.goForward();
-  releaseHomeResponse();
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-});
-
-test("same-page fragment aborts a pending client navigation", async ({ page }) => {
-  await page.goto("/");
-
-  let releaseArticleResponse: () => void = () => {};
-  let markArticleFetchStarted: () => void = () => {};
-  const articleResponseGate = new Promise<void>((resolve) => {
-    releaseArticleResponse = resolve;
-  });
-  const articleFetchStarted = new Promise<void>((resolve) => {
-    markArticleFetchStarted = resolve;
-  });
-  await page.route("**/tech/e2e-article", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] === "1") {
-      markArticleFetchStarted();
-      await articleResponseGate;
-    }
-    await route.continue().catch(() => {});
-  });
-
-  await page.getByRole("link", { name: "E2E Article" }).click();
-  await articleFetchStarted;
-  const fragmentLink = page.getByRole("link", { name: "Home fragment section" });
-  await fragmentLink.evaluate((element) =>
-    element.setAttribute("href", "/#home-fragment"),
-  );
-  await fragmentLink.click();
-  releaseArticleResponse();
-
-  await expect(page).toHaveURL(/\/#home-fragment$/);
-  await page.waitForTimeout(200);
   await expect(page.getByRole("heading", { name: "Home fragment" })).toBeInViewport();
-  await expect(page.getByText("Fixture home content")).toBeVisible();
-  await expect(page.getByText("Article fixture body")).toHaveCount(0);
-});
-
-test("modified fragment clicks do not abort a pending navigation", async ({ page }) => {
-  await page.goto("/");
-
-  let releaseArticleResponse: () => void = () => {};
-  let markArticleFetchStarted: () => void = () => {};
-  const articleResponseGate = new Promise<void>((resolve) => {
-    releaseArticleResponse = resolve;
-  });
-  const articleFetchStarted = new Promise<void>((resolve) => {
-    markArticleFetchStarted = resolve;
-  });
-  await page.route("**/tech/e2e-article", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] === "1") {
-      markArticleFetchStarted();
-      await articleResponseGate;
-    }
-    await route.continue().catch(() => {});
-  });
-
-  await page.getByRole("link", { name: "E2E Article" }).click();
-  await articleFetchStarted;
-  await page.evaluate(() => {
-    document.addEventListener(
-      "click",
-      (event) => {
-        if ((event as MouseEvent).metaKey) event.preventDefault();
-      },
-      { once: true },
-    );
-  });
-  await page
-    .getByRole("link", { name: "Home fragment section" })
-    .dispatchEvent("click", { button: 0, metaKey: true });
-  releaseArticleResponse();
-
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-  await expect(page.getByText("Article fixture body")).toBeVisible();
-});
-
-test("only the active navigation clears its busy state", async ({ page }) => {
-  await page.goto("/");
-
-  let releaseArticleResponse: () => void = () => {};
-  let markArticleFetchStarted: () => void = () => {};
-  let releaseAboutResponse: () => void = () => {};
-  let markAboutFetchStarted: () => void = () => {};
-  const articleResponseGate = new Promise<void>((resolve) => {
-    releaseArticleResponse = resolve;
-  });
-  const articleFetchStarted = new Promise<void>((resolve) => {
-    markArticleFetchStarted = resolve;
-  });
-  const aboutResponseGate = new Promise<void>((resolve) => {
-    releaseAboutResponse = resolve;
-  });
-  const aboutFetchStarted = new Promise<void>((resolve) => {
-    markAboutFetchStarted = resolve;
-  });
-  await page.route("**/tech/e2e-article", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] === "1") {
-      markArticleFetchStarted();
-      await articleResponseGate;
-    }
-    await route.continue().catch(() => {});
-  });
-  await page.route("**/about", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] === "1") {
-      markAboutFetchStarted();
-      await aboutResponseGate;
-    }
-    await route.continue().catch(() => {});
-  });
-
-  await page.getByRole("link", { name: "E2E Article" }).click();
-  await articleFetchStarted;
-  await page.getByRole("link", { name: "About", exact: true }).click();
-  await aboutFetchStarted;
-  releaseArticleResponse();
-
-  await page.waitForTimeout(200);
-  await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
-
-  releaseAboutResponse();
-  await expect(page).toHaveURL(/\/about$/);
-  await expect(page.getByRole("heading", { name: "Fixture About" })).toBeVisible();
-  await expect(page.getByRole("main")).not.toHaveAttribute("aria-busy", "true");
-});
-
-test("fragment navigation resolves a pending popstate document", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "E2E Article" }).click();
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-
-  let releaseHomeResponse: () => void = () => {};
-  let markHomeFetchStarted: () => void = () => {};
-  const homeResponseGate = new Promise<void>((resolve) => {
-    releaseHomeResponse = resolve;
-  });
-  const homeFetchStarted = new Promise<void>((resolve) => {
-    markHomeFetchStarted = resolve;
-  });
-  await page.route("**/", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] === "1") {
-      markHomeFetchStarted();
-      await homeResponseGate;
-    }
-    await route.continue().catch(() => {});
-  });
-  let documentRequests = 0;
-  page.on("request", (request) => {
-    if (request.resourceType() === "document") documentRequests += 1;
-  });
-
-  await page.goBack();
-  await homeFetchStarted;
-  await page.getByRole("main").evaluate((main) => {
-    const link = document.createElement("a");
-    link.href = "#generated-content";
-    link.textContent = "Article fragment";
-    main.prepend(link);
-  });
-  const articleDocumentRequest = page.waitForRequest(
-    (request) =>
-      request.resourceType() === "document" &&
-      new URL(request.url()).pathname === "/tech/e2e-article",
-  );
-  const fragmentClick = page.getByRole("link", { name: "Article fragment" }).click();
-  await articleDocumentRequest;
-  releaseHomeResponse();
-  await fragmentClick;
-
-  await expect(page).toHaveURL(/\/tech\/e2e-article#generated-content$/);
-  await expect(page.getByText("Article fixture body")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Generated content" })).toBeInViewport();
-  expect(documentRequests).toBe(1);
-});
-
-test("text fragments resolve against the rendered page during popstate", async ({
-  page,
-}) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "E2E Article" }).click();
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-
-  let releaseHomeResponse: () => void = () => {};
-  let markHomeFetchStarted: () => void = () => {};
-  const homeResponseGate = new Promise<void>((resolve) => {
-    releaseHomeResponse = resolve;
-  });
-  const homeFetchStarted = new Promise<void>((resolve) => {
-    markHomeFetchStarted = resolve;
-  });
-  await page.route("**/", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] === "1") {
-      markHomeFetchStarted();
-      await homeResponseGate;
-    }
-    await route.continue().catch(() => {});
-  });
-
-  await page.goBack();
-  await homeFetchStarted;
-  await page.getByRole("main").evaluate((main) => {
-    const link = document.createElement("a");
-    link.href = "#:~:text=Article%20fixture%20body";
-    link.textContent = "Article text fragment";
-    main.prepend(link);
-  });
-  const articleDocumentRequest = page.waitForRequest(
-    (request) =>
-      request.resourceType() === "document" &&
-      new URL(request.url()).pathname === "/tech/e2e-article",
-  );
-  const fragmentClick = page
-    .getByRole("link", { name: "Article text fragment" })
-    .click();
-  await articleDocumentRequest;
-  releaseHomeResponse();
-  await fragmentClick;
-
-  // Chromium removes the fragment directive from the document-visible URL.
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-  await expect(page.getByText("Article fixture body")).toBeVisible();
-});
-
-test("relative links resolve against the rendered page during popstate", async ({
-  page,
-}) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "E2E Article" }).click();
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-  await page.getByRole("main").evaluate((main) => {
-    const link = document.createElement("a");
-    link.href = "next";
-    link.textContent = "Relative next";
-    main.prepend(link);
-  });
-
-  let releaseHomeResponse: () => void = () => {};
-  let markHomeFetchStarted: () => void = () => {};
-  const homeResponseGate = new Promise<void>((resolve) => {
-    releaseHomeResponse = resolve;
-  });
-  const homeFetchStarted = new Promise<void>((resolve) => {
-    markHomeFetchStarted = resolve;
-  });
-  await page.route("**/", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] === "1") {
-      markHomeFetchStarted();
-      await homeResponseGate;
-    }
-    await route.continue().catch(() => {});
-  });
-
-  await page.goBack();
-  await homeFetchStarted;
-  const relativeRequest = page.waitForRequest(
-    (request) => request.headers()["x-okawak-navigation"] === "1",
-  );
-  await page.getByRole("link", { name: "Relative next" }).click();
-  const requestedPath = new URL((await relativeRequest).url()).pathname;
-  releaseHomeResponse();
-
-  expect(requestedPath).toBe("/tech/next");
-  await expect(page).toHaveURL(/\/tech\/next$/);
-});
-
-test("relative fragment links resolve against the rendered page during popstate", async ({
-  page,
-}) => {
-  await page.goto("/about");
-  await page.getByRole("main").evaluate((main) => {
-    const articleLink = document.createElement("a");
-    articleLink.href = "/tech/e2e-article";
-    articleLink.textContent = "Article page";
-    main.prepend(articleLink);
-  });
-  await page.getByRole("link", { name: "Article page" }).click();
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-  await page.getByRole("main").evaluate((main) => {
-    const link = document.createElement("a");
-    link.href = "about#section";
-    link.textContent = "Relative fragment";
-    main.prepend(link);
-  });
-
-  let releaseAboutResponse: () => void = () => {};
-  let markAboutFetchStarted: () => void = () => {};
-  const aboutResponseGate = new Promise<void>((resolve) => {
-    releaseAboutResponse = resolve;
-  });
-  const aboutFetchStarted = new Promise<void>((resolve) => {
-    markAboutFetchStarted = resolve;
-  });
-  await page.route("**/about", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] === "1") {
-      markAboutFetchStarted();
-      await aboutResponseGate;
-    }
-    await route.continue().catch(() => {});
-  });
-
-  await page.goBack();
-  await aboutFetchStarted;
-  const relativeRequest = page.waitForRequest(
-    (request) =>
-      request.headers()["x-okawak-navigation"] === "1" &&
-      new URL(request.url()).pathname === "/tech/about",
-  );
-  await page.getByRole("link", { name: "Relative fragment" }).click();
-  const requestedUrl = new URL((await relativeRequest).url());
-  releaseAboutResponse();
-
-  expect(requestedUrl.pathname).toBe("/tech/about");
-  await expect(page).toHaveURL(/\/tech\/about#section$/);
-});
-
-test("client navigation reloads when shell asset fingerprints change", async ({ page }) => {
-  await page.goto("/");
-  let documentRequests = 0;
-  page.on("request", (request) => {
-    if (request.resourceType() === "document") documentRequests += 1;
-  });
-  await page.route("**/tech/e2e-article", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] !== "1") {
-      await route.continue();
-      return;
-    }
-
-    const response = await route.fetch();
-    const currentBody = await response.text();
-    const body = currentBody.replace(
-      /href="\/_topcoat\/assets\/[^"]+\.css"/,
-      'href="/_topcoat/assets/deployed-shell.css"',
-    );
-    expect(body).not.toBe(currentBody);
-    await route.fulfill({ response, body });
-  });
-
-  await page.getByRole("link", { name: "E2E Article" }).click();
-
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-  await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
-  expect(documentRequests).toBe(1);
-});
-
-test("client navigation reloads when inline shell runtime changes", async ({ page }) => {
-  await page.goto("/");
-  let documentRequests = 0;
-  page.on("request", (request) => {
-    if (request.resourceType() === "document") documentRequests += 1;
-  });
-  await page.route("**/tech/e2e-article", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] !== "1") {
-      await route.continue();
-      return;
-    }
-
-    const response = await route.fetch();
-    const currentBody = await response.text();
-    const body = currentBody.replace(
-      "window.okawakScheduleCodeHighlight = function(root)",
-      "window.okawakScheduleCodeHighlightV2 = function(root)",
-    );
-    expect(body).not.toBe(currentBody);
-    await route.fulfill({ response, body });
-  });
-
-  await page.getByRole("link", { name: "E2E Article" }).click();
-
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-  await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
-  expect(documentRequests).toBe(1);
-});
-
-test("client navigation reloads when the shell version changes", async ({ page }) => {
-  await page.goto("/");
-  let documentRequests = 0;
-  page.on("request", (request) => {
-    if (request.resourceType() === "document") documentRequests += 1;
-  });
-  await page.route("**/tech/e2e-article", async (route) => {
-    if (route.request().headers()["x-okawak-navigation"] !== "1") {
-      await route.continue();
-      return;
-    }
-
-    const response = await route.fetch();
-    const currentBody = await response.text();
-    const body = currentBody.replace(
-      'name="okawak-shell-version" content="site-1"',
-      'name="okawak-shell-version" content="site-2"',
-    );
-    expect(body).not.toBe(currentBody);
-    await route.fulfill({ response, body });
-  });
-
-  await page.getByRole("link", { name: "E2E Article" }).click();
-
-  await expect(page).toHaveURL(/\/tech\/e2e-article$/);
-  await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
-  expect(documentRequests).toBe(1);
+  expect(documentRequests).toBe(0);
 });
 
 test("server-rendered pages remain navigable without JavaScript", async ({ browser }) => {
@@ -881,7 +345,7 @@ test("mobile navigation stays in the viewport and exposes its state", async ({ p
   await expect(menuButton).toHaveAttribute("aria-expanded", "false");
 });
 
-test("client popstate closes the retained mobile menu", async ({ page }) => {
+test("browser history reconstructs the closed mobile menu", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   const menuButton = page.locator('button[aria-controls="site-header-nav"]');

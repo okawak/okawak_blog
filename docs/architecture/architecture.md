@@ -87,8 +87,8 @@ okawak_blog/
 - `crates/site/server`
   - production `server` binaryを持つ単一のTopcoat application crate
   - Topcoat UI component、公開route、metadata、site定数
-  - client-side navigationと生成コンテンツ用script、Tailwind CSS入力、favicon asset
-  - Topcoat SSR、Topcoat runtime asset、client-side route遷移のホスト
+  - 生成コンテンツ用script、Tailwind CSS入力、favicon asset
+  - Topcoat SSR、Topcoat runtime asset、ブラウザ標準のfull-page navigation
   - reader の生成とTopcoat app / request contextへの注入
   - `app.rs`をrootにした`module_router!()`のmodule-derived route tree
   - `app/api` moduleによる互換記事一覧API、process liveness、artifact readiness
@@ -102,7 +102,7 @@ okawak_blog/
   - `crates/site/server`と`crates/site/infra`をまたぐproduction Topcoat serverのbrowser E2E
   - 通常CIではprivate Obsidian submoduleやS3に依存しない固定artifact fixture
   - 実S3の検証は専用Playwright configを使い、ローカル手動確認とrelease公開前smoke testへ分離
-  - Bunで依存を管理し、Playwright + Chromiumで公開route、metadata、client-side route遷移、Topcoat interactionを検証
+  - Bunで依存を管理し、Playwright + Chromiumで公開route、metadata、full-page navigation、Topcoat interactionを検証
 
 `terraform/` は読み取り専用とし、このリポジトリの通常作業では編集しない。
 
@@ -385,15 +385,15 @@ production `server`はhome、about、category、articleをSSRし、title、canon
   - listing route間で共有する記事cardを構成する
 - `src/shell.rs`
   - site chrome、metadata、error view、responsive navigationと、生成contentのKaTeX / highlight.js progressive enhancementをshell resourceとして構成する
-- `src/assets.rs` / `src/navigation.js`
-  - application asset登録とclient-side navigationを分離する
+- `src/assets.rs`
+  - application所有のstylesheetとfavicon assetを登録する
 - `style/tailwind.css`
   - semantic color、radius、typography、site layout tokenとbase styleのsource of truth
 - `style/content.css`
   - article、about、category landing、home fragmentの生成HTMLだけを`.content-prose`配下で整形するplain CSS
   - heading、code、table、image、bookmark、math spanとKaTeX描画結果など`publish` artifactの表現を担当する
 
-productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Tailwind CSS、Topcoat runtime、site navigation JavaScript、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。生成コンテンツのKaTeXとhighlight.js、iconのFont Awesome、fontのNoto Sans JPはversion固定またはURL固定のCDN資産として維持し、KaTeXにはSRIを付与する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`はNode / BunのCSS build toolを実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
+productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Tailwind CSS、Topcoat runtime、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。公開linkは独自client routerを持たず、ブラウザ標準のfull-page navigationを使う。mobile menuはTopcoat runtimeのsignalとevent expressionで構成する。生成コンテンツのKaTeXとhighlight.js、iconのFont Awesome、fontのNoto Sans JPはversion固定またはURL固定のCDN資産として維持し、KaTeXにはSRIを付与する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`はNode / BunのCSS build toolを実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
 
 `site/server/build.rs`はapplication package内の`style/tailwind.css`をTopcoatのstylesheet assetへ変換するために維持する。Rustと`view!` macroの書式はrepository rootの`mise run format`から`cargo fmt`と`topcoat fmt`を順に適用する。
 

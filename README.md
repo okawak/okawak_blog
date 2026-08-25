@@ -85,7 +85,7 @@ okawak_blog/
 - `crates/domain`: 公開成果物契約、site page contract、純粋関数を中心にした共有ドメイン層
 - `crates/publish`: `pipeline` moduleが、`vault`によるObsidian入力、`render`によるMarkdown変換とbookmark enrichment、`artifacts`による成果物生成を統括する単一の`publish` crate。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
 - `crates/site/infra`: storage非依存のartifact reader契約と、local / S3実装、source設定、cache。HTTP runtimeやUIには依存しない
-- `crates/site/server`: production `server` binaryを持つ単一のTopcoat application crate。storage非依存のpage load契約、UI / route / metadata、style、client navigation、reader生成・注入、API、release-aware ETag / Last-Modifiedを構成する
+- `crates/site/server`: production `server` binaryを持つ単一のTopcoat application crate。storage非依存のpage load契約、UI / route / metadata、style、reader生成・注入、API、release-aware ETag / Last-Modifiedを構成する
 - `e2e`: server / artifact readerをまたぐ、固定artifactベースのbrowser E2E
 
 ## 公開成果物のイメージ
@@ -227,7 +227,7 @@ browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-
 
 production deployは`mise run build-deployment`で`target/release/server`と`target/assets-staged`を生成します。`mise run quick-deploy`はservice停止中にbinaryとcontent-hash付きasset bundleを同じreleaseへ切り替え、health / readinessが失敗した場合は両方を旧releaseへ戻します。
 
-Topcoat asset bundleはTailwind CSS、Topcoat runtime、site navigation JavaScript、faviconをcontent-hash付きlocal URLで配信します。生成コンテンツの描画に必要なKaTeXとhighlight.js、Font Awesome、Noto Sans JPはversion固定またはURL固定の外部CDN資産として維持します。KaTeXはSRIを付与し、いずれもsiteのSSR可用性を左右する必須runtimeにはしません。
+Topcoat asset bundleはTailwind CSS、Topcoat runtime、faviconをcontent-hash付きlocal URLで配信します。公開linkはブラウザ標準のfull-page navigationを使います。生成コンテンツの描画に必要なKaTeXとhighlight.js、Font Awesome、Noto Sans JPはversion固定またはURL固定の外部CDN資産として維持します。KaTeXはSRIを付与し、いずれもsiteのSSR可用性を左右する必須runtimeにはしません。
 
 主要コマンドは以下です。
 

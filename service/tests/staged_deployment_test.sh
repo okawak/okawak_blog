@@ -79,8 +79,8 @@ content_type = "text/css"
 
 [[assets]]
 id = 2
-file = "navigation-new.js"
-hash = "navigation"
+file = "topcoat-runtime-new.js"
+hash = "topcoat-runtime"
 content_type = "text/javascript"
 
 [[assets]]
@@ -90,7 +90,7 @@ hash = "favicon"
 content_type = "image/x-icon"
 EOF
   printf 'new css\n' >"$bundle_dir/tailwind-new.css"
-  printf 'new js\n' >"$bundle_dir/navigation-new.js"
+  printf 'new js\n' >"$bundle_dir/topcoat-runtime-new.js"
   printf 'new icon\n' >"$bundle_dir/favicon-new.ico"
 }
 

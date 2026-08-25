@@ -7,12 +7,10 @@ use topcoat::{
     view::{Unescaped, View, component, view},
 };
 
-use crate::assets::{FAVICON, NAVIGATION_SCRIPT, STYLESHEET};
+use crate::assets::{FAVICON, STYLESHEET};
 
 const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
-// Bump when retained shell markup outside `<main>` changes incompatibly.
-const SHELL_VERSION: &str = "site-1";
 
 pub(crate) struct ShellMetadata {
     title: String,
@@ -200,7 +198,6 @@ window.okawakScheduleCodeHighlight = function(root) {
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
-                <meta name="okawak-shell-version" content=(SHELL_VERSION)>
                 <title>(title.clone())</title>
                 <meta name="description" content=(description.clone())>
                 <link rel="canonical" href=(canonical_url.clone())>
@@ -244,7 +241,6 @@ window.okawakScheduleCodeHighlight = function(root) {
                 ></script>
                 <script>(code_highlight_script)</script>
                 topcoat::runtime::script()
-                <script type="module" src=(NAVIGATION_SCRIPT)></script>
             </head>
             <body>
                 signal menu_open = false;

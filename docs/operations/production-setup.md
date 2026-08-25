@@ -124,7 +124,7 @@ curl --fail https://www.okawak.net/api/ready
 - apexと`www`のPublished applicationが同じlocalhost originを指す
 - DNSがProxiedでTunnel IDを指す
 
-ブラウザでhome、category、article、CSS、client-side navigationを確認し、consoleにTopcoat client runtimeのerrorがないことを確認します。
+ブラウザでhome、category、article、CSS、full-page navigation、mobile menuを確認し、consoleにTopcoat client runtimeのerrorがないことを確認します。
 
 ## 7. 定常運用
 
