@@ -55,12 +55,6 @@ fn test_asset_config() -> AssetConfig {
                     content_type: "text/javascript".to_string(),
                 },
                 ManifestEntry {
-                    id: assets::NAVIGATION_SCRIPT.id(),
-                    file: "navigation-test.js".to_string(),
-                    hash: "test".to_string(),
-                    content_type: "text/javascript".to_string(),
-                },
-                ManifestEntry {
                     id: assets::STYLESHEET.id(),
                     file: "tailwind-test.css".to_string(),
                     hash: "test".to_string(),
@@ -385,7 +379,7 @@ async fn home_renders_the_published_summary_as_html() {
 }
 
 #[tokio::test]
-async fn home_shell_exposes_mobile_navigation_contract() {
+async fn home_shell_exposes_topcoat_mobile_navigation_contract() {
     let router = create_router(fixture_reader(), false);
     let response = response(
         &router,
@@ -399,11 +393,8 @@ async fn home_shell_exposes_mobile_navigation_contract() {
             .body
             .contains("<script type=\"module\" src=\"/_topcoat/assets/topcoat-test.js\"></script>")
     );
-    assert!(
-        response.body.contains(
-            "<script type=\"module\" src=\"/_topcoat/assets/navigation-test.js\"></script>"
-        )
-    );
+    assert!(!response.body.contains("navigation-test.js"));
+    assert!(!response.body.contains("okawak-shell-version"));
     assert!(response.body.contains("aria-controls=\"site-header-nav\""));
     assert!(response.body.contains("aria-expanded=\"false\""));
     assert!(
