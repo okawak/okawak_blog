@@ -6,9 +6,9 @@ pub fn build_home_page_title(site_name: &str) -> String {
 
 pub fn build_home_page_description(document: &HomePageDocument) -> String {
     format!(
-        "{}件の記事を{}カテゴリで公開しています。",
-        document.total_articles,
-        document.categories.len()
+        "{} published across {}.",
+        format_count(document.total_articles, "article", "articles"),
+        format_count(document.categories.len(), "category", "categories")
     )
 }
 
@@ -25,7 +25,7 @@ pub fn build_article_page_description(document: &ArticlePageDocument) -> String 
         .map(str::to_owned)
         .unwrap_or_else(|| {
             format!(
-                "{}カテゴリの記事です。",
+                "An article in the {} category.",
                 document.article.category_display_name
             )
         })
@@ -43,9 +43,9 @@ pub fn build_category_page_description(document: &CategoryPageDocument) -> Strin
         .map(str::to_owned)
         .unwrap_or_else(|| {
             format!(
-                "{}カテゴリの記事一覧です。{}件の記事があります。",
-                document.category_display_name,
-                document.articles.len()
+                "{} in the {} category.",
+                format_count(document.articles.len(), "article", "articles"),
+                document.category_display_name
             )
         })
 }
@@ -60,7 +60,12 @@ pub fn build_static_page_description(document: &StaticPageDocument) -> String {
         .as_deref()
         .filter(|description| !description.trim().is_empty())
         .map(str::to_owned)
-        .unwrap_or_else(|| format!("{} ページです。", document.title))
+        .unwrap_or_else(|| format!("The {} page.", document.title))
+}
+
+fn format_count(count: usize, singular: &str, plural: &str) -> String {
+    let noun = if count == 1 { singular } else { plural };
+    format!("{count} {noun}")
 }
 
 #[cfg(test)]
@@ -76,7 +81,7 @@ mod tests {
                 slug: Slug::new("intro00000001".to_string()).unwrap(),
                 title: Title::new("Intro".to_string()).unwrap(),
                 category: Category::Tech,
-                category_display_name: "技術".to_string(),
+                category_display_name: "Technology".to_string(),
                 section_path: SectionPath::default(),
                 description: description.map(str::to_string),
                 tags: vec![],
@@ -92,7 +97,7 @@ mod tests {
         CategoryPageDocument {
             category: Category::Tech,
             title: "Rust".to_string(),
-            category_display_name: "技術".to_string(),
+            category_display_name: "Technology".to_string(),
             description: description.map(str::to_string),
             html: "<article><h1>Rust</h1></article>".to_string(),
             sections: vec![],
@@ -107,12 +112,12 @@ mod tests {
             categories: vec![
                 SiteCategorySummary {
                     category: Category::Tech,
-                    category_display_name: "技術".to_string(),
+                    category_display_name: "Technology".to_string(),
                     article_count: 2,
                 },
                 SiteCategorySummary {
                     category: Category::Daily,
-                    category_display_name: "日常".to_string(),
+                    category_display_name: "Daily".to_string(),
                     article_count: 1,
                 },
             ],
@@ -120,13 +125,10 @@ mod tests {
             fragment: None,
         };
 
-        assert_eq!(
-            build_home_page_title("ぶくせんの探窟メモ"),
-            "ぶくせんの探窟メモ"
-        );
+        assert_eq!(build_home_page_title("Example Blog"), "Example Blog");
         assert_eq!(
             build_home_page_description(&document),
-            "3件の記事を2カテゴリで公開しています。"
+            "3 articles published across 2 categories."
         );
     }
 
@@ -135,8 +137,8 @@ mod tests {
         let document = article_page(Some("summary"));
 
         assert_eq!(
-            build_article_page_title(&document, "ぶくせんの探窟メモ"),
-            "Intro | ぶくせんの探窟メモ"
+            build_article_page_title(&document, "Example Blog"),
+            "Intro | Example Blog"
         );
         assert_eq!(build_article_page_description(&document), "summary");
     }
@@ -145,7 +147,7 @@ mod tests {
     fn article_description_falls_back_when_missing() {
         assert_eq!(
             build_article_page_description(&article_page(None)),
-            "技術カテゴリの記事です。"
+            "An article in the Technology category."
         );
     }
 
@@ -153,7 +155,7 @@ mod tests {
     fn article_description_falls_back_when_blank() {
         assert_eq!(
             build_article_page_description(&article_page(Some("   "))),
-            "技術カテゴリの記事です。"
+            "An article in the Technology category."
         );
     }
 
@@ -162,8 +164,8 @@ mod tests {
         let document = category_page(Some("Rust articles"));
 
         assert_eq!(
-            build_category_page_title(&document, "ぶくせんの探窟メモ"),
-            "Rust | ぶくせんの探窟メモ"
+            build_category_page_title(&document, "Example Blog"),
+            "Rust | Example Blog"
         );
         assert_eq!(build_category_page_description(&document), "Rust articles");
     }
@@ -172,7 +174,7 @@ mod tests {
     fn category_description_falls_back_when_missing() {
         assert_eq!(
             build_category_page_description(&category_page(None)),
-            "技術カテゴリの記事一覧です。1件の記事があります。"
+            "1 article in the Technology category."
         );
     }
 
@@ -186,8 +188,8 @@ mod tests {
         };
 
         assert_eq!(
-            build_static_page_title(&document, "ぶくせんの探窟メモ"),
-            "About | ぶくせんの探窟メモ"
+            build_static_page_title(&document, "Example Blog"),
+            "About | Example Blog"
         );
         assert_eq!(build_static_page_description(&document), "About this site");
     }

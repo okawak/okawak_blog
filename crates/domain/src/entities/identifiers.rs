@@ -28,7 +28,7 @@ impl Slug {
     pub fn new(value: String) -> Result<Self> {
         if value.is_empty() {
             return Err(DomainError::InvalidSlug {
-                slug: "スラッグは空にできません".to_string(),
+                slug: "cannot be empty".to_string(),
             });
         }
 
@@ -37,7 +37,8 @@ impl Slug {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         {
             return Err(DomainError::InvalidSlug {
-                slug: "スラッグは英数字、ハイフン、アンダースコアのみ使用可能です".to_string(),
+                slug: "must contain only ASCII alphanumeric characters, hyphens, and underscores"
+                    .to_string(),
             });
         }
 
@@ -67,7 +68,7 @@ impl PageKey {
     pub fn new(value: String) -> Result<Self> {
         if value.is_empty() {
             return Err(DomainError::InvalidPath {
-                path: "ページキーは空にできません".to_string(),
+                path: "page key cannot be empty".to_string(),
             });
         }
 
@@ -82,7 +83,7 @@ impl PageKey {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
         {
             return Err(DomainError::InvalidPath {
-                path: "ページキーは英小文字、数字、ハイフン、アンダースコアのみ使用可能です"
+                path: "page key may contain only lowercase ASCII letters, digits, hyphens, and underscores"
                     .to_string(),
             });
         }
@@ -132,6 +133,6 @@ mod tests {
     #[test]
     fn test_slug_deserialization_rejects_invalid_value() {
         let error = serde_json::from_str::<Slug>(r#""bad slug""#).unwrap_err();
-        assert!(error.to_string().contains("スラッグ"));
+        assert!(error.to_string().contains("slug"));
     }
 }

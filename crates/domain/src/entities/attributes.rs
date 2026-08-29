@@ -31,13 +31,13 @@ impl Title {
 
         if trimmed.is_empty() {
             return Err(DomainError::InvalidTitle {
-                reason: "タイトルは空にできません".to_string(),
+                reason: "cannot be empty".to_string(),
             });
         }
 
         if trimmed.chars().count() > 200 {
             return Err(DomainError::InvalidTitle {
-                reason: "タイトルは200文字以内である必要があります".to_string(),
+                reason: "must not exceed 200 characters".to_string(),
             });
         }
 
@@ -135,10 +135,10 @@ impl Category {
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            Category::Tech => "技術",
-            Category::Daily => "日常",
-            Category::Statistics => "統計学",
-            Category::Physics => "物理学",
+            Category::Tech => "Technology",
+            Category::Daily => "Daily",
+            Category::Statistics => "Statistics",
+            Category::Physics => "Physics",
         }
     }
 }

@@ -405,7 +405,7 @@ async fn home_renders_the_published_summary_as_html() {
     assert!(response.body.starts_with("<!DOCTYPE html>"));
     assert!(response.body.contains("<title>ぶくせんの探窟メモ</title>"));
     assert!(response.body.contains(
-        "<meta name=\"description\" content=\"1件の記事を1カテゴリで公開しています。\">"
+        "<meta name=\"description\" content=\"1 article published across 1 category.\">"
     ));
     assert!(
         response
@@ -418,7 +418,7 @@ async fn home_renders_the_published_summary_as_html() {
             .contains("<meta property=\"og:title\" content=\"ぶくせんの探窟メモ\">")
     );
     assert!(response.body.contains(
-        "<meta property=\"og:description\" content=\"1件の記事を1カテゴリで公開しています。\">"
+        "<meta property=\"og:description\" content=\"1 article published across 1 category.\">"
     ));
     assert!(
         response
@@ -485,7 +485,7 @@ async fn home_renders_empty_state_without_treating_it_as_an_error() {
 
     assert_eq!(response.status, StatusCode::OK);
     assert!(response.body.contains(
-        "<meta name=\"description\" content=\"0件の記事を0カテゴリで公開しています。\">"
+        "<meta name=\"description\" content=\"0 articles published across 0 categories.\">"
     ));
     assert!(response.body.contains("記事がありません"));
     assert!(!response.body.contains("記事の読み込みに失敗しました"));
@@ -808,7 +808,7 @@ async fn article_renders_the_published_document_as_html() {
             .body
             .contains("<meta property=\"og:type\" content=\"article\">")
     );
-    assert!(response.body.contains(">技術</p>"));
+    assert!(response.body.contains(">Technology</p>"));
     assert!(response.body.contains(">E2E Article</h1>"));
     assert!(response.body.contains("Article fixture description"));
     assert!(response.body.contains("#rust"));

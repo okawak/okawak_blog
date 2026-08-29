@@ -5,22 +5,22 @@ pub type Result<T> = std::result::Result<T, DomainError>;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum DomainError {
-    #[error("無効なスラッグです: {slug}")]
+    #[error("invalid slug: {slug}")]
     InvalidSlug { slug: String },
 
-    #[error("無効なタイトルです: {reason}")]
+    #[error("invalid title: {reason}")]
     InvalidTitle { reason: String },
 
-    #[error("無効なカテゴリです: {category}")]
+    #[error("invalid category: {category}")]
     InvalidCategory { category: String },
 
-    #[error("無効なパスです: {path}")]
+    #[error("invalid path: {path}")]
     InvalidPath { path: String },
 
     #[error("invalid RFC 3339 timestamp: {value}")]
     InvalidTimestamp { value: String },
 
-    #[error("バリデーションエラー: {field}")]
+    #[error("validation error: {field}")]
     ValidationError { field: String },
 }
 
