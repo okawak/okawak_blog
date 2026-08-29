@@ -1,7 +1,3 @@
-//! Domain models expressed with Rust's type system.
-//!
-//! Domain modeling built around algebraic data types.
-
 mod attributes;
 mod identifiers;
 

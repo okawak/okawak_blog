@@ -1,5 +1,3 @@
-//! Type-safe identifier types for domain entities.
-
 use crate::error::{DomainError, Result};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{fmt, str::FromStr};

@@ -1,5 +1,3 @@
-//! Domain models and pure functions for publishable site artifacts.
-
 use crate::{Category, DomainError, Result, SectionPath, Slug, Timestamp, Title};
 use std::cmp::Ordering;
 
@@ -125,13 +123,8 @@ pub struct SiteMetadata {
     pub categories: Vec<CategoryMetadata>,
 }
 
-/// Build a summary entry from a publishable article.
-pub fn build_article_summary(article: &PublishableArticle) -> PublishedArticleSummary {
-    build_article_summary_from_meta(&article.meta)
-}
-
 /// Build a summary entry from article metadata.
-pub fn build_article_summary_from_meta(meta: &ArticleMeta) -> PublishedArticleSummary {
+fn build_article_summary_from_meta(meta: &ArticleMeta) -> PublishedArticleSummary {
     PublishedArticleSummary {
         slug: meta.slug.clone(),
         title: meta.title.clone(),

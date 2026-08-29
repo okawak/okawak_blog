@@ -1,5 +1,3 @@
-//! Domain attribute and classification types.
-
 use crate::error::{DomainError, Result};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{fmt, str::FromStr};
