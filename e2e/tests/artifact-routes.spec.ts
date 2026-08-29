@@ -142,7 +142,7 @@ test("home renders artifacts and uses full-page navigation", async ({ page }) =>
     page,
     SITE_NAME,
     "",
-    "1件の記事を1カテゴリで公開しています。",
+    "1 article published across 1 category.",
   );
 
   await page
@@ -187,7 +187,7 @@ test("home renders artifacts and uses full-page navigation", async ({ page }) =>
     page,
     SITE_NAME,
     "",
-    "1件の記事を1カテゴリで公開しています。",
+    "1 article published across 1 category.",
   );
   expect(browserErrors).toEqual([]);
 });
@@ -271,7 +271,7 @@ test("server-rendered pages remain navigable without JavaScript", async ({ brows
       page,
       SITE_NAME,
       "",
-      "1件の記事を1カテゴリで公開しています。",
+      "1 article published across 1 category.",
     );
 
     await page.getByRole("link", { name: "E2E Article" }).click();

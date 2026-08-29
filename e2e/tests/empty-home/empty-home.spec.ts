@@ -10,7 +10,7 @@ test("empty home keeps its metadata in the initial response", async ({ page }) =
   await expect(page).toHaveTitle(SITE_NAME);
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
     "content",
-    "0件の記事を0カテゴリで公開しています。",
+    "0 articles published across 0 categories.",
   );
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
@@ -22,7 +22,7 @@ test("empty home keeps its metadata in the initial response", async ({ page }) =
   );
   await expect(page.locator('meta[property="og:description"]')).toHaveAttribute(
     "content",
-    "0件の記事を0カテゴリで公開しています。",
+    "0 articles published across 0 categories.",
   );
   await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
     "content",
