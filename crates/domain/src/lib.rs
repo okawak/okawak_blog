@@ -1,20 +1,31 @@
-//! Blog domain types and business rules.
-//!
-//! Pure synchronous domain modeling without I/O.
-//! Business rules are expressed through Rust's type system.
+#![warn(unreachable_pub)]
 
-// Domain entities and value objects.
-pub mod artifact_document;
-pub mod entities;
-pub mod publishable;
-pub mod site_page;
+mod artifact;
+mod entities;
+mod error;
+mod page;
+mod publication;
 
-// Domain error types.
-pub mod error;
-
-// Re-exports.
-pub use artifact_document::*;
-pub use entities::*;
+pub use artifact::{
+    ARTIFACT_RELEASE_SCHEMA_VERSION, ArticleIndexDocument, ArticleSummaryDocument,
+    ArtifactReleasePointerDocument, CategoryArtifactDocument, CategoryMetadataDocument,
+    HomeFragmentArtifactDocument, PageArtifactDocument, SiteMetadataDocument,
+};
+pub use entities::{Category, PageKey, SectionPath, Slug, Timestamp, Title};
 pub use error::{DomainError, Result};
-pub use publishable::*;
-pub use site_page::*;
+pub use page::{
+    ArticlePageDocument, CategoryPageDocument, CategorySectionGroup, HomeFragmentDocument,
+    HomePageDocument, SiteArticleCard, SiteCategorySummary, StaticPageDocument,
+    build_article_page_canonical_path, build_article_page_description, build_article_page_document,
+    build_article_page_title, build_article_path, build_category_page_canonical_path,
+    build_category_page_description, build_category_page_document, build_category_page_title,
+    build_category_path, build_home_page_canonical_path, build_home_page_description,
+    build_home_page_document, build_home_page_title, build_static_page_canonical_path,
+    build_static_page_description, build_static_page_document, build_static_page_title,
+    find_article_summary,
+};
+pub use publication::{
+    ArticleBody, ArticleMeta, CategoryIndex, CategoryLandingBody, CategoryLandingMeta,
+    CategoryMetadata, PublishableArticle, PublishableCategoryLanding, PublishedArticleSummary,
+    SiteMetadata, build_article_index, build_category_indexes, build_site_metadata,
+};

@@ -56,10 +56,11 @@ okawak_blog/
 
 - `crates/domain`
   - 公開コンテンツの純粋なdomain model・ルールと、`publish` / readerが共有する契約
+  - `lib.rs`を明示的な公開APIのfacadeとし、内部moduleをcrate外の契約にしない。`unreachable_pub`で不要な公開を検出する
   - `Category`、`Slug`、`PageKey`、`SectionPath`
-  - `ArticleMeta`、`PublishableArticle`、`CategoryLandingMeta`、`PublishableCategoryLanding`と記事・カテゴリ索引を構築する純粋ルール
-  - artifact contract
-  - site page contract
+  - `publication` moduleによる`ArticleMeta`、`PublishableArticle`、`CategoryLandingMeta`、`PublishableCategoryLanding`と記事・カテゴリ索引を構築する純粋ルール
+  - `artifact` moduleによるartifact contract。`artifact/content.rs`にsite content document、`artifact/release.rs`にimmutable release pointerとその検証を置く
+  - `page` moduleによる公開ページ契約。表示document、artifactからの組み立て、metadata、公開pathの生成を分離する
 - `crates/publish`
   - 単一の`publish` crate
   - `lib.rs`は内部module宣言とcrate外向けAPIのre-exportに限定し、pipeline moduleが公開処理全体をorchestrationする
@@ -341,7 +342,7 @@ flowchart LR
 
 ## Site 表示モデル
 
-`crates/domain/src/site_page.rs` に、artifact から組み立てる pure な page contract を置く。
+`crates/domain/src/page.rs` に表示documentを置き、`page/builder.rs`でartifactからの組み立て、`page/metadata.rs`で表示metadata、`page/path.rs`で公開pathを扱う。いずれもI/Oを持たないpureなpage contractである。
 
 主な document は次の通り。
 
