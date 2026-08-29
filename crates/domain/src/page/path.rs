@@ -35,7 +35,7 @@ mod tests {
                 slug: Slug::new("intro00000001".to_string()).unwrap(),
                 title: Title::new("Intro".to_string()).unwrap(),
                 category: Category::Tech,
-                category_display_name: "技術".to_string(),
+                category_display_name: "Technology".to_string(),
                 section_path: SectionPath::default(),
                 description: None,
                 tags: vec![],
@@ -69,7 +69,7 @@ mod tests {
         let category = CategoryPageDocument {
             category: Category::Tech,
             title: "Tech".to_string(),
-            category_display_name: "技術".to_string(),
+            category_display_name: "Technology".to_string(),
             description: None,
             html: "<article><h1>Tech</h1></article>".to_string(),
             sections: vec![],
