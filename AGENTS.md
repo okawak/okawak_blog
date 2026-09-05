@@ -1,82 +1,40 @@
 # AGENTS.md
 
-## 会話とGit
+## 基本ルール
 
-- 常に日本語で簡潔に会話する
-- commit は署名付きで作る。commit 前に署名設定を確認する
-- ユーザーの既存差分を無断で破棄・上書きしない
-- GitHub PRのreview threadへ対応した場合は、修正をpushした後に該当threadをresolveする
+- 日本語で簡潔・丁寧に会話する。
+- commit前に署名設定を確認し、署名付きで作る。既存差分を無断で破棄・上書きしない。
+- PRのreview threadに対応したら、修正をpushしてから該当threadをresolveする。
+- `terraform/`は読み取り専用。編集も、このdirectory内でのcommand実行もしない。
 
-## リポジトリの位置付け
+## 設計と責務
 
-`okawak_blog` は、private な Obsidian Markdown を公開 artifact へ変換し、Topcoat SSR で配信する静的コンテンツ公開基盤である。主役は常駐 API や CMS ではなく、ビルド時の`publish` pipelineである。
+private Obsidian Markdownをビルド時の`publish` pipelineで公開artifactへ変換し、Topcoat SSRで配信する基盤。
+設計・module構成は[architecture](docs/architecture/architecture.md)に従う。参照優先順位は同文書 → GitHub Issue / PR → [README](README.md)。計画・進捗はIssue / PRに置き、恒久文書には現行の設計だけを書く。
 
-参照優先順位:
+- 正本はprivate Obsidian repository。記事Markdownをpublic repositoryへ通常ファイルとしてcommitしない。入力のgit submoduleは必要時だけ初期化・更新する。
+- Markdown / frontmatter / link / embedの解決とHTML生成はビルド時に完了させる。SSRはartifact読取・routing・metadata付与に集中し、本番は単一server binaryを優先する。
+- `crates/domain`: 公開コンテンツの純粋model・ルールとcrate間の共有契約。I/O、`async`、AWS SDK、HTTP frameworkを持ち込まない。
+- `crates/publish`: 入力・変換・artifact生成を担う単一crate。`lib.rs`はmodule宣言とre-exportのみ。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定し、内部の責務分割は設計文書に従う。
+- `crates/site/infra`: local / S3のartifact読取・設定・cache境界。vault読取・Markdown変換・uploadを置かない。
+- `crates/site/server`: 単一Topcoat application。UI・metadata・asset・reader注入・API・health/readiness・conditional GETを所有する。`src/app.rs`を`module_router!()`のrootとし、`app/`のfile moduleをURL構造に対応させる（`mod.rs`禁止）。UIはstorage実装へ直接依存せず`PageLoader`を経由する。
+- `e2e/`: browser E2E。通常CIはprivate submodule・AWS不要のfixtureを使い、実S3 smokeはローカル手動確認とupload workflowの公開前gateで行う。
+- 明示されない限り、DB記事管理・認証認可・管理画面・UI編集・マルチユーザー・SaaS CMS・リアルタイム更新は作らない。
 
-1. `docs/architecture/architecture.md`（現行設計の一次情報）
-2. GitHub Issue / PR（個別計画と進捗）
-3. `README.md`（概要と利用方法）
+## 開発手順
 
-実在しない構成を現行実装として記述しない。実装計画は Issue / PR に置き、恒久文書には現在有効な設計判断だけを残す。
-
-## 必須アーキテクチャ原則
-
-- source of truth は private Obsidian repository。public repository へ記事 Markdown を通常ファイルとして commit しない
-- `publish` pipelineは git submodule の Obsidian repository を入力にする。必要な作業時だけ submodule を初期化・更新する
-- Markdown / frontmatter / link / embed の解決と HTML 生成はビルド時に行う
-- SSR runtime は公開 artifact の読取、ルーティング、メタ情報付与に集中する
-- production は単一 server binary を優先する
-
-依存と配置の境界:
-
-- `crates/domain`: 公開コンテンツの純粋なdomain model・ルールと、`publish` / readerが共有する契約。I/O、`async`、AWS SDK、HTTP frameworkを持ち込まない
-- `crates/publish`: 単一の`publish` crate。`lib.rs`は内部module宣言とcrate外向けAPIのre-exportに限定する。`pipeline` moduleが公開処理をorchestrationし、`vault` moduleをローカル入力境界、`links` moduleを公開URL索引とWikiLink event解決の境界、`render` moduleをcontent描画の境界、`artifacts` moduleをartifact構築・書込み・validationの境界とする。`render`内ではcontent kind別の組み立て、共通本文処理、Markdown event生成とHTML変換、URLとraw HTMLの安全化、bookmark構文・card生成とOGP metadata取得を分離する。`publish`専用処理をcrate外へ公開せず、外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に絞る
-- `crates/site/infra`: server が artifact を読む外部境界（local / S3、設定、将来のcache）。vault読取、Markdown変換、uploadを置かない
-- `crates/site/server`: production `server` binaryを持つ単一のTopcoat application crate。`src/app.rs`を`module_router!()`のroute tree rootとし、`app/`のfile moduleをURL構造へ対応させて`mod.rs`は使わない。page / component / metadata / style / generated content script、reader注入、API、health/readiness、release-aware conditional GETを所有する。UI moduleはstorage実装へ直接依存せず、storage非依存の`PageLoader`契約を経由する
-- `e2e`: repository root直下のbrowser E2E。通常CIはprivate submoduleやAWSに依存しないfixtureで検証し、実S3 smoke testはローカル手動確認とupload workflowの公開前gateに使う
-- `service`: systemd、Cloudflare Tunnel、運用補助
-- `terraform`: 読み取り専用。編集せず、このdirectoryでcommandを実行しない
-
-公開コンテンツの純粋なdomain model・ルールと、`domain`、`publish`、`site` の責務をまたぐ純粋契約を `domain` へ置く。`publish`専用のI/Oや変換処理を reader 側へ移さず、ビルド時に解決できる責務をruntimeへ持ち込まない。
-
-## 非目標
-
-明示されない限り、DBベースの記事管理、認証認可、管理画面、UI編集、マルチユーザー、SaaS CMS、リアルタイム更新基盤は作らない。
-
-## 開発プロセス
-
-- 大きめの実装前に GitHub Issue を作成または更新し、目的、責務、依存方向、タスク、受け入れ条件を書く
-- 可能な限りTDDで進め、純粋ロジックは失敗テストを先に置く。仕様変更でない限りテストを都合よく変更しない
-- 責務や依存方向を変えたら `docs/architecture/` と必要な利用文書を更新する
-- 過剰なrepository pattern、肥大化する`shared`、`unimplemented!()`前提の大きなmodelを避ける
-- 型で状態遷移や不変条件を表せる場合は優先する
-- GitHub Actionsは原則として利用中actionの最新majorを指定する
+- 大きめの実装前にIssueを作成・更新し、目的・責務・依存方向・タスク・受け入れ条件を書く。
+- 可能な限りTDDで進め、純粋ロジックは失敗テストを先に置く。仕様変更なしにテストを都合よく変えない。
+- 責務・依存方向を変えたら`docs/architecture/`と必要な利用文書を更新する。
+- 状態遷移・不変条件は型で表すことを優先し、過剰なrepository pattern・肥大化する`shared`・`unimplemented!()`前提の大きなmodelを避ける。
+- GitHub Actionsは原則、利用中actionの最新majorを指定する。
 
 ## タスクと運用
 
-タスクランナーはrepository rootの`mise.toml`を正とする。利用可能なtaskは`mise tasks ls`で確認し、直接commandを複製せず`mise run <task>`を優先する。
+rootの[mise.toml](mise.toml)を正とし、`mise tasks ls`で確認して`mise run <task>`を優先する。E2E依存操作もrootの`e2e-*` taskを使う。
 
-主要な確認:
-
-- `mise run format`
-- `mise run test`
-- `mise run clippy`
-- `mise run check`
-- `mise run test-e2e`
-- `mise run test-e2e-s3`（ローカルからの明示的な実S3確認）
-
-開発サーバーは用途に応じて次を使い分ける。
-
-- `mise run dev-local`: private Obsidian submoduleをremoteの最新状態へ同期し、`publish`で生成した`crates/publish/dist/site`をlocal readerで配信する
-- `mise run dev`: S3 readerで本番相当のartifact取得を確認する
-
-`mise run dev`は次を使う。
-
-- `OKAWAK_BLOG_ARTIFACT_SOURCE=s3`
-- `OKAWAK_BLOG_ARTIFACT_BUCKET`（実行時に必須）
-
-`publish`側の同期だけが必要な場合は`mise run sync-obsidian`を使う。同期は未commit差分がある場合に停止し、cleanならmerge commitを作らずremoteの最新commitをcheckoutする。`dev-local`はsubmoduleの同期または`publish`の厳格モードが失敗した場合、serverを起動しない。E2Eの依存操作はrootの`e2e-*` taskを使う。S3の手動確認は`dev` / `test-e2e-s3`を使い、本番runtimeのS3設定とcredentialsは`service/okawak_blog.service`および`service/README.md`を参照する。
-
-- `/api/health`: process liveness
-- `/api/ready`: artifact reader readiness
-- `sudo`を伴うtaskはVPS運用向けとして扱う
+- 通常確認: `format`、`test`、`clippy`、`check`、`test-e2e`。
+- `dev-local`: private submoduleをremote最新へ同期し、厳格モードのpublish成果物をlocal配信する。同期・publish失敗時はserverを起動しない。
+- `sync-obsidian`: 同期のみ。未commit差分があれば停止し、cleanならmerge commitを作らずremote最新をcheckoutする。
+- `dev` / `test-e2e-s3`: S3配信の開発確認 / 明示的な実S3 smoke。`OKAWAK_BLOG_ARTIFACT_BUCKET`必須。`dev`はtaskが`OKAWAK_BLOG_ARTIFACT_SOURCE=s3`を設定する。
+- `service/`: systemd・Cloudflare Tunnel・運用補助。S3設定・credentials・health/readinessの詳細は[service/README.md](service/README.md)と[service unit](service/okawak_blog.service)を参照する。`sudo`を伴うtaskはVPS運用向け。
