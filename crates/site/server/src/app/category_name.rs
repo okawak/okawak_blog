@@ -71,7 +71,6 @@ async fn category_document(document: CategoryPageDocument) -> Result<impl View> 
         site_shell(
             status: StatusCode::OK,
             metadata: ShellMetadata::website(title, description.clone(), canonical_url),
-            current_path: canonical_path,
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-6 px-4 py-8 text-left sm:px-6 sm:py-12"
             >

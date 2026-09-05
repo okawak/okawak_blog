@@ -3,7 +3,8 @@
 use chrono::Datelike;
 use topcoat::{
     Result,
-    router::StatusCode,
+    context::Cx,
+    router::{StatusCode, href},
     view::{Child, Unescaped, View, component, view},
 };
 
@@ -51,7 +52,6 @@ pub(crate) async fn not_found_page(canonical_path: String) -> Result<impl View> 
                 NOT_FOUND_DESCRIPTION.to_string(),
                 canonical_url,
             ),
-            current_path: canonical_path,
             <div>"ページが見つかりませんでした。"</div>
         )
     })
@@ -69,7 +69,6 @@ pub(crate) async fn article_internal_server_error_page(
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
             metadata: ShellMetadata::article(title, description, canonical_url),
-            current_path: canonical_path,
             <div
                 class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground"
             >
@@ -92,7 +91,6 @@ pub(crate) async fn internal_server_error_page(
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
             metadata: ShellMetadata::website(title, description, canonical_url),
-            current_path: canonical_path,
             <div
                 class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground"
             >
@@ -104,11 +102,15 @@ pub(crate) async fn internal_server_error_page(
 
 #[component]
 pub(crate) async fn site_shell(
+    cx: &Cx,
     status: StatusCode,
     metadata: ShellMetadata,
-    current_path: String,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
+    let home_href = href!("/");
+    let about_href = href!("/about");
+    let home_is_current = home_href.is_current(cx);
+    let about_is_current = about_href.is_current(cx);
     let year = chrono::Local::now().year();
     let math_render_script = Unescaped::new_unchecked(
         r#"
@@ -321,13 +323,9 @@ window.okawakScheduleCodeHighlight = function(root) {
                                 >
                                     <li>
                                         <a
-                                            href="/"
-                                            aria-current=(if current_path == "/" {
-                                                Some("page")
-                                            } else {
-                                                None
-                                            })
-                                            class=(if current_path == "/" {
+                                            href=(home_href)
+                                            aria-current=(home_is_current.then_some("page"))
+                                            class=(if home_is_current {
                                                 "block rounded-md border-b-2 border-primary px-3 py-2 text-sm font-medium text-foreground no-underline"
                                             } else {
                                                 "block rounded-md border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-primary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -339,13 +337,9 @@ window.okawakScheduleCodeHighlight = function(root) {
                                     </li>
                                     <li>
                                         <a
-                                            href="/about"
-                                            aria-current=(if current_path == "/about" {
-                                                Some("page")
-                                            } else {
-                                                None
-                                            })
-                                            class=(if current_path == "/about" {
+                                            href=(about_href)
+                                            aria-current=(about_is_current.then_some("page"))
+                                            class=(if about_is_current {
                                                 "block rounded-md border-b-2 border-primary px-3 py-2 text-sm font-medium text-foreground no-underline"
                                             } else {
                                                 "block rounded-md border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-primary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

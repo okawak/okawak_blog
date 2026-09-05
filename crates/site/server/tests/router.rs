@@ -438,6 +438,55 @@ async fn home_renders_the_published_summary_as_html() {
 }
 
 #[tokio::test]
+async fn navigation_marks_only_the_current_destination_including_query_urls() {
+    let router = create_router(fixture_reader(), false);
+    for (path, expected) in [
+        ("/?utm_source=test", Some("/")),
+        ("/about?utm_source=test", Some("/about")),
+        ("/tech", None),
+        ("/tech/e2e-article.html", None),
+        ("/unknown/nested/path?utm_source=test", None),
+    ] {
+        let response = response(
+            &router,
+            Request::builder().uri(path).body(Body::empty()).unwrap(),
+        )
+        .await;
+        for destination in ["/", "/about"] {
+            assert_eq!(
+                response
+                    .body
+                    .contains(&format!("href=\"{destination}\" aria-current=\"page\"")),
+                expected == Some(destination),
+                "{path}: current destination {destination}",
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn error_pages_keep_navigation_tied_to_the_requested_url() {
+    let router = create_router(Arc::new(FailingSnapshotReader), false);
+    for path in ["/", "/about"] {
+        let response = response(
+            &router,
+            Request::builder()
+                .uri(format!("{path}?utm_source=test"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(
+            response
+                .body
+                .contains(&format!("href=\"{path}\" aria-current=\"page\""))
+        );
+        assert_eq!(response.body.matches("aria-current=\"page\"").count(), 1);
+    }
+}
+
+#[tokio::test]
 async fn home_shell_exposes_topcoat_mobile_navigation_contract() {
     let router = create_router(fixture_reader(), false);
     let response = response(
@@ -521,6 +570,27 @@ async fn home_uses_fallback_copy_when_optional_fragment_is_missing() {
             .body
             .contains("公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。")
     );
+}
+
+#[tokio::test]
+async fn home_returns_internal_server_error_for_invalid_optional_fragment() {
+    let temp_dir = tempdir().unwrap();
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/site");
+    for relative_path in ["articles/index.json", "metadata/site.json"] {
+        let destination = temp_dir.path().join(relative_path);
+        std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        std::fs::copy(fixture_root.join(relative_path), destination).unwrap();
+    }
+    std::fs::write(temp_dir.path().join("home.json"), "invalid JSON").unwrap();
+    let router = create_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
+    let response = response(
+        &router,
+        Request::builder().uri("/").body(Body::empty()).unwrap(),
+    )
+    .await;
+
+    assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(response.body.contains("記事の読み込みに失敗しました"));
 }
 
 #[tokio::test]

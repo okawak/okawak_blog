@@ -364,6 +364,8 @@ flowchart LR
 
 `site/server`のTopcoat pageはstorage非依存の`PageLoader`からこのpage contractを受け取り、metadataとUIを組み立てる。同じcrate内の`ArtifactPageLoader`だけがartifact読取とpage document構築を実装し、conditional GETが取得したsnapshotをrequest contextのloaderへ渡す。validatorを使わないrequestでもloader内でsnapshotを1回だけ取得する。local / S3 readerと`DynArtifactSnapshot`をpage / component moduleへ持ち込まない。
 
+homeのarticle index、site metadata、optional home fragmentは、同じsnapshotから並列に読む。home fragmentの不在だけを省略可能として扱い、それ以外の読取失敗はpageの500応答へ伝える。必要な読取とpage document構築を終えてから初期HTMLとHTTP statusを確定する。
+
 公開routeのpage document読取はTopcoat async componentを正式経路とする。手書きの`/api/page/*`は持たず、404とstorage errorのstatus / error viewをroute境界で統一する。`/api/articles`はpage documentを組み立てない互換endpointとして維持する。
 
 公開routeは`site/server/src/app.rs`をrootとするTopcoat `module_router!()`から登録する。`/about`と`/api/*`はstatic module、`/{category_name}`と`/{category_name}/{article_slug}`は`path_param!()`を宣言するnested moduleとしてURL構造へ対応させる。route moduleはfile moduleで構成し、`mod.rs`を使わない。release-aware conditional GETはmodule pathに依存しないglobal layerとして`app.rs`で明示的に登録する。
@@ -397,6 +399,8 @@ production `server`はhome、about、category、articleをSSRし、title、canon
 productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Tailwind CSS、Topcoat runtime、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。公開linkは独自client routerを持たず、ブラウザ標準のfull-page navigationを使う。mobile menuはTopcoat runtimeのsignalとevent expressionで構成する。生成コンテンツのKaTeXとhighlight.js、iconのFont Awesome、fontのNoto Sans JPはversion固定またはURL固定のCDN資産として維持し、KaTeXにはSRIを付与する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`はNode / BunのCSS build toolを実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
 
 `site/server/build.rs`はapplication package内の`style/tailwind.css`をTopcoatのstylesheet assetへ変換するために維持する。Rustと`view!` macroの書式はrepository rootの`mise run format`から`cargo fmt`と`topcoat fmt`を順に適用する。
+
+shellのナビゲーションはTopcoatの`Href::is_current`でrequest URLとの一致を判定し、同じHrefをlink先に使う。pageから選択状態用のpathは渡さず、query付きURLでも該当linkを選択状態にする。未一致URLの404でも判定できるよう、Hrefのtargetはpath literalで定義する。
 
 ## Reader 経路
 
