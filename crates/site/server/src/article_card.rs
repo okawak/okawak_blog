@@ -3,11 +3,11 @@
 use domain::{SiteArticleCard, build_article_path};
 use topcoat::{
     Result,
-    view::{component, view},
+    view::{View, component, view},
 };
 
 #[component]
-pub(crate) async fn article_card(article: &SiteArticleCard) -> Result {
+pub(crate) async fn article_card(article: &SiteArticleCard) -> Result<impl View> {
     let article_href = build_article_path(&article.category, &article.slug);
     let description = article
         .description
@@ -16,7 +16,7 @@ pub(crate) async fn article_card(article: &SiteArticleCard) -> Result {
     let created_at_label = crate::format::format_display_date(&article.created_at);
     let updated_at_label = crate::format::format_display_date(&article.updated_at);
 
-    view! {
+    Ok(view! {
         <article class="min-w-0">
             <a
                 href=(article_href)
@@ -77,5 +77,5 @@ pub(crate) async fn article_card(article: &SiteArticleCard) -> Result {
                 </div>
             </a>
         </article>
-    }
+    })
 }

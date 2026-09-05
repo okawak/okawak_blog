@@ -4,7 +4,7 @@ use chrono::Datelike;
 use topcoat::{
     Result,
     router::StatusCode,
-    view::{Unescaped, View, component, view},
+    view::{Child, Unescaped, View, component, view},
 };
 
 use crate::assets::{FAVICON, STYLESHEET};
@@ -40,10 +40,10 @@ impl ShellMetadata {
 }
 
 #[component]
-pub(crate) async fn not_found_page(canonical_path: String) -> Result {
+pub(crate) async fn not_found_page(canonical_path: String) -> Result<impl View> {
     let canonical_url = crate::build_site_url(&canonical_path);
 
-    view! {
+    Ok(view! {
         site_shell(
             status: StatusCode::NOT_FOUND,
             metadata: ShellMetadata::website(
@@ -54,7 +54,7 @@ pub(crate) async fn not_found_page(canonical_path: String) -> Result {
             current_path: canonical_path,
             <div>"ページが見つかりませんでした。"</div>
         )
-    }
+    })
 }
 
 #[component]
@@ -62,10 +62,10 @@ pub(crate) async fn article_internal_server_error_page(
     title: String,
     description: String,
     canonical_path: String,
-) -> Result {
+) -> Result<impl View> {
     let canonical_url = crate::build_site_url(&canonical_path);
 
-    view! {
+    Ok(view! {
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
             metadata: ShellMetadata::article(title, description, canonical_url),
@@ -76,7 +76,7 @@ pub(crate) async fn article_internal_server_error_page(
                 "記事の読み込みに失敗しました"
             </div>
         )
-    }
+    })
 }
 
 #[component]
@@ -85,10 +85,10 @@ pub(crate) async fn internal_server_error_page(
     description: String,
     canonical_path: String,
     message: &'static str,
-) -> Result {
+) -> Result<impl View> {
     let canonical_url = crate::build_site_url(&canonical_path);
 
-    view! {
+    Ok(view! {
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
             metadata: ShellMetadata::website(title, description, canonical_url),
@@ -99,7 +99,7 @@ pub(crate) async fn internal_server_error_page(
                 (message)
             </div>
         )
-    }
+    })
 }
 
 #[component]
@@ -107,8 +107,8 @@ pub(crate) async fn site_shell(
     status: StatusCode,
     metadata: ShellMetadata,
     current_path: String,
-    child: View,
-) -> Result {
+    #[default] child: Child<'_>,
+) -> Result<impl View> {
     let year = chrono::Local::now().year();
     let math_render_script = Unescaped::new_unchecked(
         r#"
@@ -191,7 +191,7 @@ window.okawakScheduleCodeHighlight = function(root) {
         og_type,
     } = metadata;
 
-    view! {
+    Ok(view! {
         (status)
         <!DOCTYPE html>
         <html lang="ja">
@@ -398,5 +398,5 @@ window.okawakScheduleCodeHighlight = function(root) {
                 </div>
             </body>
         </html>
-    }
+    })
 }

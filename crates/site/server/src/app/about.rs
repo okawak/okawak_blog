@@ -6,7 +6,7 @@ use topcoat::{
     Result,
     context::Cx,
     router::{StatusCode, page},
-    view::{Unescaped, View, component, view},
+    view::{Unescaped, View, ViewExt, component, view},
 };
 
 use super::page_loader;
@@ -15,17 +15,15 @@ use crate::shell::{ShellMetadata, internal_server_error_page, not_found_page, si
 const ABOUT_PAGE_KEY: &str = "about";
 
 #[page]
-async fn about(cx: &Cx) -> Result<View> {
+async fn about(cx: &Cx) -> Result<impl View> {
     let page = PageKey::new(ABOUT_PAGE_KEY.to_string())?;
 
     match page_loader(cx).loader().load_static_page(&page).await {
-        Ok(Some(document)) => view! { about_document(document: document) },
-        Ok(None) => {
-            view! { not_found_page(canonical_path: "/about".to_string()) }
-        }
+        Ok(Some(document)) => Ok(view! { about_document(document: document) }.boxed()),
+        Ok(None) => Ok(view! { not_found_page(canonical_path: "/about".to_string()) }.boxed()),
         Err(error) => {
             tracing::error!(%error, page = ABOUT_PAGE_KEY, "static page artifact read failed");
-            view! {
+            Ok(view! {
                 internal_server_error_page(
                     title: format!("About | {}", crate::SITE_NAME),
                     description: "About ページです。".to_string(),
@@ -33,12 +31,13 @@ async fn about(cx: &Cx) -> Result<View> {
                     message: "ページの読み込みに失敗しました"
                 )
             }
+            .boxed())
         }
     }
 }
 
 #[component]
-async fn about_document(document: StaticPageDocument) -> Result {
+async fn about_document(document: StaticPageDocument) -> Result<impl View> {
     let title = build_static_page_title(&document, crate::SITE_NAME);
     let description = build_static_page_description(&document);
     let canonical_url = crate::build_site_url(&build_static_page_canonical_path(&document));
@@ -47,7 +46,7 @@ async fn about_document(document: StaticPageDocument) -> Result {
     // persisting this fragment. It is therefore the trusted HTML boundary for Topcoat as well.
     let html = Unescaped::new_unchecked(document.html);
 
-    view! {
+    Ok(view! {
         site_shell(
             status: StatusCode::OK,
             metadata: ShellMetadata::website(title, description, canonical_url),
@@ -80,5 +79,5 @@ async fn about_document(document: StaticPageDocument) -> Result {
                 </article>
             </div>
         )
-    }
+    })
 }

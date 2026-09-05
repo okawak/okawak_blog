@@ -10,7 +10,7 @@ use topcoat::{
     Result,
     context::Cx,
     router::{StatusCode, page, path_param, request},
-    view::{Unescaped, View, component, view},
+    view::{Unescaped, View, ViewExt, component, view},
 };
 
 use super::page_loader;
@@ -22,41 +22,42 @@ use crate::{
 path_param!(category_name);
 
 #[page]
-async fn category_page(cx: &Cx) -> Result<View> {
+async fn category_page(cx: &Cx) -> Result<impl View> {
     let category_param = path_param::<CategoryName>(cx);
     let requested_path = request::uri(cx).path().to_string();
     let category = match Category::from_str(category_param) {
         Ok(category) => category,
         Err(_) => {
-            return view! { not_found_page(canonical_path: requested_path) };
+            return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed());
         }
     };
 
     match page_loader(cx).loader().load_category(&category).await {
-        Ok(Some(document)) => view! { category_document(document: document) },
-        Ok(None) => {
-            view! { not_found_page(canonical_path: requested_path) }
-        }
+        Ok(Some(document)) => Ok(view! { category_document(document: document) }.boxed()),
+        Ok(None) => Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
         Err(error) => {
             tracing::error!(
                 %error,
                 category = category_param,
                 "category page artifact read failed"
             );
-            view! {
+            Ok(view! {
                 internal_server_error_page(
                     title: format!("{category_param} | {}", crate::SITE_NAME),
-                    description: format!("{category_param} カテゴリの記事一覧です。"),
+                    description: format!(
+                        "{category_param} カテゴリの記事一覧です。",
+                    ),
                     canonical_path: requested_path,
                     message: "カテゴリの読み込みに失敗しました"
                 )
             }
+            .boxed())
         }
     }
 }
 
 #[component]
-async fn category_document(document: CategoryPageDocument) -> Result {
+async fn category_document(document: CategoryPageDocument) -> Result<impl View> {
     let title = build_category_page_title(&document, crate::SITE_NAME);
     let description = build_category_page_description(&document);
     let canonical_path = build_category_page_canonical_path(&document);
@@ -66,14 +67,10 @@ async fn category_document(document: CategoryPageDocument) -> Result {
     // persisting this fragment. It is therefore the trusted HTML boundary for Topcoat as well.
     let landing_html = Unescaped::new_unchecked(document.html);
 
-    view! {
+    Ok(view! {
         site_shell(
             status: StatusCode::OK,
-            metadata: ShellMetadata::website(
-                title,
-                description.clone(),
-                canonical_url,
-            ),
+            metadata: ShellMetadata::website(title, description.clone(), canonical_url),
             current_path: canonical_path,
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-6 px-4 py-8 text-left sm:px-6 sm:py-12"
@@ -112,5 +109,5 @@ async fn category_document(document: CategoryPageDocument) -> Result {
                 </div>
             </div>
         )
-    }
+    })
 }

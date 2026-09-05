@@ -8,7 +8,7 @@ use topcoat::{
     Result,
     context::Cx,
     router::{StatusCode, page, path_param, request},
-    view::{Unescaped, View, component, view},
+    view::{Unescaped, View, ViewExt, component, view},
 };
 
 use super::super::page_loader;
@@ -18,7 +18,7 @@ use crate::shell::{ShellMetadata, article_internal_server_error_page, not_found_
 path_param!(article_slug);
 
 #[page]
-async fn article_page(cx: &Cx) -> Result<View> {
+async fn article_page(cx: &Cx) -> Result<impl View> {
     let category_param = path_param::<CategoryName>(cx);
     let slug_param = path_param::<ArticleSlug>(cx);
     let normalized_slug = normalize_article_slug_param(slug_param);
@@ -27,11 +27,11 @@ async fn article_page(cx: &Cx) -> Result<View> {
     let fallback_description = format!("{category_param} カテゴリの記事です。");
     let category = match Category::from_str(category_param) {
         Ok(category) => category,
-        Err(_) => return view! { not_found_page(canonical_path: requested_path) },
+        Err(_) => return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
     };
     let slug = match Slug::new(normalized_slug.to_string()) {
         Ok(slug) => slug,
-        Err(_) => return view! { not_found_page(canonical_path: requested_path) },
+        Err(_) => return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
     };
 
     match page_loader(cx)
@@ -39,8 +39,8 @@ async fn article_page(cx: &Cx) -> Result<View> {
         .load_article(&category, &slug)
         .await
     {
-        Ok(Some(document)) => view! { article_document(document: document) },
-        Ok(None) => view! { not_found_page(canonical_path: requested_path) },
+        Ok(Some(document)) => Ok(view! { article_document(document: document) }.boxed()),
+        Ok(None) => Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
         Err(error) => {
             tracing::error!(
                 %error,
@@ -48,19 +48,20 @@ async fn article_page(cx: &Cx) -> Result<View> {
                 slug = normalized_slug,
                 "article page artifact read failed"
             );
-            view! {
+            Ok(view! {
                 article_internal_server_error_page(
                     title: fallback_title,
                     description: fallback_description,
                     canonical_path: requested_path
                 )
             }
+            .boxed())
         }
     }
 }
 
 #[component]
-async fn article_document(document: ArticlePageDocument) -> Result {
+async fn article_document(document: ArticlePageDocument) -> Result<impl View> {
     let title = build_article_page_title(&document, crate::SITE_NAME);
     let description = build_article_page_description(&document);
     let canonical_path = build_article_page_canonical_path(&document);
@@ -78,7 +79,7 @@ async fn article_document(document: ArticlePageDocument) -> Result {
     // persisting this fragment. It is therefore the trusted HTML boundary for Topcoat as well.
     let html = Unescaped::new_unchecked(document.html);
 
-    view! {
+    Ok(view! {
         site_shell(
             status: StatusCode::OK,
             metadata: ShellMetadata::article(title, description, canonical_url),
@@ -148,7 +149,7 @@ async fn article_document(document: ArticlePageDocument) -> Result {
                 </div>
             </article>
         )
-    }
+    })
 }
 
 fn normalize_article_slug_param(slug: &str) -> &str {

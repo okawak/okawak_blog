@@ -6,7 +6,7 @@
 
 ## VPS build tool
 
-production buildはTopcoat CLIを使います。Topcoat CLIのversionは`mise.toml`と`mise.lock`でframeworkと同じ0.6.2へ固定します。
+production buildはTopcoat CLIを使います。Topcoat CLIのversionは`mise.toml`と`mise.lock`でframeworkと同じ0.7.0へ固定します。
 
 VPSの運用userで次を実行します。
 
@@ -27,7 +27,7 @@ mise run check-deps
 git status --short
 ```
 
-Topcoat CLIが0.6.2で、`mise run check-deps`が成功し、Git差分が空であれば正常です。`mise run build-project`とproduction用のstaged buildはTopcoatのstandalone Tailwind integrationを使い、Bun package installへ依存しません。
+Topcoat CLIが0.7.0で、`mise run check-deps`が成功し、Git差分が空であれば正常です。`mise run build-project`とproduction用のstaged buildはTopcoatのstandalone Tailwind integrationを使い、Bun package installへ依存しません。
 
 `mise run production-deploy`は稼働中のasset directoryを直接buildしません。`target/assets-staged`にhash付きCSS / JavaScript / faviconを揃え、service停止後に`bin/okawak_blog`と、Topcoatがbinaryの隣から読む`bin/assets`を同じreleaseへ切り替えます。stagingはWebAssemblyを拒否します。起動後のhealth / readinessが失敗した場合は旧binaryと旧assetsを復元し、調査用の失敗bundleを`bin/assets.failed`へ残します。
 
