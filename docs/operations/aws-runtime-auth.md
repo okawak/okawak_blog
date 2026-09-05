@@ -299,6 +299,8 @@ taskはTerraformを変更・適用しません。既定値を変更する場合�
 
 復旧中の追加のHUP・INT・TERMは無視し、復旧処理を継続します。SIGKILLやVPSの電源断は捕捉できないため、その場合は残ったrollback fileとserviceの状態を確認して手動で復旧します。
 
+自動復旧ではservice停止後に旧certificateとprivate keyの両方を復元し、rollback fileとの内容一致を確認してからserviceを再開します。復元・内容確認・service再開のいずれかに失敗した場合はrollback fileを削除せず、保管先をエラー出力へ表示します。I/Oエラー等の原因を解消し、表示された同じ日時の旧ペアを配置・検証してserviceを復旧するまで、これらのfileを保持してください。
+
 ### 手動更新
 
 taskを使用できない場合は、管理端末で既存CAを使用し、更新ごとに新しいclient private keyとcertificateを別名で作成します。Subject CNはTerraformの`roles_anywhere_certificate_subject_cn`と一致させます。

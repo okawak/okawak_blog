@@ -52,6 +52,7 @@ cleanup_candidates() {
 restore_previous_certificate() {
   local status="$1"
   local line="$2"
+  local recovery_succeeded=true
 
   trap - ERR
   # A second Ctrl-C or SSH hangup must not interrupt the recovery commands.
@@ -60,17 +61,29 @@ restore_previous_certificate() {
   echo "certificate-activation: failed at line $line; restoring the previous certificate" >&2
 
   if [[ "$activation_started" == true ]]; then
-    sudo systemctl stop "$service_name.service"
-    sudo install -o root -g "$service_group" -m 0644 \
-      "$rollback_certificate" "$active_certificate"
-    sudo install -o root -g "$service_group" -m 0640 \
-      "$rollback_private_key" "$active_private_key"
-    if [[ "$service_was_active" == true ]]; then
-      sudo systemctl start "$service_name.service"
+    if sudo systemctl stop "$service_name.service" \
+      && sudo install -o root -g "$service_group" -m 0644 \
+        "$rollback_certificate" "$active_certificate" \
+      && sudo install -o root -g "$service_group" -m 0640 \
+        "$rollback_private_key" "$active_private_key" \
+      && sudo cmp -s "$rollback_certificate" "$active_certificate" \
+      && sudo cmp -s "$rollback_private_key" "$active_private_key"; then
+      if [[ "$service_was_active" == true ]] \
+        && ! sudo systemctl start "$service_name.service"; then
+        recovery_succeeded=false
+      fi
+    else
+      recovery_succeeded=false
     fi
   fi
 
-  sudo rm -f "$rollback_certificate" "$rollback_private_key"
+  if [[ "$recovery_succeeded" == true ]]; then
+    sudo rm -f "$rollback_certificate" "$rollback_private_key"
+  else
+    echo "certificate-activation: automatic recovery failed; rollback files retained for manual recovery:" >&2
+    printf '  %s\n' "$rollback_certificate" "$rollback_private_key" >&2
+    echo "certificate-activation: restore and verify this pair before starting $service_name.service" >&2
+  fi
   cleanup_candidates
   cleanup_uploaded_files
   exit "$status"
@@ -114,7 +127,7 @@ run_aws_check() {
   || -n "${ALLOW_CUSTOM_UPLOAD_DIR:-}" ]] \
   || fail "UPLOAD_DIR is outside the expected rotation directory"
 
-for command_name in aws curl openssl sudo systemctl; do
+for command_name in aws cmp curl openssl sudo systemctl; do
   command -v "$command_name" >/dev/null \
     || fail "required command is missing: $command_name"
 done

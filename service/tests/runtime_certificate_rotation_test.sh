@@ -59,6 +59,13 @@ while (($# > 0)); do
       ;;
   esac
 done
+source_file="${args[${#args[@]}-2]}"
+destination_file="${args[${#args[@]}-1]}"
+if [[ "$source_file" == "$CERTIFICATE_DIR/${STUB_RESTORE_FAILURE_FILE:-}.pem.rollback-$ROTATION_STAMP" ]]; then
+  : >"$STUB_RESTORE_FAILURE_MARKER"
+  printf 'incomplete restore\n' >"$destination_file"
+  exit "${STUB_RESTORE_FAILURE_STATUS:-1}"
+fi
 /usr/bin/install "${args[@]}"
 # shellcheck source=/dev/null
 source "$(dirname "$0")/signal-helper.sh"
@@ -93,6 +100,11 @@ if [[ "$1" == "is-active" ]]; then
   exit
 fi
 printf '%s\n' "$*" >>"$STUB_SYSTEMCTL_LOG"
+if [[ "${STUB_RECOVERY_SYSTEMCTL_FAILURE:-}" == "$1" ]] \
+  && (( $(grep -c '^stop ' "$STUB_SYSTEMCTL_LOG") >= 2 )); then
+  : >"$STUB_RESTORE_FAILURE_MARKER"
+  exit 1
+fi
 # shellcheck source=/dev/null
 source "$(dirname "$0")/signal-helper.sh"
 if [[ "$1" == "stop" ]]; then
@@ -207,6 +219,7 @@ run_activation() {
     STUB_SERVICE_ACTIVE=true \
     STUB_CURL_FAIL="$curl_fail" \
     STUB_SIGNAL_SENT="$case_dir/signal-sent" \
+    STUB_RESTORE_FAILURE_MARKER="$case_dir/restore-failed" \
     STUB_SYSTEMCTL_LOG="$case_dir/systemctl.log" \
     bash "$activation_script"
 }
@@ -236,6 +249,67 @@ cmp -s "$rollback_case/old-key.pem" "$rollback_case/certificates/client-key.pem"
   || fail "probe failure did not restore the old private key"
 grep -qx 'start okawak_blog.service' "$rollback_case/systemctl.log" \
   || fail "probe failure did not restart the previously active service"
+[[ ! -e "$rollback_case/certificates/client-cert.pem.rollback-$rollback_stamp" \
+  && ! -e "$rollback_case/certificates/client-key.pem.rollback-$rollback_stamp" ]] \
+  || fail "successful rollback retained its backups"
+
+for restore_status in 1 0; do
+  for restore_file in client-cert client-key; do
+    restore_case="$test_root/restore-$restore_file-status-$restore_status"
+    restore_stamp='20260905T040404Z'
+    prepare_case "$restore_case" "$restore_stamp"
+    actual_status=0
+    STUB_RESTORE_FAILURE_FILE="$restore_file" STUB_RESTORE_FAILURE_STATUS="$restore_status" \
+      run_activation "$restore_case" "$restore_stamp" true \
+      >"$restore_case/output.log" 2>&1 || actual_status=$?
+    [[ -f "$restore_case/restore-failed" ]] || fail "restore failure was not injected"
+    [[ "$actual_status" == 22 ]] || fail "restore failure lost the original probe exit status"
+    cmp -s "$restore_case/old-cert.pem" \
+      "$restore_case/certificates/client-cert.pem.rollback-$restore_stamp" \
+      || fail "failed certificate restore deleted or damaged the rollback certificate"
+    cmp -s "$restore_case/old-key.pem" \
+      "$restore_case/certificates/client-key.pem.rollback-$restore_stamp" \
+      || fail "failed private key restore deleted or damaged the rollback private key"
+    [[ "$(tail -n 1 "$restore_case/systemctl.log")" == 'stop okawak_blog.service' ]] \
+      || fail "failed restore restarted the service with an inconsistent pair"
+    grep -Fq "client-cert.pem.rollback-$restore_stamp" "$restore_case/output.log" \
+      || fail "failed restore did not report the preserved certificate path"
+    grep -Fq "client-key.pem.rollback-$restore_stamp" "$restore_case/output.log" \
+      || fail "failed restore did not report the preserved private key path"
+    [[ ! -e "$restore_case/certificates/config-$restore_stamp" && ! -d "$restore_case/upload" ]] \
+      || fail "failed restore left temporary rotation files"
+    echo "runtime-certificate-rotation-test: $restore_file restore status $restore_status preserved the old pair"
+  done
+done
+
+for recovery_command in stop start; do
+  recovery_case="$test_root/recovery-$recovery_command"
+  recovery_stamp='20260905T050505Z'
+  prepare_case "$recovery_case" "$recovery_stamp"
+  actual_status=0
+  STUB_RECOVERY_SYSTEMCTL_FAILURE="$recovery_command" \
+    run_activation "$recovery_case" "$recovery_stamp" true \
+    >"$recovery_case/output.log" 2>&1 || actual_status=$?
+  [[ -f "$recovery_case/restore-failed" && "$actual_status" == 22 ]] \
+    || fail "recovery $recovery_command failure was not exercised"
+  cmp -s "$recovery_case/old-cert.pem" \
+    "$recovery_case/certificates/client-cert.pem.rollback-$recovery_stamp" \
+    || fail "recovery $recovery_command failure lost the rollback certificate"
+  cmp -s "$recovery_case/old-key.pem" \
+    "$recovery_case/certificates/client-key.pem.rollback-$recovery_stamp" \
+    || fail "recovery $recovery_command failure lost the rollback private key"
+  if [[ "$recovery_command" == stop ]]; then
+    # Do not overwrite a pair that the running service could still be using.
+    expected_pair=new
+  else
+    expected_pair=old
+  fi
+  cmp -s "$recovery_case/$expected_pair-cert.pem" "$recovery_case/certificates/client-cert.pem" \
+    || fail "recovery $recovery_command failure left the wrong active certificate"
+  cmp -s "$recovery_case/$expected_pair-key.pem" "$recovery_case/certificates/client-key.pem" \
+    || fail "recovery $recovery_command failure left the wrong active private key"
+  echo "runtime-certificate-rotation-test: recovery $recovery_command failure preserved the old pair"
+done
 
 for signal_name in HUP INT TERM; do
   case "$signal_name" in
