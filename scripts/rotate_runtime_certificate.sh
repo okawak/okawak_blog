@@ -34,7 +34,7 @@ Optional environment variables:
   OKAWAK_BLOG_VPS_SSH_PORT       SSH port (1-65535; default: SSH config)
   OKAWAK_BLOG_PKI_DIR             CA files directory
   OKAWAK_BLOG_ARTIFACT_BUCKET     S3 artifact bucket
-  OKAWAK_BLOG_CERTIFICATE_DAYS    New certificate validity in days (default: 90)
+  OKAWAK_BLOG_CERTIFICATE_DAYS    New certificate validity in days (minimum: 8; default: 90)
   OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN
                                 Subject CN matching Terraform's
                                 roles_anywhere_certificate_subject_cn
@@ -96,8 +96,9 @@ if [[ -n "$ssh_port" ]]; then
 fi
 [[ "$artifact_bucket" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] \
   || fail "invalid S3 bucket name: $artifact_bucket"
-[[ "$certificate_days" =~ ^[1-9][0-9]*$ ]] \
-  || fail "OKAWAK_BLOG_CERTIFICATE_DAYS must be a positive integer"
+# The VPS requires seven full days remaining, so reject shorter terms before issuance.
+[[ "$certificate_days" =~ ^([8-9]|[1-9][0-9]+)$ ]] \
+  || fail "OKAWAK_BLOG_CERTIFICATE_DAYS must be an integer of at least 8"
 [[ -n "$certificate_subject_cn" && ! "$certificate_subject_cn" =~ [[:cntrl:]] ]] \
   || fail "OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN must be non-empty and contain no control characters"
 # Escape OpenSSL's subject separators so the configured value remains a single CN.

@@ -288,9 +288,11 @@ OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN='custom-blog-vps' mise run rotate-runtime-cer
 
 継続して使う場合は、Git管理対象外の`mise.local.toml`の`[env]`へこの環境変数を設定できます。
 
+新しいcertificateの有効期間は既定で90日です。`OKAWAK_BLOG_CERTIFICATE_DAYS`で変更する場合は8以上の整数を指定します。VPS側では切り替え前に残存期間が7日を超えることを確認するため、1〜7日はCA serialの更新・鍵生成・転送を行う前に拒否します。
+
 taskは次を順に実行します。
 
-1. 管理端末の既存CAで90日間有効なclient private keyとcertificateを新しい日付付きfileへ発行する
+1. 管理端末の既存CAで、新しいclient private keyと既定で90日間有効なcertificateを日付付きfileへ作成する
 2. chain、用途、certificateとprivate keyの対応を検証する
 3. VPSの一時directoryへ転送し、本番とは別のAWS configとfile pathでIAM Roles Anywhere、S3 readを検証する
 4. serviceのLoadStateとActiveStateを取得し、正常に読み込まれたactive/inactiveの場合だけcertificate pairを切り替える。activeなら停止してから切り替え、serviceを再開する

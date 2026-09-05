@@ -545,10 +545,8 @@ for signal_name in HUP INT TERM; do
   done
 done
 
-test_subject_cn() {
-  local case_name="$1"
-  local expected_cn="$2"
-  local case_dir="$test_root/cn-$case_name"
+prepare_local_rotation_case() {
+  local case_dir="$1"
 
   mkdir -p "$case_dir/stubs" "$case_dir/uploaded"
   : >"$case_dir/transport.log"
@@ -586,17 +584,41 @@ cp "$1" "$STUB_UPLOADED_DIR/cert.pem"
 cp "$2" "$STUB_UPLOADED_DIR/key.pem"
 EOF
   chmod +x "$case_dir/stubs/ssh" "$case_dir/stubs/scp"
-  local actual_status=0
+}
+
+run_local_rotation() {
+  local case_dir="$1"
+
   PATH="$case_dir/stubs:$PATH" \
     OKAWAK_BLOG_PKI_DIR="$case_dir" \
     STUB_UPLOADED_DIR="$case_dir/uploaded" \
     STUB_TRANSPORT_LOG="$case_dir/transport.log" \
-    bash "$rotation_script" test-vps >"$case_dir/output.log" 2>&1 || actual_status=$?
+    bash "$rotation_script" test-vps
+}
+
+test_subject_cn() {
+  local case_name="$1"
+  local expected_cn="$2"
+  local expected_days="${3:-90}"
+  local case_dir="$test_root/cn-$case_name"
+
+  prepare_local_rotation_case "$case_dir"
+  local actual_status=0
+  run_local_rotation "$case_dir" >"$case_dir/output.log" 2>&1 || actual_status=$?
   [[ "$actual_status" == "${STUB_ROTATION_STATUS:-0}" ]] \
     || fail "$case_name rotation: unexpected exit status $actual_status"
 
   openssl verify -purpose sslclient -CAfile "$case_dir/ca-cert.pem" \
     "$case_dir/uploaded/cert.pem" >/dev/null
+  openssl x509 -checkend 604800 -noout -in "$case_dir/uploaded/cert.pem" >/dev/null \
+    || fail "$case_name certificate would fail the VPS seven-day validity check"
+  openssl x509 -checkend "$((expected_days * 86400 - 60))" -noout \
+    -in "$case_dir/uploaded/cert.pem" >/dev/null \
+    || fail "$case_name certificate expires earlier than the configured validity"
+  if openssl x509 -checkend "$((expected_days * 86400 + 60))" -noout \
+    -in "$case_dir/uploaded/cert.pem" >/dev/null; then
+    fail "$case_name certificate expires later than the configured validity"
+  fi
   local subject
   subject="$(openssl x509 -in "$case_dir/uploaded/cert.pem" \
     -noout -subject -nameopt sep_multiline,sname,utf8)"
@@ -613,7 +635,33 @@ EOF
 
 unset OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN
 unset OKAWAK_BLOG_VPS_SSH_PORT
+unset OKAWAK_BLOG_CERTIFICATE_DAYS
+
+for invalid_days in 1 2 3 4 5 6 7 0 -1 abc 1.5 +8 08 '8 days'; do
+  days_case="$test_root/invalid-days-$invalid_days"
+  prepare_local_rotation_case "$days_case"
+  cp "$days_case/ca-cert.srl" "$days_case/ca-cert.srl.before"
+  actual_status=0
+  OKAWAK_BLOG_CERTIFICATE_DAYS="$invalid_days" \
+    run_local_rotation "$days_case" >"$days_case/output.log" 2>&1 || actual_status=$?
+  [[ "$actual_status" == 1 ]] || fail "invalid certificate validity was accepted: $invalid_days"
+  grep -Fq 'OKAWAK_BLOG_CERTIFICATE_DAYS must be an integer of at least 8' "$days_case/output.log" \
+    || fail "invalid certificate validity was not rejected before issuance: $invalid_days"
+  cmp -s "$days_case/ca-cert.srl.before" "$days_case/ca-cert.srl" \
+    || fail "invalid certificate validity modified the CA serial"
+  [[ ! -s "$days_case/transport.log" && ! -d "$days_case/.certificate-rotation.lock" ]] \
+    || fail "invalid certificate validity contacted the VPS or retained a lock"
+  if compgen -G "$days_case/vps-client-*" >/dev/null; then
+    fail "invalid certificate validity created local issuance files"
+  fi
+done
+echo 'runtime-certificate-rotation-test: invalid validity rejected without issuance or transfer'
+
 test_subject_cn default okawak-blog-vps
+OKAWAK_BLOG_CERTIFICATE_DAYS='' test_subject_cn empty-days okawak-blog-vps
+OKAWAK_BLOG_CERTIFICATE_DAYS=8 test_subject_cn minimum-days okawak-blog-vps 8
+OKAWAK_BLOG_CERTIFICATE_DAYS=9 test_subject_cn nine-days okawak-blog-vps 9
+OKAWAK_BLOG_CERTIFICATE_DAYS=10 test_subject_cn custom-days okawak-blog-vps 10
 OKAWAK_BLOG_VPS_SSH_PORT=60022 STUB_EXPECTED_SSH_PORT=60022 \
   test_subject_cn ssh-port okawak-blog-vps
 OKAWAK_BLOG_VPS_SSH_PORT=2222 STUB_EXPECTED_SSH_PORT=2222 \
