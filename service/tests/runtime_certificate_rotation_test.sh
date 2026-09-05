@@ -181,6 +181,7 @@ EOF
 
 create_ca() {
   local case_dir="$1"
+  local validity_days="${2:-30}"
 
   openssl genpkey \
     -algorithm EC \
@@ -192,7 +193,7 @@ create_ca() {
     -sha256 \
     -key "$case_dir/ca-key.pem" \
     -out "$case_dir/ca-cert.pem" \
-    -days 30 \
+    -days "$validity_days" \
     -subj '/O=test/CN=test-ca' \
     -addext 'basicConstraints=critical,CA:TRUE' \
     -addext 'keyUsage=critical,keyCertSign,cRLSign' >/dev/null 2>&1
@@ -550,7 +551,7 @@ prepare_local_rotation_case() {
 
   mkdir -p "$case_dir/stubs" "$case_dir/uploaded"
   : >"$case_dir/transport.log"
-  create_ca "$case_dir"
+  create_ca "$case_dir" "${TEST_CA_DAYS:-365}"
   create_client_certificate "$case_dir" seed
   cat >"$case_dir/stubs/hostname" <<'EOF'
 #!/usr/bin/env bash
@@ -644,6 +645,55 @@ unset OKAWAK_BLOG_VPS_SSH_PORT
 unset OKAWAK_BLOG_CERTIFICATE_DAYS
 export OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST=test-management
 
+for ca_days in 6 7 89 90 invalid; do
+  ca_case="$test_root/ca-validity-$ca_days"
+  if [[ "$ca_days" == invalid ]]; then
+    prepare_local_rotation_case "$ca_case"
+    printf 'invalid CA certificate\n' >"$ca_case/ca-cert.pem"
+  else
+    TEST_CA_DAYS="$ca_days" prepare_local_rotation_case "$ca_case"
+  fi
+  cp "$ca_case/ca-cert.srl" "$ca_case/ca-cert.srl.before"
+  actual_status=0
+  run_local_rotation "$ca_case" >"$ca_case/output.log" 2>&1 || actual_status=$?
+  [[ "$actual_status" == 1 ]] || fail "$ca_days-day CA was accepted for a 90-day certificate"
+  grep -Fq 'CA certificate cannot cover the requested 90-day validity' "$ca_case/output.log" \
+    || fail 'CA validity failure did not explain the need to renew the CA'
+  cmp -s "$ca_case/ca-cert.srl.before" "$ca_case/ca-cert.srl" \
+    || fail 'CA validity failure modified the CA serial'
+  [[ ! -s "$ca_case/transport.log" && ! -d "$ca_case/.certificate-rotation.lock" ]] \
+    || fail 'CA validity failure contacted the VPS or retained a lock'
+  if compgen -G "$ca_case/vps-client-*" >/dev/null; then
+    fail 'CA validity failure created local issuance files'
+  fi
+done
+echo 'runtime-certificate-rotation-test: insufficient CA validity rejected before issuance or transfer'
+
+ca_changed_case="$test_root/ca-changed-during-issuance"
+prepare_local_rotation_case "$ca_changed_case"
+openssl x509 -in "$ca_changed_case/ca-cert.pem" -signkey "$ca_changed_case/ca-key.pem" \
+  -days 6 -out "$ca_changed_case/short-ca.pem" >/dev/null 2>&1
+cat >"$ca_changed_case/stubs/openssl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+"$STUB_REAL_OPENSSL" "$@"
+if [[ "$1" == x509 && "${2:-}" == -req ]]; then
+  cp "$STUB_SHORT_CA" "$OKAWAK_BLOG_PKI_DIR/ca-cert.pem"
+  : >"$OKAWAK_BLOG_PKI_DIR/ca-changed"
+fi
+EOF
+chmod +x "$ca_changed_case/stubs/openssl"
+actual_status=0
+STUB_REAL_OPENSSL="$(command -v openssl)" STUB_SHORT_CA="$ca_changed_case/short-ca.pem" \
+  run_local_rotation "$ca_changed_case" >"$ca_changed_case/output.log" 2>&1 || actual_status=$?
+[[ "$actual_status" == 1 && -f "$ca_changed_case/ca-changed" ]] \
+  || fail 'CA validity was not checked again after issuance'
+grep -Fq 'CA certificate cannot cover the requested 90-day validity' "$ca_changed_case/output.log" \
+  || fail 'post-issuance CA check did not explain the failure'
+[[ ! -s "$ca_changed_case/transport.log" && ! -d "$ca_changed_case/.certificate-rotation.lock" ]] \
+  || fail 'post-issuance CA validity failure contacted the VPS or retained a lock'
+echo 'runtime-certificate-rotation-test: post-issuance CA check prevents transfer'
+
 for guard_case in unregistered empty-registration wrong-host empty-hostname hostname-failure invalid-registration; do
   host_case="$test_root/host-$guard_case"
   prepare_local_rotation_case "$host_case"
@@ -682,7 +732,7 @@ env -u OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST PATH="$help_case/stubs:$PATH" STUB_HO
 grep -Fq 'Usage: mise run rotate-runtime-certificate' "$help_case/output.log" \
   || fail 'help did not display usage'
 
-for invalid_days in 1 2 3 4 5 6 7 0 -1 abc 1.5 +8 08 '8 days'; do
+for invalid_days in 1 2 3 4 5 6 7 0 -1 abc 1.5 +8 08 '8 days' 2147483648 99999999999999999999; do
   days_case="$test_root/invalid-days-$invalid_days"
   prepare_local_rotation_case "$days_case"
   cp "$days_case/ca-cert.srl" "$days_case/ca-cert.srl.before"
@@ -703,6 +753,8 @@ done
 echo 'runtime-certificate-rotation-test: invalid validity rejected without issuance or transfer'
 
 test_subject_cn default okawak-blog-vps
+TEST_CA_DAYS=91 test_subject_cn ca-covers-default okawak-blog-vps
+TEST_CA_DAYS=9 OKAWAK_BLOG_CERTIFICATE_DAYS=8 test_subject_cn ca-covers-minimum okawak-blog-vps 8
 OKAWAK_BLOG_CERTIFICATE_DAYS='' test_subject_cn empty-days okawak-blog-vps
 OKAWAK_BLOG_CERTIFICATE_DAYS=8 test_subject_cn minimum-days okawak-blog-vps 8
 OKAWAK_BLOG_CERTIFICATE_DAYS=9 test_subject_cn nine-days okawak-blog-vps 9

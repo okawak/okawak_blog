@@ -41,6 +41,7 @@ Optional environment variables:
   OKAWAK_BLOG_PKI_DIR             CA files directory
   OKAWAK_BLOG_ARTIFACT_BUCKET     S3 artifact bucket
   OKAWAK_BLOG_CERTIFICATE_DAYS    New certificate validity in days (minimum: 8; default: 90)
+                                Must fit OpenSSL's signed 32-bit integer range
   OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN
                                 Subject CN matching Terraform's
                                 roles_anywhere_certificate_subject_cn
@@ -51,6 +52,11 @@ EOF
 fail() {
   echo "certificate-rotation: $*" >&2
   exit 1
+}
+
+check_ca_validity() {
+  openssl x509 -in "$ca_certificate" -checkend "$certificate_validity_seconds" -noout \
+    || fail "CA certificate cannot cover the requested $certificate_days-day validity; renew the CA and AWS Trust Anchor before retrying"
 }
 
 run_ssh() {
@@ -102,9 +108,12 @@ if [[ -n "$ssh_port" ]]; then
 fi
 [[ "$artifact_bucket" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] \
   || fail "invalid S3 bucket name: $artifact_bucket"
+# Bound the OpenSSL -days integer before converting it to seconds in Bash arithmetic.
 # The VPS requires seven full days remaining, so reject shorter terms before issuance.
-[[ "$certificate_days" =~ ^([8-9]|[1-9][0-9]+)$ ]] \
-  || fail "OKAWAK_BLOG_CERTIFICATE_DAYS must be an integer of at least 8"
+if [[ ! "$certificate_days" =~ ^([8-9]|[1-9][0-9]{1,9})$ ]] || ((certificate_days > 2147483647)); then
+  fail "OKAWAK_BLOG_CERTIFICATE_DAYS must be an integer of at least 8 and no more than 2147483647"
+fi
+certificate_validity_seconds=$((certificate_days * 86400))
 [[ -n "$certificate_subject_cn" && ! "$certificate_subject_cn" =~ [[:cntrl:]] ]] \
   || fail "OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN must be non-empty and contain no control characters"
 # Escape OpenSSL's subject separators so the configured value remains a single CN.
@@ -129,6 +138,10 @@ done
 for required_file in "$ca_certificate" "$ca_private_key" "$ca_serial"; do
   [[ -f "$required_file" ]] || fail "required CA file is missing: $required_file"
 done
+
+check_ca_validity
+openssl verify -check_ss_sig -CAfile "$ca_certificate" "$ca_certificate" \
+  || fail "CA certificate is not currently valid"
 
 for output_file in "$client_private_key" "$client_request" "$client_certificate"; do
   [[ ! -e "$output_file" ]] || fail "refusing to overwrite existing file: $output_file"
@@ -172,6 +185,8 @@ openssl x509 \
     'subjectKeyIdentifier=hash' \
     'authorityKeyIdentifier=keyid,issuer')
 
+# Issuance may have waited for a key passphrase; ensure the CA still covers the leaf.
+check_ca_validity
 openssl verify \
   -purpose sslclient \
   -CAfile "$ca_certificate" \

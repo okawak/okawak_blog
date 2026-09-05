@@ -264,6 +264,16 @@ openssl x509 \
   -noout -subject -issuer -serial -dates
 ```
 
+CAの期限も管理端末で確認します。client certificateに残存期間があっても、CAが先に期限切れになると認証を継続できません。次は既定の90日更新に必要な残存期間を確認する例です。有効期間を変更している場合は、その日数を秒に換算した値で確認します。
+
+```bash
+PKI_DIR="${OKAWAK_BLOG_PKI_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki}"
+openssl x509 -in "$PKI_DIR/ca-cert.pem" -noout -subject -issuer -dates
+openssl x509 -checkend 7776000 -noout -in "$PKI_DIR/ca-cert.pem"
+```
+
+CAの期限確認も日次監視・外部通知の対象にします。残存期間が不足している場合は、CAとAWS側のTrust Anchorの更新を別途計画し、期限内に完了させます。このtaskはCAやTrust Anchorを更新しません。CA秘密鍵をVPSへ移動したり、確認を無効化したりして回避しないでください。
+
 ## Client certificate更新
 
 初回のみ、管理端末で`hostname`の出力を確認し、repository rootのGit管理対象外の`mise.local.toml`へその値を固定文字列として登録します。既存の`[env]`がある場合はそのsectionに追記します。
@@ -300,6 +310,8 @@ OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN='custom-blog-vps' mise run rotate-runtime-cer
 継続して使う場合は、Git管理対象外の`mise.local.toml`の`[env]`へこの環境変数を設定できます。
 
 新しいcertificateの有効期間は既定で90日です。`OKAWAK_BLOG_CERTIFICATE_DAYS`で変更する場合は8以上の整数を指定します。VPS側では切り替え前に残存期間が7日を超えることを確認するため、1〜7日はCA serialの更新・鍵生成・転送を行う前に拒否します。
+
+CA自身が指定した有効期間全体をカバーできることも、鍵生成・serial更新の前に検証します。発行に時間がかかって境界を越えた場合を考慮し、発行後にも同じ検証を行い、CAが先に期限切れになるペアは転送しません。有効期間はOpenSSLの`-days`が受け取れる符号付き32-bit整数の範囲に制限し、秒への換算でoverflowする入力も発行前に拒否します。
 
 taskは次を順に実行します。
 
