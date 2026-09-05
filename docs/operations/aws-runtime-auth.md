@@ -266,11 +266,22 @@ openssl x509 \
 
 ## Client certificate更新
 
+初回のみ、管理端末で`hostname`の出力を確認し、repository rootのGit管理対象外の`mise.local.toml`へその値を固定文字列として登録します。既存の`[env]`がある場合はそのsectionに追記します。
+
+```toml
+[env]
+OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST = "管理端末のhostnameの出力"
+```
+
+taskは登録したhostnameと実行端末のhostnameが完全一致する場合だけ実行できます。未設定・空文字・不一致・hostname取得失敗の場合は、CA fileの確認・鍵生成・serial更新・SSH/SCP接続より前に停止します。`--help`は未登録の端末でも表示できます。管理端末のhostnameを変更した場合は登録値も更新します。登録値を実行のたびに自動取得する設定にはせず、VPSのhostnameを登録しないでください。この確認は誤操作防止用であり、hostnameや設定を書き換えられる利用者に対する認証・アクセス制御ではありません。
+
 通常の更新は管理端末のrepository rootから次のtaskを実行します。SSH configの`oci`をVPS接続先として使い、必要な`sudo` passwordは実行中に入力します。
 
 ```bash
 mise run rotate-runtime-certificate
 ```
+
+この制限は管理端末側の発行taskだけに適用します。VPS側の切り替えscriptはtaskからSSH経由で自動実行するため、VPSでこのmise taskを手動実行したり、管理端末の登録設定を用意したりする必要はありません。
 
 別のSSH targetを使う場合は引数で指定します。SSH configにPortが設定されていない接続先では、通常運用の60022番を環境変数で指定します。
 

@@ -205,7 +205,7 @@ echo "quick-deploy completed"
 '''
 
 [tasks.rotate-runtime-certificate]
-description = "Rotate the production IAM Roles Anywhere client certificate"
+description = "Rotate the production IAM Roles Anywhere client certificate from the registered management host"
 run = "bash scripts/rotate_runtime_certificate.sh"
 
 [tasks.ci-flow]

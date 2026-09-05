@@ -9,6 +9,7 @@ pki_dir="${OKAWAK_BLOG_PKI_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-bl
 artifact_bucket="${OKAWAK_BLOG_ARTIFACT_BUCKET:-okawak-blog-resources-bucket}"
 certificate_days="${OKAWAK_BLOG_CERTIFICATE_DAYS:-90}"
 certificate_subject_cn="${OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN-okawak-blog-vps}"
+issuer_host="${OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST:-}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 
 ca_certificate="$pki_dir/ca-cert.pem"
@@ -28,7 +29,12 @@ usage() {
 Usage: mise run rotate-runtime-certificate [SSH_TARGET]
 
 Rotate the IAM Roles Anywhere client certificate used by the production VPS.
+Run this task only on the registered management host; VPS activation runs over SSH.
 SSH_TARGET defaults to OKAWAK_BLOG_VPS_SSH_TARGET, or to the SSH alias "oci".
+
+Required environment variable (configure once in mise.local.toml):
+  OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST
+                                Literal hostname of the management host
 
 Optional environment variables:
   OKAWAK_BLOG_VPS_SSH_PORT       SSH port (1-65535; default: SSH config)
@@ -106,6 +112,14 @@ escaped_subject_cn="${certificate_subject_cn//\\/\\\\}"
 escaped_subject_cn="${escaped_subject_cn//\//\\/}"
 escaped_subject_cn="${escaped_subject_cn//+/\\+}"
 certificate_subject="/O=okawak/CN=$escaped_subject_cn"
+
+# Fail closed before accessing the CA or contacting the VPS, even if CA files were copied.
+[[ "$issuer_host" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
+  || fail "management-host guard: set OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST to the management host's literal hostname in mise.local.toml"
+current_hostname="$(hostname)" \
+  || fail "management-host guard: could not determine the current hostname"
+[[ "$current_hostname" == "$issuer_host" ]] \
+  || fail "management-host guard: run this task on '$issuer_host', not '$current_hostname'; VPS activation is performed automatically over SSH"
 
 for command_name in openssl scp ssh; do
   command -v "$command_name" >/dev/null \

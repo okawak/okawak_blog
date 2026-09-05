@@ -552,6 +552,12 @@ prepare_local_rotation_case() {
   : >"$case_dir/transport.log"
   create_ca "$case_dir"
   create_client_certificate "$case_dir" seed
+  cat >"$case_dir/stubs/hostname" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "${STUB_HOSTNAME-test-management}"
+exit "${STUB_HOSTNAME_STATUS:-0}"
+EOF
   cat >"$case_dir/stubs/ssh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -583,7 +589,7 @@ printf 'scp %s\n' "$port" >>"$STUB_TRANSPORT_LOG"
 cp "$1" "$STUB_UPLOADED_DIR/cert.pem"
 cp "$2" "$STUB_UPLOADED_DIR/key.pem"
 EOF
-  chmod +x "$case_dir/stubs/ssh" "$case_dir/stubs/scp"
+  chmod +x "$case_dir/stubs/hostname" "$case_dir/stubs/ssh" "$case_dir/stubs/scp"
 }
 
 run_local_rotation() {
@@ -636,6 +642,45 @@ test_subject_cn() {
 unset OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN
 unset OKAWAK_BLOG_VPS_SSH_PORT
 unset OKAWAK_BLOG_CERTIFICATE_DAYS
+export OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST=test-management
+
+for guard_case in unregistered empty-registration wrong-host empty-hostname hostname-failure invalid-registration; do
+  host_case="$test_root/host-$guard_case"
+  prepare_local_rotation_case "$host_case"
+  cp "$host_case/ca-cert.srl" "$host_case/ca-cert.srl.before"
+  actual_status=0
+  (
+    case "$guard_case" in
+      unregistered) unset OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST ;;
+      empty-registration) export OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST='' ;;
+      wrong-host) export STUB_HOSTNAME=test-vps ;;
+      empty-hostname) export STUB_HOSTNAME='' ;;
+      # Even plausible output must not be accepted after a failed hostname query.
+      hostname-failure) export STUB_HOSTNAME_STATUS=42 ;;
+      invalid-registration) export OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST='not a hostname' ;;
+    esac
+    run_local_rotation "$host_case"
+  ) >"$host_case/output.log" 2>&1 || actual_status=$?
+  [[ "$actual_status" == 1 ]] || fail "$guard_case management-host guard did not reject execution"
+  grep -Fq 'certificate-rotation: management-host guard:' "$host_case/output.log" \
+    || fail "$guard_case did not explain the management-host restriction"
+  cmp -s "$host_case/ca-cert.srl.before" "$host_case/ca-cert.srl" \
+    || fail "$guard_case modified the CA serial"
+  [[ ! -s "$host_case/transport.log" && ! -d "$host_case/.certificate-rotation.lock" ]] \
+    || fail "$guard_case contacted the VPS or retained a lock"
+  if compgen -G "$host_case/vps-client-*" >/dev/null; then
+    fail "$guard_case created local issuance files"
+  fi
+done
+echo 'runtime-certificate-rotation-test: management-host guard rejects before issuance or transfer'
+
+help_case="$test_root/host-help"
+prepare_local_rotation_case "$help_case"
+env -u OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST PATH="$help_case/stubs:$PATH" STUB_HOSTNAME=test-vps \
+  bash "$rotation_script" --help >"$help_case/output.log" 2>&1 \
+  || fail 'help was blocked on an unregistered host'
+grep -Fq 'Usage: mise run rotate-runtime-certificate' "$help_case/output.log" \
+  || fail 'help did not display usage'
 
 for invalid_days in 1 2 3 4 5 6 7 0 -1 abc 1.5 +8 08 '8 days'; do
   days_case="$test_root/invalid-days-$invalid_days"
