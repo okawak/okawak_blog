@@ -7,7 +7,7 @@ ssh_target="${1:-${OKAWAK_BLOG_VPS_SSH_TARGET:-oci}}"
 pki_dir="${OKAWAK_BLOG_PKI_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki}"
 artifact_bucket="${OKAWAK_BLOG_ARTIFACT_BUCKET:-okawak-blog-resources-bucket}"
 certificate_days="${OKAWAK_BLOG_CERTIFICATE_DAYS:-90}"
-certificate_subject='/O=okawak/CN=okawak-blog-vps'
+certificate_subject_cn="${OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN-okawak-blog-vps}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 
 ca_certificate="$pki_dir/ca-cert.pem"
@@ -33,6 +33,10 @@ Optional environment variables:
   OKAWAK_BLOG_PKI_DIR             CA files directory
   OKAWAK_BLOG_ARTIFACT_BUCKET     S3 artifact bucket
   OKAWAK_BLOG_CERTIFICATE_DAYS    New certificate validity in days (default: 90)
+  OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN
+                                Subject CN matching Terraform's
+                                roles_anywhere_certificate_subject_cn
+                                (default: okawak-blog-vps)
 EOF
 }
 
@@ -44,6 +48,8 @@ fail() {
 cleanup_remote_upload() {
   local status="$?"
 
+  trap - EXIT
+  trap '' HUP INT TERM
   if [[ "$remote_upload_created" == true ]]; then
     # The remote paths are intentionally expanded locally from the validated stamp.
     # shellcheck disable=SC2029
@@ -69,6 +75,13 @@ fi
   || fail "invalid S3 bucket name: $artifact_bucket"
 [[ "$certificate_days" =~ ^[1-9][0-9]*$ ]] \
   || fail "OKAWAK_BLOG_CERTIFICATE_DAYS must be a positive integer"
+[[ -n "$certificate_subject_cn" && ! "$certificate_subject_cn" =~ [[:cntrl:]] ]] \
+  || fail "OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN must be non-empty and contain no control characters"
+# Escape OpenSSL's subject separators so the configured value remains a single CN.
+escaped_subject_cn="${certificate_subject_cn//\\/\\\\}"
+escaped_subject_cn="${escaped_subject_cn//\//\\/}"
+escaped_subject_cn="${escaped_subject_cn//+/\\+}"
+certificate_subject="/O=okawak/CN=$escaped_subject_cn"
 
 for command_name in openssl scp ssh; do
   command -v "$command_name" >/dev/null \
@@ -87,6 +100,9 @@ mkdir "$rotation_lock" \
   || fail "another certificate rotation may be running: $rotation_lock"
 rotation_lock_created=true
 trap cleanup_remote_upload EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 umask 077
 
 echo "certificate-rotation: generating a new $certificate_days-day client certificate"
@@ -97,6 +113,7 @@ openssl genpkey \
 
 openssl req \
   -new \
+  -utf8 \
   -key "$client_private_key" \
   -out "$client_request" \
   -subj "$certificate_subject"
@@ -155,7 +172,7 @@ ssh -tt "$ssh_target" \
 remote_upload_created=false
 rmdir "$rotation_lock"
 rotation_lock_created=false
-trap - EXIT
+trap - EXIT HUP INT TERM
 
 echo "certificate-rotation: completed successfully"
 echo "certificate-rotation: retained the new certificate and private key in $pki_dir"

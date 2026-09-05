@@ -54,6 +54,8 @@ restore_previous_certificate() {
   local line="$2"
 
   trap - ERR
+  # A second Ctrl-C or SSH hangup must not interrupt the recovery commands.
+  trap '' HUP INT TERM
   set +e
   echo "certificate-activation: failed at line $line; restoring the previous certificate" >&2
 
@@ -129,6 +131,9 @@ done
 
 sudo -v
 trap 'restore_previous_certificate $? $LINENO' ERR
+trap 'restore_previous_certificate 129 $LINENO' HUP
+trap 'restore_previous_certificate 130 $LINENO' INT
+trap 'restore_previous_certificate 143 $LINENO' TERM
 
 private_key_digest="$(
   openssl pkey -in "$source_private_key" -pubout -outform DER 2>/dev/null |
@@ -191,7 +196,7 @@ if [[ "$service_was_active" == true ]]; then
   curl --fail --silent --show-error --output /dev/null "$local_ready_url"
 fi
 
-trap - ERR
+trap - ERR HUP INT TERM
 sudo rm -f "$rollback_certificate" "$rollback_private_key"
 cleanup_candidates
 cleanup_uploaded_files

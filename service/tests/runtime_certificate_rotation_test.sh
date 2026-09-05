@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 activation_script="$repo_root/scripts/activate_runtime_certificate.sh"
+rotation_script="$repo_root/scripts/rotate_runtime_certificate.sh"
 test_root="$(mktemp -d)"
 trap 'rm -rf -- "$test_root"' EXIT
 
@@ -16,6 +17,22 @@ write_command_stubs() {
   local stub_dir="$1"
 
   mkdir -p "$stub_dir"
+  cat >"$stub_dir/signal-helper.sh" <<'EOF'
+signal_activation() {
+  if [[ "$1" == service-stopped && -e "${STUB_SIGNAL_SENT:-}" ]]; then
+    # Exercise repeated signals while the rollback is already running.
+    : >"$STUB_SIGNAL_SENT.repeated"
+    kill -s HUP "$PPID"
+    kill -s INT "$PPID"
+    kill -s TERM "$PPID"
+    return 0
+  fi
+  [[ "${STUB_SIGNAL_POINT:-}" == "$1" ]] || return 0
+  [[ ! -e "$STUB_SIGNAL_SENT" ]] || return 0
+  : >"$STUB_SIGNAL_SENT"
+  kill -s "$STUB_SIGNAL" "$PPID"
+}
+EOF
   cat >"$stub_dir/sudo" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -43,6 +60,11 @@ while (($# > 0)); do
   esac
 done
 /usr/bin/install "${args[@]}"
+# shellcheck source=/dev/null
+source "$(dirname "$0")/signal-helper.sh"
+if [[ "${args[${#args[@]}-1]}" == "$CERTIFICATE_DIR/client-cert.pem" ]]; then
+  signal_activation certificate-installed
+fi
 EOF
   cat >"$stub_dir/chown" <<'EOF'
 #!/usr/bin/env bash
@@ -71,6 +93,11 @@ if [[ "$1" == "is-active" ]]; then
   exit
 fi
 printf '%s\n' "$*" >>"$STUB_SYSTEMCTL_LOG"
+# shellcheck source=/dev/null
+source "$(dirname "$0")/signal-helper.sh"
+if [[ "$1" == "stop" ]]; then
+  signal_activation service-stopped
+fi
 EOF
   cat >"$stub_dir/aws" <<'EOF'
 #!/usr/bin/env bash
@@ -86,6 +113,9 @@ fi
 EOF
   cat >"$stub_dir/curl" <<'EOF'
 #!/usr/bin/env bash
+# shellcheck source=/dev/null
+source "$(dirname "$0")/signal-helper.sh"
+signal_activation probes
 if [[ "${STUB_CURL_FAIL:-false}" == "true" ]]; then
   exit 22
 fi
@@ -108,7 +138,9 @@ create_ca() {
     -key "$case_dir/ca-key.pem" \
     -out "$case_dir/ca-cert.pem" \
     -days 30 \
-    -subj '/O=test/CN=test-ca' >/dev/null 2>&1
+    -subj '/O=test/CN=test-ca' \
+    -addext 'basicConstraints=critical,CA:TRUE' \
+    -addext 'keyUsage=critical,keyCertSign,cRLSign' >/dev/null 2>&1
 }
 
 create_client_certificate() {
@@ -174,6 +206,7 @@ run_activation() {
     SERVICE_GROUP="$(id -gn)" \
     STUB_SERVICE_ACTIVE=true \
     STUB_CURL_FAIL="$curl_fail" \
+    STUB_SIGNAL_SENT="$case_dir/signal-sent" \
     STUB_SYSTEMCTL_LOG="$case_dir/systemctl.log" \
     bash "$activation_script"
 }
@@ -203,5 +236,103 @@ cmp -s "$rollback_case/old-key.pem" "$rollback_case/certificates/client-key.pem"
   || fail "probe failure did not restore the old private key"
 grep -qx 'start okawak_blog.service' "$rollback_case/systemctl.log" \
   || fail "probe failure did not restart the previously active service"
+
+for signal_name in HUP INT TERM; do
+  case "$signal_name" in
+    HUP) expected_status=129 ;;
+    INT) expected_status=130 ;;
+    TERM) expected_status=143 ;;
+  esac
+  for signal_point in service-stopped certificate-installed probes; do
+    signal_case="$test_root/signal-$signal_name-$signal_point"
+    signal_stamp='20260905T030303Z'
+    prepare_case "$signal_case" "$signal_stamp"
+    actual_status=0
+    STUB_SIGNAL="$signal_name" STUB_SIGNAL_POINT="$signal_point" \
+      run_activation "$signal_case" "$signal_stamp" false \
+      >"$signal_case/output.log" 2>&1 || actual_status=$?
+    [[ -f "$signal_case/signal-sent" ]] || fail "$signal_name was not sent at $signal_point"
+    [[ -f "$signal_case/signal-sent.repeated" ]] || fail "rollback did not receive repeated signals"
+    [[ "$actual_status" == "$expected_status" ]] \
+      || fail "$signal_name at $signal_point: expected status $expected_status, got $actual_status"
+    cmp -s "$signal_case/old-cert.pem" "$signal_case/certificates/client-cert.pem" \
+      || fail "$signal_name at $signal_point did not restore the old certificate"
+    cmp -s "$signal_case/old-key.pem" "$signal_case/certificates/client-key.pem" \
+      || fail "$signal_name at $signal_point did not restore the old private key"
+    [[ "$(tail -n 1 "$signal_case/systemctl.log")" == 'start okawak_blog.service' ]] \
+      || fail "$signal_name at $signal_point left the service stopped"
+    [[ ! -e "$signal_case/certificates/config-$signal_stamp" && ! -d "$signal_case/upload" ]] \
+      || fail "$signal_name at $signal_point left temporary rotation files"
+    echo "runtime-certificate-rotation-test: $signal_name at $signal_point restored the old pair and service"
+  done
+done
+
+test_subject_cn() {
+  local case_name="$1"
+  local expected_cn="$2"
+  local case_dir="$test_root/cn-$case_name"
+
+  mkdir -p "$case_dir/stubs" "$case_dir/uploaded"
+  create_ca "$case_dir"
+  create_client_certificate "$case_dir" seed
+  cat >"$case_dir/stubs/ssh" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == '-tt' && -n "${STUB_LOCAL_SIGNAL:-}" ]]; then
+  kill -s "$STUB_LOCAL_SIGNAL" "$PPID"
+fi
+exit 0
+EOF
+  cat >"$case_dir/stubs/scp" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cp "$1" "$STUB_UPLOADED_DIR/cert.pem"
+cp "$2" "$STUB_UPLOADED_DIR/key.pem"
+EOF
+  chmod +x "$case_dir/stubs/ssh" "$case_dir/stubs/scp"
+  local actual_status=0
+  PATH="$case_dir/stubs:$PATH" \
+    OKAWAK_BLOG_PKI_DIR="$case_dir" \
+    STUB_UPLOADED_DIR="$case_dir/uploaded" \
+    bash "$rotation_script" test-vps >"$case_dir/output.log" 2>&1 || actual_status=$?
+  [[ "$actual_status" == "${STUB_ROTATION_STATUS:-0}" ]] \
+    || fail "$case_name rotation: unexpected exit status $actual_status"
+
+  openssl verify -purpose sslclient -CAfile "$case_dir/ca-cert.pem" \
+    "$case_dir/uploaded/cert.pem" >/dev/null
+  local subject
+  subject="$(openssl x509 -in "$case_dir/uploaded/cert.pem" \
+    -noout -subject -nameopt sep_multiline,sname,utf8)"
+  [[ "$(printf '%s\n' "$subject" | sed -n 's/^ *CN=//p')" == "$expected_cn" ]] \
+    || fail "issued certificate CN does not match $expected_cn: $subject"
+  [[ ! -d "$case_dir/.certificate-rotation.lock" ]] || fail "rotation lock was retained"
+  echo "runtime-certificate-rotation-test: $case_name CN matches the issued certificate"
+}
+
+unset OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN
+test_subject_cn default okawak-blog-vps
+OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN=custom-blog-vps \
+  test_subject_cn custom custom-blog-vps
+OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN='blue/team+CN=unexpected\node' \
+  test_subject_cn escaped 'blue/team+CN=unexpected\node'
+
+for signal_name in HUP INT TERM; do
+  case "$signal_name" in
+    HUP) expected_status=129 ;;
+    INT) expected_status=130 ;;
+    TERM) expected_status=143 ;;
+  esac
+  STUB_LOCAL_SIGNAL="$signal_name" STUB_ROTATION_STATUS="$expected_status" \
+    test_subject_cn "local-signal-$signal_name" okawak-blog-vps
+done
+
+for invalid_cn in '' $'blog\nCN=injected'; do
+  if OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN="$invalid_cn" \
+    OKAWAK_BLOG_PKI_DIR="$test_root/not-created" \
+    bash "$rotation_script" test-vps >"$test_root/invalid-cn.log" 2>&1; then
+    fail "empty or multiline CN was accepted"
+  fi
+  grep -q 'OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN must be' "$test_root/invalid-cn.log" \
+    || fail "invalid CN was not rejected before accessing the CA"
+done
 
 echo "runtime-certificate-rotation-test: all cases passed"

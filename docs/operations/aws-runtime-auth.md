@@ -278,16 +278,26 @@ mise run rotate-runtime-certificate
 mise run rotate-runtime-certificate -- '<USER>@<RESERVED_PUBLIC_IP>'
 ```
 
+Terraformの`roles_anywhere_certificate_subject_cn`を既定値の`okawak-blog-vps`から変更している場合は、同じ値を`OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN`へ設定します。
+
+```bash
+OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN='custom-blog-vps' mise run rotate-runtime-certificate
+```
+
+継続して使う場合は、Git管理対象外の`mise.local.toml`の`[env]`へこの環境変数を設定できます。
+
 taskは次を順に実行します。
 
 1. 管理端末の既存CAで90日間有効なclient private keyとcertificateを新しい日付付きfileへ発行する
 2. chain、用途、certificateとprivate keyの対応を検証する
 3. VPSの一時directoryへ転送し、本番とは別のAWS configとfile pathでIAM Roles Anywhere、S3 readを検証する
 4. serviceが起動中なら停止してcertificate pairを切り替え、serviceを再開する
-5. IAM Roles Anywhere、S3 read、health、readinessを再検証し、失敗時は旧certificate pairへ戻す
+5. IAM Roles Anywhere、S3 read、health、readinessを再検証し、失敗時や検証完了前のHUP・INT・TERM受信時は旧certificate pairへ戻し、元々稼働していたserviceを再開する
 6. 成功後にVPS上の一時fileとrollback fileを削除し、新しいcertificate pairは管理端末のPKI directoryへ維持する
 
 taskはTerraformを変更・適用しません。既定値を変更する場合は`mise run rotate-runtime-certificate -- --help`で環境変数を確認します。
+
+復旧中の追加のHUP・INT・TERMは無視し、復旧処理を継続します。SIGKILLやVPSの電源断は捕捉できないため、その場合は残ったrollback fileとserviceの状態を確認して手動で復旧します。
 
 ### 手動更新
 
