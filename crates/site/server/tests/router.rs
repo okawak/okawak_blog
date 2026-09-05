@@ -521,6 +521,10 @@ async fn home_shell_exposes_topcoat_mobile_navigation_contract() {
             .body
             .contains("aria-label=\"Open okawak GitHub profile\"")
     );
+    assert!(!response.body.contains("font-awesome"));
+    assert!(!response.body.contains("fa-github"));
+    assert!(response.body.contains("<svg"));
+    assert!(response.body.contains("Noto+Sans+JP:wght@400..700"));
 }
 
 #[tokio::test]

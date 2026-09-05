@@ -4,11 +4,13 @@ use chrono::Datelike;
 use topcoat::{
     Result,
     context::Cx,
+    icon::icon,
     router::{StatusCode, href},
     view::{Child, Unescaped, View, component, view},
 };
 
 use crate::assets::{FAVICON, STYLESHEET};
+use crate::icons::GITHUB;
 
 const NOT_FOUND_TITLE: &str = "ページが見つかりません";
 const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
@@ -209,14 +211,14 @@ window.okawakScheduleCodeHighlight = function(root) {
                 <meta property="og:type" content=(og_type)>
                 <link rel="stylesheet" href=(STYLESHEET)>
                 <link
+                    rel="stylesheet"
+                    href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400..700&display=swap"
+                >
+                <link
                     rel="icon"
                     href=(FAVICON)
                     type="image/x-icon"
                     sizes="16x16 32x32 48x48"
-                >
-                <link
-                    rel="stylesheet"
-                    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
                 >
                 <link
                     rel="stylesheet"
@@ -361,7 +363,7 @@ window.okawakScheduleCodeHighlight = function(root) {
                                         rel="noopener noreferrer"
                                         target="_blank"
                                     >
-                                        <i class="fab fa-github text-xl" aria-hidden="true"></i>
+                                        icon(data: GITHUB, size: 20)
                                     </a>
                                 </div>
                             </nav>
