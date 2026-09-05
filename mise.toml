@@ -204,6 +204,10 @@ bash scripts/activate_staged_deployment.sh
 echo "quick-deploy completed"
 '''
 
+[tasks.rotate-runtime-certificate]
+description = "Rotate the production IAM Roles Anywhere client certificate"
+run = "bash scripts/rotate_runtime_certificate.sh"
+
 [tasks.ci-flow]
 description = "Run the CI-oriented local flow"
 depends = ["check-deps", "format", "build-project"]
@@ -214,10 +218,11 @@ description = "Run tests for all workspace crates"
 run = "cargo test --workspace"
 
 [tasks.test-service]
-description = "Validate systemd units and staged deployment rollback"
+description = "Validate systemd units, deployment rollback, and certificate rotation"
 run = '''
 bash service/tests/systemd_units_test.sh
 bash service/tests/staged_deployment_test.sh
+bash service/tests/runtime_certificate_rotation_test.sh
 '''
 
 [tasks.test-domain]

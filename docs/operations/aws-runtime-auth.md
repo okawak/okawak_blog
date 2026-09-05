@@ -266,7 +266,32 @@ openssl x509 \
 
 ## Client certificate更新
 
-管理端末で既存CAを使用し、更新ごとに新しいclient private keyとcertificateを別名で作成します。Subject CNはTerraformの`roles_anywhere_certificate_subject_cn`と一致させます。
+通常の更新は管理端末のrepository rootから次のtaskを実行します。SSH configの`oci`をVPS接続先として使い、必要な`sudo` passwordは実行中に入力します。
+
+```bash
+mise run rotate-runtime-certificate
+```
+
+別のSSH targetを使う場合は引数で指定します。
+
+```bash
+mise run rotate-runtime-certificate -- '<USER>@<RESERVED_PUBLIC_IP>'
+```
+
+taskは次を順に実行します。
+
+1. 管理端末の既存CAで90日間有効なclient private keyとcertificateを新しい日付付きfileへ発行する
+2. chain、用途、certificateとprivate keyの対応を検証する
+3. VPSの一時directoryへ転送し、本番とは別のAWS configとfile pathでIAM Roles Anywhere、S3 readを検証する
+4. serviceが起動中なら停止してcertificate pairを切り替え、serviceを再開する
+5. IAM Roles Anywhere、S3 read、health、readinessを再検証し、失敗時は旧certificate pairへ戻す
+6. 成功後にVPS上の一時fileとrollback fileを削除し、新しいcertificate pairは管理端末のPKI directoryへ維持する
+
+taskはTerraformを変更・適用しません。既定値を変更する場合は`mise run rotate-runtime-certificate -- --help`で環境変数を確認します。
+
+### 手動更新
+
+taskを使用できない場合は、管理端末で既存CAを使用し、更新ごとに新しいclient private keyとcertificateを別名で作成します。Subject CNはTerraformの`roles_anywhere_certificate_subject_cn`と一致させます。
 
 ```bash
 export PKI_DIR="${HOME}/.local/share/okawak-blog-pki"

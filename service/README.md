@@ -52,7 +52,7 @@ AWS_EC2_METADATA_DISABLED=true
 
 `ProtectHome=true`を維持するため、serviceは`~/.aws`へ依存しません。AWS SDKはhelperから期限付きrole credentialを取得し、期限前に再取得します。temporary credentialをfileへ書くtimerやapplication独自のrefresh処理は導入しません。
 
-helper、certificate、private key、AWS configの配置と検証はruntime認証runbookに従います。productionでは`AWS_SHARED_CREDENTIALS_FILE`を指定せず、`/var/lib/okawak_blog/aws/credentials`やhome配下のlong-lived access keyへfallbackしません。
+helper、certificate、private key、AWS configの配置と検証はruntime認証runbookに従います。定期的なclient certificate更新は管理端末から`mise run rotate-runtime-certificate`を実行します。productionでは`AWS_SHARED_CREDENTIALS_FILE`を指定せず、`/var/lib/okawak_blog/aws/credentials`やhome配下のlong-lived access keyへfallbackしません。
 
 ## Runtime probes
 
