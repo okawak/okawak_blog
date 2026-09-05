@@ -264,9 +264,77 @@ openssl x509 \
   -noout -subject -issuer -serial -dates
 ```
 
+CAの期限も管理端末で確認します。client certificateに残存期間があっても、CAが先に期限切れになると認証を継続できません。次は既定の90日更新に必要な残存期間を確認する例です。有効期間を変更している場合は、その日数を秒に換算した値で確認します。
+
+```bash
+PKI_DIR="${OKAWAK_BLOG_PKI_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki}"
+openssl x509 -in "$PKI_DIR/ca-cert.pem" -noout -subject -issuer -dates
+openssl x509 -checkend 7776000 -noout -in "$PKI_DIR/ca-cert.pem"
+```
+
+CAの期限確認も日次監視・外部通知の対象にします。残存期間が不足している場合は、CAとAWS側のTrust Anchorの更新を別途計画し、期限内に完了させます。このtaskはCAやTrust Anchorを更新しません。CA秘密鍵をVPSへ移動したり、確認を無効化したりして回避しないでください。
+
 ## Client certificate更新
 
-管理端末で既存CAを使用し、更新ごとに新しいclient private keyとcertificateを別名で作成します。Subject CNはTerraformの`roles_anywhere_certificate_subject_cn`と一致させます。
+初回のみ、管理端末で`hostname`の出力を確認し、repository rootのGit管理対象外の`mise.local.toml`へその値を固定文字列として登録します。既存の`[env]`がある場合はそのsectionに追記します。
+
+```toml
+[env]
+OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST = "管理端末のhostnameの出力"
+```
+
+taskは登録したhostnameと実行端末のhostnameが完全一致する場合だけ実行できます。未設定・空文字・不一致・hostname取得失敗の場合は、CA fileの確認・鍵生成・serial更新・SSH/SCP接続より前に停止します。`--help`は未登録の端末でも表示できます。管理端末のhostnameを変更した場合は登録値も更新します。登録値を実行のたびに自動取得する設定にはせず、VPSのhostnameを登録しないでください。この確認は誤操作防止用であり、hostnameや設定を書き換えられる利用者に対する認証・アクセス制御ではありません。
+
+通常の更新は管理端末のrepository rootから次のtaskを実行します。SSH configの`oci`をVPS接続先として使い、必要な`sudo` passwordは実行中に入力します。
+
+```bash
+mise run rotate-runtime-certificate
+```
+
+この制限は管理端末側の発行taskだけに適用します。VPS側の切り替えscriptはtaskからSSH経由で自動実行するため、VPSでこのmise taskを手動実行したり、管理端末の登録設定を用意したりする必要はありません。
+
+別のSSH targetを使う場合は引数で指定します。SSH configにPortが設定されていない接続先では、通常運用の60022番を環境変数で指定します。
+
+```bash
+OKAWAK_BLOG_VPS_SSH_PORT=60022 mise run rotate-runtime-certificate -- '<USER>@<RESERVED_PUBLIC_IP>'
+```
+
+`OKAWAK_BLOG_VPS_SSH_PORT`は転送・切り替え・失敗時の後片付けのすべてに適用されます。未指定または空文字の場合はSSH configの設定に従います。
+
+Terraformの`roles_anywhere_certificate_subject_cn`を既定値の`okawak-blog-vps`から変更している場合は、同じ値を`OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN`へ設定します。
+
+```bash
+OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN='custom-blog-vps' mise run rotate-runtime-certificate
+```
+
+継続して使う場合は、Git管理対象外の`mise.local.toml`の`[env]`へこの環境変数を設定できます。
+
+新しいcertificateの有効期間は既定で90日です。`OKAWAK_BLOG_CERTIFICATE_DAYS`で変更する場合は8以上の整数を指定します。VPS側では切り替え前に残存期間が7日を超えることを確認するため、1〜7日はCA serialの更新・鍵生成・転送を行う前に拒否します。
+
+CA自身が指定した有効期間全体をカバーできることも、鍵生成・serial更新の前に検証します。発行に時間がかかって境界を越えた場合を考慮し、発行後にも同じ検証を行い、CAが先に期限切れになるペアは転送しません。有効期間はOpenSSLの`-days`が受け取れる符号付き32-bit整数の範囲に制限し、秒への換算でoverflowする入力も発行前に拒否します。
+
+taskは次を順に実行します。
+
+1. 管理端末の既存CAで、新しいclient private keyと既定で90日間有効なcertificateを日付付きfileへ作成する
+2. chain、用途、certificateとprivate keyの対応を検証する
+3. VPSの一時directoryへ転送し、本番とは別のAWS configとfile pathでIAM Roles Anywhere、S3 readを検証する
+4. serviceのLoadStateとActiveStateを取得し、正常に読み込まれたactive/inactiveの場合だけcertificate pairを切り替える。activeなら停止してから切り替え、serviceを再開する
+5. IAM Roles Anywhere、S3 read、health、readinessを再検証し、失敗時や検証完了前のHUP・INT・TERM受信時は旧certificate pairへ戻し、元々稼働していたserviceを再開する
+6. 成功後にVPS上の一時fileとrollback fileを削除し、新しいcertificate pairは管理端末のPKI directoryへ維持する
+
+service再開後のhealth/readinessは、両方が同じ試行で成功するまで最大15回確認し、失敗した試行の間は1秒待機します。各HTTP requestには接続timeout 2秒・全体timeout 5秒を設定し、上限まで成功しなければ最後のprobeの終了コードで失敗して旧ペアへ復旧します。
+
+service状態の照会失敗、ユニット未読込、failedや起動・停止などの遷移中、不明な状態では、本番ペアの変更やservice操作を行わず終了します。元々inactiveならserviceを起動せず、切り替え後のAWS認証・S3 readだけを検証します。更新中は別の証明書更新やデプロイを同じVPSで並行実行しないでください。
+
+taskはTerraformを変更・適用しません。既定値を変更する場合は`mise run rotate-runtime-certificate -- --help`で環境変数を確認します。
+
+復旧中の追加のHUP・INT・TERMは無視し、復旧処理を継続します。SIGKILLやVPSの電源断は捕捉できないため、その場合は残ったrollback fileとserviceの状態を確認して手動で復旧します。
+
+自動復旧ではservice停止後に旧certificateとprivate keyの両方を復元し、rollback fileとの内容一致を確認してからserviceを再開します。復元・内容確認・service再開のいずれかに失敗した場合はrollback fileを削除せず、保管先をエラー出力へ表示します。I/Oエラー等の原因を解消し、表示された同じ日時の旧ペアを配置・検証してserviceを復旧するまで、これらのfileを保持してください。
+
+### 手動更新
+
+taskを使用できない場合は、管理端末で既存CAを使用し、更新ごとに新しいclient private keyとcertificateを別名で作成します。Subject CNはTerraformの`roles_anywhere_certificate_subject_cn`と一致させます。
 
 ```bash
 export PKI_DIR="${HOME}/.local/share/okawak-blog-pki"
