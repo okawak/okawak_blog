@@ -114,6 +114,10 @@ EOF
   cat >"$stub_dir/aws" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${AWS_PAGER-unset}" != "" ]]; then
+  echo 'AWS pager must be explicitly disabled for unattended validation' >&2
+  exit 1
+fi
 [[ -r "$AWS_CONFIG_FILE" ]]
 grep -F -- '--certificate ' "$AWS_CONFIG_FILE" >/dev/null
 grep -F -- '--private-key ' "$AWS_CONFIG_FILE" >/dev/null
@@ -246,6 +250,7 @@ run_activation() {
     AWS_CONFIG_PATH="$case_dir/certificates/config" \
     SERVICE_USER="$(id -un)" \
     SERVICE_GROUP="$(id -gn)" \
+    AWS_PAGER=must-not-run-certificate-pager \
     STUB_SERVICE_ACTIVE=true \
     STUB_CURL_FAIL="$curl_fail" \
     STUB_CURL_LOG="$case_dir/curl.log" \

@@ -103,6 +103,7 @@ run_aws_check() {
       AWS_CONFIG_FILE="$config_path" \
       AWS_SHARED_CREDENTIALS_FILE=/dev/null \
       AWS_EC2_METADATA_DISABLED=true \
+      AWS_PAGER="" \
       aws sts get-caller-identity \
         --query Arn \
         --output text
@@ -118,6 +119,7 @@ run_aws_check() {
     AWS_CONFIG_FILE="$config_path" \
     AWS_SHARED_CREDENTIALS_FILE=/dev/null \
     AWS_EC2_METADATA_DISABLED=true \
+    AWS_PAGER="" \
     aws s3api head-object \
       --bucket "$artifact_bucket" \
       --key current.json \
