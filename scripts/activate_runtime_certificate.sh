@@ -93,16 +93,20 @@ run_aws_check() {
   local config_path="$1"
   local caller_arn
 
-  caller_arn="$(sudo -u "$service_user" env \
-    HOME=/nonexistent \
-    AWS_PROFILE="$aws_profile" \
-    AWS_REGION="$aws_region" \
-    AWS_CONFIG_FILE="$config_path" \
-    AWS_SHARED_CREDENTIALS_FILE=/dev/null \
-    AWS_EC2_METADATA_DISABLED=true \
-    aws sts get-caller-identity \
-      --query Arn \
-      --output text)"
+  caller_arn="$(
+    # Let the failed assignment trigger recovery only in the parent shell.
+    trap - ERR
+    sudo -u "$service_user" env \
+      HOME=/nonexistent \
+      AWS_PROFILE="$aws_profile" \
+      AWS_REGION="$aws_region" \
+      AWS_CONFIG_FILE="$config_path" \
+      AWS_SHARED_CREDENTIALS_FILE=/dev/null \
+      AWS_EC2_METADATA_DISABLED=true \
+      aws sts get-caller-identity \
+        --query Arn \
+        --output text
+  )"
   [[ "$caller_arn" == *":assumed-role/$expected_role_name/"* ]] \
     || fail "unexpected caller identity: $caller_arn"
   echo "$caller_arn"
@@ -149,10 +153,13 @@ trap 'restore_previous_certificate 130 $LINENO' INT
 trap 'restore_previous_certificate 143 $LINENO' TERM
 
 private_key_digest="$(
+  # Keep recovery in the parent while pipefail preserves validation failures.
+  trap - ERR
   openssl pkey -in "$source_private_key" -pubout -outform DER 2>/dev/null |
     openssl dgst -sha256
 )"
 certificate_digest="$(
+  trap - ERR
   openssl x509 -in "$source_certificate" -pubkey -noout |
     openssl pkey -pubin -outform DER 2>/dev/null |
     openssl dgst -sha256

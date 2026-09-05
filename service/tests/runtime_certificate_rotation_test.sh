@@ -117,6 +117,14 @@ set -euo pipefail
 [[ -r "$AWS_CONFIG_FILE" ]]
 grep -F -- '--certificate ' "$AWS_CONFIG_FILE" >/dev/null
 grep -F -- '--private-key ' "$AWS_CONFIG_FILE" >/dev/null
+phase=candidate
+if [[ "$AWS_CONFIG_FILE" == "$CERTIFICATE_DIR/config" ]]; then
+  phase=active
+fi
+if [[ "${STUB_AWS_FAIL_AT:-}" == "$phase-$1" ]]; then
+  echo "simulated AWS failure at $phase-$1" >&2
+  exit 42
+fi
 if [[ "$1" == "sts" ]]; then
   echo 'arn:aws:sts::123456789012:assumed-role/okawak-blog-runtime-role/test'
 else
@@ -224,6 +232,32 @@ run_activation() {
     bash "$activation_script"
 }
 
+assert_single_recovery() {
+  local case_dir="$1"
+  local stamp="$2"
+  local phase="$3"
+
+  [[ "$(grep -c 'restoring the previous certificate' "$case_dir/output.log")" == 1 ]] \
+    || fail "$phase failure ran recovery more than once"
+  cmp -s "$case_dir/old-cert.pem" "$case_dir/certificates/client-cert.pem" \
+    || fail "$phase failure did not preserve the old certificate"
+  cmp -s "$case_dir/old-key.pem" "$case_dir/certificates/client-key.pem" \
+    || fail "$phase failure did not preserve the old private key"
+  if [[ "$phase" == active ]]; then
+    [[ "$(cat "$case_dir/systemctl.log")" == \
+      $'stop okawak_blog.service\nstart okawak_blog.service\nstop okawak_blog.service\nstart okawak_blog.service' ]] \
+      || fail "active failure did not restore the service exactly once"
+  else
+    [[ ! -s "$case_dir/systemctl.log" ]] || fail "preflight failure changed the running service"
+  fi
+  [[ ! -e "$case_dir/certificates/client-cert.pem.rollback-$stamp" \
+    && ! -e "$case_dir/certificates/client-key.pem.rollback-$stamp" \
+    && ! -e "$case_dir/certificates/config-$stamp" \
+    && ! -e "$case_dir/certificates/client-cert-$stamp.pem" \
+    && ! -e "$case_dir/certificates/client-key-$stamp.pem" \
+    && ! -d "$case_dir/upload" ]] || fail "$phase failure left temporary rotation files"
+}
+
 success_stamp='20260905T010101Z'
 success_case="$test_root/success"
 prepare_case "$success_case" "$success_stamp"
@@ -252,6 +286,31 @@ grep -qx 'start okawak_blog.service' "$rollback_case/systemctl.log" \
 [[ ! -e "$rollback_case/certificates/client-cert.pem.rollback-$rollback_stamp" \
   && ! -e "$rollback_case/certificates/client-key.pem.rollback-$rollback_stamp" ]] \
   || fail "successful rollback retained its backups"
+
+for aws_fail_at in active-sts candidate-sts active-s3api; do
+  aws_case="$test_root/aws-$aws_fail_at"
+  aws_stamp='20260905T060606Z'
+  prepare_case "$aws_case" "$aws_stamp"
+  actual_status=0
+  STUB_AWS_FAIL_AT="$aws_fail_at" run_activation "$aws_case" "$aws_stamp" false \
+    >"$aws_case/output.log" 2>&1 || actual_status=$?
+  [[ "$actual_status" == 42 ]] || fail "$aws_fail_at failure lost the AWS exit status"
+  assert_single_recovery "$aws_case" "$aws_stamp" "${aws_fail_at%%-*}"
+  echo "runtime-certificate-rotation-test: $aws_fail_at failure recovered exactly once"
+done
+
+for invalid_pem in key cert; do
+  pem_case="$test_root/invalid-$invalid_pem"
+  pem_stamp='20260905T070707Z'
+  prepare_case "$pem_case" "$pem_stamp"
+  printf 'invalid PEM\n' >"$pem_case/upload/vps-client-$invalid_pem-$pem_stamp.pem"
+  actual_status=0
+  run_activation "$pem_case" "$pem_stamp" false \
+    >"$pem_case/output.log" 2>&1 || actual_status=$?
+  [[ "$actual_status" != 0 ]] || fail "invalid $invalid_pem was accepted"
+  assert_single_recovery "$pem_case" "$pem_stamp" preflight
+  echo "runtime-certificate-rotation-test: invalid $invalid_pem cleaned up exactly once"
+done
 
 for restore_status in 1 0; do
   for restore_file in client-cert client-key; do
