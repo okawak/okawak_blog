@@ -160,7 +160,6 @@ async fn home_document(document: HomePageDocument) -> Result<impl View> {
         site_shell(
             status: StatusCode::OK,
             metadata: ShellMetadata::website(title, description, canonical_url),
-            current_path: "/".to_string(),
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-12 px-4 py-8 text-left sm:px-6 sm:py-12"
             >

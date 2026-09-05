@@ -83,7 +83,6 @@ async fn article_document(document: ArticlePageDocument) -> Result<impl View> {
         site_shell(
             status: StatusCode::OK,
             metadata: ShellMetadata::article(title, description, canonical_url),
-            current_path: canonical_path,
             <article
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-8 px-4 py-8 text-left sm:px-6 sm:py-12"
             >

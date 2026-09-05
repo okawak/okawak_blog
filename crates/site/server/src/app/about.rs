@@ -50,7 +50,6 @@ async fn about_document(document: StaticPageDocument) -> Result<impl View> {
         site_shell(
             status: StatusCode::OK,
             metadata: ShellMetadata::website(title, description, canonical_url),
-            current_path: "/about".to_string(),
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-8 px-4 py-8 text-left sm:px-6 sm:py-12"
             >
