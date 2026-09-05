@@ -227,7 +227,7 @@ browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-
 
 production deployは`mise run build-deployment`で`target/release/server`と`target/assets-staged`を生成します。`mise run quick-deploy`はservice停止中にbinaryとcontent-hash付きasset bundleを同じreleaseへ切り替え、health / readinessが失敗した場合は両方を旧releaseへ戻します。
 
-Topcoat asset bundleはTailwind CSS、Topcoat runtime、faviconをcontent-hash付きlocal URLで配信します。公開linkはブラウザ標準のfull-page navigationを使います。生成コンテンツの描画に必要なKaTeXとhighlight.js、Font Awesome、Noto Sans JPはversion固定またはURL固定の外部CDN資産として維持します。KaTeXはSRIを付与し、いずれもsiteのSSR可用性を左右する必須runtimeにはしません。
+Topcoat asset bundleはTailwind CSS、Topcoat runtime、faviconをcontent-hash付きlocal URLで配信します。公開linkはブラウザ標準のfull-page navigationを使います。GitHubアイコンは同梱したOcticonsのSVGをTopcoatのicon componentでinline描画します。端末間で字体を揃えるためNoto Sans JPをGoogle Fontsから読み込み、400〜700の可変ウェイト指定でCSSの重複を抑えます。フォントCSSはHTML headから直接参照し、`display=swap`で読み込み中も本文を表示します。生成コンテンツの描画に必要なKaTeXとhighlight.jsはversion固定の外部CDN資産として維持します。KaTeXはSRIを付与し、いずれもsiteのSSR可用性を左右する必須runtimeにはしません。
 
 主要コマンドは以下です。
 

@@ -123,6 +123,30 @@ test("site declares and serves its favicon", async ({ page, request }) => {
   expect((await response.body()).byteLength).toBeGreaterThan(0);
 });
 
+test("GitHub icon stays accessible without an icon font", async ({ page }) => {
+  const iconFontRequests: string[] = [];
+  page.on("request", (request) => {
+    if (/font-awesome|fa-brands/.test(request.url())) {
+      iconFontRequests.push(request.url());
+    }
+  });
+  await page.goto("/");
+
+  const github = page.getByRole("link", { name: "Open okawak GitHub profile" });
+  await expect(github).toHaveAttribute("href", "https://github.com/okawak");
+  await expect(github.locator("svg")).toHaveAttribute("aria-hidden", "true");
+  await expect(github.locator("svg")).toBeVisible();
+  await expect(github.locator("svg")).toHaveCSS("width", "20px");
+  await expect(github.locator("svg")).toHaveCSS("height", "20px");
+
+  // Reach the profile link through the same keyboard sequence as a visitor.
+  await page.getByRole("navigation").getByRole("link", { name: "About", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  await expect(github).toBeFocused();
+  expect(await github.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe("solid");
+  expect(iconFontRequests).toEqual([]);
+});
+
 test("home renders artifacts and uses full-page navigation", async ({ page }) => {
   const browserErrors = captureBrowserErrors(page);
 

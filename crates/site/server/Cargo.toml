@@ -14,7 +14,7 @@ domain = { path = "../../domain" }
 infra = { path = "../infra" }
 httpdate.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-topcoat.workspace = true
+topcoat = { workspace = true, features = ["icon"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 

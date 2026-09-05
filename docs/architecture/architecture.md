@@ -390,13 +390,15 @@ production `server`はhome、about、category、articleをSSRし、title、canon
   - site chrome、metadata、error view、responsive navigationと、生成contentのKaTeX / highlight.js progressive enhancementをshell resourceとして構成する
 - `src/assets.rs`
   - application所有のstylesheetとfavicon assetを登録する
+- `src/icons.rs`
+  - 同梱したGitHub Octiconsの単一SVGをTopcoatのicon componentへ渡す。icon fontや外部icon setの取得を必要としない
 - `style/tailwind.css`
   - semantic color、radius、typography、site layout tokenとbase styleのsource of truth
 - `style/content.css`
   - article、about、category landing、home fragmentの生成HTMLだけを`.content-prose`配下で整形するplain CSS
   - heading、code、table、image、bookmark、math spanとKaTeX描画結果など`publish` artifactの表現を担当する
 
-productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Tailwind CSS、Topcoat runtime、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。公開linkは独自client routerを持たず、ブラウザ標準のfull-page navigationを使う。mobile menuはTopcoat runtimeのsignalとevent expressionで構成する。生成コンテンツのKaTeXとhighlight.js、iconのFont Awesome、fontのNoto Sans JPはversion固定またはURL固定のCDN資産として維持し、KaTeXにはSRIを付与する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`はNode / BunのCSS build toolを実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
+productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Tailwind CSS、Topcoat runtime、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。公開linkは独自client routerを持たず、ブラウザ標準のfull-page navigationを使う。mobile menuはTopcoat runtimeのsignalとevent expressionで構成する。GitHubアイコンはTopcoatのicon componentによるinline SVGとし、リンクのaccessible nameを維持してSVG自体は支援技術から隠す。端末間の字体を揃えるNoto Sans JPはGoogle Fontsの可変ウェイト範囲`400..700`を指定し、ウェイトごとのCSS宣言の重複を抑える。font stylesheetはshellのHTML headから直接読み込み、`display=swap`で読み込み中の本文表示を維持する。生成コンテンツのKaTeXとhighlight.jsはversion固定のCDN資産として維持し、KaTeXにはSRIを付与する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`はNode / BunのCSS build toolを実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
 
 `site/server/build.rs`はapplication package内の`style/tailwind.css`をTopcoatのstylesheet assetへ変換するために維持する。Rustと`view!` macroの書式はrepository rootの`mise run format`から`cargo fmt`と`topcoat fmt`を順に適用する。
 

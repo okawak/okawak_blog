@@ -11,6 +11,8 @@ pub mod assets;
 
 mod format;
 
+mod icons;
+
 pub mod http_cache;
 
 mod page_loader;
