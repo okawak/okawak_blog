@@ -1,6 +1,6 @@
 [tools]
 bun = "1.4.0"
-"cargo:topcoat-cli" = "0.6.2"
+"cargo:topcoat-cli" = "0.7.0"
 
 [env]
 PROJECT_NAME = "okawak_blog"

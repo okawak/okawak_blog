@@ -21,7 +21,7 @@ use topcoat::{
         page, request,
         response::{IntoResponse, Response},
     },
-    view::{Unescaped, View, component, view},
+    view::{Unescaped, View, ViewExt, component, view},
 };
 
 use crate::{
@@ -33,20 +33,21 @@ use crate::{
 };
 
 #[page]
-async fn home(cx: &Cx) -> Result<View> {
+async fn home(cx: &Cx) -> Result<impl View> {
     match page_loader(cx).loader().load_home().await {
-        Ok(document) => view! { home_document(document: document) },
+        Ok(document) => Ok(view! { home_document(document: document) }.boxed()),
         Err(error) => {
             tracing::error!(%error, "home page artifact read failed");
-            view! {
+            let description = "公開済みの記事を読み込めませんでした。".to_string();
+            Ok(view! {
                 internal_server_error_page(
                     title: build_home_page_title(crate::SITE_NAME),
-                    description: "公開済みの記事を読み込めませんでした。"
-                        .to_string(),
+                    description: description,
                     canonical_path: "/".to_string(),
                     message: "記事の読み込みに失敗しました"
                 )
             }
+            .boxed())
         }
     }
 }
@@ -75,7 +76,9 @@ fn render_unmatched_path<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFut
                     && is_site_page_path(request::uri(cx).path()) =>
             {
                 let canonical_path = request::uri(cx).path().to_string();
-                let page = view! { cx => not_found_page(canonical_path: canonical_path) }?;
+                let page = view! { cx => not_found_page(canonical_path: canonical_path) }
+                    .single()
+                    .await?;
                 page.into_response(cx)
             }
             response => response,
@@ -147,13 +150,13 @@ pub fn create_router(
 }
 
 #[component]
-async fn home_document(document: HomePageDocument) -> Result {
+async fn home_document(document: HomePageDocument) -> Result<impl View> {
     let title = build_home_page_title(crate::SITE_NAME);
     let description = build_home_page_description(&document);
     let canonical_url = crate::build_site_url(build_home_page_canonical_path());
     let is_empty = document.articles.is_empty();
 
-    view! {
+    Ok(view! {
         site_shell(
             status: StatusCode::OK,
             metadata: ShellMetadata::website(title, description, canonical_url),
@@ -203,14 +206,14 @@ async fn home_document(document: HomePageDocument) -> Result {
                 </section>
             </div>
         )
-    }
+    })
 }
 
 #[component]
-async fn home_page_content(document: HomePageDocument) -> Result {
+async fn home_page_content(document: HomePageDocument) -> Result<impl View> {
     let page_description = build_home_page_description(&document);
 
-    view! {
+    Ok(view! {
         <div class="grid gap-6 lg:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
             <div
                 class="flex flex-col gap-4 rounded-xl border border-border/80 bg-gradient-to-b from-card to-secondary/70 p-6 text-card-foreground shadow-sm"
@@ -218,9 +221,7 @@ async fn home_page_content(document: HomePageDocument) -> Result {
                 match document.fragment.as_ref() {
                     Some(fragment) => {
                         <div class="content-prose text-muted-foreground">
-                            (Unescaped::new_unchecked(
-                                fragment.html.clone(),
-                            ))
+                            (Unescaped::new_unchecked(fragment.html.clone()))
                         </div>
                     }
                     None => {
@@ -257,5 +258,5 @@ async fn home_page_content(document: HomePageDocument) -> Result {
                 }
             </section>
         </div>
-    }
+    })
 }
