@@ -133,13 +133,32 @@ fi
 EOF
   cat >"$stub_dir/curl" <<'EOF'
 #!/usr/bin/env bash
+set -euo pipefail
 # shellcheck source=/dev/null
 source "$(dirname "$0")/signal-helper.sh"
 signal_activation probes
-if [[ "${STUB_CURL_FAIL:-false}" == "true" ]]; then
-  exit 22
+probe_url="${!#}"
+probe="${probe_url##*/}"
+printf '%s\n' "$probe" >>"$STUB_CURL_LOG"
+printf '%s\n' "$*" >>"$STUB_CURL_ARGUMENTS_LOG"
+case "$probe" in
+  health) failures="${STUB_HEALTH_FAILURES:-0}" ;;
+  ready) failures="${STUB_READY_FAILURES:-0}" ;;
+  *) exit 1 ;;
+esac
+if [[ "${STUB_CURL_FAIL:-false}" == "true" ]] \
+  || (( $(grep -c "^$probe$" "$STUB_CURL_LOG") <= failures )); then
+  exit "${STUB_PROBE_FAILURE_STATUS:-22}"
 fi
 exit 0
+EOF
+  cat >"$stub_dir/sleep" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$STUB_SLEEP_LOG"
+# shellcheck source=/dev/null
+source "$(dirname "$0")/signal-helper.sh"
+signal_activation probe-wait
 EOF
   chmod +x "$stub_dir"/*
 }
@@ -209,6 +228,9 @@ region = ap-northeast-1
 credential_process = /usr/local/bin/aws_signing_helper credential-process --certificate $case_dir/certificates/client-cert.pem --private-key $case_dir/certificates/client-key.pem --trust-anchor-arn test --profile-arn test --role-arn test
 EOF
   : >"$case_dir/systemctl.log"
+  : >"$case_dir/curl.log"
+  : >"$case_dir/curl-arguments.log"
+  : >"$case_dir/sleep.log"
 }
 
 run_activation() {
@@ -226,6 +248,9 @@ run_activation() {
     SERVICE_GROUP="$(id -gn)" \
     STUB_SERVICE_ACTIVE=true \
     STUB_CURL_FAIL="$curl_fail" \
+    STUB_CURL_LOG="$case_dir/curl.log" \
+    STUB_CURL_ARGUMENTS_LOG="$case_dir/curl-arguments.log" \
+    STUB_SLEEP_LOG="$case_dir/sleep.log" \
     STUB_SIGNAL_SENT="$case_dir/signal-sent" \
     STUB_RESTORE_FAILURE_MARKER="$case_dir/restore-failed" \
     STUB_SYSTEMCTL_LOG="$case_dir/systemctl.log" \
@@ -270,6 +295,61 @@ cmp -s "$success_case/new-key.pem" "$success_case/certificates/client-key.pem" \
   || fail "successful activation retained the rollback certificate"
 [[ ! -e "$success_case/certificates/config-$success_stamp" ]] \
   || fail "successful activation retained the candidate AWS config"
+[[ ! -s "$success_case/sleep.log" ]] || fail "healthy service was unnecessarily retried"
+
+for delayed_probe in health ready both; do
+  delayed_case="$test_root/delayed-$delayed_probe"
+  delayed_stamp='20260905T080808Z'
+  prepare_case "$delayed_case" "$delayed_stamp"
+  case "$delayed_probe" in
+    health) health_failures=2; ready_failures=0; failure_status=7 ;;
+    ready) health_failures=0; ready_failures=2; failure_status=22 ;;
+    # Recovery on the last allowed attempt must still succeed.
+    both) health_failures=7; ready_failures=7; failure_status=28 ;;
+  esac
+  STUB_HEALTH_FAILURES="$health_failures" STUB_READY_FAILURES="$ready_failures" \
+    STUB_PROBE_FAILURE_STATUS="$failure_status" \
+    run_activation "$delayed_case" "$delayed_stamp" false \
+      >"$delayed_case/output.log" 2>&1 || fail "transient $delayed_probe failure rolled back"
+  cmp -s "$delayed_case/new-cert.pem" "$delayed_case/certificates/client-cert.pem" \
+    || fail "$delayed_probe delay did not retain the new certificate"
+  cmp -s "$delayed_case/new-key.pem" "$delayed_case/certificates/client-key.pem" \
+    || fail "$delayed_probe delay did not retain the new private key"
+  [[ "$(cat "$delayed_case/systemctl.log")" == $'stop okawak_blog.service\nstart okawak_blog.service' ]] \
+    || fail "$delayed_probe delay restarted the service more than once"
+  [[ "$(grep -c '^health$' "$delayed_case/curl.log")" == "$((health_failures + ready_failures + 1))" \
+    && "$(grep -c '^ready$' "$delayed_case/curl.log")" == "$((ready_failures + 1))" \
+    && "$(grep -c '^1$' "$delayed_case/sleep.log")" == "$((health_failures + ready_failures))" ]] \
+    || fail "$delayed_probe delay did not retry both probes at one-second intervals"
+  [[ ! -e "$delayed_case/certificates/client-cert.pem.rollback-$delayed_stamp" \
+    && ! -e "$delayed_case/certificates/client-key.pem.rollback-$delayed_stamp" \
+    && ! -e "$delayed_case/certificates/config-$delayed_stamp" \
+    && ! -d "$delayed_case/upload" ]] || fail "$delayed_probe delay left temporary rotation files"
+  echo "runtime-certificate-rotation-test: transient $delayed_probe failure retried successfully"
+done
+
+for failed_probe in health ready; do
+  failed_case="$test_root/probe-exhausted-$failed_probe"
+  failed_stamp='20260905T090909Z'
+  prepare_case "$failed_case" "$failed_stamp"
+  health_failures=0
+  ready_failures=0
+  if [[ "$failed_probe" == health ]]; then health_failures=15; else ready_failures=15; fi
+  actual_status=0
+  STUB_HEALTH_FAILURES="$health_failures" STUB_READY_FAILURES="$ready_failures" \
+    STUB_PROBE_FAILURE_STATUS=28 \
+    run_activation "$failed_case" "$failed_stamp" false \
+      >"$failed_case/output.log" 2>&1 || actual_status=$?
+  [[ "$actual_status" == 28 ]] || fail "$failed_probe exhaustion lost the last probe exit status"
+  [[ "$(grep -c "^$failed_probe$" "$failed_case/curl.log")" == 15 \
+    && "$(grep -c '^1$' "$failed_case/sleep.log")" == 14 ]] \
+    || fail "$failed_probe exhaustion did not stop after 15 attempts with 14 waits"
+  if grep -v -- '--connect-timeout 2 --max-time 5' "$failed_case/curl-arguments.log"; then
+    fail "$failed_probe probe did not set connection and request timeouts"
+  fi
+  assert_single_recovery "$failed_case" "$failed_stamp" active
+  echo "runtime-certificate-rotation-test: exhausted $failed_probe retries recovered exactly once"
+done
 
 rollback_stamp='20260905T020202Z'
 rollback_case="$test_root/rollback"
@@ -376,12 +456,12 @@ for signal_name in HUP INT TERM; do
     INT) expected_status=130 ;;
     TERM) expected_status=143 ;;
   esac
-  for signal_point in service-stopped certificate-installed probes; do
+  for signal_point in service-stopped certificate-installed probes probe-wait; do
     signal_case="$test_root/signal-$signal_name-$signal_point"
     signal_stamp='20260905T030303Z'
     prepare_case "$signal_case" "$signal_stamp"
     actual_status=0
-    STUB_SIGNAL="$signal_name" STUB_SIGNAL_POINT="$signal_point" \
+    STUB_SIGNAL="$signal_name" STUB_SIGNAL_POINT="$signal_point" STUB_HEALTH_FAILURES=1 \
       run_activation "$signal_case" "$signal_stamp" false \
       >"$signal_case/output.log" 2>&1 || actual_status=$?
     [[ -f "$signal_case/signal-sent" ]] || fail "$signal_name was not sent at $signal_point"

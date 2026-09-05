@@ -295,6 +295,8 @@ taskは次を順に実行します。
 5. IAM Roles Anywhere、S3 read、health、readinessを再検証し、失敗時や検証完了前のHUP・INT・TERM受信時は旧certificate pairへ戻し、元々稼働していたserviceを再開する
 6. 成功後にVPS上の一時fileとrollback fileを削除し、新しいcertificate pairは管理端末のPKI directoryへ維持する
 
+service再開後のhealth/readinessは、両方が同じ試行で成功するまで最大15回確認し、失敗した試行の間は1秒待機します。各HTTP requestには接続timeout 2秒・全体timeout 5秒を設定し、上限まで成功しなければ最後のprobeの終了コードで失敗して旧ペアへ復旧します。
+
 taskはTerraformを変更・適用しません。既定値を変更する場合は`mise run rotate-runtime-certificate -- --help`で環境変数を確認します。
 
 復旧中の追加のHUP・INT・TERMは無視し、復旧処理を継続します。SIGKILLやVPSの電源断は捕捉できないため、その場合は残ったrollback fileとserviceの状態を確認して手動で復旧します。

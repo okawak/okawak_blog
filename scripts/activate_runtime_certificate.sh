@@ -125,13 +125,37 @@ run_aws_check() {
       --output text
 }
 
+wait_for_service() {
+  local attempt
+  local probe_attempts=15
+  local status=1
+
+  # Type=simple does not wait for listen/readiness, including RestartSec delays.
+  for ((attempt = 1; attempt <= probe_attempts; attempt += 1)); do
+    if curl --fail --silent --show-error --output /dev/null \
+      --connect-timeout 2 --max-time 5 "$local_health_url" \
+      && curl --fail --silent --show-error --output /dev/null \
+        --connect-timeout 2 --max-time 5 "$local_ready_url"; then
+      return 0
+    else
+      status=$?
+    fi
+    if ((attempt < probe_attempts)); then
+      sleep 1
+    fi
+  done
+
+  echo "certificate-activation: health/readiness checks did not pass after $probe_attempts attempts" >&2
+  return "$status"
+}
+
 [[ "$rotation_stamp" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] \
   || fail "ROTATION_STAMP has an invalid format"
 [[ "$upload_dir" == "/tmp/okawak-blog-certificate-$rotation_stamp" \
   || -n "${ALLOW_CUSTOM_UPLOAD_DIR:-}" ]] \
   || fail "UPLOAD_DIR is outside the expected rotation directory"
 
-for command_name in aws cmp curl openssl sudo systemctl; do
+for command_name in aws cmp curl openssl sleep sudo systemctl; do
   command -v "$command_name" >/dev/null \
     || fail "required command is missing: $command_name"
 done
@@ -212,8 +236,7 @@ echo "certificate-activation: validating the active certificate"
 run_aws_check "$aws_config"
 
 if [[ "$service_was_active" == true ]]; then
-  curl --fail --silent --show-error --output /dev/null "$local_health_url"
-  curl --fail --silent --show-error --output /dev/null "$local_ready_url"
+  wait_for_service
 fi
 
 trap - ERR HUP INT TERM
