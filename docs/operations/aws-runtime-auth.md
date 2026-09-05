@@ -272,11 +272,13 @@ openssl x509 \
 mise run rotate-runtime-certificate
 ```
 
-別のSSH targetを使う場合は引数で指定します。
+別のSSH targetを使う場合は引数で指定します。SSH configにPortが設定されていない接続先では、通常運用の60022番を環境変数で指定します。
 
 ```bash
-mise run rotate-runtime-certificate -- '<USER>@<RESERVED_PUBLIC_IP>'
+OKAWAK_BLOG_VPS_SSH_PORT=60022 mise run rotate-runtime-certificate -- '<USER>@<RESERVED_PUBLIC_IP>'
 ```
+
+`OKAWAK_BLOG_VPS_SSH_PORT`は転送・切り替え・失敗時の後片付けのすべてに適用されます。未指定または空文字の場合はSSH configの設定に従います。
 
 Terraformの`roles_anywhere_certificate_subject_cn`を既定値の`okawak-blog-vps`から変更している場合は、同じ値を`OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN`へ設定します。
 
@@ -291,11 +293,13 @@ taskは次を順に実行します。
 1. 管理端末の既存CAで90日間有効なclient private keyとcertificateを新しい日付付きfileへ発行する
 2. chain、用途、certificateとprivate keyの対応を検証する
 3. VPSの一時directoryへ転送し、本番とは別のAWS configとfile pathでIAM Roles Anywhere、S3 readを検証する
-4. serviceが起動中なら停止してcertificate pairを切り替え、serviceを再開する
+4. serviceのLoadStateとActiveStateを取得し、正常に読み込まれたactive/inactiveの場合だけcertificate pairを切り替える。activeなら停止してから切り替え、serviceを再開する
 5. IAM Roles Anywhere、S3 read、health、readinessを再検証し、失敗時や検証完了前のHUP・INT・TERM受信時は旧certificate pairへ戻し、元々稼働していたserviceを再開する
 6. 成功後にVPS上の一時fileとrollback fileを削除し、新しいcertificate pairは管理端末のPKI directoryへ維持する
 
 service再開後のhealth/readinessは、両方が同じ試行で成功するまで最大15回確認し、失敗した試行の間は1秒待機します。各HTTP requestには接続timeout 2秒・全体timeout 5秒を設定し、上限まで成功しなければ最後のprobeの終了コードで失敗して旧ペアへ復旧します。
+
+service状態の照会失敗、ユニット未読込、failedや起動・停止などの遷移中、不明な状態では、本番ペアの変更やservice操作を行わず終了します。元々inactiveならserviceを起動せず、切り替え後のAWS認証・S3 readだけを検証します。更新中は別の証明書更新やデプロイを同じVPSで並行実行しないでください。
 
 taskはTerraformを変更・適用しません。既定値を変更する場合は`mise run rotate-runtime-certificate -- --help`で環境変数を確認します。
 

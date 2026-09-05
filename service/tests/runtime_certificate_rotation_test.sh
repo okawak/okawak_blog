@@ -95,9 +95,21 @@ EOF
   cat >"$stub_dir/systemctl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "$1" == "is-active" ]]; then
-  [[ "${STUB_SERVICE_ACTIVE:-false}" == "true" ]]
-  exit
+if [[ "$1" == "is-active" || "$1" == "show" ]]; then
+  if [[ "${STUB_SERVICE_QUERY_STATUS:-0}" != 0 ]]; then
+    echo 'simulated service manager query failure' >&2
+    exit "$STUB_SERVICE_QUERY_STATUS"
+  fi
+  if [[ "$1" == "is-active" ]]; then
+    [[ "${STUB_SERVICE_STATE:-active}" == active ]]
+    exit
+  fi
+  if [[ "${STUB_SERVICE_PROPERTIES+set}" == set ]]; then
+    printf '%s\n' "$STUB_SERVICE_PROPERTIES"
+  else
+    printf 'LoadState=%s\nActiveState=%s\n' "${STUB_SERVICE_LOAD_STATE:-loaded}" "${STUB_SERVICE_STATE:-active}"
+  fi
+  exit 0
 fi
 printf '%s\n' "$*" >>"$STUB_SYSTEMCTL_LOG"
 if [[ "${STUB_RECOVERY_SYSTEMCTL_FAILURE:-}" == "$1" ]] \
@@ -251,7 +263,7 @@ run_activation() {
     SERVICE_USER="$(id -un)" \
     SERVICE_GROUP="$(id -gn)" \
     AWS_PAGER=must-not-run-certificate-pager \
-    STUB_SERVICE_ACTIVE=true \
+    STUB_SERVICE_STATE="${STUB_SERVICE_STATE:-active}" \
     STUB_CURL_FAIL="$curl_fail" \
     STUB_CURL_LOG="$case_dir/curl.log" \
     STUB_CURL_ARGUMENTS_LOG="$case_dir/curl-arguments.log" \
@@ -301,6 +313,54 @@ cmp -s "$success_case/new-key.pem" "$success_case/certificates/client-key.pem" \
 [[ ! -e "$success_case/certificates/config-$success_stamp" ]] \
   || fail "successful activation retained the candidate AWS config"
 [[ ! -s "$success_case/sleep.log" ]] || fail "healthy service was unnecessarily retried"
+
+for query_status in 1 3; do
+  query_case="$test_root/service-query-$query_status"
+  query_stamp='20260905T101010Z'
+  prepare_case "$query_case" "$query_stamp"
+  actual_status=0
+  STUB_SERVICE_QUERY_STATUS="$query_status" run_activation "$query_case" "$query_stamp" false \
+    >"$query_case/output.log" 2>&1 || actual_status=$?
+  [[ "$actual_status" == "$query_status" ]] || fail "service query failure did not abort with its exit status"
+  assert_single_recovery "$query_case" "$query_stamp" preflight
+done
+
+for invalid_state in activating deactivating reloading failed unknown ''; do
+  state_case="$test_root/service-state-$invalid_state"
+  state_stamp='20260905T111111Z'
+  prepare_case "$state_case" "$state_stamp"
+  actual_status=0
+  STUB_SERVICE_PROPERTIES="$(printf 'LoadState=loaded\nActiveState=%s' "$invalid_state")" \
+    run_activation "$state_case" "$state_stamp" false \
+      >"$state_case/output.log" 2>&1 || actual_status=$?
+  [[ "$actual_status" != 0 ]] || fail "unsafe service state was accepted: $invalid_state"
+  assert_single_recovery "$state_case" "$state_stamp" preflight
+done
+
+for load_state in not-found masked error ''; do
+  load_case="$test_root/service-load-$load_state"
+  load_stamp='20260905T121212Z'
+  prepare_case "$load_case" "$load_stamp"
+  actual_status=0
+  STUB_SERVICE_PROPERTIES="$(printf 'ActiveState=inactive\nLoadState=%s' "$load_state")" \
+    run_activation "$load_case" "$load_stamp" false \
+      >"$load_case/output.log" 2>&1 || actual_status=$?
+  [[ "$actual_status" != 0 ]] || fail "unloaded service was accepted: $load_state"
+  assert_single_recovery "$load_case" "$load_stamp" preflight
+done
+
+inactive_case="$test_root/service-inactive"
+inactive_stamp='20260905T131313Z'
+prepare_case "$inactive_case" "$inactive_stamp"
+STUB_SERVICE_STATE=inactive STUB_SERVICE_PROPERTIES=$'ActiveState=inactive\nLoadState=loaded' \
+  run_activation "$inactive_case" "$inactive_stamp" false >"$inactive_case/output.log" 2>&1
+cmp -s "$inactive_case/new-cert.pem" "$inactive_case/certificates/client-cert.pem" \
+  || fail "inactive service did not receive the new certificate"
+cmp -s "$inactive_case/new-key.pem" "$inactive_case/certificates/client-key.pem" \
+  || fail "inactive service did not receive the new private key"
+[[ ! -s "$inactive_case/systemctl.log" && ! -s "$inactive_case/curl.log" ]] \
+  || fail "inactive service was started or probed"
+echo 'runtime-certificate-rotation-test: service query errors and unsafe states abort before activation'
 
 for delayed_probe in health ready both; do
   delayed_case="$test_root/delayed-$delayed_probe"
@@ -491,18 +551,37 @@ test_subject_cn() {
   local case_dir="$test_root/cn-$case_name"
 
   mkdir -p "$case_dir/stubs" "$case_dir/uploaded"
+  : >"$case_dir/transport.log"
   create_ca "$case_dir"
   create_client_certificate "$case_dir" seed
   cat >"$case_dir/stubs/ssh" <<'EOF'
 #!/usr/bin/env bash
-if [[ "${1:-}" == '-tt' && -n "${STUB_LOCAL_SIGNAL:-}" ]]; then
-  kill -s "$STUB_LOCAL_SIGNAL" "$PPID"
+set -euo pipefail
+port=''
+if [[ "${1:-}" == '-p' ]]; then
+  port="$2"
+  shift 2
+fi
+[[ "$port" == "${STUB_EXPECTED_SSH_PORT:-}" ]]
+printf 'ssh %s\n' "$port" >>"$STUB_TRANSPORT_LOG"
+if [[ "${1:-}" == '-tt' ]]; then
+  if [[ -n "${STUB_LOCAL_SIGNAL:-}" ]]; then
+    kill -s "$STUB_LOCAL_SIGNAL" "$PPID"
+  fi
+  exit "${STUB_SSH_ACTIVATION_STATUS:-0}"
 fi
 exit 0
 EOF
   cat >"$case_dir/stubs/scp" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+port=''
+if [[ "${1:-}" == '-P' ]]; then
+  port="$2"
+  shift 2
+fi
+[[ "$port" == "${STUB_EXPECTED_SSH_PORT:-}" ]]
+printf 'scp %s\n' "$port" >>"$STUB_TRANSPORT_LOG"
 cp "$1" "$STUB_UPLOADED_DIR/cert.pem"
 cp "$2" "$STUB_UPLOADED_DIR/key.pem"
 EOF
@@ -511,6 +590,7 @@ EOF
   PATH="$case_dir/stubs:$PATH" \
     OKAWAK_BLOG_PKI_DIR="$case_dir" \
     STUB_UPLOADED_DIR="$case_dir/uploaded" \
+    STUB_TRANSPORT_LOG="$case_dir/transport.log" \
     bash "$rotation_script" test-vps >"$case_dir/output.log" 2>&1 || actual_status=$?
   [[ "$actual_status" == "${STUB_ROTATION_STATUS:-0}" ]] \
     || fail "$case_name rotation: unexpected exit status $actual_status"
@@ -523,11 +603,22 @@ EOF
   [[ "$(printf '%s\n' "$subject" | sed -n 's/^ *CN=//p')" == "$expected_cn" ]] \
     || fail "issued certificate CN does not match $expected_cn: $subject"
   [[ ! -d "$case_dir/.certificate-rotation.lock" ]] || fail "rotation lock was retained"
+  local expected_ssh_calls=2
+  if [[ "$actual_status" != 0 ]]; then expected_ssh_calls=3; fi
+  [[ "$(grep -Fxc "ssh ${STUB_EXPECTED_SSH_PORT:-}" "$case_dir/transport.log")" == "$expected_ssh_calls" \
+    && "$(grep -Fxc "scp ${STUB_EXPECTED_SSH_PORT:-}" "$case_dir/transport.log")" == 1 ]] \
+    || fail "$case_name did not use the same SSH port for staging, activation and cleanup"
   echo "runtime-certificate-rotation-test: $case_name CN matches the issued certificate"
 }
 
 unset OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN
+unset OKAWAK_BLOG_VPS_SSH_PORT
 test_subject_cn default okawak-blog-vps
+OKAWAK_BLOG_VPS_SSH_PORT=60022 STUB_EXPECTED_SSH_PORT=60022 \
+  test_subject_cn ssh-port okawak-blog-vps
+OKAWAK_BLOG_VPS_SSH_PORT=2222 STUB_EXPECTED_SSH_PORT=2222 \
+  STUB_SSH_ACTIVATION_STATUS=42 STUB_ROTATION_STATUS=42 \
+  test_subject_cn ssh-port-failure okawak-blog-vps
 OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN=custom-blog-vps \
   test_subject_cn custom custom-blog-vps
 OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN='blue/team+CN=unexpected\node' \
@@ -539,8 +630,18 @@ for signal_name in HUP INT TERM; do
     INT) expected_status=130 ;;
     TERM) expected_status=143 ;;
   esac
-  STUB_LOCAL_SIGNAL="$signal_name" STUB_ROTATION_STATUS="$expected_status" \
+  OKAWAK_BLOG_VPS_SSH_PORT=60022 STUB_EXPECTED_SSH_PORT=60022 \
+    STUB_LOCAL_SIGNAL="$signal_name" STUB_ROTATION_STATUS="$expected_status" \
     test_subject_cn "local-signal-$signal_name" okawak-blog-vps
+done
+
+for invalid_port in 0 65536 -1 abc '22 -oProxyCommand=unexpected' 99999999999999999999; do
+  if OKAWAK_BLOG_VPS_SSH_PORT="$invalid_port" OKAWAK_BLOG_PKI_DIR="$test_root/not-created" \
+    bash "$rotation_script" test-vps >"$test_root/invalid-port.log" 2>&1; then
+    fail "invalid SSH port was accepted: $invalid_port"
+  fi
+  grep -q 'OKAWAK_BLOG_VPS_SSH_PORT must be' "$test_root/invalid-port.log" \
+    || fail 'invalid SSH port was not rejected before accessing the CA'
 done
 
 for invalid_cn in '' $'blog\nCN=injected'; do

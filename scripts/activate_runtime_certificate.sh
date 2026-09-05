@@ -127,6 +127,30 @@ run_aws_check() {
       --output text
 }
 
+read_service_state() {
+  local properties property value
+  local load_state=''
+  local active_state=''
+
+  properties="$(
+    # Query errors must reach the parent without running recovery twice.
+    trap - ERR
+    sudo systemctl show --no-pager --property=LoadState --property=ActiveState "$service_name.service"
+  )"
+  while IFS='=' read -r property value; do
+    case "$property" in
+      LoadState) load_state="$value" ;;
+      ActiveState) active_state="$value" ;;
+    esac
+  done <<<"$properties"
+  [[ "$load_state" == loaded ]] || fail "service is not loaded: $load_state"
+  case "$active_state" in
+    active) service_was_active=true ;;
+    inactive) service_was_active=false ;;
+    *) fail "service state is unsafe for rotation: $active_state" ;;
+  esac
+}
+
 wait_for_service() {
   local attempt
   local probe_attempts=15
@@ -215,9 +239,7 @@ sudo grep -F -- "--private-key $candidate_private_key" "$candidate_config" >/dev
 echo "certificate-activation: validating the staged certificate with IAM Roles Anywhere"
 run_aws_check "$candidate_config"
 
-if sudo systemctl is-active --quiet "$service_name.service"; then
-  service_was_active=true
-fi
+read_service_state
 
 sudo cp -p "$active_certificate" "$rollback_certificate"
 sudo cp -p "$active_private_key" "$rollback_private_key"

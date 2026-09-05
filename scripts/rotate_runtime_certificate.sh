@@ -4,6 +4,7 @@ set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ssh_target="${1:-${OKAWAK_BLOG_VPS_SSH_TARGET:-oci}}"
+ssh_port="${OKAWAK_BLOG_VPS_SSH_PORT:-}"
 pki_dir="${OKAWAK_BLOG_PKI_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki}"
 artifact_bucket="${OKAWAK_BLOG_ARTIFACT_BUCKET:-okawak-blog-resources-bucket}"
 certificate_days="${OKAWAK_BLOG_CERTIFICATE_DAYS:-90}"
@@ -30,6 +31,7 @@ Rotate the IAM Roles Anywhere client certificate used by the production VPS.
 SSH_TARGET defaults to OKAWAK_BLOG_VPS_SSH_TARGET, or to the SSH alias "oci".
 
 Optional environment variables:
+  OKAWAK_BLOG_VPS_SSH_PORT       SSH port (1-65535; default: SSH config)
   OKAWAK_BLOG_PKI_DIR             CA files directory
   OKAWAK_BLOG_ARTIFACT_BUCKET     S3 artifact bucket
   OKAWAK_BLOG_CERTIFICATE_DAYS    New certificate validity in days (default: 90)
@@ -45,6 +47,22 @@ fail() {
   exit 1
 }
 
+run_ssh() {
+  if [[ -n "$ssh_port" ]]; then
+    ssh -p "$ssh_port" "$@"
+  else
+    ssh "$@"
+  fi
+}
+
+run_scp() {
+  if [[ -n "$ssh_port" ]]; then
+    scp -P "$ssh_port" "$@"
+  else
+    scp "$@"
+  fi
+}
+
 cleanup_remote_upload() {
   local status="$?"
 
@@ -53,7 +71,7 @@ cleanup_remote_upload() {
   if [[ "$remote_upload_created" == true ]]; then
     # The remote paths are intentionally expanded locally from the validated stamp.
     # shellcheck disable=SC2029
-    ssh "$ssh_target" \
+    run_ssh "$ssh_target" \
       "rm -f '$remote_upload_dir/vps-client-cert-$stamp.pem' '$remote_upload_dir/vps-client-key-$stamp.pem' '$remote_script'; rmdir '$remote_upload_dir' 2>/dev/null || true" \
       >/dev/null 2>&1 || true
   fi
@@ -71,6 +89,11 @@ fi
 [[ "$ssh_target" =~ ^[A-Za-z0-9._@:-]+$ ]] \
   || fail "SSH target contains unsupported characters: $ssh_target"
 [[ "$ssh_target" != -* ]] || fail "SSH target must not start with '-'"
+if [[ -n "$ssh_port" ]]; then
+  if [[ ! "$ssh_port" =~ ^[1-9][0-9]{0,4}$ ]] || ((ssh_port > 65535)); then
+    fail "OKAWAK_BLOG_VPS_SSH_PORT must be an integer between 1 and 65535"
+  fi
+fi
 [[ "$artifact_bucket" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] \
   || fail "invalid S3 bucket name: $artifact_bucket"
 [[ "$certificate_days" =~ ^[1-9][0-9]*$ ]] \
@@ -158,15 +181,15 @@ openssl x509 \
 echo "certificate-rotation: staging files on $ssh_target"
 # The remote path is intentionally expanded locally from the validated stamp.
 # shellcheck disable=SC2029
-ssh "$ssh_target" "umask 077; mkdir '$remote_upload_dir'"
+run_ssh "$ssh_target" "umask 077; mkdir '$remote_upload_dir'"
 remote_upload_created=true
-scp \
+run_scp \
   "$client_certificate" \
   "$client_private_key" \
   "$repo_root/scripts/activate_runtime_certificate.sh" \
   "$ssh_target:$remote_upload_dir/"
 
-ssh -tt "$ssh_target" \
+run_ssh -tt "$ssh_target" \
   "ROTATION_STAMP='$stamp' ARTIFACT_BUCKET='$artifact_bucket' UPLOAD_DIR='$remote_upload_dir' bash '$remote_script'"
 
 remote_upload_created=false
