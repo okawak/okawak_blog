@@ -504,7 +504,7 @@ Obsidian submodule
   -> Browser
 ```
 
-application deployはTopcoat release binaryとasset bundleを同じrelease単位で扱う。`build-deployment`は稼働中のdirectoryへ書かず、`target/release/server`と`target/assets-staged`を生成する。activationはsystemd unitの`WorkingDirectory`と`ExecStart`をVPS上のrepositoryと配備binaryの絶対パスへ合わせてインストールし、service停止中にbinaryを`bin/okawak_blog`、bundleをbinary隣接の`bin/assets`へ切り替える。stagingはmanifest内のCSS、JavaScript、faviconと各参照fileを検証し、WebAssemblyを拒否する。起動後のhealth / readinessが失敗した場合は旧binaryと旧bundleを復元し、失敗bundleを`bin/assets.failed`へ保存する。
+application deployはTopcoat release binaryとasset bundleを同じrelease単位で扱う。`build-deployment`は稼働中のdirectoryへ書かず、`target/release/server`と`target/assets-staged`を生成する。activationはsystemd unitの`WorkingDirectory`と`ExecStart`をVPS上のrepositoryと配備binaryの絶対パスへ合わせてインストールし、service停止中にbinaryを`bin/okawak_blog`、bundleをbinary隣接の`bin/assets`へ切り替える。stagingはmanifest内のCSS、JavaScript、faviconと各参照fileを検証し、WebAssemblyを拒否する。起動後のhealth / readinessが失敗した場合は旧binary・旧bundle・上書き前のsystemd unitを復元してから`daemon-reload`と再起動を行い、失敗bundleを`bin/assets.failed`へ保存する。
 
 `cloudflared`はVPSからCloudflareへ外向き接続し、originの80/443は公開しない。public hostnameとTunnel routeはCloudflare Dashboardで管理し、OCI TerraformはReserved Public IP、SSH用ingress、Tunnel用egressなどのOCI resourceだけを管理する。S3 upload は Rust アプリに持たせず、workflow の責務として扱う。
 

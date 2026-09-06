@@ -17,6 +17,8 @@ rollback_assets="$bin_dir/assets.rollback"
 failed_assets="$bin_dir/assets.failed"
 installed_bin="$bin_dir/$service_name"
 rollback_bin="$bin_dir/$service_name.rollback"
+installed_service="$systemd_unit_dir/$service_name.service"
+rollback_service="$installed_service.rollback"
 probe_attempts="${DEPLOY_PROBE_ATTEMPTS:-15}"
 
 service_was_active=false
@@ -24,6 +26,8 @@ live_assets_moved=false
 assets_swapped=false
 binary_change_started=false
 had_installed_bin=false
+unit_change_started=false
+had_installed_service=false
 
 fail() {
   echo "staged-deploy: $*" >&2
@@ -69,6 +73,18 @@ rollback() {
     sudo mv "$rollback_assets" "$live_assets"
   fi
 
+  if [[ "$unit_change_started" == true ]]; then
+    if [[ "$had_installed_service" == true ]]; then
+      if ! sudo mv -f "$rollback_service" "$installed_service"; then
+        echo "staged-deploy: unit recovery failed; restore $rollback_service before restarting the service" >&2
+        exit "$status"
+      fi
+    elif ! sudo rm -f "$installed_service"; then
+      echo "staged-deploy: could not remove the failed deployment unit: $installed_service" >&2
+      exit "$status"
+    fi
+  fi
+
   sudo systemctl daemon-reload
   if [[ "$service_was_active" == true ]]; then
     sudo systemctl start "$service_name.service"
@@ -106,6 +122,7 @@ done < <(sed -nE 's/^file = "([^"]+)"$/\1/p' "$staged_assets/manifest.toml")
 path_exists "$rollback_assets" && fail "rollback asset bundle already exists: $rollback_assets"
 path_exists "$failed_assets" && fail "failed asset bundle already exists: $failed_assets"
 path_exists "$rollback_bin" && fail "rollback binary already exists: $rollback_bin"
+path_exists "$rollback_service" && fail "rollback systemd unit already exists: $rollback_service"
 
 rendered_service="$(mktemp)"
 trap 'rm -f -- "$rendered_service"' EXIT
@@ -118,10 +135,17 @@ if sudo systemctl is-active --quiet "$service_name.service"; then
   service_was_active=true
 fi
 
+# Preserve the old unit before changing it, including when it points to another checkout.
+if path_exists "$installed_service"; then
+  sudo cp -Pp "$installed_service" "$rollback_service"
+  had_installed_service=true
+fi
+
 trap 'rollback $? $LINENO' ERR
 
+unit_change_started=true
 sudo install -o root -g root -m 0644 \
-  "$rendered_service" "$systemd_unit_dir/$service_name.service"
+  "$rendered_service" "$installed_service"
 sudo systemctl daemon-reload
 sudo systemctl stop "$service_name.service"
 
@@ -163,6 +187,9 @@ if [[ "$live_assets_moved" == true ]]; then
 fi
 if [[ "$had_installed_bin" == true ]]; then
   sudo rm -f "$rollback_bin"
+fi
+if [[ "$had_installed_service" == true ]]; then
+  sudo rm -f "$rollback_service"
 fi
 
 echo "staged-deploy: release activated and health/readiness checks passed"

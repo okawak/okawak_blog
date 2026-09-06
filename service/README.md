@@ -72,9 +72,9 @@ git status --short
 
 Topcoat CLIが0.7.0で、`mise run check-deps`が成功し、Git差分が空であれば正常です。`mise run build-project`とproduction用のstaged buildはTopcoatのstandalone Tailwind integrationを使い、Bun package installへ依存しません。
 
-`mise run production-deploy`は稼働中のasset directoryを直接buildしません。`target/assets-staged`にhash付きCSS / JavaScript / faviconを揃え、service停止後に`bin/okawak_blog`と、Topcoatがbinaryの隣から読む`bin/assets`を同じreleaseへ切り替えます。stagingはWebAssemblyを拒否します。起動後のhealth / readinessが失敗した場合は旧binaryと旧assetsを復元し、調査用の失敗bundleを`bin/assets.failed`へ残します。
+`mise run production-deploy`は稼働中のasset directoryを直接buildしません。`target/assets-staged`にhash付きCSS / JavaScript / faviconを揃え、service停止後に`bin/okawak_blog`と、Topcoatがbinaryの隣から読む`bin/assets`を同じreleaseへ切り替えます。stagingはWebAssemblyを拒否します。起動後のhealth / readinessが失敗した場合は旧binary・旧assets・旧systemd unitを復元し、調査用の失敗bundleを`bin/assets.failed`へ残します。
 
-配備時はsystemd unitの`WorkingDirectory`をVPSのrepository root、`ExecStart`を配備したbinaryの絶対パスへ置き換えてインストールします。Git管理下のunit fileは変更しません。`ProtectHome=true`は維持するため、インストール先には`/opt`や`/srv`など、serviceから読める場所を使います。
+配備時はsystemd unitの`WorkingDirectory`をVPSのrepository root、`ExecStart`を配備したbinaryの絶対パスへ置き換えてインストールします。上書き前のunitは同じsystemd directoryの`okawak_blog.service.rollback`へ退避し、失敗時は`daemon-reload`と再起動の前に復元します。初回配備で旧unitがなければ新unitを削除します。unit復元に失敗した場合はbackupを残し、再起動を止めて手動復旧を案内します。Git管理下のunit fileは変更しません。`ProtectHome=true`は維持するため、インストール先には`/opt`や`/srv`など、serviceから読める場所を使います。
 
 ## AWS credentials
 
