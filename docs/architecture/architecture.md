@@ -503,6 +503,8 @@ application deployはTopcoat release binaryとasset bundleを同じrelease単位
 
 `cloudflared`はVPSからCloudflareへ外向き接続し、originの80/443は公開しない。public hostnameとTunnel routeはCloudflare Dashboardで管理し、OCI TerraformはReserved Public IP、SSH用ingress、Tunnel用egressなどのOCI resourceだけを管理する。S3 upload は Rust アプリに持たせず、workflow の責務として扱う。
 
+通常のVPS運用の入口は管理端末の`*-vps` taskとする。SSH呼出しは`scripts/vps.sh`へ集約し、配備はVPS内部の`production-deploy` taskへ委譲する。ビルド・切り替え・rollbackはVPSで完結し、管理端末のソースやbinaryを転送しない。SSH接続設定などの`mise.local.toml`は管理端末専用とし、VPSはGit管理下のmise設定とsystemd / `/etc/okawak_blog/aws/`を使用する。
+
 ## 非目標
 
 現時点の非目標は次の通り。

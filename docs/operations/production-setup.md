@@ -69,7 +69,9 @@ VPSのOS、SSH、一般的なbuild tool、運用userの準備手順はこの文�
 
 IAM Roles Anywhereのhelper、AWS config、client certificate、private keyを先に配置します。[AWS runtime認証](./aws-runtime-auth.md)のVPS手順でcaller identityとS3 readを確認します。
 
-applicationをbuildしてserviceを配置します。
+初期設定後のコード更新は、管理端末のrepository rootから`mise run deploy-vps`を実行します。SSH接続設定・前提・完了確認は[操作する端末と設定](../../service/README.md#操作する端末と設定)を参照してください。`mise.local.toml`は管理端末専用で、VPSには配置しません。
+
+以下は初期構築時にVPSへログインして内部taskを直接実行する手順です。applicationをbuildしてserviceを配置します。
 
 ```bash
 cd /opt/okawak_blog
@@ -84,7 +86,7 @@ curl --fail http://127.0.0.1:8008/api/ready
 
 `production-deploy`は`origin/main`をpullし、Topcoat release binaryをbuildして、稼働中の`bin/assets`とは別の`target/assets-staged`へcontent-hash付きCSS、JavaScript、faviconを生成します。staging bundleはmanifest参照とfile実体を検証し、WebAssemblyを拒否します。bundleが完成した後だけapplication serviceを停止し、`bin/okawak_blog`と`bin/assets`を同じreleaseへ切り替えて起動します。起動後はhealth / readinessを確認し、失敗時は直前のbinaryとasset bundleを復元します。Cloudflare Tunnelは独立したserviceとして維持します。
 
-失敗したasset bundleを保存できた場合は`bin/assets.failed`へ残します。原因を確認して不要になった後に削除してから、`mise run production-deploy`を再実行します。
+失敗したasset bundleを保存できた場合は`bin/assets.failed`へ残します。原因を確認して不要になった後に削除してから、管理端末で`mise run deploy-vps`を再実行します。
 
 ## 5. Cloudflare Tunnelを構築する
 
@@ -128,8 +130,8 @@ curl --fail https://www.okawak.net/api/ready
 
 ## 7. 定常運用
 
-- application deploy: `mise run production-deploy`
-- application log: `mise run logs-recent`
+- application deploy（管理端末）: `mise run deploy-vps`
+- application log（管理端末）: `mise run logs-recent-vps`
 - AWS certificate: [期限確認と更新](./aws-runtime-auth.md#certificate期限確認)
 - Cloudflare package/token: [更新と検証](./cloudflare-tunnel.md)
 - OCI変更: [plan review](./oci-network.md#terraform変更時の確認)

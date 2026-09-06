@@ -1,17 +1,20 @@
-# 管理端末のローカル設定例。詳細: docs/operations/aws-runtime-auth.md
+# 管理端末専用のローカル設定例。VPSにはこのファイルやmise.local.tomlを配置しない。
+# デプロイ: service/README.md、証明書更新: docs/operations/aws-runtime-auth.md
 # mise.local.tomlがない場合だけコピーし、既存ファイルがあれば必要な項目を[env]へ追記する。
 # mise.local.tomlはGit管理対象外。秘密鍵や証明書の本文はここに記入しない。
 
 [env]
+# *-vps / rotate-runtime-certificate共通のSSH接続先。SSH configのHost名などを指定する。
+# 必須（taskの引数でも指定可能、引数が優先）。固定の接続先へのfallbackはない。
+# 例: SSH configが「Host oci」なら "oci" を記入する。
+OKAWAK_BLOG_VPS_SSH_TARGET = ""
+
 # 証明書更新時に必須: CAを保管する管理端末でhostnameを実行し、その出力を固定文字列で記入する。
 # VPSのhostnameや、実行時にhostnameを自動取得する式は設定しない。
 # 空欄のままでは、証明書更新taskは鍵生成・SSH接続より前に停止する。
 OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST = ""
 
 # 以下は必要な場合だけコメントを外して設定する。
-
-# 更新対象のSSH接続先。既定はoci。taskの引数で指定した接続先が優先される。
-# OKAWAK_BLOG_VPS_SSH_TARGET = "oci"
 
 # SSH configにPortがない場合などに指定する。未設定ならSSH configに従う。
 # OKAWAK_BLOG_VPS_SSH_PORT = "60022"

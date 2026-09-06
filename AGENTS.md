@@ -37,4 +37,4 @@ rootの[mise.toml](mise.toml)を正とし、`mise tasks ls`で確認して`mise 
 - `dev-local`: private submoduleをremote最新へ同期し、厳格モードのpublish成果物をlocal配信する。同期・publish失敗時はserverを起動しない。
 - `sync-obsidian`: 同期のみ。未commit差分があれば停止し、cleanならmerge commitを作らずremote最新をcheckoutする。
 - `dev` / `test-e2e-s3`: S3配信の開発確認 / 明示的な実S3 smoke。`OKAWAK_BLOG_ARTIFACT_BUCKET`必須。`dev`はtaskが`OKAWAK_BLOG_ARTIFACT_SOURCE=s3`を設定する。
-- `service/`: systemd・Cloudflare Tunnel・運用補助。S3設定・credentials・health/readinessの詳細は[service/README.md](service/README.md)と[service unit](service/okawak_blog.service)を参照する。`sudo`を伴うtaskはVPS運用向け。
+- `service/`: systemd・Cloudflare Tunnel・運用補助。通常のVPS操作は管理端末の`*-vps` taskを使い、VPS内部用taskは`mise tasks ls --hidden`で確認する。`mise.local.toml`は管理端末専用。S3設定・credentials・health/readinessの詳細は[service/README.md](service/README.md)と[service unit](service/okawak_blog.service)を参照する。

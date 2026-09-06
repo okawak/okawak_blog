@@ -283,16 +283,17 @@ cp -n mise.local.toml.example mise.local.toml
 hostname
 ```
 
-`mise.local.toml`を編集し、`hostname`の出力を固定文字列として登録します。exampleの空欄のままでは更新taskは実行できません。SSH接続先、PKI directory、有効日数などの任意設定もexampleのコメントを参照してください。
+`mise.local.toml`を編集し、`hostname`の出力とSSH接続先を固定文字列として登録します。exampleの空欄のままでは更新taskは実行できません。PKI directory、有効日数などの任意設定もexampleのコメントを参照してください。
 
 ```toml
 [env]
 OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST = "管理端末のhostnameの出力"
+OKAWAK_BLOG_VPS_SSH_TARGET = "SSH configのHost名"
 ```
 
 taskは登録したhostnameと実行端末のhostnameが完全一致する場合だけ実行できます。未設定・空文字・不一致・hostname取得失敗の場合は、CA fileの確認・鍵生成・serial更新・SSH/SCP接続より前に停止します。`--help`は未登録の端末でも表示できます。管理端末のhostnameを変更した場合は登録値も更新します。登録値を実行のたびに自動取得する設定にはせず、VPSのhostnameを登録しないでください。この確認は誤操作防止用であり、hostnameや設定を書き換えられる利用者に対する認証・アクセス制御ではありません。
 
-通常の更新は管理端末のrepository rootから次のtaskを実行します。SSH configの`oci`をVPS接続先として使い、必要な`sudo` passwordは実行中に入力します。
+通常の更新は管理端末のrepository rootから次のtaskを実行します。`OKAWAK_BLOG_VPS_SSH_TARGET`に設定した接続先を使い、必要な`sudo` passwordは実行中に入力します。接続先の既定値はなく、環境変数と引数の両方が未設定なら、鍵生成・SSH接続前に停止します。
 
 ```bash
 mise run rotate-runtime-certificate
