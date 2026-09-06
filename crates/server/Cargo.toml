@@ -10,7 +10,7 @@ license.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono = { workspace = true, features = ["serde"] }
-domain = { path = "../../domain" }
+domain = { path = "../domain" }
 infra = { path = "../infra" }
 httpdate.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

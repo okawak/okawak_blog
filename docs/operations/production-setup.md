@@ -65,7 +65,7 @@ OCI Terraformは現在local stateを使います。stateとbackupをrepository�
 
 ## 4. VPSへapplicationを配置する
 
-VPSのOS、SSH、一般的なbuild tool、運用userの準備手順はこの文書の対象外です。repositoryが`/opt/okawak_blog`にあり、[runtime serviceのVPS build tool設定](../../service/README.md#vps-build-tool)が有効であることを前提とします。
+VPSのOS、SSH、一般的なbuild tool、運用userの準備手順はこの文書の対象外です。repositoryがVPS上に配置済みであり、[runtime serviceのVPS build tool設定](../../service/README.md#vps-build-tool)が有効であることを前提とします。管理端末の`mise.local.toml`には、この配置先を`OKAWAK_BLOG_VPS_REPO_DIR`として必ず指定します。未設定・空欄ではデプロイできません。
 
 IAM Roles Anywhereのhelper、AWS config、client certificate、private keyを先に配置します。[AWS runtime認証](./aws-runtime-auth.md)のVPS手順でcaller identityとS3 readを確認します。
 
@@ -74,7 +74,7 @@ IAM Roles Anywhereのhelper、AWS config、client certificate、private keyを�
 以下は初期構築時にVPSへログインして内部taskを直接実行する手順です。applicationをbuildしてserviceを配置します。
 
 ```bash
-cd /opt/okawak_blog
+cd /opt/okawak_blog # 別のインストール先の場合はそのパスへ置き換える
 mise run production-deploy
 
 sudo systemctl enable okawak_blog

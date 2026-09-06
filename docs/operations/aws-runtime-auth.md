@@ -16,9 +16,9 @@ VPSで維持するfile:
 管理端末ではCA private key、CA certificate、serial fileをrepositoryや同期対象外の暗号化された保管先で維持します。CA private keyはclient certificate更新に必要なので削除しません。
 
 ```text
-${HOME}/.local/share/okawak-blog-pki/ca-key.pem
-${HOME}/.local/share/okawak-blog-pki/ca-cert.pem
-${HOME}/.local/share/okawak-blog-pki/ca-cert.srl
+${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki/ca-key.pem
+${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki/ca-cert.pem
+${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki/ca-cert.srl
 ```
 
 systemd unitは次だけをAWS SDKへ渡します。
@@ -39,7 +39,7 @@ AWS_EC2_METADATA_DISABLED=true
 CA private keyはrepositoryや同期directoryの外に置き、暗号化backupを作成します。client certificate更新で再利用するため削除しません。
 
 ```bash
-export PKI_DIR="${HOME}/.local/share/okawak-blog-pki"
+export PKI_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki"
 install -d -m 0700 "${PKI_DIR}"
 cd "${PKI_DIR}"
 umask 077
@@ -264,10 +264,10 @@ openssl x509 \
   -noout -subject -issuer -serial -dates
 ```
 
-CAの期限も管理端末で確認します。client certificateに残存期間があっても、CAが先に期限切れになると認証を継続できません。次は既定の90日更新に必要な残存期間を確認する例です。有効期間を変更している場合は、その日数を秒に換算した値で確認します。
+CAの期限も管理端末で確認します。client certificateに残存期間があっても、CAが先に期限切れになると認証を継続できません。次は90日更新に必要な残存期間を確認する例です。
 
 ```bash
-PKI_DIR="${OKAWAK_BLOG_PKI_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki}"
+PKI_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki"
 openssl x509 -in "$PKI_DIR/ca-cert.pem" -noout -subject -issuer -dates
 openssl x509 -checkend 7776000 -noout -in "$PKI_DIR/ca-cert.pem"
 ```
@@ -283,7 +283,7 @@ cp -n mise.local.toml.example mise.local.toml
 hostname
 ```
 
-`mise.local.toml`を編集し、`hostname`の出力とSSH接続先を固定文字列として登録します。exampleの空欄のままでは更新taskは実行できません。PKI directory、有効日数などの任意設定もexampleのコメントを参照してください。
+`mise.local.toml`を編集し、`hostname`の出力とSSH接続先を固定文字列として登録します。exampleの空欄のままでは更新taskは実行できません。
 
 ```toml
 [env]
@@ -301,29 +301,26 @@ mise run rotate-runtime-certificate
 
 この制限は管理端末側の発行taskだけに適用します。VPS側の切り替えscriptはtaskからSSH経由で自動実行するため、VPSでこのmise taskを手動実行したり、管理端末の登録設定を用意したりする必要はありません。
 
-別のSSH targetを使う場合は引数で指定します。SSH configにPortが設定されていない接続先では、通常運用の60022番を環境変数で指定します。
+別のSSH targetを使う場合は引数で指定します。hostname、user、鍵、PortはSSH configに設定し、転送・切り替え・失敗時の後片付けで共通して使います。
 
 ```bash
-OKAWAK_BLOG_VPS_SSH_PORT=60022 mise run rotate-runtime-certificate -- '<USER>@<RESERVED_PUBLIC_IP>'
+mise run rotate-runtime-certificate -- my-vps
 ```
 
-`OKAWAK_BLOG_VPS_SSH_PORT`は転送・切り替え・失敗時の後片付けのすべてに適用されます。未指定または空文字の場合はSSH configの設定に従います。
+発行設定は次の値に固定し、運用task用の環境変数による上書きは受け付けません。
 
-Terraformの`roles_anywhere_certificate_subject_cn`を既定値の`okawak-blog-vps`から変更している場合は、同じ値を`OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN`へ設定します。
+- CA fileの保存先: `${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki`
+- client certificateの有効期間: 90日
+- Subject CN: `okawak-blog-vps`（AWS側で許可するCNもこの値に揃える）
+- 検証するS3 bucket: `okawak-blog-resources-bucket`
 
-```bash
-OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN='custom-blog-vps' mise run rotate-runtime-certificate
-```
+`OKAWAK_BLOG_ARTIFACT_BUCKET`はアプリのS3 readerと`dev` / `test-e2e-s3`の設定として使用します。証明書更新taskでは参照しません。
 
-継続して使う場合は、Git管理対象外の`mise.local.toml`の`[env]`へこの環境変数を設定できます。
-
-新しいcertificateの有効期間は既定で90日です。`OKAWAK_BLOG_CERTIFICATE_DAYS`で変更する場合は8以上の整数を指定します。VPS側では切り替え前に残存期間が7日を超えることを確認するため、1〜7日はCA serialの更新・鍵生成・転送を行う前に拒否します。
-
-CA自身が指定した有効期間全体をカバーできることも、鍵生成・serial更新の前に検証します。発行に時間がかかって境界を越えた場合を考慮し、発行後にも同じ検証を行い、CAが先に期限切れになるペアは転送しません。有効期間はOpenSSLの`-days`が受け取れる符号付き32-bit整数の範囲に制限し、秒への換算でoverflowする入力も発行前に拒否します。
+CA自身が90日間の有効期間全体をカバーできることを、鍵生成・serial更新の前に検証します。発行に時間がかかって境界を越えた場合を考慮し、発行後にも同じ検証を行い、CAが先に期限切れになるペアは転送しません。
 
 taskは次を順に実行します。
 
-1. 管理端末の既存CAで、新しいclient private keyと既定で90日間有効なcertificateを日付付きfileへ作成する
+1. 管理端末の既存CAで、新しいclient private keyと90日間有効なcertificateを日付付きfileへ作成する
 2. chain、用途、certificateとprivate keyの対応を検証する
 3. VPSの一時directoryへ転送し、本番とは別のAWS configとfile pathでIAM Roles Anywhere、S3 readを検証する
 4. serviceのLoadStateとActiveStateを取得し、正常に読み込まれたactive/inactiveの場合だけcertificate pairを切り替える。activeなら停止してから切り替え、serviceを再開する
@@ -334,7 +331,7 @@ service再開後のhealth/readinessは、両方が同じ試行で成功するま
 
 service状態の照会失敗、ユニット未読込、failedや起動・停止などの遷移中、不明な状態では、本番ペアの変更やservice操作を行わず終了します。元々inactiveならserviceを起動せず、切り替え後のAWS認証・S3 readだけを検証します。更新中は別の証明書更新やデプロイを同じVPSで並行実行しないでください。
 
-taskはTerraformを変更・適用しません。既定値を変更する場合は`mise run rotate-runtime-certificate -- --help`で環境変数を確認します。
+taskはTerraformを変更・適用しません。実行方法は`mise run rotate-runtime-certificate -- --help`で確認できます。
 
 復旧中の追加のHUP・INT・TERMは無視し、復旧処理を継続します。SIGKILLやVPSの電源断は捕捉できないため、その場合は残ったrollback fileとserviceの状態を確認して手動で復旧します。
 
@@ -345,7 +342,7 @@ taskはTerraformを変更・適用しません。既定値を変更する場合�
 taskを使用できない場合は、管理端末で既存CAを使用し、更新ごとに新しいclient private keyとcertificateを別名で作成します。Subject CNはTerraformの`roles_anywhere_certificate_subject_cn`と一致させます。
 
 ```bash
-export PKI_DIR="${HOME}/.local/share/okawak-blog-pki"
+export PKI_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki"
 export CERT_STAMP="$(date +%Y%m%d)"
 cd "${PKI_DIR}"
 umask 077

@@ -20,9 +20,6 @@ printf '%s\n' "$@" >"$STUB_SSH_LOG"
 [[ "${STUB_SSH_STATUS:-0}" == 0 ]] || exit "$STUB_SSH_STATUS"
 [[ "$1" == -tt ]]
 shift
-if [[ "$1" == -p ]]; then
-  shift 2
-fi
 shift # SSH target
 [[ $# == 1 ]]
 # Exercise shell quoting, but never load the test runner's real login profile.
@@ -31,8 +28,9 @@ bash() {
   /bin/bash --noprofile --norc -c "$2"
 }
 cd() {
-  [[ "$1" == /opt/okawak_blog ]]
+  [[ "$1" == "${STUB_EXPECTED_REPO_DIR:-/opt/okawak_blog}" ]]
   printf 'cd %s\n' "$1" >>"$STUB_REMOTE_LOG"
+  return "${STUB_CD_STATUS:-0}"
 }
 export -f bash cd
 /bin/bash --noprofile --norc -c "$1"
@@ -66,7 +64,7 @@ chmod +x "$test_root/bin/"*
 export PATH="$test_root/bin:$PATH"
 export STUB_SSH_LOG="$test_root/ssh.log"
 export STUB_REMOTE_LOG="$test_root/remote.log"
-unset OKAWAK_BLOG_VPS_SSH_TARGET OKAWAK_BLOG_VPS_SSH_PORT
+unset OKAWAK_BLOG_VPS_SSH_TARGET OKAWAK_BLOG_VPS_SSH_PORT OKAWAK_BLOG_VPS_REPO_DIR
 
 run_case() {
   local expected_status="$1"
@@ -91,14 +89,32 @@ for script in "$deployment_script" "$repo_root/scripts/rotate_runtime_certificat
 done
 export OKAWAK_BLOG_VPS_SSH_TARGET=test-vps
 
+run_case 1 bash "$deployment_script" deploy
+grep -q 'OKAWAK_BLOG_VPS_REPO_DIR' "$test_root/output.log" || fail "missing directory setup guidance"
+[[ ! -s "$STUB_SSH_LOG" && ! -s "$STUB_REMOTE_LOG" ]] || fail "missing VPS directory contacted SSH"
+run_case 0 bash "$deployment_script" deploy --help
+[[ ! -s "$STUB_SSH_LOG" ]] || fail "help without directory contacted SSH"
+export OKAWAK_BLOG_VPS_REPO_DIR=/opt/okawak_blog
+
 run_case 0 bash "$deployment_script" deploy
 [[ "$(head -2 "$STUB_SSH_LOG")" == $'-tt\ntest-vps' ]] || fail "configured SSH alias/TTY not used"
 [[ "$(cat "$STUB_REMOTE_LOG")" == $'cd /opt/okawak_blog\ngit branch --show-current\ngit status --porcelain\ngit fetch origin main\ngit merge-base --is-ancestor HEAD FETCH_HEAD\nmise run production-deploy' ]] \
   || fail "remote preflight/deploy order is incorrect"
 
+run_case 0 env OKAWAK_BLOG_VPS_REPO_DIR=/srv/apps/okawak_blog STUB_EXPECTED_REPO_DIR=/srv/apps/okawak_blog \
+  bash "$deployment_script" deploy
+[[ "$(head -1 "$STUB_REMOTE_LOG")" == 'cd /srv/apps/okawak_blog' ]] || fail "configured VPS directory not used"
+for invalid_dir in '' relative/path '~/okawak_blog' / ' /srv/blog' '/srv/blog;echo bad' '/srv/$(echo bad)' '/srv/blog%h' '/srv/blog name'; do
+  run_case 1 env OKAWAK_BLOG_VPS_REPO_DIR="$invalid_dir" bash "$deployment_script" deploy
+  grep -q 'OKAWAK_BLOG_VPS_REPO_DIR' "$test_root/output.log" || fail "missing directory setup guidance"
+  [[ ! -s "$STUB_SSH_LOG" ]] || fail "invalid VPS directory contacted SSH"
+done
+run_case 1 env STUB_CD_STATUS=1 bash "$deployment_script" deploy
+! grep -q '^git \|^mise ' "$STUB_REMOTE_LOG" || fail "missing VPS directory advanced deployment"
+
 run_case 0 env OKAWAK_BLOG_VPS_SSH_TARGET=other-host OKAWAK_BLOG_VPS_SSH_PORT=60022 \
   bash "$deployment_script" deploy user@vps
-[[ "$(head -4 "$STUB_SSH_LOG")" == $'-tt\n-p\n60022\nuser@vps' ]] || fail "SSH argument precedence/port not applied"
+[[ "$(head -2 "$STUB_SSH_LOG")" == $'-tt\nuser@vps' ]] || fail "SSH argument precedence/config not applied"
 run_case 0 env OKAWAK_BLOG_VPS_SSH_TARGET=other-host bash "$deployment_script" deploy
 [[ "$(sed -n '2p' "$STUB_SSH_LOG")" == other-host ]] || fail "environment target not used"
 
@@ -107,10 +123,6 @@ run_case 0 bash "$deployment_script" deploy --help
 for invalid_target in -oProxyCommand=bad 'host;echo bad' 'host name'; do
   run_case 1 bash "$deployment_script" deploy "$invalid_target"
   [[ ! -s "$STUB_SSH_LOG" ]] || fail "invalid target contacted SSH"
-done
-for invalid_port in 0 65536 -1 '22;echo bad'; do
-  run_case 1 env OKAWAK_BLOG_VPS_SSH_PORT="$invalid_port" bash "$deployment_script" deploy
-  [[ ! -s "$STUB_SSH_LOG" ]] || fail "invalid port contacted SSH"
 done
 run_case 1 bash "$deployment_script" deploy test-vps unexpected-argument
 [[ ! -s "$STUB_SSH_LOG" ]] || fail "extra arguments contacted SSH"

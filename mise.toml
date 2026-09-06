@@ -73,7 +73,7 @@ git submodule update --remote --checkout --recursive "$obsidian_path"
 description = "Format Rust and Topcoat source files"
 run = '''
 cargo fmt --all
-find crates/site/server -name '*.rs' -exec topcoat fmt {} +
+find crates/server -name '*.rs' -exec topcoat fmt {} +
 '''
 
 [tasks.dev]
@@ -190,9 +190,9 @@ run = "cargo test --workspace"
 description = "Validate systemd units, remote deployment, rollback, and certificate rotation"
 run = '''
 bash service/tests/systemd_units_test.sh
-bash service/tests/staged_deployment_test.sh
-bash service/tests/remote_deployment_test.sh
-bash service/tests/runtime_certificate_rotation_test.sh
+bash scripts/tests/staged_deployment_test.sh
+bash scripts/tests/remote_deployment_test.sh
+bash scripts/tests/runtime_certificate_rotation_test.sh
 '''
 
 [tasks.test-domain]

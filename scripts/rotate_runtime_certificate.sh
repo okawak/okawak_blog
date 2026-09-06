@@ -4,11 +4,11 @@ set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ssh_target="${1:-${OKAWAK_BLOG_VPS_SSH_TARGET:-}}"
-ssh_port="${OKAWAK_BLOG_VPS_SSH_PORT:-}"
-pki_dir="${OKAWAK_BLOG_PKI_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki}"
-artifact_bucket="${OKAWAK_BLOG_ARTIFACT_BUCKET:-okawak-blog-resources-bucket}"
-certificate_days="${OKAWAK_BLOG_CERTIFICATE_DAYS:-90}"
-certificate_subject_cn="${OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN-okawak-blog-vps}"
+pki_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki"
+artifact_bucket="okawak-blog-resources-bucket"
+certificate_days=90
+certificate_subject="/O=okawak/CN=okawak-blog-vps"
+certificate_validity_seconds=$((certificate_days * 86400))
 issuer_host="${OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST:-}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 
@@ -37,16 +37,10 @@ Required environment variable (configure once in mise.local.toml):
                                 Literal hostname of the management host
   OKAWAK_BLOG_VPS_SSH_TARGET    SSH target (unless supplied as an argument)
 
-Optional environment variables:
-  OKAWAK_BLOG_VPS_SSH_PORT       SSH port (1-65535; default: SSH config)
-  OKAWAK_BLOG_PKI_DIR             CA files directory
-  OKAWAK_BLOG_ARTIFACT_BUCKET     S3 artifact bucket
-  OKAWAK_BLOG_CERTIFICATE_DAYS    New certificate validity in days (minimum: 8; default: 90)
-                                Must fit OpenSSL's signed 32-bit integer range
-  OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN
-                                Subject CN matching Terraform's
-                                roles_anywhere_certificate_subject_cn
-                                (default: okawak-blog-vps)
+SSH config supplies the port, hostname, user and authentication settings.
+CA files: ${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki.
+Certificate: 90 days, Subject CN okawak-blog-vps.
+S3 artifact bucket: okawak-blog-resources-bucket.
 EOF
 }
 
@@ -60,22 +54,6 @@ check_ca_validity() {
     || fail "CA certificate cannot cover the requested $certificate_days-day validity; renew the CA and AWS Trust Anchor before retrying"
 }
 
-run_ssh() {
-  if [[ -n "$ssh_port" ]]; then
-    ssh -p "$ssh_port" "$@"
-  else
-    ssh "$@"
-  fi
-}
-
-run_scp() {
-  if [[ -n "$ssh_port" ]]; then
-    scp -P "$ssh_port" "$@"
-  else
-    scp "$@"
-  fi
-}
-
 cleanup_remote_upload() {
   local status="$?"
 
@@ -84,7 +62,7 @@ cleanup_remote_upload() {
   if [[ "$remote_upload_created" == true ]]; then
     # The remote paths are intentionally expanded locally from the validated stamp.
     # shellcheck disable=SC2029
-    run_ssh "$ssh_target" \
+    ssh "$ssh_target" \
       "rm -f '$remote_upload_dir/vps-client-cert-$stamp.pem' '$remote_upload_dir/vps-client-key-$stamp.pem' '$remote_script'; rmdir '$remote_upload_dir' 2>/dev/null || true" \
       >/dev/null 2>&1 || true
   fi
@@ -104,27 +82,6 @@ fi
 [[ "$ssh_target" =~ ^[A-Za-z0-9._@:-]+$ ]] \
   || fail "SSH target contains unsupported characters: $ssh_target"
 [[ "$ssh_target" != -* ]] || fail "SSH target must not start with '-'"
-if [[ -n "$ssh_port" ]]; then
-  if [[ ! "$ssh_port" =~ ^[1-9][0-9]{0,4}$ ]] || ((ssh_port > 65535)); then
-    fail "OKAWAK_BLOG_VPS_SSH_PORT must be an integer between 1 and 65535"
-  fi
-fi
-[[ "$artifact_bucket" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] \
-  || fail "invalid S3 bucket name: $artifact_bucket"
-# Bound the OpenSSL -days integer before converting it to seconds in Bash arithmetic.
-# The VPS requires seven full days remaining, so reject shorter terms before issuance.
-if [[ ! "$certificate_days" =~ ^([8-9]|[1-9][0-9]{1,9})$ ]] || ((certificate_days > 2147483647)); then
-  fail "OKAWAK_BLOG_CERTIFICATE_DAYS must be an integer of at least 8 and no more than 2147483647"
-fi
-certificate_validity_seconds=$((certificate_days * 86400))
-[[ -n "$certificate_subject_cn" && ! "$certificate_subject_cn" =~ [[:cntrl:]] ]] \
-  || fail "OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN must be non-empty and contain no control characters"
-# Escape OpenSSL's subject separators so the configured value remains a single CN.
-escaped_subject_cn="${certificate_subject_cn//\\/\\\\}"
-escaped_subject_cn="${escaped_subject_cn//\//\\/}"
-escaped_subject_cn="${escaped_subject_cn//+/\\+}"
-certificate_subject="/O=okawak/CN=$escaped_subject_cn"
-
 # Fail closed before accessing the CA or contacting the VPS, even if CA files were copied.
 [[ "$issuer_host" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
   || fail "management-host guard: set OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST to the management host's literal hostname in mise.local.toml"
@@ -214,15 +171,15 @@ openssl x509 \
 echo "certificate-rotation: staging files on $ssh_target"
 # The remote path is intentionally expanded locally from the validated stamp.
 # shellcheck disable=SC2029
-run_ssh "$ssh_target" "umask 077; mkdir '$remote_upload_dir'"
+ssh "$ssh_target" "umask 077; mkdir '$remote_upload_dir'"
 remote_upload_created=true
-run_scp \
+scp \
   "$client_certificate" \
   "$client_private_key" \
   "$repo_root/scripts/activate_runtime_certificate.sh" \
   "$ssh_target:$remote_upload_dir/"
 
-run_ssh -tt "$ssh_target" \
+ssh -tt "$ssh_target" \
   "ROTATION_STAMP='$stamp' ARTIFACT_BUCKET='$artifact_bucket' UPLOAD_DIR='$remote_upload_dir' bash '$remote_script'"
 
 remote_upload_created=false

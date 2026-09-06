@@ -1,8 +1,8 @@
-# site/server
+# server
 
-production `server` binaryを持つ単一のTopcoat application crateです。runtimeの起動、router composition、API、HTTP cache、assetと、公開UI、SSR route、metadataを所有します。Markdown変換は行わず、UI moduleはstorage非依存の`PageLoader`からdomainのpage documentを受け取ってhome、about、category、articleを表示します。`ArtifactPageLoader`だけが`site/infra`のartifact readerを利用します。
+production `server` binaryを持つ単一のTopcoat application crateです。runtimeの起動、router composition、API、HTTP cache、assetと、公開UI、SSR route、metadataを所有します。Markdown変換は行わず、UI moduleはstorage非依存の`PageLoader`からdomainのpage documentを受け取ってhome、about、category、articleを表示します。`ArtifactPageLoader`だけが`crates/infra`のartifact readerを利用します。
 
-browser E2Eはserverとartifact readerを含む公開サイト全体を対象とするため、repository rootの[`e2e/`](../../../e2e/README.md)に置いています。
+browser E2Eはserverとartifact readerを含む公開サイト全体を対象とするため、repository rootの[`e2e/`](../../e2e/README.md)に置いています。
 
 ## applicationとruntimeの境界
 

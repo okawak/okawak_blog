@@ -549,7 +549,8 @@ done
 prepare_local_rotation_case() {
   local case_dir="$1"
 
-  mkdir -p "$case_dir/stubs" "$case_dir/uploaded"
+  mkdir -p "$case_dir/stubs" "$case_dir/uploaded" "$case_dir/data"
+  ln -s .. "$case_dir/data/okawak-blog-pki"
   : >"$case_dir/transport.log"
   create_ca "$case_dir" "${TEST_CA_DAYS:-365}"
   create_client_certificate "$case_dir" seed
@@ -562,14 +563,10 @@ EOF
   cat >"$case_dir/stubs/ssh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-port=''
-if [[ "${1:-}" == '-p' ]]; then
-  port="$2"
-  shift 2
-fi
-[[ "$port" == "${STUB_EXPECTED_SSH_PORT:-}" ]]
-printf 'ssh %s\n' "$port" >>"$STUB_TRANSPORT_LOG"
+printf 'ssh\n' >>"$STUB_TRANSPORT_LOG"
+[[ "${1:-}" == test-vps || "${1:-}" == -tt ]]
 if [[ "${1:-}" == '-tt' ]]; then
+  [[ "$2" == test-vps && "$3" == *"ARTIFACT_BUCKET='okawak-blog-resources-bucket'"* ]]
   if [[ -n "${STUB_LOCAL_SIGNAL:-}" ]]; then
     kill -s "$STUB_LOCAL_SIGNAL" "$PPID"
   fi
@@ -580,13 +577,7 @@ EOF
   cat >"$case_dir/stubs/scp" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-port=''
-if [[ "${1:-}" == '-P' ]]; then
-  port="$2"
-  shift 2
-fi
-[[ "$port" == "${STUB_EXPECTED_SSH_PORT:-}" ]]
-printf 'scp %s\n' "$port" >>"$STUB_TRANSPORT_LOG"
+printf 'scp\n' >>"$STUB_TRANSPORT_LOG"
 cp "$1" "$STUB_UPLOADED_DIR/cert.pem"
 cp "$2" "$STUB_UPLOADED_DIR/key.pem"
 EOF
@@ -597,16 +588,17 @@ run_local_rotation() {
   local case_dir="$1"
 
   PATH="$case_dir/stubs:$PATH" \
-    OKAWAK_BLOG_PKI_DIR="$case_dir" \
+    XDG_DATA_HOME="$case_dir/data" \
+    STUB_CA_DIR="$case_dir" \
     STUB_UPLOADED_DIR="$case_dir/uploaded" \
     STUB_TRANSPORT_LOG="$case_dir/transport.log" \
     bash "$rotation_script" test-vps
 }
 
-test_subject_cn() {
+test_local_rotation() {
   local case_name="$1"
-  local expected_cn="$2"
-  local expected_days="${3:-90}"
+  local expected_cn=okawak-blog-vps
+  local expected_days=90
   local case_dir="$test_root/cn-$case_name"
 
   prepare_local_rotation_case "$case_dir"
@@ -634,9 +626,9 @@ test_subject_cn() {
   [[ ! -d "$case_dir/.certificate-rotation.lock" ]] || fail "rotation lock was retained"
   local expected_ssh_calls=2
   if [[ "$actual_status" != 0 ]]; then expected_ssh_calls=3; fi
-  [[ "$(grep -Fxc "ssh ${STUB_EXPECTED_SSH_PORT:-}" "$case_dir/transport.log")" == "$expected_ssh_calls" \
-    && "$(grep -Fxc "scp ${STUB_EXPECTED_SSH_PORT:-}" "$case_dir/transport.log")" == 1 ]] \
-    || fail "$case_name did not use the same SSH port for staging, activation and cleanup"
+  [[ "$(grep -Fxc 'ssh' "$case_dir/transport.log")" == "$expected_ssh_calls" \
+    && "$(grep -Fxc 'scp' "$case_dir/transport.log")" == 1 ]] \
+    || fail "$case_name did not complete staging, activation and cleanup through SSH config"
   echo "runtime-certificate-rotation-test: $case_name CN matches the issued certificate"
 }
 
@@ -678,8 +670,8 @@ cat >"$ca_changed_case/stubs/openssl" <<'EOF'
 set -euo pipefail
 "$STUB_REAL_OPENSSL" "$@"
 if [[ "$1" == x509 && "${2:-}" == -req ]]; then
-  cp "$STUB_SHORT_CA" "$OKAWAK_BLOG_PKI_DIR/ca-cert.pem"
-  : >"$OKAWAK_BLOG_PKI_DIR/ca-changed"
+  cp "$STUB_SHORT_CA" "$STUB_CA_DIR/ca-cert.pem"
+  : >"$STUB_CA_DIR/ca-changed"
 fi
 EOF
 chmod +x "$ca_changed_case/stubs/openssl"
@@ -732,42 +724,16 @@ env -u OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST PATH="$help_case/stubs:$PATH" STUB_HO
 grep -Fq 'Usage: mise run rotate-runtime-certificate' "$help_case/output.log" \
   || fail 'help did not display usage'
 
-for invalid_days in 1 2 3 4 5 6 7 0 -1 abc 1.5 +8 08 '8 days' 2147483648 99999999999999999999; do
-  days_case="$test_root/invalid-days-$invalid_days"
-  prepare_local_rotation_case "$days_case"
-  cp "$days_case/ca-cert.srl" "$days_case/ca-cert.srl.before"
-  actual_status=0
-  OKAWAK_BLOG_CERTIFICATE_DAYS="$invalid_days" \
-    run_local_rotation "$days_case" >"$days_case/output.log" 2>&1 || actual_status=$?
-  [[ "$actual_status" == 1 ]] || fail "invalid certificate validity was accepted: $invalid_days"
-  grep -Fq 'OKAWAK_BLOG_CERTIFICATE_DAYS must be an integer of at least 8' "$days_case/output.log" \
-    || fail "invalid certificate validity was not rejected before issuance: $invalid_days"
-  cmp -s "$days_case/ca-cert.srl.before" "$days_case/ca-cert.srl" \
-    || fail "invalid certificate validity modified the CA serial"
-  [[ ! -s "$days_case/transport.log" && ! -d "$days_case/.certificate-rotation.lock" ]] \
-    || fail "invalid certificate validity contacted the VPS or retained a lock"
-  if compgen -G "$days_case/vps-client-*" >/dev/null; then
-    fail "invalid certificate validity created local issuance files"
-  fi
-done
-echo 'runtime-certificate-rotation-test: invalid validity rejected without issuance or transfer'
-
-test_subject_cn default okawak-blog-vps
-TEST_CA_DAYS=91 test_subject_cn ca-covers-default okawak-blog-vps
-TEST_CA_DAYS=9 OKAWAK_BLOG_CERTIFICATE_DAYS=8 test_subject_cn ca-covers-minimum okawak-blog-vps 8
-OKAWAK_BLOG_CERTIFICATE_DAYS='' test_subject_cn empty-days okawak-blog-vps
-OKAWAK_BLOG_CERTIFICATE_DAYS=8 test_subject_cn minimum-days okawak-blog-vps 8
-OKAWAK_BLOG_CERTIFICATE_DAYS=9 test_subject_cn nine-days okawak-blog-vps 9
-OKAWAK_BLOG_CERTIFICATE_DAYS=10 test_subject_cn custom-days okawak-blog-vps 10
-OKAWAK_BLOG_VPS_SSH_PORT=60022 STUB_EXPECTED_SSH_PORT=60022 \
-  test_subject_cn ssh-port okawak-blog-vps
-OKAWAK_BLOG_VPS_SSH_PORT=2222 STUB_EXPECTED_SSH_PORT=2222 \
-  STUB_SSH_ACTIVATION_STATUS=42 STUB_ROTATION_STATUS=42 \
-  test_subject_cn ssh-port-failure okawak-blog-vps
-OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN=custom-blog-vps \
-  test_subject_cn custom custom-blog-vps
-OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN='blue/team+CN=unexpected\node' \
-  test_subject_cn escaped 'blue/team+CN=unexpected\node'
+test_local_rotation default
+TEST_CA_DAYS=91 test_local_rotation ca-covers-default
+OKAWAK_BLOG_VPS_SSH_PORT='invalid-port' \
+  OKAWAK_BLOG_PKI_DIR="$test_root/not-created" \
+  OKAWAK_BLOG_ARTIFACT_BUCKET='invalid-bucket!' \
+  OKAWAK_BLOG_CERTIFICATE_DAYS=8 \
+  OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN='custom/CN=unexpected' \
+  test_local_rotation removed-options
+STUB_SSH_ACTIVATION_STATUS=42 STUB_ROTATION_STATUS=42 \
+  test_local_rotation activation-failure
 
 for signal_name in HUP INT TERM; do
   case "$signal_name" in
@@ -775,28 +741,8 @@ for signal_name in HUP INT TERM; do
     INT) expected_status=130 ;;
     TERM) expected_status=143 ;;
   esac
-  OKAWAK_BLOG_VPS_SSH_PORT=60022 STUB_EXPECTED_SSH_PORT=60022 \
-    STUB_LOCAL_SIGNAL="$signal_name" STUB_ROTATION_STATUS="$expected_status" \
-    test_subject_cn "local-signal-$signal_name" okawak-blog-vps
-done
-
-for invalid_port in 0 65536 -1 abc '22 -oProxyCommand=unexpected' 99999999999999999999; do
-  if OKAWAK_BLOG_VPS_SSH_PORT="$invalid_port" OKAWAK_BLOG_PKI_DIR="$test_root/not-created" \
-    bash "$rotation_script" test-vps >"$test_root/invalid-port.log" 2>&1; then
-    fail "invalid SSH port was accepted: $invalid_port"
-  fi
-  grep -q 'OKAWAK_BLOG_VPS_SSH_PORT must be' "$test_root/invalid-port.log" \
-    || fail 'invalid SSH port was not rejected before accessing the CA'
-done
-
-for invalid_cn in '' $'blog\nCN=injected'; do
-  if OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN="$invalid_cn" \
-    OKAWAK_BLOG_PKI_DIR="$test_root/not-created" \
-    bash "$rotation_script" test-vps >"$test_root/invalid-cn.log" 2>&1; then
-    fail "empty or multiline CN was accepted"
-  fi
-  grep -q 'OKAWAK_BLOG_CERTIFICATE_SUBJECT_CN must be' "$test_root/invalid-cn.log" \
-    || fail "invalid CN was not rejected before accessing the CA"
+  STUB_LOCAL_SIGNAL="$signal_name" STUB_ROTATION_STATUS="$expected_status" \
+    test_local_rotation "local-signal-$signal_name"
 done
 
 echo "runtime-certificate-rotation-test: all cases passed"

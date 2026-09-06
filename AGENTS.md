@@ -16,8 +16,8 @@ private Obsidian Markdownをビルド時の`publish` pipelineで公開artifact�
 - Markdown / frontmatter / link / embedの解決とHTML生成はビルド時に完了させる。SSRはartifact読取・routing・metadata付与に集中し、本番は単一server binaryを優先する。
 - `crates/domain`: 公開コンテンツの純粋model・ルールとcrate間の共有契約。I/O、`async`、AWS SDK、HTTP frameworkを持ち込まない。
 - `crates/publish`: 入力・変換・artifact生成を担う単一crate。`lib.rs`はmodule宣言とre-exportのみ。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定し、内部の責務分割は設計文書に従う。
-- `crates/site/infra`: local / S3のartifact読取・設定・cache境界。vault読取・Markdown変換・uploadを置かない。
-- `crates/site/server`: 単一Topcoat application。UI・metadata・asset・reader注入・API・health/readiness・conditional GETを所有する。`src/app.rs`を`module_router!()`のrootとし、`app/`のfile moduleをURL構造に対応させる（`mod.rs`禁止）。UIはstorage実装へ直接依存せず`PageLoader`を経由する。
+- `crates/infra`: local / S3のartifact読取・設定・cache境界。vault読取・Markdown変換・uploadを置かない。
+- `crates/server`: 単一Topcoat application。UI・metadata・asset・reader注入・API・health/readiness・conditional GETを所有する。`src/app.rs`を`module_router!()`のrootとし、`app/`のfile moduleをURL構造に対応させる（`mod.rs`禁止）。UIはstorage実装へ直接依存せず`PageLoader`を経由する。
 - `e2e/`: browser E2E。通常CIはprivate submodule・AWS不要のfixtureを使い、実S3 smokeはローカル手動確認とupload workflowの公開前gateで行う。
 - 明示されない限り、DB記事管理・認証認可・管理画面・UI編集・マルチユーザー・SaaS CMS・リアルタイム更新は作らない。
 
