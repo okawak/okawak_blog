@@ -50,7 +50,7 @@ https://www.okawak.net
 6. 成果物を S3 にアップロードする
 7. Topcoat SSR サーバーがそれを読んで公開する
 
-この境界に合わせて、`publish`側の実装は `crates/publish/` に、公開成果物を読む blog 側の実装は `crates/site/` に寄せます。`crates/domain/` は両者で共有する契約と純粋ルールを置く場所として扱います。
+この境界に合わせて、`publish`側の実装は `crates/publish/` に、公開成果物の読取は `crates/infra/`、配信とUIは `crates/server/` に置きます。`crates/domain/` は両者で共有する契約と純粋ルールを置く場所として扱います。
 
 ### ビルド時変換
 
@@ -71,13 +71,15 @@ okawak_blog/
 ├── crates/
 │   ├── domain/               # 公開成果物契約と純粋ルール
 │   ├── publish/              # publish CLIと内部module
-│   └── site/
-│       ├── infra/            # artifact reader、source設定、cache
-│       └── server/           # Topcoat application、runtime、UI、API、reader composition
+│   ├── infra/                # artifact reader、source設定、cache
+│   └── server/               # Topcoat application、runtime、UI、API、reader composition
 ├── e2e/                      # 公開サイト全体の browser E2E
 ├── docs/
 │   └── architecture/
-├── service/
+├── scripts/                 # 運用スクリプト
+│   └── tests/                # スクリプトのテスト
+├── service/                 # systemd unitと運用手順
+│   └── tests/                # systemd unitのテスト
 └── terraform/
 ```
 
@@ -85,8 +87,8 @@ okawak_blog/
 
 - `crates/domain`: 公開成果物契約、site page contract、純粋関数を中心にした共有ドメイン層
 - `crates/publish`: `pipeline` moduleが、`vault`によるObsidian入力、`render`によるMarkdown変換とbookmark enrichment、`artifacts`による成果物生成を統括する単一の`publish` crate。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
-- `crates/site/infra`: storage非依存のartifact reader契約と、local / S3実装、source設定、cache。HTTP runtimeやUIには依存しない
-- `crates/site/server`: production `server` binaryを持つ単一のTopcoat application crate。storage非依存のpage load契約、UI / route / metadata、style、reader生成・注入、API、release-aware ETag / Last-Modifiedを構成する
+- `crates/infra`: storage非依存のartifact reader契約と、local / S3実装、source設定、cache。HTTP runtimeやUIには依存しない
+- `crates/server`: production `server` binaryを持つ単一のTopcoat application crate。storage非依存のpage load契約、UI / route / metadata、style、reader生成・注入、API、release-aware ETag / Last-Modifiedを構成する
 - `e2e`: server / artifact readerをまたぐ、固定artifactベースのbrowser E2E
 
 ## 公開成果物のイメージ
@@ -201,7 +203,7 @@ mise run versions-check
 
 共通実行tool（Bun、Topcoat CLI）は`mise.toml`をsource of truthとし、`mise.lock`にはmacOS arm64、GitHub Actions Linux x64、VPSが識別するLinux platform aliasの解決済みrelease assetを記録します。Rust toolchainは`rust-toolchain.toml`、Cargo / Bun依存は各manifestとlockfile、GitHub Actionsはworkflow内の最新major指定を正とします。
 
-site UIはTopcoat componentとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/site/server/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
+site UIはTopcoat componentとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/server/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
 
 private Obsidian repoを使う`publish`側の開発では、`mise run dev-local`がsubmoduleをremoteの最新commitへ同期してから`publish`を実行します。生成先の`crates/publish/dist/site`を既存のlocal readerでそのまま配信し、未公開content、Markdown変換、UIを一続きで確認します。`mise run dev`はGitHub Actionsが公開したS3 artifactを読み、本番相当のreader経路を確認します。同期だけを行う場合は`mise run sync-obsidian`を使います。自動同期はsubmodule内に未commit差分がある場合は停止し、merge commitを作らずremote revisionをcheckoutします。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。

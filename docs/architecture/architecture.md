@@ -16,7 +16,7 @@
 4. render module が単一の`pulldown-cmark` event pipeline内でWikiLinkを解決・安全化し、MarkdownのHTML変換とbookmark enrichmentを行う
 5. artifacts module が `site/` 配下の HTML / JSON を組み立てる
 6. GitHub Actions が artifact を immutable release として S3 に配置し、`current.json` を最後に切り替える
-7. `crates/site/server` が `crates/site/infra` 経由でrelease snapshotからpage documentを組み立て、TopcoatでSSRする
+7. `crates/server` が `crates/infra` 経由でrelease snapshotからpage documentを組み立て、TopcoatでSSRする
 
 Markdown から HTML への変換はビルド時に完了させる。ランタイムは artifact の読取、ルーティング、メタ情報の付与に集中する。
 
@@ -30,8 +30,8 @@ flowchart LR
     F --> G[site artifact directory]
     G --> H[GitHub Actions upload]
     H --> I[S3]
-    I --> J[crates/site/infra]
-    J --> K[crates/site/server Topcoat application]
+    I --> J[crates/infra]
+    J --> K[crates/server Topcoat application]
     K --> M[Browser]
 ```
 
@@ -42,15 +42,19 @@ okawak_blog/
 ├── crates/
 │   ├── domain/
 │   ├── publish/
-│   └── site/
-│       ├── infra/
-│       └── server/
+│   ├── infra/
+│   └── server/
 ├── e2e/
 ├── docs/
 │   └── architecture/
+├── scripts/
+│   └── tests/
 ├── service/
+│   └── tests/
 └── terraform/
 ```
+
+各crateは`crates/`直下へ並べ、workspace memberは各パスを明示する。配信用の親ディレクトリを設けず、責務と依存方向はcrate境界で表す。
 
 各 crate の責務は次の通り。
 
@@ -77,7 +81,7 @@ okawak_blog/
   - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
   - `ObsidianFrontMatter`と`ContentKind`は`publish`入力形式として内部に保持する
   - `publish`固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
-- `crates/site/infra`
+- `crates/infra`
   - `contract` moduleによる`ArtifactReader` / `ArtifactSnapshot`境界
   - `local` moduleによるfilesystem reader
   - `s3` moduleによるS3 readerとimmutable release解決
@@ -85,7 +89,7 @@ okawak_blog/
   - `config` moduleによるsource設定とreader composition
   - `error` moduleによるstorage / config error境界
   - `lib.rs`はmodule宣言とcrate外向けAPIのre-exportに限定する
-- `crates/site/server`
+- `crates/server`
   - production `server` binaryを持つ単一のTopcoat application crate
   - Topcoat UI component、公開route、metadata、site定数
   - 生成コンテンツ用script、Tailwind CSS入力、favicon asset
@@ -100,10 +104,12 @@ okawak_blog/
   - `http_cache` moduleによるrelease-aware ETagとconditional GET
   - `tests/router.rs`による公開routerのcrate外integration test
 - `e2e`
-  - `crates/site/server`と`crates/site/infra`をまたぐproduction Topcoat serverのbrowser E2E
+  - `crates/server`と`crates/infra`をまたぐproduction Topcoat serverのbrowser E2E
   - 通常CIではprivate Obsidian submoduleやS3に依存しない固定artifact fixture
   - 実S3の検証は専用Playwright configを使い、ローカル手動確認とrelease公開前smoke testへ分離
   - Bunで依存を管理し、Playwright + Chromiumで公開route、metadata、full-page navigation、Topcoat interactionを検証
+
+`scripts/tests/`はデプロイ・証明書更新などの運用スクリプトを検証し、`service/tests/`はsystemd unitの設定を検証する。`mise run test-service`が両方を実行する。
 
 `terraform/` は読み取り専用とし、このリポジトリの通常作業では編集しない。
 
@@ -122,13 +128,12 @@ flowchart TB
         P4[artifacts]
     end
 
-    subgraph Site["crates/site/*"]
-        S1[infra]
-        S2[server Topcoat application]
-    end
+    S1[crates/infra]
+    S2[crates/server Topcoat application]
 
     Publish --> Domain
-    Site --> Domain
+    S1 --> Domain
+    S2 --> Domain
     P1 --> P2
     P2 --> P3
     P3 --> P4
@@ -362,19 +367,19 @@ flowchart LR
 - `StaticPageDocument`
   - `about` などの固定ページ用contract
 
-`site/server`のTopcoat pageはstorage非依存の`PageLoader`からこのpage contractを受け取り、metadataとUIを組み立てる。同じcrate内の`ArtifactPageLoader`だけがartifact読取とpage document構築を実装し、conditional GETが取得したsnapshotをrequest contextのloaderへ渡す。validatorを使わないrequestでもloader内でsnapshotを1回だけ取得する。local / S3 readerと`DynArtifactSnapshot`をpage / component moduleへ持ち込まない。
+`crates/server`のTopcoat pageはstorage非依存の`PageLoader`からこのpage contractを受け取り、metadataとUIを組み立てる。同じcrate内の`ArtifactPageLoader`だけがartifact読取とpage document構築を実装し、conditional GETが取得したsnapshotをrequest contextのloaderへ渡す。validatorを使わないrequestでもloader内でsnapshotを1回だけ取得する。local / S3 readerと`DynArtifactSnapshot`をpage / component moduleへ持ち込まない。
 
 homeのarticle index、site metadata、optional home fragmentは、同じsnapshotから並列に読む。home fragmentの不在だけを省略可能として扱い、それ以外の読取失敗はpageの500応答へ伝える。必要な読取とpage document構築を終えてから初期HTMLとHTTP statusを確定する。
 
 公開routeのpage document読取はTopcoat async componentを正式経路とする。手書きの`/api/page/*`は持たず、404とstorage errorのstatus / error viewをroute境界で統一する。`/api/articles`はpage documentを組み立てない互換endpointとして維持する。
 
-公開routeは`site/server/src/app.rs`をrootとするTopcoat `module_router!()`から登録する。`/about`と`/api/*`はstatic module、`/{category_name}`と`/{category_name}/{article_slug}`は`path_param!()`を宣言するnested moduleとしてURL構造へ対応させる。route moduleはfile moduleで構成し、`mod.rs`を使わない。release-aware conditional GETはmodule pathに依存しないglobal layerとして`app.rs`で明示的に登録する。
+公開routeは`crates/server/src/app.rs`をrootとするTopcoat `module_router!()`から登録する。`/about`と`/api/*`はstatic module、`/{category_name}`と`/{category_name}/{article_slug}`は`path_param!()`を宣言するnested moduleとしてURL構造へ対応させる。route moduleはfile moduleで構成し、`mod.rs`を使わない。release-aware conditional GETはmodule pathに依存しないglobal layerとして`app.rs`で明示的に登録する。
 
 production `server`はhome、about、category、articleをSSRし、title、canonical、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。
 
 ## UI styling境界
 
-`site/server`のUIはTopcoat componentとTailwind CSSを主系にする。
+`crates/server`のUIはTopcoat componentとTailwind CSSを主系にする。
 
 - `src/page_loader.rs`
   - storage非依存のpage load portを定義する
@@ -400,7 +405,7 @@ production `server`はhome、about、category、articleをSSRし、title、canon
 
 productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrationで生成し、Tailwind CSS、Topcoat runtime、faviconをTopcoat asset bundleからcontent-hash付きURLで配信する。公開linkは独自client routerを持たず、ブラウザ標準のfull-page navigationを使う。mobile menuはTopcoat runtimeのsignalとevent expressionで構成する。GitHubアイコンはTopcoatのicon componentによるinline SVGとし、リンクのaccessible nameを維持してSVG自体は支援技術から隠す。端末間の字体を揃えるNoto Sans JPはGoogle Fontsの可変ウェイト範囲`400..700`を指定し、ウェイトごとのCSS宣言の重複を抑える。font stylesheetはshellのHTML headから直接読み込み、`display=swap`で読み込み中の本文表示を維持する。生成コンテンツのKaTeXとhighlight.jsはversion固定のCDN資産として維持し、KaTeXにはSRIを付与する。production build、fixture E2E、S3 smoke、`dev` / `dev-local`はNode / BunのCSS build toolを実行しない。Sass、Stylance、routeごとのCSS module生成工程は持たず、Rust componentのlayoutと、ビルド時に生成されるartifact本文のstyle境界を分離する。
 
-`site/server/build.rs`はapplication package内の`style/tailwind.css`をTopcoatのstylesheet assetへ変換するために維持する。Rustと`view!` macroの書式はrepository rootの`mise run format`から`cargo fmt`と`topcoat fmt`を順に適用する。
+`crates/server/build.rs`はapplication package内の`style/tailwind.css`をTopcoatのstylesheet assetへ変換するために維持する。Rustと`view!` macroの書式はrepository rootの`mise run format`から`cargo fmt`と`topcoat fmt`を順に適用する。
 
 shellのナビゲーションはTopcoatの`Href::is_current`でrequest URLとの一致を判定し、同じHrefをlink先に使う。pageから選択状態用のpathは渡さず、query付きURLでも該当linkを選択状態にする。未一致URLの404でも判定できるよう、Hrefのtargetはpath literalで定義する。
 
@@ -439,17 +444,17 @@ reader 側の設定は主に次の env で切り替える。
 
 `OKAWAK_BLOG_SITE_ORIGIN` は canonical / Open Graph 用の absolute URL 生成に使う。
 
-production `server`はprocess起動時に`tracing` subscriberを初期化する。log filterは`RUST_LOG`からlossyに読み、未指定または有効なdirectiveがない場合は`info`を使う。同じapplication crateのpage handlerはpage document読取失敗を構造化eventとして発行する。subscriber設定は`site/server`のbinary entrypointに閉じ、domain、publish、infraはprocess-wideなlog設定を所有しない。
+production `server`はprocess起動時に`tracing` subscriberを初期化する。log filterは`RUST_LOG`からlossyに読み、未指定または有効なdirectiveがない場合は`info`を使う。同じapplication crateのpage handlerはpage document読取失敗を構造化eventとして発行する。subscriber設定は`crates/server`のbinary entrypointに閉じ、domain、publish、infraはprocess-wideなlog設定を所有しない。
 
 cacheはrelease snapshot単位で所有する。TTL経過後に`current.json`を再確認し、release identityが同じならartifact cacheを保持する。identityが変わった場合だけ新しいcacheへ切り替わり、既存requestが保持する古いsnapshotはそのrequestの完了まで有効である。legacy rootにはidentityを付けず、TTLごとにcacheを作り直す。
 
 AWS SDK標準retry後もsnapshot更新に失敗した場合、cache identityを持つ直前のimmutable releaseをprocessの存続中は期限なく返す。fallback時も最終確認時刻を更新し、次のTTLまではS3への再試行を抑える。運用中に`current.json`が消えた場合もlegacy rootへdowngradeせず、直前のimmutable releaseを維持する。初回取得失敗、TTL=`0`、legacy snapshotにはfallbackしない。artifactは必要時にmemory cacheするため、stale snapshot内でも未取得objectのS3 readが失敗すればそのrequestはerrorになる。全artifactのeager preloadは行わない。
 
-`site/server`はprocess instance、release snapshot identity、request URIからweak ETagを生成し、release生成時刻とprocess起動時刻の新しい方をHTTP-dateへ変換した`Last-Modified`を付与する。process起動時刻も含めることで、artifactが同じでもserver / UI更新後のrepresentationを日付validatorだけで再利用させない。対象はartifact-backedなGET / HEAD responseと`/api/articles`で、matching `If-None-Match`にはbodyをrenderせず`304 Not Modified`を返す。`If-Modified-Since`はresourceが存在することをhandlerの成功responseで確認してからbodyを破棄して304へ変換するため、未知のURIやerror responseを誤って304にしない。両方がある場合はRFC 9110に従って`If-None-Match`を優先し、不正または複数の`If-Modified-Since`は無視する。成功responseには`Cache-Control: public, max-age=0, must-revalidate`を付け、browserやproxyへ毎回のrevalidationを要求する。
+`crates/server`はprocess instance、release snapshot identity、request URIからweak ETagを生成し、release生成時刻とprocess起動時刻の新しい方をHTTP-dateへ変換した`Last-Modified`を付与する。process起動時刻も含めることで、artifactが同じでもserver / UI更新後のrepresentationを日付validatorだけで再利用させない。対象はartifact-backedなGET / HEAD responseと`/api/articles`で、matching `If-None-Match`にはbodyをrenderせず`304 Not Modified`を返す。`If-Modified-Since`はresourceが存在することをhandlerの成功responseで確認してからbodyを破棄して304へ変換するため、未知のURIやerror responseを誤って304にしない。両方がある場合はRFC 9110に従って`If-None-Match`を優先し、不正または複数の`If-Modified-Since`は無視する。成功responseには`Cache-Control: public, max-age=0, must-revalidate`を付け、browserやproxyへ毎回のrevalidationを要求する。
 
 validatorは`current.json`からimmutable release identityと生成時刻を取得でき、snapshot cache TTLが`0`でない場合だけ有効にする。local reader、legacy root、release prefixを直接読む公開前smoke test、TTL=`0`ではrequest内で同じsnapshotを保証できないため付与しない。health / readiness、static asset、404 / error responseも対象外とする。process再起動時はETagを変え、artifactが同じでもserver / UI変更後の古いrepresentationを再利用させない。stale fallback中は同じsnapshot metadataとprocess instanceを使うためvalidatorも維持する。
 
-本番のAWS SDKは`AWS_CONFIG_FILE=/etc/okawak_blog/aws/config`のprofileから`aws_signing_helper credential-process`を実行し、IAM Roles AnywhereのX.509 identityを期限付きrole credentialへ交換する。helper、config、end-entity certificate、private keyはroot管理pathへ置き、`ProtectHome=true`を維持する。SDK標準のcredential refreshを使い、application独自のtimerやcredential管理責務を`site/infra`へ持ち込まない。
+本番のAWS SDKは`AWS_CONFIG_FILE=/etc/okawak_blog/aws/config`のprofileから`aws_signing_helper credential-process`を実行し、IAM Roles AnywhereのX.509 identityを期限付きrole credentialへ交換する。helper、config、end-entity certificate、private keyはroot管理pathへ置き、`ProtectHome=true`を維持する。SDK標準のcredential refreshを使い、application独自のtimerやcredential管理責務を`crates/infra`へ持ち込まない。
 
 production runtimeはlong-livedなIAM user access key、Secrets Manager rotation、credential fileを持たない。`AWS_SHARED_CREDENTIALS_FILE`へfallbackせず、repositoryからstatic credential refresh timerも導入しない。IAM Roles Anywhere resourceと最小権限のS3 read roleをTerraformで管理し、certificate更新と障害確認は[AWS runtime認証runbook](../operations/aws-runtime-auth.md)に定める。
 
@@ -499,11 +504,11 @@ Obsidian submodule
   -> Browser
 ```
 
-application deployはTopcoat release binaryとasset bundleを同じrelease単位で扱う。`build-deployment`は稼働中のdirectoryへ書かず、`target/release/server`と`target/assets-staged`を生成する。activationはservice停止中にbinaryを`bin/okawak_blog`、bundleをbinary隣接の`bin/assets`へ切り替える。stagingはmanifest内のCSS、JavaScript、faviconと各参照fileを検証し、WebAssemblyを拒否する。起動後のhealth / readinessが失敗した場合は旧binaryと旧bundleを復元し、失敗bundleを`bin/assets.failed`へ保存する。
+application deployはTopcoat release binaryとasset bundleを同じrelease単位で扱う。`build-deployment`は稼働中のdirectoryへ書かず、`target/release/server`と`target/assets-staged`を生成する。activationはsystemd unitの`WorkingDirectory`と`ExecStart`をVPS上のrepositoryと配備binaryの絶対パスへ合わせてインストールし、service停止中にbinaryを`bin/okawak_blog`、bundleをbinary隣接の`bin/assets`へ切り替える。stagingはmanifest内のCSS、JavaScript、faviconと各参照fileを検証し、WebAssemblyを拒否する。起動後のhealth / readinessが失敗した場合は旧binaryと旧bundleを復元し、失敗bundleを`bin/assets.failed`へ保存する。
 
 `cloudflared`はVPSからCloudflareへ外向き接続し、originの80/443は公開しない。public hostnameとTunnel routeはCloudflare Dashboardで管理し、OCI TerraformはReserved Public IP、SSH用ingress、Tunnel用egressなどのOCI resourceだけを管理する。S3 upload は Rust アプリに持たせず、workflow の責務として扱う。
 
-通常のVPS運用の入口は管理端末の`*-vps` taskとする。SSH呼出しは`scripts/vps.sh`へ集約し、配備はVPS内部の`production-deploy` taskへ委譲する。ビルド・切り替え・rollbackはVPSで完結し、管理端末のソースやbinaryを転送しない。SSH接続設定などの`mise.local.toml`は管理端末専用とし、VPSはGit管理下のmise設定とsystemd / `/etc/okawak_blog/aws/`を使用する。
+通常のVPS運用の入口は管理端末の`*-vps` taskとする。SSH呼出しは`scripts/vps.sh`へ集約し、`OKAWAK_BLOG_VPS_REPO_DIR`で指定したVPS上のrepositoryで`production-deploy` taskへ委譲する。管理端末の`mise.local.toml`でのrepository指定を必須とし、未設定・空欄ならSSH接続前に停止する。ビルド・切り替え・rollbackはVPSで完結し、管理端末のソースやbinaryを転送しない。SSH接続設定などの`mise.local.toml`は管理端末専用とし、VPSはGit管理下のmise設定とsystemd / `/etc/okawak_blog/aws/`を使用する。
 
 ## 非目標
 

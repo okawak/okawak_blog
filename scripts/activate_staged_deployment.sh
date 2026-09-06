@@ -9,7 +9,8 @@ service_name="${SERVICE_NAME:-okawak_blog}"
 service_file="${SERVICE_FILE:-service/okawak_blog.service}"
 systemd_unit_dir="${SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
 target_bin="${TARGET_BIN:-./target/release/server}"
-bin_dir="${BIN_DIR:-./bin}"
+bin_dir="${BIN_DIR:-$repo_root/bin}"
+[[ "$bin_dir" == /* ]] || bin_dir="$repo_root/$bin_dir"
 staged_assets="${DEPLOY_STAGED_ASSETS:-./target/assets-staged}"
 live_assets="$bin_dir/assets"
 rollback_assets="$bin_dir/assets.rollback"
@@ -28,6 +29,12 @@ fail() {
   echo "staged-deploy: $*" >&2
   return 1
 }
+
+# Keep deployment paths literal in both the shell and systemd unit syntax.
+for deployment_path in "$repo_root" "$installed_bin"; do
+  [[ "$deployment_path" =~ ^/[A-Za-z0-9._/-]+$ && "$deployment_path" != / ]] \
+    || fail "deployment paths must be absolute and contain only letters, digits, '/', '.', '_', and '-'"
+done
 
 path_exists() {
   [[ -e "$1" || -L "$1" ]]
@@ -100,6 +107,13 @@ path_exists "$rollback_assets" && fail "rollback asset bundle already exists: $r
 path_exists "$failed_assets" && fail "failed asset bundle already exists: $failed_assets"
 path_exists "$rollback_bin" && fail "rollback binary already exists: $rollback_bin"
 
+rendered_service="$(mktemp)"
+trap 'rm -f -- "$rendered_service"' EXIT
+sed \
+  -e "s|^WorkingDirectory=.*|WorkingDirectory=$repo_root|" \
+  -e "s|^ExecStart=.*|ExecStart=$installed_bin|" \
+  "$service_file" >"$rendered_service"
+
 if sudo systemctl is-active --quiet "$service_name.service"; then
   service_was_active=true
 fi
@@ -107,7 +121,7 @@ fi
 trap 'rollback $? $LINENO' ERR
 
 sudo install -o root -g root -m 0644 \
-  "$service_file" "$systemd_unit_dir/$service_name.service"
+  "$rendered_service" "$systemd_unit_dir/$service_name.service"
 sudo systemctl daemon-reload
 sudo systemctl stop "$service_name.service"
 

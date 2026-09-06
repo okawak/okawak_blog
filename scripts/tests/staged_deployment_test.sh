@@ -103,7 +103,7 @@ prepare_case() {
     "$case_dir/target/release"
   write_command_stubs "$case_dir/stubs"
   write_bundle "$case_dir/target/assets-staged"
-  printf 'unit\n' >"$case_dir/service.service"
+  cp "$repo_root/service/okawak_blog.service" "$case_dir/service.service"
   printf 'old binary\n' >"$case_dir/bin/okawak_blog"
   printf 'old asset\n' >"$case_dir/bin/assets/old.css"
   printf '#!/usr/bin/env bash\necho new binary\n' >"$case_dir/target/release/server"
@@ -132,6 +132,14 @@ run_activation() {
 success_case="$test_root/success"
 prepare_case "$success_case"
 run_activation "$success_case" false
+grep -Fxq "WorkingDirectory=$success_case" "$success_case/systemd/okawak_blog.service" \
+  || fail "systemd working directory does not match the deployment directory"
+grep -Fxq "ExecStart=$success_case/bin/okawak_blog" "$success_case/systemd/okawak_blog.service" \
+  || fail "systemd executable does not match the installed binary"
+grep -Fxq 'ProtectHome=true' "$success_case/systemd/okawak_blog.service" \
+  || fail "systemd hardening was lost"
+cmp -s "$repo_root/service/okawak_blog.service" "$success_case/service.service" \
+  || fail "deployment modified the source service unit"
 cmp -s "$success_case/target/release/server" "$success_case/bin/okawak_blog" \
   || fail "successful activation did not install the new binary"
 [[ -f "$success_case/bin/assets/tailwind-new.css" ]] \

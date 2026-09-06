@@ -2,7 +2,8 @@
 members = [
     "crates/domain",
     "crates/publish",
-    "crates/site/*",
+    "crates/infra",
+    "crates/server",
 ]
 resolver = "3"
 

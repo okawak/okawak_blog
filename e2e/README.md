@@ -1,6 +1,6 @@
 # Browser E2E
 
-公開サイト全体を対象とする Playwright E2E です。productionと同じTopcoat serverと`crates/site/infra`のartifact readerを通し、公開routeとclient-side interactionを検証するため、リポジトリルートに置いています。
+公開サイト全体を対象とする Playwright E2E です。productionと同じTopcoat serverと`crates/infra`のartifact readerを通し、公開routeとclient-side interactionを検証するため、リポジトリルートに置いています。
 
 E2Eの依存管理にはBunを使います。通常はリポジトリルートから`mise` taskを実行してください。
 

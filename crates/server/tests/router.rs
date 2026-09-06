@@ -32,13 +32,13 @@ struct TestResponse {
 
 fn fixture_reader() -> DynArtifactReader {
     Arc::new(LocalArtifactReader::new(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/site"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site"),
     ))
 }
 
 fn empty_fixture_reader() -> DynArtifactReader {
     Arc::new(LocalArtifactReader::new(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/empty-site"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/empty-site"),
     ))
 }
 
@@ -549,7 +549,7 @@ async fn home_uses_fallback_copy_when_optional_fragment_is_missing() {
     let temp_dir = tempdir().unwrap();
     std::fs::create_dir_all(temp_dir.path().join("articles")).unwrap();
     std::fs::create_dir_all(temp_dir.path().join("metadata")).unwrap();
-    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/site");
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site");
     std::fs::copy(
         fixture_root.join("articles/index.json"),
         temp_dir.path().join("articles/index.json"),
@@ -579,7 +579,7 @@ async fn home_uses_fallback_copy_when_optional_fragment_is_missing() {
 #[tokio::test]
 async fn home_returns_internal_server_error_for_invalid_optional_fragment() {
     let temp_dir = tempdir().unwrap();
-    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/site");
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site");
     for relative_path in ["articles/index.json", "metadata/site.json"] {
         let destination = temp_dir.path().join(relative_path);
         std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
@@ -942,7 +942,7 @@ async fn article_returns_not_found_for_invalid_or_missing_documents() {
 
     let temp_dir = tempdir().unwrap();
     std::fs::create_dir_all(temp_dir.path().join("articles")).unwrap();
-    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/site");
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site");
     std::fs::copy(
         fixture_root.join("articles/index.json"),
         temp_dir.path().join("articles/index.json"),
@@ -966,7 +966,7 @@ async fn article_returns_not_found_for_invalid_or_missing_documents() {
 async fn article_returns_internal_server_error_for_invalid_artifacts() {
     let temp_dir = tempdir().unwrap();
     std::fs::create_dir_all(temp_dir.path().join("articles/tech")).unwrap();
-    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../e2e/fixtures/site");
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site");
     std::fs::copy(
         fixture_root.join("articles/index.json"),
         temp_dir.path().join("articles/index.json"),
