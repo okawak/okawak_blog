@@ -276,7 +276,14 @@ CAの期限確認も日次監視・外部通知の対象にします。残存期
 
 ## Client certificate更新
 
-初回のみ、管理端末で`hostname`の出力を確認し、repository rootのGit管理対象外の`mise.local.toml`へその値を固定文字列として登録します。既存の`[env]`がある場合はそのsectionに追記します。
+初回のみ、管理端末のrepository rootで[`mise.local.toml.example`](../../mise.local.toml.example)を元に、Git管理対象外の`mise.local.toml`を用意します。次のコピーは既存ファイルを上書きしません。既に設定済みの場合は、exampleを参照して必要な項目だけ既存の`[env]`へ追記します。
+
+```bash
+cp -n mise.local.toml.example mise.local.toml
+hostname
+```
+
+`mise.local.toml`を編集し、`hostname`の出力を固定文字列として登録します。exampleの空欄のままでは更新taskは実行できません。SSH接続先、PKI directory、有効日数などの任意設定もexampleのコメントを参照してください。
 
 ```toml
 [env]

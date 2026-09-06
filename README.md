@@ -10,6 +10,7 @@ https://www.okawak.net
 
 - [docs/architecture/architecture.md](./docs/architecture/architecture.md): 現行アーキテクチャと artifact 契約
 - [docs/content/obsidian-template.md](./docs/content/obsidian-template.md): Obsidian Markdown のテンプレート
+- [mise.local.toml.example](./mise.local.toml.example): 管理端末のローカル設定例。[証明書更新手順](./docs/operations/aws-runtime-auth.md#client-certificate更新)に沿って必要な項目を設定する
 - GitHub Issues / PRs: 実装計画、進捗、作業単位の管理
 
 ## このリポジトリが担うこと
