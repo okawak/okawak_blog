@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ssh_target="${1:-${OKAWAK_BLOG_VPS_SSH_TARGET:-oci}}"
+ssh_target="${1:-${OKAWAK_BLOG_VPS_SSH_TARGET:-}}"
 ssh_port="${OKAWAK_BLOG_VPS_SSH_PORT:-}"
 pki_dir="${OKAWAK_BLOG_PKI_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/okawak-blog-pki}"
 artifact_bucket="${OKAWAK_BLOG_ARTIFACT_BUCKET:-okawak-blog-resources-bucket}"
@@ -30,11 +30,12 @@ Usage: mise run rotate-runtime-certificate [SSH_TARGET]
 
 Rotate the IAM Roles Anywhere client certificate used by the production VPS.
 Run this task only on the registered management host; VPS activation runs over SSH.
-SSH_TARGET defaults to OKAWAK_BLOG_VPS_SSH_TARGET, or to the SSH alias "oci".
+SSH_TARGET overrides OKAWAK_BLOG_VPS_SSH_TARGET; one of them must be set.
 
 Required environment variable (configure once in mise.local.toml):
   OKAWAK_BLOG_CERTIFICATE_ISSUER_HOST
                                 Literal hostname of the management host
+  OKAWAK_BLOG_VPS_SSH_TARGET    SSH target (unless supplied as an argument)
 
 Optional environment variables:
   OKAWAK_BLOG_VPS_SSH_PORT       SSH port (1-65535; default: SSH config)
@@ -98,6 +99,8 @@ if [[ "$ssh_target" == "--help" || "$ssh_target" == "-h" ]]; then
   exit 0
 fi
 
+[[ -n "$ssh_target" ]] \
+  || fail "set OKAWAK_BLOG_VPS_SSH_TARGET in mise.local.toml [env], or pass an SSH target"
 [[ "$ssh_target" =~ ^[A-Za-z0-9._@:-]+$ ]] \
   || fail "SSH target contains unsupported characters: $ssh_target"
 [[ "$ssh_target" != -* ]] || fail "SSH target must not start with '-'"

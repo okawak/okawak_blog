@@ -3,13 +3,6 @@ bun = "1.4.0"
 "cargo:topcoat-cli" = "0.7.0"
 
 [env]
-PROJECT_NAME = "okawak_blog"
-SERVICE_NAME = "okawak_blog"
-SERVICE_FILE = "service/okawak_blog.service"
-BIN_DIR = "./bin"
-TARGET_BIN = "./target/release/server"
-TARGET_ASSET_DIR = "./target/release/assets"
-DEPLOY_STAGED_ASSETS = "./target/assets-staged"
 TOPCOAT_TAILWIND_VERSION = "4.3.3"
 
 [tasks.check-deps]
@@ -121,9 +114,10 @@ depends = ["check-deps"]
 run = "topcoat asset bundle --package server --bin server --release"
 
 [tasks.build-deployment]
-description = "Build a production release outside the live site directory"
+description = "VPS internal: build a production release outside the live site directory"
+hide = true
 depends = ["check-deps"]
-run = "topcoat asset bundle --package server --bin server --release --out \"$DEPLOY_STAGED_ASSETS\""
+run = "topcoat asset bundle --package server --bin server --release --out \"${DEPLOY_STAGED_ASSETS:-./target/assets-staged}\""
 
 [tasks.build-server]
 description = "Build the Topcoat server binary only"
@@ -139,55 +133,25 @@ description = "Pull the latest changes from origin/main and update submodules"
 depends = ["pull"]
 run = "git submodule update --init --recursive"
 
-[tasks.stop]
-description = "Stop the systemd service"
-run = '''
-if sudo systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1; then
-  sudo systemctl stop "$SERVICE_NAME.service"
-fi
-'''
+[tasks.status-vps]
+description = "Management host: show the VPS service status via SSH"
+run = "bash scripts/vps.sh status"
 
-[tasks.service]
-description = "Install the systemd unit file"
-run = '''
-sudo cp -f "$SERVICE_FILE" "/etc/systemd/system/$SERVICE_NAME.service"
-'''
+[tasks.logs-vps]
+description = "Management host: follow VPS service logs via SSH"
+run = "bash scripts/vps.sh logs"
 
-[tasks.bin]
-description = "Copy the existing Topcoat server binary and asset bundle into ./bin"
-run = '''
-sudo mkdir -p "$BIN_DIR"
-sudo install -m 0755 "$TARGET_BIN" "$BIN_DIR/$SERVICE_NAME"
-sudo rm -rf -- "$BIN_DIR/assets"
-sudo cp -R "$TARGET_ASSET_DIR" "$BIN_DIR/assets"
-sudo chown -R root:root "$BIN_DIR"
-'''
+[tasks.logs-recent-vps]
+description = "Management host: show the latest 50 VPS service log lines via SSH"
+run = "bash scripts/vps.sh logs-recent"
 
-[tasks.deploy]
-description = "Reload systemd and start the service"
-run = '''
-sudo systemctl daemon-reload
-sudo systemctl start "$SERVICE_NAME"
-'''
-
-[tasks.status]
-description = "Check the systemd service status"
-run = "sudo systemctl status $SERVICE_NAME"
-
-[tasks.logs]
-description = "Tail the systemd service logs"
-run = "sudo journalctl -u $SERVICE_NAME -f"
-
-[tasks.logs-recent]
-description = "Show recent systemd service logs"
-run = "sudo journalctl -u $SERVICE_NAME --lines=50"
-
-[tasks.restart]
-description = "Restart the systemd service"
-run = "sudo systemctl restart $SERVICE_NAME"
+[tasks.restart-vps]
+description = "Management host: restart the VPS application via SSH"
+run = "bash scripts/vps.sh restart"
 
 [tasks.production-deploy]
-description = "Pull, build, and deploy the production application service in order"
+description = "VPS internal: pull, build, and deploy (called by deploy-vps)"
+hide = true
 run = '''
 set -euo pipefail
 mise run pull
@@ -195,8 +159,13 @@ mise run quick-deploy
 echo "production-deploy completed"
 '''
 
+[tasks.deploy-vps]
+description = "Management host: deploy origin/main via SSH; build and activate on the VPS"
+run = "bash scripts/vps.sh deploy"
+
 [tasks.quick-deploy]
-description = "Build a staged release and activate it with rollback protection"
+description = "VPS internal: build and activate a release with rollback protection"
+hide = true
 run = '''
 set -euo pipefail
 mise run build-deployment
@@ -205,7 +174,7 @@ echo "quick-deploy completed"
 '''
 
 [tasks.rotate-runtime-certificate]
-description = "Rotate the production IAM Roles Anywhere client certificate from the registered management host"
+description = "Management host: rotate the production IAM Roles Anywhere client certificate"
 run = "bash scripts/rotate_runtime_certificate.sh"
 
 [tasks.ci-flow]
@@ -218,10 +187,11 @@ description = "Run tests for all workspace crates"
 run = "cargo test --workspace"
 
 [tasks.test-service]
-description = "Validate systemd units, deployment rollback, and certificate rotation"
+description = "Validate systemd units, remote deployment, rollback, and certificate rotation"
 run = '''
 bash service/tests/systemd_units_test.sh
 bash service/tests/staged_deployment_test.sh
+bash service/tests/remote_deployment_test.sh
 bash service/tests/runtime_certificate_rotation_test.sh
 '''
 
@@ -283,6 +253,9 @@ echo "Common commands:"
 echo "  mise run dev"
 echo "  mise run dev-local"
 echo "  mise run build-project"
+echo "  mise run deploy-vps"
+echo "  mise run status-vps"
+echo "  mise run logs-recent-vps"
 echo "  mise run e2e-install"
 echo "  mise run e2e-update"
 echo "  mise run e2e-outdated"

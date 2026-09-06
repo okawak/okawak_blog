@@ -4,6 +4,46 @@
 
 本番環境の構成順序は[本番環境の初期構築](../docs/operations/production-setup.md)、IAM Roles Anywhereの検証、certificate更新、障害切り分けは[AWS runtime認証](../docs/operations/aws-runtime-auth.md)を一次手順とします。
 
+## 操作する端末と設定
+
+通常の運用コマンドは管理端末のrepository rootで実行します。VPSへの接続はSSH configを使い、必要な`sudo` passwordはSSHの対話端末で入力します。
+
+| 管理端末のコマンド | VPSで行う処理 |
+| --- | --- |
+| `mise run deploy-vps` | 最新mainの取得、ビルド、配備、health/readiness確認 |
+| `mise run status-vps` | service状態表示 |
+| `mise run logs-recent-vps` | 直近50行のjournal表示 |
+| `mise run logs-vps` | journalの追尾（Ctrl-Cで終了） |
+| `mise run restart-vps` | application serviceの再起動 |
+| `mise run rotate-runtime-certificate` | 管理端末で発行した証明書の配置と検証 |
+
+`mise.local.toml`は管理端末専用です。[設定例](../mise.local.toml.example)にSSH接続先や証明書発行端末名を設定します。VPSにはmise本体とGit管理下の`mise.toml` / `mise.lock`を用意しますが、`mise.local.toml`は不要です。VPSのruntime認証は`/etc/okawak_blog/aws/`、serviceの実行設定はsystemd unitで管理します。
+
+接続先は管理端末の`mise.local.toml`の`[env]`に`OKAWAK_BLOG_VPS_SSH_TARGET`として設定します。taskの引数で一時的に上書きできます。既定の接続先はなく、未設定・空欄なら接続前に停止します。hostname、user、鍵は通常のSSH configで指定します。`OKAWAK_BLOG_VPS_SSH_PORT`も証明書更新と共通で、未指定ならSSH configのPortに従います。
+
+たとえばSSH configの`Host oci`を使う場合、管理端末の`mise.local.toml`へ次を設定します。接続先は端末ごとの設定なので、共有する`mise.toml`には固定値を置きません。
+
+```toml
+[env]
+OKAWAK_BLOG_VPS_SSH_TARGET = "oci"
+```
+
+```bash
+mise run deploy-vps -- my-vps
+mise run deploy-vps -- --help
+```
+
+`deploy-vps`はVPSのlogin shellを開き、`/opt/okawak_blog`で既存の`production-deploy` taskを呼びます。前提は、VPSの運用userでGitHubからpullでき、login shellのPATHにmiseがあり、後述のbuild tool設定が済んでいることです。VPS checkoutがmain以外、未commit差分あり、またはorigin/mainに含まれないcommitを持つ場合は、ビルド・service操作より前に停止します。管理端末の未push・未mergeのソースやbinaryを転送する機能はありません。
+
+実行中は端末とSSH接続を維持し、別のデプロイや証明書更新を並行実行しないでください。VPS側の失敗は管理端末へ非ゼロの終了コードで返し、デプロイ成功時は`production-deploy completed`を表示します。公開URLのreadinessとホーム・記事の表示も確認します。
+
+```bash
+curl --fail -H 'Cache-Control: no-cache' \
+  "https://www.okawak.net/api/ready?deploy-check=$(date +%s)"
+```
+
+`production-deploy`・`quick-deploy`・`build-deployment`はVPS内部用として通常の`mise tasks ls`から隠しています。初期構築や障害対応で直接操作する場合は、VPSの`/opt/okawak_blog`で`mise tasks ls --hidden`を参照できます。旧`stop`・`service`・`bin`・`deploy` taskは一括配備へ集約し、旧`status`・`logs`・`logs-recent`・`restart`は管理端末の`*-vps`へ移行しました。
+
 ## VPS build tool
 
 production buildはTopcoat CLIを使います。Topcoat CLIのversionは`mise.toml`と`mise.lock`でframeworkと同じ0.7.0へ固定します。

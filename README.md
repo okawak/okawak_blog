@@ -10,7 +10,7 @@ https://www.okawak.net
 
 - [docs/architecture/architecture.md](./docs/architecture/architecture.md): 現行アーキテクチャと artifact 契約
 - [docs/content/obsidian-template.md](./docs/content/obsidian-template.md): Obsidian Markdown のテンプレート
-- [mise.local.toml.example](./mise.local.toml.example): 管理端末のローカル設定例。[証明書更新手順](./docs/operations/aws-runtime-auth.md#client-certificate更新)に沿って必要な項目を設定する
+- [mise.local.toml.example](./mise.local.toml.example): 管理端末専用のローカル設定例。[VPS運用](./service/README.md#操作する端末と設定)・[証明書更新](./docs/operations/aws-runtime-auth.md#client-certificate更新)に必要な項目を設定する。VPSには配置しない
 - GitHub Issues / PRs: 実装計画、進捗、作業単位の管理
 
 ## このリポジトリが担うこと
@@ -228,6 +228,8 @@ browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-
 
 production deployは`mise run build-deployment`で`target/release/server`と`target/assets-staged`を生成します。`mise run quick-deploy`はservice停止中にbinaryとcontent-hash付きasset bundleを同じreleaseへ切り替え、health / readinessが失敗した場合は両方を旧releaseへ戻します。
 
+通常の更新は管理端末から`mise run deploy-vps`を実行します。SSH経由でVPS内部の`production-deploy` taskを呼び、最新mainの取得・ビルド・配備をVPSで行います。VPSにもmiseとGit管理下の設定が必要ですが、`mise.local.toml`は不要です。
+
 Topcoat asset bundleはTailwind CSS、Topcoat runtime、faviconをcontent-hash付きlocal URLで配信します。公開linkはブラウザ標準のfull-page navigationを使います。GitHubアイコンは同梱したOcticonsのSVGをTopcoatのicon componentでinline描画します。端末間で字体を揃えるためNoto Sans JPをGoogle Fontsから読み込み、400〜700の可変ウェイト指定でCSSの重複を抑えます。フォントCSSはHTML headから直接参照し、`display=swap`で読み込み中も本文を表示します。生成コンテンツの描画に必要なKaTeXとhighlight.jsはversion固定の外部CDN資産として維持します。KaTeXはSRIを付与し、いずれもsiteのSSR可用性を左右する必須runtimeにはしません。
 
 主要コマンドは以下です。
@@ -250,11 +252,12 @@ mise run clippy
 mise run check
 ```
 
-VPS 前提のデプロイ・運用タスクも `mise` に移しています。
+デプロイ・運用taskは管理端末からSSH経由で実行します。VPS内部用の配備taskは通常の一覧から隠しています。
 
 ```bash
-mise run production-deploy
-mise run status
-mise run logs
-mise run logs-recent
+mise run deploy-vps
+mise run status-vps
+mise run logs-vps
+mise run logs-recent-vps
+mise run restart-vps
 ```
