@@ -75,6 +75,52 @@ fn create_router(artifact_reader: DynArtifactReader, validators_enabled: bool) -
     create_router_with_assets(artifact_reader, validators_enabled, test_asset_config())
 }
 
+fn assert_html_document(body: &str) {
+    // Topcoat 0.8 hoists signal declarations before the component's HTML.
+    // Comments before the doctype are valid and must not switch the browser to quirks mode.
+    let mut body = body;
+    while let Some(comment) = body.strip_prefix("<!--::topcoat::signal(") {
+        body = comment.split_once("-->").expect("closed signal comment").1;
+    }
+    assert!(body.starts_with("<!DOCTYPE html>"));
+}
+
+#[tokio::test]
+async fn trailing_slashes_redirect_to_canonical_routes_without_artifact_validators() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    for path in [
+        "/about",
+        "/tech",
+        "/tech/e2e-article",
+        "/api/articles",
+        "/api/health",
+    ] {
+        for method in [Method::GET, Method::HEAD] {
+            let response = response(
+                &router,
+                Request::builder()
+                    .method(method.clone())
+                    .uri(format!("{path}/?from=slash%20test"))
+                    .header(header::IF_MODIFIED_SINCE, "Wed, 01 Jan 2098 00:00:00 GMT")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(
+                response.status,
+                StatusCode::PERMANENT_REDIRECT,
+                "{method} {path}"
+            );
+            assert_eq!(
+                response.headers[header::LOCATION],
+                format!("{path}?from=slash%20test")
+            );
+            assert!(!response.headers.contains_key(header::ETAG));
+            assert!(!response.headers.contains_key(header::LAST_MODIFIED));
+        }
+    }
+}
+
 #[derive(Clone)]
 struct ValidatorReader {
     inner: DynArtifactReader,
@@ -402,7 +448,7 @@ async fn home_renders_the_published_summary_as_html() {
         response.content_type.as_deref(),
         Some("text/html; charset=utf-8")
     );
-    assert!(response.body.starts_with("<!DOCTYPE html>"));
+    assert_html_document(&response.body);
     assert!(response.body.contains("<title>ぶくせんの探窟メモ</title>"));
     assert!(response.body.contains(
         "<meta name=\"description\" content=\"1 article published across 1 category.\">"
@@ -687,7 +733,7 @@ async fn category_renders_the_published_landing_and_articles_as_html() {
         response.content_type.as_deref(),
         Some("text/html; charset=utf-8")
     );
-    assert!(response.body.starts_with("<!DOCTYPE html>"));
+    assert_html_document(&response.body);
     assert!(
         response
             .body
@@ -832,6 +878,94 @@ async fn conditional_get_and_category_share_one_snapshot() {
 }
 
 #[tokio::test]
+async fn category_and_inline_shard_share_one_snapshot_without_validators() {
+    let snapshot_calls = Arc::new(AtomicUsize::new(0));
+    let router = create_router(
+        Arc::new(CountingReader {
+            inner: fixture_reader(),
+            snapshot_calls: snapshot_calls.clone(),
+        }),
+        false,
+    );
+    let response = response(
+        &router,
+        Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(response.status, StatusCode::OK);
+    assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
+    assert!(response.body.contains("記事を絞り込む"));
+    assert!(response.body.contains("E2E Article"));
+}
+
+#[tokio::test]
+async fn category_shard_validates_browser_arguments_and_keeps_errors_out_of_the_site_shell() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    let page = response(
+        &router,
+        Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+    )
+    .await;
+    let (_, marker) = page
+        .body
+        .split_once("::topcoat::shard::start(")
+        .expect("shard marker");
+    let mut arguments = marker.split('"');
+    let shard = arguments.nth(1).expect("shard id");
+    let identity = arguments.nth(1).expect("invocation identity");
+    for (category, expected) in [
+        ("tech", StatusCode::OK),
+        ("../../private", StatusCode::BAD_REQUEST),
+        ("daily", StatusCode::NOT_FOUND),
+        ("physics", StatusCode::INTERNAL_SERVER_ERROR),
+    ] {
+        let response = response(
+            &router,
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/_topcoat/runtime/shards/{shard}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(topcoat::router::request::IDENTITY_HEADER, identity)
+                .body(Body::from(
+                    serde_json::json!({ "args": [category], "signals": {} }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(response.status, expected, "{category}");
+        assert!(!response.headers.contains_key(header::ETAG));
+        assert!(!response.headers.contains_key(header::LAST_MODIFIED));
+        assert!(!response.body.contains("<!DOCTYPE html>"));
+    }
+}
+
+#[tokio::test]
+async fn page_rerun_does_not_reuse_the_unfiltered_get_validator_after_rewrite() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    let page = response(
+        &router,
+        Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+    )
+    .await;
+    let rerun = response(
+        &router,
+        Request::builder()
+            .method(Method::POST)
+            .uri("/_topcoat/runtime/pages/tech")
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::IF_NONE_MATCH, &page.headers[header::ETAG])
+            .body(Body::from(r#"{"signals":{}}"#))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(rerun.status, StatusCode::OK);
+    assert!(!rerun.headers.contains_key(header::ETAG));
+    assert!(!rerun.headers.contains_key(header::LAST_MODIFIED));
+    assert!(!rerun.headers.contains_key(header::CACHE_CONTROL));
+    assert!(rerun.body.contains("E2E Article"));
+}
+
+#[tokio::test]
 async fn article_renders_the_published_document_as_html() {
     let router = create_router(fixture_reader(), false);
     let response = response(
@@ -848,7 +982,7 @@ async fn article_renders_the_published_document_as_html() {
         response.content_type.as_deref(),
         Some("text/html; charset=utf-8")
     );
-    assert!(response.body.starts_with("<!DOCTYPE html>"));
+    assert_html_document(&response.body);
     assert!(
         response
             .body
@@ -1112,7 +1246,7 @@ async fn about_renders_the_published_page_as_html() {
         response.content_type.as_deref(),
         Some("text/html; charset=utf-8")
     );
-    assert!(response.body.starts_with("<!DOCTYPE html>"));
+    assert_html_document(&response.body);
     assert!(response.body.contains("<html lang=\"ja\">"));
     assert!(
         response

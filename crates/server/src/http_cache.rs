@@ -235,11 +235,11 @@ fn is_artifact_request(method: &Method, path: &str) -> bool {
     if path == "/api" || path.starts_with("/api/") {
         return false;
     }
-    !is_static_path(path)
+    !is_framework_path(path)
 }
 
-fn is_static_path(path: &str) -> bool {
-    path == "/_topcoat/assets" || path.starts_with("/_topcoat/assets/")
+fn is_framework_path(path: &str) -> bool {
+    path == "/_topcoat" || path.starts_with("/_topcoat/")
 }
 
 #[cfg(test)]
@@ -478,10 +478,17 @@ mod tests {
             assert!(!result.should_attach_validators(StatusCode::OK));
         }
 
-        assert!(
-            decision(Some("release-1"), true, "/api/health", HeaderMap::new())
-                .await
-                .is_none()
-        );
+        for path in [
+            "/api/health",
+            "/_topcoat",
+            "/_topcoat/assets/site.css",
+            "/_topcoat/runtime/shards/unknown",
+        ] {
+            assert!(
+                decision(Some("release-1"), true, path, HeaderMap::new())
+                    .await
+                    .is_none()
+            );
+        }
     }
 }

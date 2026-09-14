@@ -17,7 +17,10 @@ pub(crate) async fn article_card(article: &SiteArticleCard) -> Result<impl View>
     let updated_at_label = crate::format::format_display_date(&article.updated_at);
 
     Ok(view! {
-        <article class="min-w-0">
+        <article
+            id=(format!("article-{}-{}", article.category, article.slug))
+            class="min-w-0"
+        >
             <a
                 href=(article_href)
                 class="group block text-inherit no-underline focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"

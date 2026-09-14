@@ -7,20 +7,21 @@ mod category_name;
 use std::sync::Arc;
 
 use domain::{
-    HomePageDocument, build_category_path, build_home_page_canonical_path,
-    build_home_page_description, build_home_page_title,
+    Category, CategoryPageDocument, HomePageDocument, build_category_path,
+    build_home_page_canonical_path, build_home_page_description, build_home_page_title,
 };
 use infra::DynArtifactReader;
 use topcoat::{
     Result,
     asset::{AssetConfig, RouterBuilderAssetExt},
-    context::{Cx, app_context, try_request_context},
+    context::{Cx, app_context, memoize, try_request_context},
     router::{
-        Body, LayerFn, LayerFuture, Next, Path, Router, StatusCode,
+        Body, LayerFn, LayerFuture, Next, Path, Router, StatusCode, TrailingSlash,
         error::NotFoundError,
         page, request,
         response::{IntoResponse, Response},
     },
+    runtime::{RouterBuilderRuntimeExt, RouterBuilderShardExt},
     view::{Unescaped, View, ViewExt, component, view},
 };
 
@@ -28,7 +29,7 @@ use crate::{
     article_card::article_card,
     artifact_page_loader::ArtifactPageLoader,
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
-    page_loader::PageLoaderContext,
+    page_loader::{PageLoadResult, PageLoaderContext},
     shell::{ShellMetadata, internal_server_error_page, not_found_page, site_shell},
 };
 
@@ -52,9 +53,18 @@ async fn home(cx: &Cx) -> Result<impl View> {
     }
 }
 
-fn page_loader(cx: &Cx) -> &PageLoaderContext {
+pub(crate) fn page_loader(cx: &Cx) -> &PageLoaderContext {
     try_request_context::<PageLoaderContext>(cx)
         .unwrap_or_else(|| app_context::<PageLoaderContext>(cx))
+}
+
+// The page and its inline shard share the same published document and snapshot.
+#[memoize]
+pub(crate) async fn load_category(
+    cx: &Cx,
+    category: Category,
+) -> PageLoadResult<Option<CategoryPageDocument>> {
+    page_loader(cx).loader().load_category(&category).await
 }
 
 fn is_under_path(path: &str, prefix: &str) -> bool {
@@ -65,7 +75,7 @@ fn is_under_path(path: &str, prefix: &str) -> bool {
 }
 
 fn is_site_page_path(path: &str) -> bool {
-    !is_under_path(path, "/api") && !is_under_path(path, "/_topcoat/assets")
+    !is_under_path(path, "/api") && !is_under_path(path, "/_topcoat")
 }
 
 fn render_unmatched_path<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
@@ -97,7 +107,13 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
     Box::pin(async move {
         let state = app_context::<ArtifactHttpCacheState>(cx);
         let Some(conditional_get) = state
-            .conditional_get(request::method(cx), request::uri(cx), request::headers(cx))
+            // Runtime page re-runs rewrite POST into GET, but their signal-dependent
+            // HTML must not share validators with the ordinary published page.
+            .conditional_get(
+                request::original_method(cx),
+                request::uri(cx),
+                request::headers(cx),
+            )
             .await
         else {
             return next.run(cx, body).await;
@@ -133,6 +149,9 @@ pub fn create_router(
     assets: AssetConfig,
 ) -> Router {
     topcoat::router::module_router!()
+        .runtime()
+        .discover_shards()
+        .trailing_slash(TrailingSlash::Redirect)
         // The framework-neutral decision filters APIs, static assets, and unsuccessful responses.
         // One global layer also avoids nested prefix layers acquiring more than one snapshot.
         .layer(LayerFn::new(None::<&Path>, artifact_conditional_get))

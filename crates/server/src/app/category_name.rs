@@ -13,9 +13,9 @@ use topcoat::{
     view::{Unescaped, View, ViewExt, component, view},
 };
 
-use super::page_loader;
+use super::load_category;
 use crate::{
-    article_card::article_card,
+    category_articles::category_articles,
     shell::{ShellMetadata, internal_server_error_page, not_found_page, site_shell},
 };
 
@@ -32,7 +32,7 @@ async fn category_page(cx: &Cx) -> Result<impl View> {
         }
     };
 
-    match page_loader(cx).loader().load_category(&category).await {
+    match load_category(cx, category).await.clone() {
         Ok(Some(document)) => Ok(view! { category_document(document: document) }.boxed()),
         Ok(None) => Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
         Err(error) => {
@@ -62,6 +62,7 @@ async fn category_document(document: CategoryPageDocument) -> Result<impl View> 
     let description = build_category_page_description(&document);
     let canonical_path = build_category_page_canonical_path(&document);
     let canonical_url = crate::build_site_url(&canonical_path);
+    let category = document.category.to_string();
     let page_title = document.title;
     // The publish pipeline escapes raw Markdown HTML and neutralizes unsafe href schemes before
     // persisting this fragment. It is therefore the trusted HTML boundary for Topcoat as well.
@@ -92,20 +93,7 @@ async fn category_document(document: CategoryPageDocument) -> Result<impl View> 
                     (landing_html)
                 </section>
 
-                <div class="grid gap-6">
-                    for section in &document.sections {
-                        <section class="grid gap-4">
-                            <h2 class="m-0 text-xl font-semibold text-foreground">
-                                (&section.heading)
-                            </h2>
-                            <div class="grid gap-4">
-                                for article in &section.articles {
-                                    article_card(article: article)
-                                }
-                            </div>
-                        </section>
-                    }
-                </div>
+                category_articles(category: $(category))
             </div>
         )
     })

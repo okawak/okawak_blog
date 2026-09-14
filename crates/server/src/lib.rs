@@ -3,7 +3,9 @@
 //! Topcoat site application, runtime composition, and HTTP boundary.
 
 mod article_card;
+mod article_filter;
 mod artifact_page_loader;
+mod category_articles;
 
 pub mod app;
 
