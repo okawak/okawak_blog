@@ -153,6 +153,7 @@ test("home renders artifacts and uses full-page navigation", async ({ page }) =>
   const response = await page.goto("/");
 
   expect(response?.status()).toBe(200);
+  expect(await page.evaluate(() => document.compatMode)).toBe("CSS1Compat");
   await expect(page.locator('link[rel="stylesheet"][href^="/"]')).toHaveAttribute(
     "href",
     /^\/[^?]*[.-][A-Za-z0-9_-]{8,}\.css$/,
@@ -456,6 +457,66 @@ test("category landing content stays within the mobile viewport", async ({ page 
     () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
   );
   expect(pageHasNoHorizontalOverflow).toBe(true);
+});
+
+test("category filtering morphs only the list and preserves browser state", async ({ page }) => {
+  const browserErrors = captureBrowserErrors(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tech");
+  const menu = page.locator('button[aria-controls="site-header-nav"]');
+  await menu.click();
+  const input = page.getByRole("searchbox", { name: "記事を絞り込む" });
+  const results = page.getByRole("region", { name: "カテゴリの記事", exact: true });
+  const status = results.getByRole("status");
+  let documentRequests = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documentRequests += 1;
+  });
+  await page.locator("main .content-prose").evaluate((element) => {
+    element.setAttribute("data-preserved", "true");
+  });
+
+  for (const query of [" e2e ARTICLE ", "fixture description", "RUST"]) {
+    const rerender = page.waitForResponse((response) =>
+      response.request().method() === "POST" && response.url().includes("/_topcoat/runtime/shards/"),
+    );
+    await input.fill(query);
+    const response = await rerender;
+    expect(response.status()).toBe(200);
+    expect(response.headers().etag).toBeUndefined();
+    await expect(status).toHaveText("1件の記事");
+    await expect(results.getByRole("link", { name: "E2E Article" })).toBeVisible();
+  }
+  await input.fill("no matching article");
+  await expect(status).toHaveText("0件の記事");
+  await expect(results.getByRole("link", { name: "E2E Article" })).toHaveCount(0);
+  await expect(results.getByRole("heading", { name: "rust / async" })).toHaveCount(0);
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue("no matching article");
+
+  await input.fill("");
+  await expect(status).toHaveText("1件の記事");
+  await expect(results.getByRole("link", { name: "E2E Article" })).toBeVisible();
+  await expect(input).toBeFocused();
+  await expect(menu).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("main .content-prose")).toHaveAttribute("data-preserved", "true");
+  await expect(page).toHaveURL(/\/tech$/);
+  expect(documentRequests).toBe(0);
+  expect(browserErrors).toEqual([]);
+});
+
+test("category articles remain available without JavaScript", async ({ browser }) => {
+  const context = await browser.newContext({ baseURL: BASE_URL, javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto("/tech");
+    await expect(page.getByRole("status")).toHaveText("1件の記事");
+    await expect(page.getByRole("heading", { name: "rust / async" })).toBeVisible();
+    await page.getByRole("link", { name: "E2E Article" }).click();
+    await expect(page).toHaveURL(/\/tech\/e2e-article$/);
+  } finally {
+    await context.close();
+  }
 });
 
 test("generated article content stays readable on mobile", async ({ page }) => {

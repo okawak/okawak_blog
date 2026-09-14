@@ -6,6 +6,7 @@ use topcoat::{
     context::Cx,
     icon::icon,
     router::{StatusCode, href},
+    runtime::signal,
     view::{Child, Unescaped, View, component, view},
 };
 
@@ -114,6 +115,7 @@ pub(crate) async fn site_shell(
     let home_is_current = home_href.is_current(cx);
     let about_is_current = about_href.is_current(cx);
     let year = chrono::Local::now().year();
+    let menu_open = signal(cx, || false);
     let math_render_script = Unescaped::new_unchecked(
         r#"
 window.okawakRenderMath = function(root) {
@@ -247,8 +249,6 @@ window.okawakScheduleCodeHighlight = function(root) {
                 topcoat::runtime::script()
             </head>
             <body>
-                signal menu_open = false;
-
                 <div class="flex min-h-dvh flex-col text-foreground">
                     <header
                         class="sticky top-0 z-50 h-[var(--site-header-height)] border-b border-border/60 bg-[image:var(--site-header-background)] shadow-[0_8px_24px_rgb(0_0_0/0.45)] backdrop-blur-sm"

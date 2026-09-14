@@ -20,6 +20,8 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 - `src/app/category_name.rs`: `/{category_name}`のcategory page
 - `src/app/category_name/article_slug.rs`: `/{category_name}/{article_slug}`のarticle page
 - `src/article_card.rs`: 一覧routeが共有する記事card
+- `src/category_articles.rs`: signalをサーバー側で読み、カテゴリ記事一覧だけを再描画するshard
+- `src/article_filter.rs`: タイトル・説明・タグによる記事絞り込みの純粋ロジック
 - `src/shell.rs`: HTML shell、metadata、error view、生成contentのprogressive enhancement
 - `src/assets.rs`: application所有のbundle asset登録
 - `src/icons.rs`: 同梱したGitHub Octiconsの単一SVG（[MITライセンス](licenses/Octicons-MIT.txt)）をTopcoatのicon componentへ渡す
@@ -28,6 +30,10 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 - `build.rs`: `style/tailwind.css`をTopcoatのstylesheet assetへ変換するbuild integration
 
 routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`path_param!()`で宣言し、route moduleに`mod.rs`は使いません。
+
+Topcoat frameworkとCLIは0.8.1に揃え、routerには`.runtime()`と`.discover_shards()`を登録します。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
+
+カテゴリの記事絞り込みはshard内の`signal(cx, String::new)`とtracked readで構成します。タイトル・説明・タグを大文字小文字を区別せず部分一致で検索し、入力はサーバー側でも先頭100文字に制限します。カテゴリ引数も再描画時に検証します。ページと初期shardは`#[memoize]`で同じpage documentを共有し、再描画では`PageLoader`から再取得します。記事・sectionの安定したIDを使うDOM morphにより、入力フォーカスとshard外の状態を維持します。JavaScript無効時も初期HTMLの全記事とリンクを利用できます。
 
 productionはpackage直下の`build.rs`から`style/tailwind.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。公開linkは独自client routerを介さず、ブラウザ標準のfull-page navigationを使います。mobile menuはTopcoat runtimeのsignalとevent expressionで構成します。
 
