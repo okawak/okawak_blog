@@ -107,7 +107,13 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
     Box::pin(async move {
         let state = app_context::<ArtifactHttpCacheState>(cx);
         let Some(conditional_get) = state
-            .conditional_get(request::method(cx), request::uri(cx), request::headers(cx))
+            // Runtime page re-runs rewrite POST into GET, but their signal-dependent
+            // HTML must not share validators with the ordinary published page.
+            .conditional_get(
+                request::original_method(cx),
+                request::uri(cx),
+                request::headers(cx),
+            )
             .await
         else {
             return next.run(cx, body).await;

@@ -377,6 +377,8 @@ homeのarticle index、site metadata、optional home fragmentは、同じsnapsho
 
 routerはTopcoat 0.8.1の`.runtime()`と`.discover_shards()`を登録し、`TrailingSlash::Redirect`で末尾スラッシュを宣言済みURLへ308リダイレクトする。queryは維持し、redirectにはartifact validatorを付けない。`/_topcoat`配下のframework endpointをサイト用404 HTMLの対象から除外する。
 
+conditional GETのmethod判定には`request::original_method(cx)`を使う。runtimeのpage再描画はPOSTを内部でGETへrewriteするため、rewrite後のmethodで判定するとsignal状態に依存するHTMLへ通常pageと同じvalidatorを付けてしまう。元のrequestがPOSTならartifact cacheの対象にしない。
+
 カテゴリ内の記事絞り込みは`src/category_articles.rs`のshardが所有する。shard内のsignalをサーバー側で読み、記事一覧と入力欄だけをDOM morphで更新する。UI用の純粋な部分一致ロジックは`src/article_filter.rs`に置き、タイトル・説明・タグを対象にする。ブラウザから届くカテゴリはdomain型へ検証し、検索語は先頭100文字に制限する。初期pageとshardはリクエスト単位の`#[memoize]`で同じpage documentを共有し、再描画時もstorageへ直接依存せず`PageLoader`を使う。sectionと記事に安定したIDを付け、入力フォーカスとshard外のmenu・生成本文を維持する。JavaScript無効時は全記事をSSRした一覧を利用できる。
 
 production `server`はhome、about、category、articleをSSRし、title、canonical、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。

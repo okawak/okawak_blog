@@ -33,6 +33,8 @@ routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL�
 
 Topcoat frameworkとCLIは0.8.1に揃え、routerには`.runtime()`と`.discover_shards()`を登録します。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
 
+runtimeのpage再描画はPOSTをGETへ内部rewriteします。conditional GETでは`request::original_method(cx)`を参照し、再描画応答に通常pageのvalidatorを適用しません。
+
 カテゴリの記事絞り込みはshard内の`signal(cx, String::new)`とtracked readで構成します。タイトル・説明・タグを大文字小文字を区別せず部分一致で検索し、入力はサーバー側でも先頭100文字に制限します。カテゴリ引数も再描画時に検証します。ページと初期shardは`#[memoize]`で同じpage documentを共有し、再描画では`PageLoader`から再取得します。記事・sectionの安定したIDを使うDOM morphにより、入力フォーカスとshard外の状態を維持します。JavaScript無効時も初期HTMLの全記事とリンクを利用できます。
 
 productionはpackage直下の`build.rs`から`style/tailwind.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。公開linkは独自client routerを介さず、ブラウザ標準のfull-page navigationを使います。mobile menuはTopcoat runtimeのsignalとevent expressionで構成します。

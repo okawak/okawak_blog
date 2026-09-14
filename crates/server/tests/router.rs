@@ -940,6 +940,32 @@ async fn category_shard_validates_browser_arguments_and_keeps_errors_out_of_the_
 }
 
 #[tokio::test]
+async fn page_rerun_does_not_reuse_the_unfiltered_get_validator_after_rewrite() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    let page = response(
+        &router,
+        Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+    )
+    .await;
+    let rerun = response(
+        &router,
+        Request::builder()
+            .method(Method::POST)
+            .uri("/_topcoat/runtime/pages/tech")
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::IF_NONE_MATCH, &page.headers[header::ETAG])
+            .body(Body::from(r#"{"signals":{}}"#))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(rerun.status, StatusCode::OK);
+    assert!(!rerun.headers.contains_key(header::ETAG));
+    assert!(!rerun.headers.contains_key(header::LAST_MODIFIED));
+    assert!(!rerun.headers.contains_key(header::CACHE_CONTROL));
+    assert!(rerun.body.contains("E2E Article"));
+}
+
+#[tokio::test]
 async fn article_renders_the_published_document_as_html() {
     let router = create_router(fixture_reader(), false);
     let response = response(
