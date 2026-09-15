@@ -61,7 +61,7 @@ jobs:
           echo "Validated Rust CI run ${ci_run_id} for ${GITHUB_SHA}."
 
       - name: Get App Token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         id: app-token
         with:
           client-id: ${{ secrets.GH_APP_ID }}
@@ -72,7 +72,7 @@ jobs:
             obsidian
 
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           token: ${{ steps.app-token.outputs.token }}
           submodules: recursive
@@ -84,7 +84,7 @@ jobs:
           git submodule update --recursive --remote
 
       - name: Set up shared build tools
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
 
       - name: Check tool version consistency
         run: mise run versions-check
@@ -95,7 +95,7 @@ jobs:
           sudo apt-get install pkg-config libssl-dev
 
       - name: Cargo cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ~/.cargo/registry/index/
@@ -161,7 +161,7 @@ jobs:
           echo "✅ All required AWS secrets are present"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           aws-region: ${{ secrets.AWS_REGION }}
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
@@ -197,7 +197,7 @@ jobs:
 
       - name: Upload Playwright traces
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-s3-traces
           path: e2e/test-results/s3/
