@@ -4,6 +4,9 @@
 
 ## Runbooks
 
+- [依存関係の更新](./dependency-updates.md)
+  - Renovate GitHub Appの導入とGitHubのsecurity設定
+  - 更新対象、スケジュール、更新PRと設定の検証
 - [本番環境の初期構築](./production-setup.md)
   - 管理端末、AWS、OCI、VPS、Cloudflare Dashboardをまたぐ構築順序
   - secretの配置境界と構築完了時の確認

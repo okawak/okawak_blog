@@ -32,9 +32,4 @@ if grep -R -n -E \
   fail "workflow-local tool version or installer found"
 fi
 
-for workflow in .github/workflows/ci.yml .github/workflows/upload.yml; do
-  grep -q 'jdx/mise-action@v4' "$workflow" \
-    || fail "$workflow does not use jdx/mise-action@v4"
-done
-
 echo "versions-check: shared tool versions are consistent"

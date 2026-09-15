@@ -1,0 +1,14 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices"],
+  "enabledManagers": ["cargo", "bun", "github-actions", "rust-toolchain"],
+  "ignoreDeps": ["topcoat"],
+  "ignorePaths": ["terraform/**", "crates/publish/obsidian/**"],
+  "timezone": "Asia/Tokyo",
+  "schedule": ["* * * * 1"],
+  "automerge": false,
+  "platformCommit": "enabled",
+  "vulnerabilityAlerts": {
+    "enabled": true
+  }
+}
