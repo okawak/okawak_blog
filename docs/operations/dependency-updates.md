@@ -6,7 +6,7 @@
 
 | 対象 | Renovate manager | 主なファイル |
 | --- | --- | --- |
-| Rust crate | `cargo` | root / 各crateの`Cargo.toml`、`Cargo.lock` |
+| Rust crate（Topcoat本体を除く） | `cargo` | root / 各crateの`Cargo.toml`、`Cargo.lock` |
 | E2EのBun package | `bun` | `e2e/package.json`、`e2e/bun.lock` |
 | GitHub Actions | `github-actions` | `.github/workflows/*.yml` |
 | Rust toolchain | `rust-toolchain` | `rust-toolchain.toml` |
@@ -18,7 +18,8 @@
 - PRはCIとreviewを経て手動でmergeします。`automerge`は無効です。
 - `platformCommit: enabled`によりGitHub AppのAPI経由で署名付きcommitを作成します。[署名の設定](https://docs.renovatebot.com/configuration-options/#platformcommit)
 - `terraform/`とprivate Obsidian submoduleを更新対象から除外します。`mise`や`git-submodules` managerも有効にしません。
-- `mise.toml` / `mise.lock`のBun本体・Topcoat CLI、およびTailwindのversionは共通toolの更新手順で管理します。Topcoatの更新PRにはCLIとのversion整合を促す注記を付けます。
+- Topcoat本体は`ignoreDeps: ["topcoat"]`でRenovateの更新対象から除外します。`Cargo.toml`の完全固定（`=version`）を維持し、変更内容を確認して手動で更新します。Topcoatの脆弱性が通知された場合も手動で対応します。
+- `mise.toml` / `mise.lock`のBun本体・Topcoat CLI、およびTailwindのversionは共通toolの更新手順で管理します。
 
 ## GitHubで行う初期設定
 
@@ -43,6 +44,7 @@ repositoryの管理権限があるアカウントで、次を実施します。
 
 - 通常のRust / Bun package更新ではmanifestとlockfileの差分を確認し、Rust CIを通します。Bun依存は[Bun manager](https://docs.renovatebot.com/modules/manager/bun/)が`bun.lock`も更新します。
 - Topcoat frameworkの更新時は`mise.toml`の`cargo:topcoat-cli`も同じversionへ揃え、`mise lock --platform macos-arm64,linux-x64`でlockfileを更新します。`mise install`後に`mise run versions-check`を通し、同じPRへ含めます。
+- Topcoat本体の除外は、推移依存の固定を意味しません。`topcoat-*` crateはTopcoat本体からversion範囲で参照されているため、週次lockfile更新などで変更されることがあります。`Cargo.lock`の該当差分もreviewして判断します。
 - GitHub ActionsのSHA固定PRでは、対応versionのcommentと参照先を確認します。`mise run versions-check`は`jdx/mise-action`のmajor tag・完全なcommit SHAの両形式を受け付けます。
 - Bun本体やTailwindを手動更新する場合も、[READMEの共通tool更新手順](../../README.md#開発コマンド)に従って関連するversionを揃えます。
 - 更新PRを手動修正してcommitする際も、署名設定を確認して署名付きcommitを作成します。

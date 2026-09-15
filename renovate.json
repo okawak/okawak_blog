@@ -2,6 +2,7 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:best-practices"],
   "enabledManagers": ["cargo", "bun", "github-actions", "rust-toolchain"],
+  "ignoreDeps": ["topcoat"],
   "ignorePaths": ["terraform/**", "crates/publish/obsidian/**"],
   "timezone": "Asia/Tokyo",
   "schedule": ["* * * * 1"],
@@ -9,14 +10,5 @@
   "platformCommit": "enabled",
   "vulnerabilityAlerts": {
     "enabled": true
-  },
-  "packageRules": [
-    {
-      "matchManagers": ["cargo"],
-      "matchPackageNames": ["topcoat"],
-      "prBodyNotes": [
-        "Topcoat framework と mise.toml の cargo:topcoat-cli を同じ version に揃え、mise.lock を更新して mise run versions-check を通してください。"
-      ]
-    }
-  ]
+  }
 }
