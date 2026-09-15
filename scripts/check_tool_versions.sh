@@ -32,10 +32,16 @@ if grep -R -n -E \
   fail "workflow-local tool version or installer found"
 fi
 
+mise_action_major=v4
+mise_action_prefix='^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+jdx/mise-action@'
+# Renovate pins refs to SHAs; the comment must still identify the supported major.
+mise_action_ref="(${mise_action_major}([[:space:]]+#.*)?|[[:xdigit:]]{40}[[:space:]]+#[[:space:]]+${mise_action_major}([.][0-9]+){0,2}([[:space:]]+.*)?)[[:space:]]*$"
 for workflow in .github/workflows/ci.yml .github/workflows/upload.yml; do
-  # Renovate pins action refs to commit SHAs while retaining the version in a comment.
-  grep -Eq '^[[:space:]]*uses:[[:space:]]+jdx/mise-action@(v[0-9]+|[[:xdigit:]]{40})([[:space:]]|$)' "$workflow" \
-    || fail "$workflow does not use jdx/mise-action with a major tag or full commit SHA"
+  mise_action_steps="$(grep -E "$mise_action_prefix" "$workflow" || true)"
+  [ -n "$mise_action_steps" ] || fail "$workflow does not use jdx/mise-action"
+  if printf '%s\n' "$mise_action_steps" | grep -Ev "${mise_action_prefix}${mise_action_ref}"; then
+    fail "$workflow must use jdx/mise-action@${mise_action_major} or a full commit SHA with a ${mise_action_major} version comment"
+  fi
 done
 
 echo "versions-check: shared tool versions are consistent"

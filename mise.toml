@@ -22,6 +22,10 @@ actual_topcoat_version="$(topcoat fmt --version | awk '{print $2}')"
 description = "Check shared tool and build helper version consistency"
 run = "bash scripts/check_tool_versions.sh"
 
+[tasks.test-tool-versions]
+description = "Test shared tool version checks and mise-action refs"
+run = "bash scripts/tests/tool_versions_test.sh"
+
 [tasks.e2e-install]
 description = "Install root E2E dependencies with bun"
 run = '''
