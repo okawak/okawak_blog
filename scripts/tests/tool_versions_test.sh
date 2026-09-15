@@ -35,7 +35,7 @@ write_workflow() {
   shift
   printf 'jobs:\n  verify:\n    steps:\n' >"$test_root/$workflow"
   for ref in "$@"; do
-    printf '      - name: Set up build tools\n        uses: jdx/mise-action@%s\n' "$ref" >>"$test_root/$workflow"
+    printf '      - name: Set up build tools\n        uses: %s\n' "$ref" >>"$test_root/$workflow"
   done
 }
 
@@ -51,30 +51,50 @@ run_case() {
 
 ci_workflow=.github/workflows/ci.yml
 upload_workflow=.github/workflows/upload.yml
+action=jdx/mise-action
 action_sha=0123456789abcdef0123456789abcdef01234567
 
-write_workflow "$ci_workflow" v4 v4
-write_workflow "$upload_workflow" v4
+write_workflow "$ci_workflow" "$action@v4" "$action@v4"
+write_workflow "$upload_workflow" "$action@v4"
 run_case 0 'current major tags'
 
-write_workflow "$ci_workflow" "$action_sha # v4" "$action_sha # v4.2.0"
-write_workflow "$upload_workflow" "$action_sha # v4"
-run_case 0 'SHA pins with current-major comments'
+for quote in "'" '"' ''; do
+  for workflow in "$ci_workflow" "$upload_workflow"; do
+    for invalid_ref in \
+      "$quote$action@v1$quote" \
+      "$quote$action@v5$quote" \
+      "$quote$action@$action_sha$quote" \
+      "$quote$action@$action_sha$quote # v1" \
+      "$quote$action@$action_sha$quote # v40" \
+      "$quote$action@0123456$quote # v4"; do
+      write_workflow "$ci_workflow" "$action@v4" "$action@v4"
+      write_workflow "$upload_workflow" "$action@v4"
+      # One valid unquoted step must not hide an invalid quoted or unquoted ref.
+      write_workflow "$workflow" "$action@v4" "$invalid_ref"
+      run_case 1 "mixed refs in $workflow: $invalid_ref"
+      write_workflow "$workflow" "$invalid_ref"
+      run_case 1 "invalid ref in $workflow: $invalid_ref"
+    done
+  done
+
+  write_workflow "$ci_workflow" "$quote$action@v4$quote"
+  write_workflow "$upload_workflow" "$quote$action@v4$quote"
+  run_case 0 "current major tags with quote: $quote"
+  write_workflow "$ci_workflow" "$quote$action@$action_sha$quote # v4" "$quote$action@$action_sha$quote # v4.2.0"
+  write_workflow "$upload_workflow" "$quote$action@$action_sha$quote # v4"
+  run_case 0 "SHA pins with current-major comments and quote: $quote"
+done
 
 for workflow in "$ci_workflow" "$upload_workflow"; do
-  for invalid_ref in v1 v5 "$action_sha" "$action_sha # v1" "$action_sha # v40" '0123456 # v4'; do
-    write_workflow "$ci_workflow" v4 v4
-    write_workflow "$upload_workflow" v4
-    write_workflow "$workflow" "$invalid_ref"
-    run_case 1 "invalid ref in $workflow: $invalid_ref"
-    # One valid step must not hide another step using an invalid ref.
-    write_workflow "$workflow" v4 "$invalid_ref"
-    run_case 1 "mixed refs in $workflow: $invalid_ref"
-  done
-  write_workflow "$ci_workflow" v4
-  write_workflow "$upload_workflow" v4
+  write_workflow "$ci_workflow" "$action@v4"
+  write_workflow "$upload_workflow" "$action@v4"
   write_workflow "$workflow"
   run_case 1 "missing mise action in $workflow"
 done
+
+write_workflow "$ci_workflow" "$action@v4"
+write_workflow "$upload_workflow" "$action@v4"
+printf '      # uses: "%s@v1"\n' "$action" >>"$test_root/$ci_workflow"
+run_case 0 'commented-out old major'
 
 echo 'tool-versions-test: all cases passed'
