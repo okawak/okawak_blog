@@ -33,8 +33,9 @@ if grep -R -n -E \
 fi
 
 for workflow in .github/workflows/ci.yml .github/workflows/upload.yml; do
-  grep -q 'jdx/mise-action@v4' "$workflow" \
-    || fail "$workflow does not use jdx/mise-action@v4"
+  # Renovate pins action refs to commit SHAs while retaining the version in a comment.
+  grep -Eq '^[[:space:]]*uses:[[:space:]]+jdx/mise-action@(v[0-9]+|[[:xdigit:]]{40})([[:space:]]|$)' "$workflow" \
+    || fail "$workflow does not use jdx/mise-action with a major tag or full commit SHA"
 done
 
 echo "versions-check: shared tool versions are consistent"

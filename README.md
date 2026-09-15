@@ -201,7 +201,7 @@ mise install
 mise run versions-check
 ```
 
-共通実行tool（Bun、Topcoat CLI）は`mise.toml`をsource of truthとし、`mise.lock`にはmacOS arm64、GitHub Actions Linux x64、VPSが識別するLinux platform aliasの解決済みrelease assetを記録します。Rust toolchainは`rust-toolchain.toml`、Cargo / Bun依存は各manifestとlockfile、GitHub Actionsはworkflow内の最新major指定を正とします。
+共通実行tool（Bun、Topcoat CLI）は`mise.toml`をsource of truthとし、`mise.lock`にはmacOS arm64、GitHub Actions Linux x64、VPSが識別するLinux platform aliasの解決済みrelease assetを記録します。Rust toolchainは`rust-toolchain.toml`、Cargo / Bun依存は各manifestとlockfileを正とします。GitHub Actionsは最新majorへ追従し、Renovateでworkflow内のcommit SHAと対応versionのcommentを更新します。
 
 site UIはTopcoat componentとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/server/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
 
@@ -209,7 +209,7 @@ private Obsidian repoを使う`publish`側の開発では、`mise run dev-local`
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
 production CSSはTopcoatのstandalone Tailwind integrationで生成し、そのversionを`mise.toml`の`TOPCOAT_TAILWIND_VERSION`とTopcoat build scriptで一致させます。`mise run versions-check`がこれらとTopcoat CLI / framework、E2EのBun versionを照合し、GitHub Actionsは`jdx/mise-action`経由で同じlocked toolchainを導入します。
 
-共通toolを更新するときは、`mise.toml`のversionを更新して`mise lock --platform macos-arm64,linux-x64`を実行します。Bun package、Rust crate、Rust toolchain、GitHub Actionsの更新はそれぞれの標準manifestとDependabotで管理します。
+共通toolを更新するときは、`mise.toml`のversionを更新して`mise lock --platform macos-arm64,linux-x64`を実行します。Bun package、Rust crate、Rust toolchain、GitHub Actionsの更新はそれぞれの標準manifestと[Renovate設定](./renovate.json)で管理します。GitHub Appの導入、security設定、更新PRの確認は[依存関係の更新](./docs/operations/dependency-updates.md)を参照してください。
 browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-install-browser`、実行は `mise run test-e2e` を使ってください。E2E は root の `e2e/` に置き、通常CIではprivate Obsidian submoduleやS3に依存しない固定artifactで実行します。S3への公開はGitHub Actionsの`Publish Obsidian to S3`を`main`から手動実行します。workflowは対象commitのRust CI成功と最新`main`であることを先に確認し、immutable releaseを実S3 smoke testで検証します。pointer切替直前にも最新`main`を再確認してから`current.json`を更新します。ローカルからS3へ直接syncする経路は標準の公開手順にしません。
 
 開発端末では、local previewに`mise run dev-local`、S3 readerの本番相当確認に`mise run dev`または`mise run test-e2e-s3`を使います。S3用taskはAWS CLIを実行せず、AWS SDKが設定済みprofileまたは環境変数credentialを読みます。bucketやcredentialは保存せず、`AWS_PROFILE`、region、`OKAWAK_BLOG_ARTIFACT_BUCKET`、必要な場合だけ`OKAWAK_BLOG_ARTIFACT_PREFIX`を実行時に渡します。詳細は[e2e/README.md](./e2e/README.md)を参照してください。

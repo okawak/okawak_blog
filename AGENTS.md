@@ -27,7 +27,7 @@ private Obsidian Markdownをビルド時の`publish` pipelineで公開artifact�
 - 可能な限りTDDで進め、純粋ロジックは失敗テストを先に置く。仕様変更なしにテストを都合よく変えない。
 - 責務・依存方向を変えたら`docs/architecture/`と必要な利用文書を更新する。
 - 状態遷移・不変条件は型で表すことを優先し、過剰なrepository pattern・肥大化する`shared`・`unimplemented!()`前提の大きなmodelを避ける。
-- GitHub Actionsは原則、利用中actionの最新majorを指定する。
+- GitHub Actionsは原則、利用中actionの最新majorへ追従する。Renovateでcommit SHAを固定し、対応versionをcommentに残す。
 
 ## タスクと運用
 
