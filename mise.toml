@@ -281,3 +281,7 @@ echo "  mise run check"
 [tasks.translate-ui]
 description = "Translate UI catalog only (no private Obsidian needed)"
 run = "cargo run -p export -- --ui-only"
+
+[tasks.test-public-artifacts]
+description = "Validate the language-aware prepublication artifact gate with public fixtures"
+run = "bash scripts/tests/public_artifacts_test.sh"

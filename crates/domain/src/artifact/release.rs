@@ -10,7 +10,11 @@ pub struct ArtifactReleasePointerDocument {
     pub release_id: String,
     pub artifact_prefix: String,
     pub publisher_commit: String,
+    /// Legacy source revision (private vault in old releases, public repository in new ones).
     pub source_commit: String,
+    /// Public repository revision containing the reviewed Markdown; absent in old v1 releases.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_commit: Option<String>,
     pub generated_at: String,
 }
 
@@ -38,6 +42,11 @@ impl ArtifactReleasePointerDocument {
             if value.trim().is_empty() {
                 return Err(crate::DomainError::validation(field));
             }
+        }
+        if let Some(commit) = &self.content_commit
+            && (commit.len() != 40 || !commit.bytes().all(|b| b.is_ascii_hexdigit()))
+        {
+            return Err(crate::DomainError::validation("content_commit"));
         }
         self.generated_at_time()?;
         Ok(())
@@ -77,8 +86,26 @@ mod tests {
             artifact_prefix: prefix.to_string(),
             publisher_commit: "publisher-sha".to_string(),
             source_commit: "source-sha".to_string(),
+            content_commit: None,
             generated_at: "2026-07-12T12:00:00Z".to_string(),
         }
+    }
+
+    #[test]
+    fn release_provenance_adds_public_revision_without_breaking_old_v1() {
+        let old = release_pointer("releases/old/site");
+        let old_json = serde_json::to_value(&old).unwrap();
+        assert!(old_json.get("content_commit").is_none());
+        let read: ArtifactReleasePointerDocument = serde_json::from_value(old_json).unwrap();
+        assert_eq!(read.content_commit, None);
+        assert!(read.validate().is_ok());
+        let mut current = old;
+        current.content_commit = Some("a".repeat(40));
+        assert!(current.validate().is_ok());
+        let encoded = serde_json::to_value(&current).unwrap();
+        assert_eq!(encoded["source_commit"], "source-sha");
+        current.content_commit = Some("bad revision".into());
+        assert!(current.validate().is_err());
     }
 
     #[test]

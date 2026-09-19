@@ -65,3 +65,9 @@ credentialには対象keyへの`s3:GetObject`だけを付与したread-only prof
 - `.github/workflows/upload.yml`は`main`から`workflow_dispatch`で手動実行します。生成物をimmutable release prefixへuploadした後、そのprefixを`test-e2e-s3`で直接検証し、成功した場合だけ`current.json`を切り替えます。
 
 S3 smoke testはOIDCで取得したupload workflowの一時credentialを再利用し、pull requestへAWS credentialを渡しません。失敗時のPlaywright traceはGitHub Actions artifactに7日間保存されます。
+
+## 言語別releaseの公開前検証
+
+通常fixtureに日英の対応表・翻訳タグを持ち、言語切替、初回SSR、絞り込み後の文言、モバイルメニュー、未翻訳404を検証する。公開workflowでは`OKAWAK_BLOG_EXPECTED_ARTIFACT_ROOT`に今回生成したsite directoryを渡し、その`locales.json`で宣言された各言語のhome・About・代表カテゴリ／記事を実S3から表示する。artifactの全件存在はupload前script、remoteへの転送は全object数とlocale表の一致で確認する。
+
+手動の`test-e2e-s3`で対応するローカルbuildを指定しない場合は、従来の日本語smokeに加え、homeに宣言された英語版を表示できるか確認する。通常CIはこのsmokeの表示検証をlocal fixtureでも実行し、AWS・private vault・実AIを必要としない。
