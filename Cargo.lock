@@ -1037,6 +1037,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "export"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "domain",
+ "percent-encoding",
+ "pulldown-cmark",
+ "rstest",
+ "scraper",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2 0.11.0",
+ "tempfile",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
