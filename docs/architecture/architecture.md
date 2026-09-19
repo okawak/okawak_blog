@@ -89,6 +89,7 @@ okawak_blog/
   - render/ogpによる共有HTTP clientと上限付き並行処理を使ったbookmark metadata取得、OGP・Twitter Card・HTML fallbackの解析
   - classify moduleによる公開種別の確定と`section_path`の導出
   - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
+  - CLIの`--validate-artifacts`は`artifact_check`でdomainのpage builderを使い、公開前に全言語のhome・記事・カテゴリ・固定ページの不変条件を検証する。公開前scriptはこれに加えてartifact間の集合・件数を照合する。
   - `PublicContentMeta`と`ContentKind`はdomainの共有契約。Obsidian固有frontmatterを保持しない
   - `publish`固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
 - `crates/infra`

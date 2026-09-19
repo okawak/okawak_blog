@@ -108,4 +108,13 @@ if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/empty
   echo "A category artifact must remain declared even when it has no articles" >&2
   exit 1
 fi
+for landing_field in title html updated_at; do
+  cp -R "$validation_tmp/valid" "$validation_tmp/invalid-$landing_field"
+  jq --arg field "$landing_field" '.[$field] = ""' "$validation_tmp/invalid-$landing_field/en/categories/tech.json" > "$validation_tmp/category.json"
+  mv "$validation_tmp/category.json" "$validation_tmp/invalid-$landing_field/en/categories/tech.json"
+  if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/invalid-$landing_field" >/dev/null 2>&1; then
+    echo "Every category landing must satisfy domain rules: $landing_field" >&2
+    exit 1
+  fi
+done
 echo "Public artifact gate tests passed"

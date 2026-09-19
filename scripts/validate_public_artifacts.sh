@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # Validate a completed local release before upload; no vault or AI dependency.
 set -euo pipefail
-root="${1:?Usage: validate_public_artifacts.sh SITE_ROOT}"
+root="${1:?Usage: validate_public_artifacts.sh SITE_ROOT [PUBLISH_BINARY]}"
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -n "${2:-}" ]; then
+  "$2" --validate-artifacts "$root"
+else
+  cargo run --quiet --locked --manifest-path "$repo_root/Cargo.toml" -p publish -- --validate-artifacts "$root"
+fi
 jq -e '
   .routes["/"] as $home_locales |
   .schema_version == 1 and (.routes | type == "object") and

@@ -97,7 +97,7 @@ jobs:
           set -euo pipefail
           RUST_LOG=info cargo run --release -p publish
 
-          bash scripts/validate_public_artifacts.sh "$UPLOAD_PATH"
+          bash scripts/validate_public_artifacts.sh "$UPLOAD_PATH" target/release/publish
 
       - name: Build release pointer
         run: |
