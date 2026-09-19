@@ -36,38 +36,56 @@ fn preferred_locale(headers: &HeaderMap) -> Locale {
             }
         }
     }
-    let mut best = (0, Locale::En);
-    for value in headers.get_all(header::ACCEPT_LANGUAGE) {
-        for range in value.to_str().unwrap_or_default().split(',') {
-            let mut parts = range.trim().split(';');
-            let tag = parts.next().unwrap_or_default().trim().to_ascii_lowercase();
-            let locale = match tag.split('-').next() {
-                Some("ja") => Locale::Ja,
-                Some("en" | "*") => Locale::En,
-                _ => continue,
-            };
-            if tag != "*"
-                && !tag.split('-').all(|part| {
-                    !part.is_empty()
-                        && part.len() <= 8
-                        && part.bytes().all(|c| c.is_ascii_alphanumeric())
-                })
-            {
-                continue;
-            }
-            let quality = match (parts.next(), parts.next()) {
-                (None, None) => Some(1000),
-                (Some(parameter), None) => parameter.trim().strip_prefix("q=").and_then(quality),
-                _ => None,
-            };
-            if let Some(quality) = quality
-                && quality > best.0
-            {
-                best = (quality, locale);
-            }
+    let mut japanese: Option<(u16, usize)> = None;
+    let mut english: Option<(u16, usize)> = None;
+    let mut wildcard: Option<(u16, usize)> = None;
+    let ranges = headers
+        .get_all(header::ACCEPT_LANGUAGE)
+        .iter()
+        .flat_map(|value| value.to_str().unwrap_or_default().split(','));
+    for (order, range) in ranges.enumerate() {
+        let mut parts = range.trim().split(';');
+        let tag = parts.next().unwrap_or_default().trim().to_ascii_lowercase();
+        let slot = match tag.split('-').next() {
+            Some("ja") => &mut japanese,
+            Some("en") => &mut english,
+            Some("*") if tag == "*" => &mut wildcard,
+            _ => continue,
+        };
+        if tag != "*"
+            && !tag.split('-').all(|part| {
+                !part.is_empty()
+                    && part.len() <= 8
+                    && part.bytes().all(|c| c.is_ascii_alphanumeric())
+            })
+        {
+            continue;
+        }
+        let weight = match (parts.next(), parts.next()) {
+            (None, None) => Some(1000),
+            (Some(parameter), None) => parameter.trim().strip_prefix("q=").and_then(quality),
+            _ => None,
+        };
+        if let Some(weight) = weight
+            && slot.is_none_or(|(previous, _)| weight > previous)
+        {
+            *slot = Some((weight, order));
         }
     }
-    best.1
+    // Keep explicit zero weights: the wildcard must not re-enable an excluded language.
+    [
+        (Locale::En, english.or(wildcard)),
+        (Locale::Ja, japanese.or(wildcard)),
+    ]
+    .into_iter()
+    .filter_map(|(locale, weight)| {
+        weight
+            .filter(|(weight, _)| *weight > 0)
+            .map(|(weight, order)| (locale, weight, order))
+    })
+    .min_by_key(|(_, weight, order)| (std::cmp::Reverse(*weight), *order))
+    .map(|(locale, _, _)| locale)
+    .unwrap_or(Locale::En)
 }
 
 fn quality(value: &str) -> Option<u16> {
