@@ -45,4 +45,21 @@ if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/unind
   echo "Every declared article must appear in the locale index" >&2
   exit 1
 fi
+for about_mode in missing english-only; do
+  cp -R "$repo_root/e2e/fixtures/site" "$validation_tmp/about-$about_mode"
+  jq --arg mode "$about_mode" 'if $mode == "missing" then del(.routes["/about"]) else .routes["/about"] = ["en"] end' \
+    "$validation_tmp/about-$about_mode/locales.json" > "$validation_tmp/locales.json"
+  mv "$validation_tmp/locales.json" "$validation_tmp/about-$about_mode/locales.json"
+  rm "$validation_tmp/about-$about_mode/pages/about.json"
+  if [ "$about_mode" = missing ]; then rm "$validation_tmp/about-$about_mode/en/pages/about.json"; fi
+  if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/about-$about_mode" >/dev/null 2>&1; then
+    echo "Japanese About is mandatory even when its route is not declared: $about_mode" >&2
+    exit 1
+  fi
+done
+cp -R "$repo_root/e2e/fixtures/site" "$validation_tmp/japanese-about"
+jq '.routes["/about"] = ["ja"]' "$validation_tmp/japanese-about/locales.json" > "$validation_tmp/locales.json"
+mv "$validation_tmp/locales.json" "$validation_tmp/japanese-about/locales.json"
+rm "$validation_tmp/japanese-about/en/pages/about.json"
+bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/japanese-about"
 echo "Public artifact gate tests passed"
