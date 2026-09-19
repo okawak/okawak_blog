@@ -29,4 +29,20 @@ fi
 jq '.routes |= with_entries(.value = ["ja"])' "$validation_tmp/missing-locale/locales.json" > "$validation_tmp/locales.json"
 mv "$validation_tmp/locales.json" "$validation_tmp/missing-locale/locales.json"
 bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/missing-locale"
+cp -R "$repo_root/e2e/fixtures/site" "$validation_tmp/undeclared-article"
+jq '.routes["/tech/e2e-article"] = ["ja"]' "$validation_tmp/undeclared-article/locales.json" > "$validation_tmp/locales.json"
+mv "$validation_tmp/locales.json" "$validation_tmp/undeclared-article/locales.json"
+if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/undeclared-article" >/dev/null 2>&1; then
+  echo "Every indexed article must declare its locale" >&2
+  exit 1
+fi
+cp -R "$repo_root/e2e/fixtures/site" "$validation_tmp/unindexed-article"
+jq '.articles = []' "$validation_tmp/unindexed-article/en/articles/index.json" > "$validation_tmp/index.json"
+mv "$validation_tmp/index.json" "$validation_tmp/unindexed-article/en/articles/index.json"
+jq '.total_articles = 0' "$validation_tmp/unindexed-article/en/metadata/site.json" > "$validation_tmp/metadata.json"
+mv "$validation_tmp/metadata.json" "$validation_tmp/unindexed-article/en/metadata/site.json"
+if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/unindexed-article" >/dev/null 2>&1; then
+  echo "Every declared article must appear in the locale index" >&2
+  exit 1
+fi
 echo "Public artifact gate tests passed"
