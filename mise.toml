@@ -69,6 +69,10 @@ fi
 git submodule update --remote --checkout --recursive "$obsidian_path"
 '''
 
+[tasks.export-ja]
+description = "Export only completed Obsidian notes to public Japanese Markdown"
+run = "cargo run -p export --"
+
 [tasks.format]
 description = "Format Rust and Topcoat source files"
 run = '''

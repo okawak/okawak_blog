@@ -1,0 +1,21 @@
+[package]
+name = "export"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Export explicitly published Obsidian content into public Markdown"
+
+[dependencies]
+anyhow.workspace = true
+domain = { path = "../domain" }
+pulldown-cmark.workspace = true
+scraper.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true

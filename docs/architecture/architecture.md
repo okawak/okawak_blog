@@ -41,6 +41,7 @@ flowchart LR
 okawak_blog/
 ├── crates/
 │   ├── domain/
+│   ├── export/
 │   ├── publish/
 │   ├── infra/
 │   └── server/
@@ -67,6 +68,7 @@ okawak_blog/
   - `artifact` moduleによるartifact contract。`artifact/content.rs`にsite content document、`artifact/release.rs`にimmutable release pointerとその検証を置く
   - `page` moduleによる公開ページ契約。表示document、artifactからの組み立て、metadata、公開pathの生成を分離する
 - `crates/publish`
+  - 現行の配信経路は従来のObsidian入力を維持する。公開Markdownへの抽出コマンドは`export`に独立して実装されている。
   - 単一の`publish` crate
   - `lib.rs`は内部module宣言とcrate外向けAPIのre-exportに限定し、pipeline moduleが公開処理全体をorchestrationする
   - crate外向けAPIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
@@ -83,6 +85,7 @@ okawak_blog/
   - `ObsidianFrontMatter`と`ContentKind`は`publish`入力形式として内部に保持する
   - `publish`固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
 - `crates/infra`
+  - 公開Markdown抽出には関与しない。
   - `contract` moduleによる`ArtifactReader` / `ArtifactSnapshot`境界
   - `local` moduleによるfilesystem reader
   - `s3` moduleによるS3 readerとimmutable release解決
