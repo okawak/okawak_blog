@@ -83,6 +83,31 @@ pub(crate) fn translate_stage(
                     if !candidates {
                         continue;
                     }
+                    let candidate_path =
+                        stage.join(format!(".export-candidates/{}.md", original.meta.id));
+                    if candidate_path.exists() {
+                        let candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
+                        if candidate.meta.id != original.meta.id
+                            || candidate.meta.locale != Locale::En
+                        {
+                            bail!("candidate identity changed");
+                        }
+                        match decide(
+                            &input,
+                            Some(&text_hash(&candidate)?),
+                            candidate.meta.translation.as_ref(),
+                        ) {
+                            Decision::Reuse => {
+                                report.reused += 1;
+                                continue;
+                            }
+                            Decision::Protect => bail!(
+                                "manually edited candidate {}; move it aside before generating a replacement",
+                                original.meta.id
+                            ),
+                            Decision::Generate => {}
+                        }
+                    }
                 }
                 let checked = ArticleTranslator {
                     translator,
