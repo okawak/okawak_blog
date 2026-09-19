@@ -309,6 +309,28 @@ fn reviewed_catalog_candidates_survive_retries_and_reject_overwrites() {
     assert_eq!(fs::read(&candidate).unwrap(), before);
     assert_eq!(fs::read(&path).unwrap(), catalog_before);
     assert_eq!(fake.0.get(), 2);
+    for reset in [false, true] {
+        for candidates in [false, true] {
+            let mut changed = catalog.clone();
+            let translation = &mut changed.entries.get_mut("label").unwrap().translation;
+            if reset {
+                translation.as_mut().unwrap().value = "EN 表示".into();
+            } else {
+                *translation = None;
+            }
+            save(&path, &changed);
+            let before_generation = fs::read(&path).unwrap();
+            let error =
+                export::translate_catalog(&path, &fake, &settings(), candidates).unwrap_err();
+            assert!(
+                error.to_string().contains("manually edited candidate"),
+                "{error}"
+            );
+            assert_eq!(fs::read(&candidate).unwrap(), before);
+            assert_eq!(fs::read(&path).unwrap(), before_generation);
+            assert_eq!(fake.0.get(), 2);
+        }
+    }
     fs::remove_file(&candidate).unwrap();
     export::translate_catalog(&path, &fake, &settings(), true).unwrap();
     assert_eq!(fake.0.get(), 3);
