@@ -12,7 +12,7 @@ cargo run -p export -- --source /path/to/vault/Publish --output content
 
 `content/ja/<id>.md` に日本語を出力する。初回IDは従来のtitle／元path／createdによるslugを保持する。再実行では元pathのdigestで既存IDを探し、path変更時は削除された元pathと同じkind・createdを持つ候補が1つのときだけ引き継ぐ。曖昧なら原文へ `publish_id: <既存ID>` を指定する。category移動時にはcategoryを含むURLが変わるため、差分を確認する。
 
-WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する。note embedは公開先へのリンクとして扱う。単独の見出し参照も含め、参照先は公開ノート集合内で解決する。未解決・曖昧なノート／見出しはエラーとする。見出しには原文から決定するanchorを付ける。PNG/JPEG/GIF/WebP/AVIFは参照されたファイルだけをcontent hash名で `content/assets/` へコピーする。ローカル参照を含むraw HTMLはMarkdownのリンク／画像へ書き直してから実行する。外部URLのbookmark HTMLは使用できる。
+WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する。通常Markdownのリンク・画像は参照元からの相対pathで解決し、同名の別ファイルへfallbackしない。WikiLink・Wiki embedだけは公開rootやbasenameからも候補を探す。note embedは公開先へのリンクとして扱う。単独の見出し参照も含め、参照先は公開ノート集合内で解決する。未解決・曖昧なノート／見出しはエラーとする。見出しには原文から決定するanchorを付ける。PNG/JPEG/GIF/WebP/AVIFは参照されたファイルだけをcontent hash名で `content/assets/` へコピーする。ローカル参照を含むraw HTMLはMarkdownのリンク／画像へ書き直してから実行する。外部URLのbookmark HTMLは使用できる。
 
 出力は同じfilesystemの一時ディレクトリで組み立て、検証成功後に入れ替える。同時exportはlockで拒否する。差分がなければ既存ファイルのmtimeも変えない。削除・非公開化された日英Markdownは `content/.export-archive/`（Git対象外）へ退避する。任意のREADME・隠しファイルは保持する。`ja/`、`en/` のMarkdownとhash名のassetはexport管理領域である。
 
@@ -59,3 +59,5 @@ cargo run -p export -- --accept-tag '統計'
 タグ候補は`content/.export-candidates/catalog/`にキー・原文・用途付きで保存する。履歴付き訳文を手で修正し、その原文・用途・関連用語集・翻訳設定が変わると上書きを保護し`stale`にする。入力が同じなら手動訳を保持してAIを呼ばない。履歴がない値は自動生成とみなさず、保持して保護対象として報告する。欠落・更新待ちの英語タグは日本語表示名、辞書項目がなければ元のタグIDを使う。
 
 記事・タグは一つのtransaction、UI辞書は別のtransactionで反映する。UIで失敗しても完了した公開コンテンツは保持される。再実行では成功済みの項目を再利用する。どちらも部分的に壊れたファイルを保存せず、最終的に両方の差分を確認してGitへ確定する。
+
+`--ui-catalog ui.json`のような相対pathも利用できる。辞書単独の操作は親directoryを走査・入れ替えず、対象JSONを一時ファイルから置換する。同じ公開treeのexportとはlockを共有する。失敗時も完成した候補・cacheはGit対象外の作業領域に残り、辞書本体は全項目の検証成功後に確定する。

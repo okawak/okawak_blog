@@ -1,6 +1,6 @@
 //! Resolve references using only the explicitly public source set.
 use crate::vault::{Source, digest};
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use pulldown_cmark::{Event, LinkType, Options, Parser, Tag};
 use std::{
     collections::BTreeMap,
@@ -39,41 +39,86 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                 Event::Start(Tag::Link {
                     link_type,
                     dest_url,
+                    title,
                     ..
                 })
                 | Event::Start(Tag::Image {
                     link_type,
                     dest_url,
+                    title,
                     ..
                 }) => {
                     let raw = &body[range.clone()];
                     let image = raw.starts_with('!');
                     let wiki = matches!(link_type, LinkType::WikiLink { .. });
                     let target = dest_url.trim().trim_end_matches('\\');
-                    if !wiki && external(target) {
+                    if !wiki && (external(target) || matches!(link_type, LinkType::Email)) {
+                        if matches!(
+                            link_type,
+                            LinkType::Reference | LinkType::Collapsed | LinkType::Shortcut
+                        ) {
+                            let label = markdown_label(raw, image)?;
+                            let title = if title.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" \"{}\"", title.replace('\\', "\\\\").replace('"', "\\\""))
+                            };
+                            edits.push((
+                                range,
+                                format!(
+                                    "{}[{}](<{}>{title})",
+                                    if image { "!" } else { "" },
+                                    label,
+                                    target.replace('<', "%3C").replace('>', "%3E")
+                                ),
+                            ));
+                        }
                         continue;
                     }
+                    let (target, anchor) = target
+                        .split_once('#')
+                        .map(|(t, a)| (t, Some(a)))
+                        .unwrap_or((target, None));
+                    let decode = |value: &str| -> Result<String> {
+                        if wiki {
+                            Ok(value.to_owned())
+                        } else {
+                            Ok(percent_encoding::percent_decode_str(value)
+                                .decode_utf8()?
+                                .into_owned())
+                        }
+                    };
+                    let target = decode(target)?;
+                    let anchor = anchor.map(decode).transpose()?;
+                    let target = target.as_str();
+                    let anchor = anchor.as_deref();
                     if target.contains(['\\', '\0'])
                         || target.starts_with('/')
                         || target.contains("://")
                     {
                         bail!("private or unsupported reference");
                     }
-                    let (target, anchor) = target
-                        .split_once('#')
-                        .map(|(t, a)| (t, Some(a)))
-                        .unwrap_or((target, None));
-                    let extensionless = target.strip_suffix(".md").unwrap_or(target);
+                    let extensionless = if Path::new(target)
+                        .extension()
+                        .and_then(|s| s.to_str())
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
+                    {
+                        &target[..target.len() - 3]
+                    } else {
+                        target
+                    };
                     let relative = resolve_relative(&source.key, extensionless)?;
                     let exact: Vec<_> = index
                         .iter()
                         .filter(|(key, _, _, _)| {
-                            key == extensionless
-                                || key == &relative
-                                || (extensionless.is_empty() && key == &source.key)
+                            if extensionless.is_empty() {
+                                key == &source.key
+                            } else {
+                                key == &relative || (wiki && key == extensionless)
+                            }
                         })
                         .collect();
-                    let matches = if exact.is_empty() {
+                    let matches = if wiki && exact.is_empty() {
                         index
                             .iter()
                             .filter(|(key, _, _, _)| key.rsplit('/').next() == Some(extensionless))
@@ -101,9 +146,11 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                                 .iter()
                                 .filter(|p| {
                                     let key = p.strip_prefix(root).unwrap().to_string_lossy();
-                                    key == target
-                                        || key == relative
-                                        || p.file_name().and_then(|p| p.to_str()) == Some(target)
+                                    key == relative
+                                        || (wiki
+                                            && (key == target
+                                                || p.file_name().and_then(|p| p.to_str())
+                                                    == Some(target)))
                                 })
                                 .collect();
                             let [path] = matches.as_slice() else {
@@ -135,26 +182,17 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                             .unwrap_or(&default_label)
                             .trim_end_matches('\\')
                             .to_owned()
+                            .replace('[', "\\[")
+                            .replace(']', "\\]")
                     } else {
-                        let start = usize::from(image) + 1;
-                        raw[start..]
-                            .split_once(']')
-                            .map(|(label, _)| label)
-                            .context("unsupported link syntax")?
-                            .to_owned()
+                        markdown_label(raw, image)?.to_owned()
                     };
                     let marker = if image && href.starts_with("/content-assets/") {
                         "!"
                     } else {
                         ""
                     };
-                    edits.push((
-                        range,
-                        format!(
-                            "{marker}[{}]({href})",
-                            label.replace('[', "\\[").replace(']', "\\]")
-                        ),
-                    ));
+                    edits.push((range, format!("{marker}[{label}]({href})")));
                 }
                 Event::Start(Tag::Heading { .. }) => {
                     let heading = heading_text(&body[range.clone()]);
@@ -202,9 +240,63 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
         for (range, value) in edits.into_iter().rev() {
             normalized.replace_range(range, &value);
         }
+        // All resolved references are inline now. Repeat to remove shadowed
+        // duplicate definitions too; parser ranges leave fenced examples intact.
+        loop {
+            let parser = Parser::new_ext(&normalized, options());
+            let mut definitions: Vec<_> = parser
+                .reference_definitions()
+                .iter()
+                .map(|(_, definition)| definition.span.clone())
+                .collect();
+            if definitions.is_empty() {
+                break;
+            }
+            definitions.sort_by_key(|range| range.start);
+            for range in definitions.into_iter().rev() {
+                normalized.replace_range(range, "");
+            }
+        }
         source.document.body = normalized;
     }
     Ok(assets)
+}
+
+fn markdown_label(raw: &str, image: bool) -> Result<&str> {
+    let start = usize::from(image) + 1;
+    let opaque: Vec<_> = Parser::new_ext(raw, options())
+        .into_offset_iter()
+        .filter_map(|(event, range)| {
+            matches!(
+                event,
+                Event::Code(_) | Event::InlineHtml(_) | Event::Html(_)
+            )
+            .then_some(range)
+        })
+        .collect();
+    let mut depth = 1;
+    let mut escaped = false;
+    for (index, ch) in raw.char_indices().filter(|(index, _)| *index >= start) {
+        if opaque.iter().any(|range| range.contains(&index)) {
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' => escaped = true,
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(&raw[start..index]);
+                }
+            }
+            _ => {}
+        }
+    }
+    bail!("unsupported link syntax")
 }
 
 pub(crate) fn options() -> Options {

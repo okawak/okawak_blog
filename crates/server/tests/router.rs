@@ -1741,3 +1741,46 @@ async fn content_images_are_shared_across_locales_and_do_not_use_page_validators
     let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
     assert_eq!(bytes.as_ref(), std::fs::read(path).unwrap());
 }
+
+#[tokio::test]
+async fn missing_content_assets_do_not_render_the_site_error_page() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    for path in [
+        format!("/content-assets/{}.png", "0".repeat(64)),
+        "/content-assets/not-a-hash.png".into(),
+        "/content-assets".into(),
+        "/content-assets/nested/missing.png".into(),
+    ] {
+        let result = response(
+            &router,
+            Request::builder().uri(&path).body(Body::empty()).unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::NOT_FOUND, "{path}");
+        assert!(
+            !result
+                .content_type
+                .as_deref()
+                .unwrap_or_default()
+                .starts_with("text/html"),
+            "{path}"
+        );
+        assert!(!result.body.contains("<!DOCTYPE html>"), "{path}");
+        assert!(result.headers.get(header::ETAG).is_none());
+    }
+    let page = response(
+        &router,
+        Request::builder()
+            .uri("/content-assets-missing")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(page.status, StatusCode::NOT_FOUND);
+    assert!(
+        page.content_type
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("text/html")
+    );
+}

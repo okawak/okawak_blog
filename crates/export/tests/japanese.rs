@@ -292,3 +292,221 @@ fn public_bookmark_html_is_allowed_but_local_html_images_are_rejected() {
     );
     assert!(export::export_japanese(source.path(), output.path()).is_err());
 }
+
+#[test]
+fn markdown_links_resolve_the_sibling_before_a_root_note_with_the_same_name() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/sub/article.md",
+        "Article",
+        true,
+        "[Target](target.md)",
+    );
+    note(
+        source.path(),
+        "tech/sub/target.md",
+        "Sibling",
+        true,
+        "Sibling body",
+    );
+    note(source.path(), "target.md", "Root", true, "Root body");
+    let root_note = source.path().join("target.md");
+    let raw = fs::read_to_string(&root_note)
+        .unwrap()
+        .replace("category: tech", "kind: home");
+    fs::write(root_note, raw).unwrap();
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let exported = outputs(output.path());
+    let sibling = exported
+        .iter()
+        .find(|text| text.contains("title: Sibling\n"))
+        .unwrap();
+    let id = sibling
+        .lines()
+        .find_map(|line| line.strip_prefix("id: "))
+        .unwrap();
+    let article = exported
+        .iter()
+        .find(|text| text.contains("title: Article\n"))
+        .unwrap();
+    assert!(article.contains(&format!("[Target](content:{id})")));
+
+    // A private sibling must not silently redirect to a different public note.
+    note(
+        source.path(),
+        "tech/sub/target.md",
+        "Sibling",
+        false,
+        "PRIVATE",
+    );
+    assert!(export::export_japanese(source.path(), output.path()).is_err());
+    assert_eq!(outputs(output.path()), exported);
+}
+
+#[test]
+fn markdown_images_use_the_relative_file_despite_duplicate_basenames() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/sub/article.md",
+        "Article",
+        true,
+        "![x](image.png)",
+    );
+    fs::write(source.path().join("tech/sub/image.png"), b"sibling image").unwrap();
+    fs::write(source.path().join("image.png"), b"other image").unwrap();
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let assets: Vec<_> = fs::read_dir(output.path().join("assets"))
+        .unwrap()
+        .collect();
+    assert_eq!(assets.len(), 1);
+    assert_eq!(
+        fs::read(assets[0].as_ref().unwrap().path()).unwrap(),
+        b"sibling image"
+    );
+
+    note(
+        source.path(),
+        "tech/sub/article.md",
+        "Article",
+        true,
+        "![[image.png]]",
+    );
+    assert!(export::export_japanese(source.path(), output.path()).is_err());
+}
+
+#[test]
+fn markdown_url_paths_and_heading_fragments_are_decoded_before_resolution() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "[Target](My%20Note.md#%E8%A6%8B%E5%87%BA%E3%81%97)\n![Photo](my%20image.png)",
+    );
+    note(source.path(), "tech/My Note.md", "Target", true, "# 見出し");
+    fs::write(source.path().join("tech/my image.png"), b"public photo").unwrap();
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let before = outputs(output.path());
+    let article = before
+        .iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    assert!(article.contains("#section-"));
+    assert!(article.contains("![Photo](/content-assets/"));
+    assert!(!article.contains("%20"));
+    for path in [
+        "%2Fprivate%2Fsecret.md",
+        "..%2F..%2Fsecret.md",
+        "target%00.md",
+        "%FF.md",
+    ] {
+        note(
+            source.path(),
+            "tech/article.md",
+            "Article",
+            true,
+            &format!("[Bad]({path})"),
+        );
+        assert!(
+            export::export_japanese(source.path(), output.path()).is_err(),
+            "accepted {path}"
+        );
+        assert_eq!(outputs(output.path()), before);
+    }
+}
+
+#[test]
+fn reference_definitions_do_not_leave_vault_paths_or_unused_private_titles() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "[Target][ref]\n![Photo][photo]\n[External][web]\n\n[ref]: target.md \"PRIVATE TITLE\"\n[ref]: unused.md \"PRIVATE DUPLICATE\"\n[photo]: image.png \"PRIVATE IMAGE\"\n[web]: https://example.com \"Public tooltip\"\n\n```md\n[example]: literal.md\n```",
+    );
+    note(source.path(), "tech/target.md", "Target", true, "Body");
+    fs::write(source.path().join("tech/image.png"), b"public photo").unwrap();
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let exported = outputs(output.path());
+    let article = exported
+        .iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    assert!(article.contains("[Target](content:"));
+    assert!(article.contains("![Photo](/content-assets/"));
+    assert!(article.contains("https://example.com"));
+    assert!(article.contains("Public tooltip"));
+    assert!(!article.contains("PRIVATE"));
+    assert!(!article.contains("target.md"));
+    assert!(!article.contains("image.png"));
+    assert!(article.contains("```md\n[example]: literal.md\n```"));
+}
+
+#[test]
+fn email_and_web_autolinks_remain_external_references() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let body = "<me@example.com> <https://example.com/a>";
+    note(source.path(), "tech/article.md", "Article", true, body);
+    export::export_japanese(source.path(), output.path()).unwrap();
+    assert!(outputs(output.path())[0].contains(body));
+}
+
+#[test]
+fn references_resolve_markdown_extensions_case_insensitively() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "[Target](target.MD) [[target.MD|Wiki]]",
+    );
+    note(source.path(), "tech/target.MD", "Target", true, "Body");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let article = outputs(output.path())
+        .into_iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    assert!(article.contains("[Target](content:"));
+    assert!(article.contains("[Wiki](content:"));
+}
+
+#[test]
+fn markdown_link_labels_preserve_escaped_nested_and_opaque_brackets() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let labels = [
+        r"see \] escaped",
+        "see [nested]",
+        "see `]` code",
+        "see <span title=\"]\">HTML</span>",
+    ];
+    let body = labels
+        .iter()
+        .map(|label| format!("[{label}](target.md)"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    note(source.path(), "tech/article.md", "Article", true, &body);
+    note(source.path(), "tech/target.md", "Target", true, "Body");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let article = outputs(output.path())
+        .into_iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    for label in labels {
+        assert!(
+            article.contains(&format!("[{label}](content:")),
+            "lost label: {label}\n{article}"
+        );
+    }
+}

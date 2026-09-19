@@ -2,7 +2,7 @@
 use anyhow::{Result, bail};
 use std::{fs, path::Path};
 
-pub(crate) fn transaction(output: &Path, build: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
+pub(crate) fn locked<T>(output: &Path, build: impl FnOnce() -> Result<T>) -> Result<T> {
     let parent = output
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -32,30 +32,45 @@ pub(crate) fn transaction(output: &Path, build: impl FnOnce(&Path) -> Result<()>
             backup.display()
         );
     }
-    let stage = tempfile::Builder::new()
-        .prefix(".export-stage-")
-        .tempdir_in(parent)?;
-    if output.exists() {
-        copy_tree(output, stage.path())?;
-    }
-    build(stage.path())?;
-    if output.exists() && same_tree(output, stage.path())? {
-        return Ok(());
-    }
-    let existed = output.exists();
-    if existed {
-        fs::rename(output, &backup)?;
-    }
-    if let Err(error) = fs::rename(stage.path(), output) {
-        if existed {
-            fs::rename(&backup, output)?;
+    build()
+}
+
+pub(crate) fn transaction(output: &Path, build: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
+    locked(output, || {
+        let parent = output
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let name = output
+            .file_name()
+            .expect("validated by lock")
+            .to_string_lossy();
+        let backup = parent.join(format!(".{name}.export-backup"));
+        let stage = tempfile::Builder::new()
+            .prefix(".export-stage-")
+            .tempdir_in(parent)?;
+        if output.exists() {
+            copy_tree(output, stage.path())?;
         }
-        return Err(error.into());
-    }
-    if existed {
-        fs::remove_dir_all(backup)?;
-    }
-    Ok(())
+        build(stage.path())?;
+        if output.exists() && same_tree(output, stage.path())? {
+            return Ok(());
+        }
+        let existed = output.exists();
+        if existed {
+            fs::rename(output, &backup)?;
+        }
+        if let Err(error) = fs::rename(stage.path(), output) {
+            if existed {
+                fs::rename(&backup, output)?;
+            }
+            return Err(error.into());
+        }
+        if existed {
+            fs::remove_dir_all(backup)?;
+        }
+        Ok(())
+    })
 }
 
 fn copy_tree(from: &Path, to: &Path) -> Result<()> {

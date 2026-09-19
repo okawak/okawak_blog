@@ -653,28 +653,7 @@ async fn publishes_english_separately_and_removes_stale_output() {
         .replace("schema_version: 1", "schema_version: 1\ntags: [統計]");
     fs::write(article_path, source).unwrap();
     fs::write(fixture.content_dir().join("tags.json"), r#"{"schema_version":1,"entries":{"統計":{"source":"統計","context":"blog tag","translation":{"value":"Statistics","stale":false}}}}"#).unwrap();
-    fs::create_dir_all(fixture.content_dir().join("en")).unwrap();
-    for entry in fs::read_dir(fixture.content_dir().join("ja")).unwrap() {
-        let path = entry.unwrap().path();
-        let source = fs::read_to_string(&path).unwrap();
-        let english = source.replace("locale: ja", "locale: en").replacen(
-            "---\n",
-            &format!(
-                "---\ntranslation:\n  input_hash: '{}'\n  generated_hash: '{}'\n  stale: false\n",
-                "a".repeat(64),
-                "b".repeat(64)
-            ),
-            1,
-        );
-        fs::write(
-            fixture
-                .content_dir()
-                .join("en")
-                .join(path.file_name().unwrap()),
-            english,
-        )
-        .unwrap();
-    }
+    write_english_copies(&fixture);
     publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
@@ -717,6 +696,74 @@ async fn publishes_english_separately_and_removes_stale_output() {
     );
     let ja_index: ArticleIndexDocument = read_json(fixture.site_root().join("articles/index.json"));
     assert_eq!(ja_index.articles.len(), 1);
+}
+
+fn write_english_copies(fixture: &PublishFixture) {
+    fs::create_dir_all(fixture.content_dir().join("en")).unwrap();
+    for entry in fs::read_dir(fixture.content_dir().join("ja")).unwrap() {
+        let path = entry.unwrap().path();
+        let source = fs::read_to_string(&path).unwrap();
+        let english = source.replace("locale: ja", "locale: en").replacen(
+            "---\n",
+            &format!(
+                "---\ntranslation:\n  input_hash: '{}'\n  generated_hash: '{}'\n  stale: false\n",
+                "a".repeat(64),
+                "b".repeat(64)
+            ),
+            1,
+        );
+        fs::write(
+            fixture
+                .content_dir()
+                .join("en")
+                .join(path.file_name().unwrap()),
+            english,
+        )
+        .unwrap();
+    }
+}
+
+#[rstest]
+#[case("section_path", "[different-section]")]
+#[case("priority", "999")]
+#[case("updated", "'2026-09-19T00:00:00+09:00'")]
+#[tokio::test]
+async fn rejects_divergent_english_management_metadata_without_replacing_release(
+    #[case] field: &str,
+    #[case] value: &str,
+) {
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    write_english_copies(&fixture);
+    publish(fixture.content_dir(), fixture.output_dir())
+        .await
+        .unwrap();
+    let index = fixture.site_root().join("en/articles/index.json");
+    let before = fs::read(&index).unwrap();
+    let article = fixture.content_dir().join("en/tech-required-article.md");
+    let original = fs::read_to_string(&article).unwrap();
+    let (yaml, body) = original
+        .strip_prefix("---\n")
+        .unwrap()
+        .split_once("\n---\n")
+        .unwrap();
+    let mut metadata: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+    metadata[field] = serde_yaml::from_str(value).unwrap();
+    fs::write(
+        &article,
+        format!(
+            "---\n{}---\n{body}",
+            serde_yaml::to_string(&metadata).unwrap()
+        ),
+    )
+    .unwrap();
+    assert!(
+        publish(fixture.content_dir(), fixture.output_dir())
+            .await
+            .is_err(),
+        "accepted divergent {field}"
+    );
+    assert_eq!(fs::read(index).unwrap(), before);
 }
 
 #[tokio::test]

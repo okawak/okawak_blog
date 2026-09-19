@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail};
 use domain::{LabelCatalog, LabelProvenance, LabelTranslation};
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -25,16 +26,11 @@ pub fn translate_catalog(
     settings: &TranslationSettings,
     candidates: bool,
 ) -> Result<TranslationReport> {
-    let root = parent(path);
-    let name = path.file_name().context("catalog filename is required")?;
-    let mut report = TranslationReport::default();
-    sync::transaction(root, |stage| {
-        report =
-            translate_catalog_stage(&stage.join(name), root, translator, settings, candidates)?;
-        crate::translation::copy_cache(root, stage)?;
-        Ok(())
-    })?;
-    Ok(report)
+    let path = canonical_parent_path(path)?;
+    let root = parent(&path);
+    sync::locked(root, || {
+        translate_catalog_stage(&path, root, translator, settings, candidates)
+    })
 }
 
 pub(crate) fn translate_catalog_stage(
@@ -117,9 +113,8 @@ pub fn accept_catalog_translation(
     key: &str,
     settings: &TranslationSettings,
 ) -> Result<()> {
-    let name = path.file_name().context("catalog filename is required")?;
-    sync::transaction(parent(path), |stage| {
-        let path = stage.join(name);
+    let path = canonical_parent_path(path)?;
+    sync::locked(parent(&path), || {
         let mut catalog = read(&path)?;
         let entry = catalog
             .entries
@@ -155,6 +150,9 @@ pub fn accept_catalog_translation(
 }
 
 pub(crate) fn read(path: &Path) -> Result<LabelCatalog> {
+    if !fs::symlink_metadata(path)?.file_type().is_file() {
+        bail!("catalog must be a regular file");
+    }
     let catalog: LabelCatalog = serde_json::from_slice(&fs::read(path)?)?;
     catalog.validate()?;
     Ok(catalog)
@@ -163,7 +161,12 @@ pub(crate) fn read(path: &Path) -> Result<LabelCatalog> {
 pub(crate) fn write(path: &Path, value: &impl serde::Serialize) -> Result<()> {
     let mut bytes = serde_json::to_vec_pretty(value)?;
     bytes.push(b'\n');
-    fs::write(path, bytes)?;
+    if fs::read(path).is_ok_and(|existing| existing == bytes) {
+        return Ok(());
+    }
+    let mut temporary = tempfile::NamedTempFile::new_in(parent(path))?;
+    temporary.write_all(&bytes)?;
+    temporary.persist(path)?;
     Ok(())
 }
 
@@ -179,6 +182,12 @@ fn candidate_path(path: &Path, key: &str) -> PathBuf {
     parent(path)
         .join(".export-candidates/catalog")
         .join(format!("{}.json", crate::vault::digest(identity)))
+}
+fn canonical_parent_path(path: &Path) -> Result<PathBuf> {
+    let name = path.file_name().context("catalog needs a file name")?;
+    // Resolve directory aliases for the shared tree lock, but retain the final
+    // component so read() can continue rejecting symlink catalog files.
+    Ok(parent(path).canonicalize()?.join(name))
 }
 fn parent(path: &Path) -> &Path {
     path.parent()
