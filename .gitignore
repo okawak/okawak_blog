@@ -23,6 +23,11 @@ config.json
 output.json
 tmp*
 dist/
+.export-stage-*/
+.*.export-backup/
+.*.export-lock
+.export-archive/
+.export-candidates/
 mise.local.lock
 mise.*.local.lock
 mise.local.toml

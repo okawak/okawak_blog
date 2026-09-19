@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/domain",
+    "crates/export",
     "crates/publish",
     "crates/infra",
     "crates/server",
@@ -26,6 +27,7 @@ httpdate = "1"
 ignore = "0.4"
 indoc = "2"
 pulldown-cmark = "0.13"
+percent-encoding = "2"
 regex = "1"
 reqwest = "0.13"
 rstest = "0.27"
