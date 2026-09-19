@@ -49,6 +49,9 @@ jobs:
             target/
           key: ${{ runner.os }}-rust-ci-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Validate public artifact gate
+        run: mise run test-public-artifacts
+
       - name: Test workspace
         run: cargo test --workspace
 

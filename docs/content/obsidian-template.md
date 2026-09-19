@@ -2,7 +2,7 @@
 
 ## 目的
 
-この文書は、`publish`が処理できる Obsidian Markdown の最小テンプレートをまとめたものである。source of truth は private な Obsidian リポジトリ側にあり、この public リポジトリには通常ファイルとして commit しない。
+この文書は、`export`が処理できる Obsidian Markdown の最小テンプレートをまとめたものである。日本語の正本はprivate Obsidianに置き、`export`が選別・正規化した[公開用Markdown](public-markdown.md)だけをこのリポジトリへcommitする。`publish`は公開用Markdownを入力にする。
 
 ## 前提
 
@@ -80,13 +80,13 @@ Obsidian link や bookmark 埋め込みを含めてよい。
 
 本文の基本的な Markdown 記法は CommonMark に従う。Obsidian 固有の解釈だけで成立する強調記法などは`publish`では補正しない。
 
-Markdown table内の表示名付きWikiLinkは、cell区切りと区別するためpipeをescapeして`[[target\|label]]`と書く。embedも同様に`![[target\|alt]]`とする。table外では通常どおり`[[target|label]]`と書ける。`publish`はMarkdown自体を書き換えず、`pulldown-cmark`が生成したWikiLink eventのtargetからtable用escapeだけを除去して公開URLを解決する。
+Markdown table内の表示名付きWikiLinkは、cell区切りと区別するためpipeをescapeして`[[target\|label]]`と書く。embedも同様に`![[target\|alt]]`とする。table外では通常どおり`[[target|label]]`と書ける。`export`が公開対象の参照を`content:<id>`へ正規化し、`publish`が言語別の公開URLへ解決する。非公開・未解決・曖昧なノートや見出しへの参照はexport時にエラーになる。
 
 メモ:
 
 - `kind` を省略した場合は `article` として扱う
 - `category` は必須
-- article の path の先頭ディレクトリは `category` と一致させる。不一致の場合は publish に失敗する
+- article の path の先頭ディレクトリは `category` と一致させる。不一致の場合は export に失敗する
 - `Publish/tech/rust/async.md` のような path なら `section_path=["rust"]` が自動で付く
 
 ## 2. カテゴリトップページ
@@ -231,3 +231,4 @@ updated: "2026-04-12T10:00:00+09:00"
 - 同じカテゴリ配下で `kind=category` を複数作らない
 - 未完成の下書きは `is_completed: false` のままにする
 - category ごとの記事グルーピングは frontmatter ではなくディレクトリ構造で表現する
+- 原文更新後に`mise run export-ja`または`mise run export`を実行し、公開用Markdownの差分を確認する。英訳の手動修正・更新候補の採用は[exportの操作手順](../../crates/export/README.md)に従う

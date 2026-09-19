@@ -1,4 +1,4 @@
-name: Publish Obsidian to S3
+name: Publish Content to S3
 
 on:
   workflow_dispatch:
@@ -60,28 +60,10 @@ jobs:
 
           echo "Validated Rust CI run ${ci_run_id} for ${GITHUB_SHA}."
 
-      - name: Get App Token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
-        id: app-token
-        with:
-          client-id: ${{ secrets.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: >-
-            okawak_blog,
-            obsidian
-
-      - name: Checkout repository
+      - name: Checkout reviewed public content
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          token: ${{ steps.app-token.outputs.token }}
-          submodules: recursive
           fetch-depth: 1
-
-      - name: Update submodules
-        run: |
-          git submodule sync --recursive
-          git submodule update --recursive --remote
 
       - name: Set up shared build tools
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
@@ -115,27 +97,13 @@ jobs:
           set -euo pipefail
           RUST_LOG=info cargo run --release -p publish
 
-          if [ ! -d "${{ env.UPLOAD_PATH }}" ]; then
-            echo "❌ Output directory not found"
-            exit 1
-          fi
-
-          test -s "${{ env.UPLOAD_PATH }}/articles/index.json"
-          test -s "${{ env.UPLOAD_PATH }}/metadata/site.json"
-
-          file_count=$(find "${{ env.UPLOAD_PATH }}/articles" -name "*.html" -type f | wc -l | tr -d ' ')
-          if [ "$file_count" -eq 0 ]; then
-            echo "❌ No article HTML files were generated"
-            exit 1
-          fi
-
-          echo "✅ Validated ${file_count} article HTML files"
+          bash scripts/validate_public_artifacts.sh "$UPLOAD_PATH" target/release/publish
 
       - name: Build release pointer
         run: |
           set -euo pipefail
-          source_commit=$(git -C crates/publish/obsidian rev-parse HEAD)
-          release_id="${GITHUB_SHA:0:12}-${source_commit:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          content_commit="$GITHUB_SHA"
+          release_id="${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           artifact_prefix="releases/${release_id}/site"
 
           jq -n \
@@ -143,9 +111,10 @@ jobs:
             --arg release_id "$release_id" \
             --arg artifact_prefix "$artifact_prefix" \
             --arg publisher_commit "$GITHUB_SHA" \
-            --arg source_commit "$source_commit" \
+            --arg source_commit "$content_commit" \
+            --arg content_commit "$content_commit" \
             --arg generated_at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-            '{schema_version: $schema_version, release_id: $release_id, artifact_prefix: $artifact_prefix, publisher_commit: $publisher_commit, source_commit: $source_commit, generated_at: $generated_at}' \
+            '{schema_version: $schema_version, release_id: $release_id, artifact_prefix: $artifact_prefix, publisher_commit: $publisher_commit, source_commit: $source_commit, content_commit: $content_commit, generated_at: $generated_at}' \
             > "$RUNNER_TEMP/release.json"
 
           echo "RELEASE_ID=$release_id" >> "$GITHUB_ENV"
@@ -181,6 +150,12 @@ jobs:
             exit 1
           fi
 
+          local_file_count=$(find "$UPLOAD_PATH" -type f | wc -l | tr -d ' ')
+          remote_file_count=$(aws s3 ls "$release_uri/" --recursive | wc -l | tr -d ' ')
+          test "$remote_file_count" -eq "$local_file_count"
+          aws s3 cp "$release_uri/locales.json" "$RUNNER_TEMP/remote-locales.json"
+          cmp "$UPLOAD_PATH/locales.json" "$RUNNER_TEMP/remote-locales.json"
+
           aws s3 cp "$RUNNER_TEMP/release.json" \
             "s3://${{ secrets.S3_BUCKET }}/releases/${RELEASE_ID}/manifest.json" \
             --content-type "application/json" \
@@ -193,6 +168,7 @@ jobs:
           CI: "true"
           OKAWAK_BLOG_ARTIFACT_BUCKET: ${{ secrets.S3_BUCKET }}
           PLAYWRIGHT_INSTALL_WITH_DEPS: "true"
+          OKAWAK_BLOG_EXPECTED_ARTIFACT_ROOT: ${{ github.workspace }}/crates/publish/dist/site
         run: OKAWAK_BLOG_ARTIFACT_PREFIX="$ARTIFACT_PREFIX" mise run test-e2e-s3
 
       - name: Upload Playwright traces
@@ -240,7 +216,7 @@ jobs:
           echo "Please check the logs above for detailed error information." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Common issues:" >> $GITHUB_STEP_SUMMARY
-          echo "- Submodule update failures" >> $GITHUB_STEP_SUMMARY
+          echo "- Public Markdown or translation validation failures" >> $GITHUB_STEP_SUMMARY
           echo "- AWS credentials or permissions" >> $GITHUB_STEP_SUMMARY
           echo "- Artifact generation or browser smoke failures" >> $GITHUB_STEP_SUMMARY
           echo "- S3 sync issues" >> $GITHUB_STEP_SUMMARY

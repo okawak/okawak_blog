@@ -89,6 +89,7 @@ okawak_blog/
   - render/ogpによる共有HTTP clientと上限付き並行処理を使ったbookmark metadata取得、OGP・Twitter Card・HTML fallbackの解析
   - classify moduleによる公開種別の確定と`section_path`の導出
   - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
+  - CLIの`--validate-artifacts`は`artifact_check`でdomainのpage builderを使い、公開前に全言語のhome・記事・カテゴリ・固定ページの不変条件を検証する。公開前scriptはこれに加えてartifact間の集合・件数を照合する。
   - `PublicContentMeta`と`ContentKind`はdomainの共有契約。Obsidian固有frontmatterを保持しない
   - `publish`固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
 - `crates/infra`
@@ -325,7 +326,7 @@ releases/
         └── metadata/
 ```
 
-`current.json`とreleaseごとの`manifest.json`は同じ`ArtifactReleasePointerDocument`を使い、schema version、release ID、artifact prefix、publisher commit、Obsidian source commit、RFC 3339 UTCの生成時刻を保持する。公開workflowは`main`からの`workflow_dispatch`だけで明示的に起動し、定期実行やローカルからの直接syncは標準経路にしない。repository単位のconcurrency groupと`queue: max`で公開runを直列化し、実行中runと待機中runをcancelしない。workflowは処理開始時にrunのcommitが最新`main`であり、同じcommitのpush起因CI workflowが成功済みであることを確認する。`site/`のuploadとobject数検証を終え、release prefixを直接読むbrowser E2Eが成功した後、runのpublisher commitがremote `main`の最新commitと一致することを再確認してから`current.json`を最後に更新する。古いrunはimmutable releaseを残して失敗し、公開pointerには触れない。これによりreaderは更新途中または表示検証に失敗したreleaseを公開対象として選ばず、待機runの処理順によって公開pointerが古いreleaseへ戻ることも防ぐ。
+`current.json`とreleaseごとの`manifest.json`は同じ`ArtifactReleasePointerDocument`を使い、schema version、release ID、artifact prefix、publisher commit、source commit、任意のcontent commit、RFC 3339 UTCの生成時刻を保持する。schema v1を維持し、`content_commit`は後方互換の任意フィールドとする。旧releaseでは`source_commit`がprivate vaultのrevision、新releaseでは互換用に公開repositoryのrevisionを保持し、`content_commit`も同じ公開commitを明示する。新旧readerは日本語artifact配置を共有し、新readerは`content_commit`のない旧pointerも読める。公開workflowは`main`からの`workflow_dispatch`だけで明示的に起動し、定期実行やローカルからの直接syncは標準経路にしない。repository単位のconcurrency groupと`queue: max`で公開runを直列化し、実行中runと待機中runをcancelしない。workflowは処理開始時にrunのcommitが最新`main`であり、同じcommitのpush起因CI workflowが成功済みであることを確認する。公開workflowはprivate submoduleとAI認証を使わず、checkout済み`content/`を入力にする。`scripts/validate_public_artifacts.sh`で日英のindex・metadata・宣言された全artifactの存在を検証する。`site/`のupload後に全object数・HTML数と`locales.json`の一致を確認し、release prefixを直接読むbrowser E2Eで各言語のhome・存在するAbout・代表カテゴリと記事を検証する。成功した後、runのpublisher commitがremote `main`の最新commitと一致することを再確認してから`current.json`を最後に更新する。古いrunはimmutable releaseを残して失敗し、公開pointerには触れない。これによりreaderは更新途中または表示検証に失敗したreleaseを公開対象として選ばず、待機runの処理順によって公開pointerが古いreleaseへ戻ることも防ぐ。
 
 ```mermaid
 flowchart TB
@@ -522,7 +523,9 @@ GitHub Actions publish job
 本番では GitHub Actions が artifact を S3 に置き、VPS 上の単一バイナリがそれを読む。
 
 ```text
-Obsidian submodule
+private Obsidian（ローカルのみ）
+  -> export / 翻訳 / レビュー
+  -> 日英の公開MarkdownをGitで確定
   -> GitHub Actions publish job
   -> S3 releases/<release-id>/site
   -> current.json pointer switch

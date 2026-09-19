@@ -306,6 +306,7 @@ mod tests {
             artifact_prefix: "releases/release-123/site".to_string(),
             publisher_commit: "publisher-sha".to_string(),
             source_commit: "source-sha".to_string(),
+            content_commit: None,
             generated_at: "2026-07-12T12:00:00Z".to_string(),
         };
         let expected_last_modified = pointer.generated_at_time().unwrap();
