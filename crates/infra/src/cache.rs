@@ -1,8 +1,9 @@
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactReader, DynArtifactSnapshot, Result};
 use async_trait::async_trait;
 use domain::{
-    ArticleIndexDocument, Category, CategoryArtifactDocument, HomeFragmentArtifactDocument,
-    PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
+    ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
+    HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, SiteLocalesDocument,
+    SiteMetadataDocument, Slug,
 };
 use std::{
     collections::HashMap,
@@ -107,6 +108,9 @@ impl ArtifactReader for CachingArtifactReader {
 }
 
 struct CachingArtifactSnapshot {
+    localized: KeyedCache<Option<DynArtifactSnapshot>>,
+    locales: OnceCell<SiteLocalesDocument>,
+    content_assets: ContentAssetCache,
     inner: DynArtifactSnapshot,
     article_index: OnceCell<ArticleIndexDocument>,
     site_metadata: OnceCell<SiteMetadataDocument>,
@@ -119,6 +123,9 @@ struct CachingArtifactSnapshot {
 impl CachingArtifactSnapshot {
     fn new(inner: DynArtifactSnapshot) -> Self {
         Self {
+            localized: KeyedCache::new(),
+            locales: OnceCell::new(),
+            content_assets: ContentAssetCache::default(),
             inner,
             article_index: OnceCell::new(),
             site_metadata: OnceCell::new(),
@@ -138,6 +145,29 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
 
     fn last_modified(&self) -> Option<SystemTime> {
         self.inner.last_modified()
+    }
+
+    async fn localized(&self, locale: Locale) -> Result<Option<DynArtifactSnapshot>> {
+        self.localized
+            .get_or_try_init(locale.to_string(), || async {
+                Ok(self.inner.localized(locale).await?.map(|snapshot| {
+                    Arc::new(CachingArtifactSnapshot::new(snapshot)) as DynArtifactSnapshot
+                }))
+            })
+            .await
+    }
+
+    async fn read_locales(&self) -> Result<SiteLocalesDocument> {
+        self.locales
+            .get_or_try_init(|| self.inner.read_locales())
+            .await
+            .cloned()
+    }
+
+    async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
+        self.content_assets
+            .get_or_try_init(name.as_str(), || self.inner.read_content_asset(name))
+            .await
     }
 
     async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
@@ -186,6 +216,67 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
                 self.inner.read_page_document(page)
             })
             .await
+    }
+}
+
+type ContentAssetResult = std::result::Result<Option<Vec<u8>>, Arc<crate::InfraError>>;
+type ContentAssetCell = Arc<OnceCell<ContentAssetResult>>;
+
+#[derive(Default)]
+struct ContentAssetEntry {
+    cell: ContentAssetCell,
+    readers: usize,
+}
+
+#[derive(Default)]
+struct ContentAssetCache {
+    // Only map access is synchronous; storage I/O happens outside this lock.
+    entries: std::sync::Mutex<HashMap<String, ContentAssetEntry>>,
+}
+
+impl ContentAssetCache {
+    async fn get_or_try_init<F, Fut>(&self, key: &str, load: F) -> Result<Option<Vec<u8>>>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<Option<Vec<u8>>>>,
+    {
+        let cell = {
+            let mut entries = self.entries.lock().unwrap();
+            let entry = entries.entry(key.into()).or_default();
+            entry.readers += 1;
+            Arc::clone(&entry.cell)
+        };
+        let read = ContentAssetRead {
+            cache: self,
+            key,
+            cell,
+        };
+        read.cell
+            .get_or_init(|| async { load().await.map_err(Arc::new) })
+            .await
+            .clone()
+            .map_err(crate::InfraError::Shared)
+    }
+}
+
+struct ContentAssetRead<'a> {
+    cache: &'a ContentAssetCache,
+    key: &'a str,
+    cell: ContentAssetCell,
+}
+
+impl Drop for ContentAssetRead<'_> {
+    fn drop(&mut self) {
+        let mut entries = self.cache.entries.lock().unwrap();
+        let entry = entries
+            .get_mut(self.key)
+            .expect("active content asset read");
+        entry.readers -= 1;
+        // Count completion while locked; Arc fields may be dropped later on another
+        // thread. Only successful bytes survive the final reader of this flight.
+        if entry.readers == 0 && !matches!(self.cell.get(), Some(Ok(Some(_)))) {
+            entries.remove(self.key);
+        }
     }
 }
 
@@ -299,6 +390,15 @@ mod tests {
 
     #[async_trait]
     impl ArtifactSnapshot for CountingSnapshot {
+        async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
+            self.article_reads.fetch_add(1, Ordering::SeqCst);
+            tokio::task::yield_now().await;
+            Ok(name
+                .as_str()
+                .starts_with(&"0".repeat(64))
+                .then(|| b"image".to_vec()))
+        }
+
         fn cache_identity(&self) -> Option<&str> {
             self.cache_identity
         }
@@ -458,6 +558,142 @@ mod tests {
         assert!(snapshot.read_article_index().await.is_err());
         assert!(snapshot.read_article_index().await.is_ok());
         assert_eq!(article_reads.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn content_asset_cache_retains_only_successful_reads() {
+        let root = tempfile::tempdir().unwrap();
+        let assets = root.path().join("content-assets");
+        std::fs::create_dir(&assets).unwrap();
+        let found = ContentAssetName::new(format!("{:064x}.png", 0)).unwrap();
+        std::fs::write(assets.join(found.as_str()), b"image").unwrap();
+        let snapshot =
+            CachingArtifactSnapshot::new(Arc::new(crate::LocalArtifactReader::new(root.path())));
+
+        assert_eq!(
+            snapshot.read_content_asset(&found).await.unwrap(),
+            Some(b"image".to_vec())
+        );
+        std::fs::remove_file(assets.join(found.as_str())).unwrap();
+        assert_eq!(
+            snapshot.read_content_asset(&found).await.unwrap(),
+            Some(b"image".to_vec())
+        );
+        for id in 1..=128 {
+            let missing = ContentAssetName::new(format!("{id:064x}.png")).unwrap();
+            assert!(
+                snapshot
+                    .read_content_asset(&missing)
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+        }
+        let failed = ContentAssetName::new(format!("{:064x}.png", 129)).unwrap();
+        std::fs::create_dir(assets.join(failed.as_str())).unwrap();
+        assert!(snapshot.read_content_asset(&failed).await.is_err());
+        assert_eq!(snapshot.content_assets.entries.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn content_asset_reads_single_flight_concurrent_requests() {
+        let reads = Arc::new(AtomicUsize::new(0));
+        let snapshot = CachingArtifactSnapshot::new(Arc::new(CountingSnapshot {
+            article_reads: Arc::clone(&reads),
+            fail_next_article_read: Arc::new(AtomicBool::new(false)),
+            cache_identity: Some("release-1"),
+            last_modified: None,
+        }));
+        for present in [true, false] {
+            reads.store(0, Ordering::SeqCst);
+            let name = ContentAssetName::new(format!("{:064x}.png", u8::from(!present))).unwrap();
+            let (first, second) = tokio::join!(
+                snapshot.read_content_asset(&name),
+                snapshot.read_content_asset(&name)
+            );
+            assert_eq!(first.unwrap().is_some(), present);
+            assert_eq!(second.unwrap().is_some(), present);
+            assert_eq!(reads.load(Ordering::SeqCst), 1);
+        }
+        assert_eq!(snapshot.content_assets.entries.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn cancelled_content_asset_reads_release_in_flight_entries() {
+        let cache = Arc::new(ContentAssetCache::default());
+        let started = Arc::new(tokio::sync::Notify::new());
+        let reader = {
+            let cache = Arc::clone(&cache);
+            let started = Arc::clone(&started);
+            tokio::spawn(async move {
+                cache
+                    .get_or_try_init("cancelled", || async {
+                        started.notify_one();
+                        std::future::pending().await
+                    })
+                    .await
+            })
+        };
+        started.notified().await;
+        reader.abort();
+        assert!(reader.await.unwrap_err().is_cancelled());
+        assert!(cache.entries.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn concurrent_asset_read_errors_are_shared_but_later_requests_retry() {
+        let cache = ContentAssetCache::default();
+        let reads = AtomicUsize::new(0);
+        let fail = || async {
+            reads.fetch_add(1, Ordering::SeqCst);
+            tokio::task::yield_now().await;
+            Err(InfraError::Io(std::io::Error::other("temporary failure")))
+        };
+        let (first, second) = tokio::join!(
+            cache.get_or_try_init("same", fail),
+            cache.get_or_try_init("same", fail)
+        );
+        assert_eq!(
+            first.unwrap_err().to_string(),
+            second.unwrap_err().to_string()
+        );
+        assert_eq!(reads.load(Ordering::SeqCst), 1);
+        assert!(cache.entries.lock().unwrap().is_empty());
+        assert_eq!(
+            cache
+                .get_or_try_init("same", || async {
+                    reads.fetch_add(1, Ordering::SeqCst);
+                    Ok(Some(b"retry".to_vec()))
+                })
+                .await
+                .unwrap(),
+            Some(b"retry".to_vec())
+        );
+        assert_eq!(reads.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn simultaneous_reader_completion_does_not_retain_missing_assets() {
+        let cache = Arc::new(ContentAssetCache::default());
+        for _ in 0..1024 {
+            let mut readers = tokio::task::JoinSet::new();
+            for _ in 0..16 {
+                let cache = Arc::clone(&cache);
+                readers.spawn(async move {
+                    cache
+                        .get_or_try_init("missing", || async {
+                            tokio::task::yield_now().await;
+                            Ok(None)
+                        })
+                        .await
+                        .unwrap()
+                });
+            }
+            while let Some(reader) = readers.join_next().await {
+                assert!(reader.unwrap().is_none());
+            }
+            assert!(cache.entries.lock().unwrap().is_empty());
+        }
     }
 
     #[tokio::test]

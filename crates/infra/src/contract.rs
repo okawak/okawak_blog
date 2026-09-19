@@ -2,8 +2,9 @@ use std::{sync::Arc, time::SystemTime};
 
 use async_trait::async_trait;
 use domain::{
-    ArticleIndexDocument, Category, CategoryArtifactDocument, HomeFragmentArtifactDocument,
-    PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
+    ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
+    HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, SiteLocalesDocument,
+    SiteMetadataDocument, Slug,
 };
 
 use crate::Result;
@@ -18,6 +19,20 @@ pub trait ArtifactReader: Send + Sync {
 
 #[async_trait]
 pub trait ArtifactSnapshot: Send + Sync {
+    /// Optional locale selection, within this exact release snapshot.
+    async fn localized(&self, _locale: Locale) -> Result<Option<DynArtifactSnapshot>> {
+        Ok(None)
+    }
+
+    /// Older releases have no locale catalog and remain Japanese-only.
+    async fn read_locales(&self) -> Result<SiteLocalesDocument> {
+        Ok(SiteLocalesDocument::default())
+    }
+
+    async fn read_content_asset(&self, _name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
+
     fn cache_identity(&self) -> Option<&str> {
         None
     }
