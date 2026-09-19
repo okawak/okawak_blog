@@ -556,7 +556,7 @@ fn markdown_image_prefers_the_asset_over_a_note_with_the_same_stem() {
         "tech/article.md",
         "Article",
         true,
-        "![photo](image.png)\n![[image.png.md|Note embed]]",
+        "![photo](image.png)\n![[image.png.md|Note embed]]\n![Markdown note](image.png.md)",
     );
     note(
         source.path(),
@@ -573,6 +573,7 @@ fn markdown_image_prefers_the_asset_over_a_note_with_the_same_stem() {
         .unwrap();
     assert!(article.contains("![photo](/content-assets/"), "{article}");
     assert!(article.contains("[Note embed](content:"), "{article}");
+    assert!(article.contains("[Markdown note](content:"), "{article}");
     let assets: Vec<_> = fs::read_dir(output.path().join("assets"))
         .unwrap()
         .map(|e| e.unwrap().path())
