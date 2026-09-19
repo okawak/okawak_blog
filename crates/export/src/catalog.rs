@@ -20,6 +20,20 @@ struct Candidate {
     translation: LabelTranslation,
 }
 
+pub(crate) struct CatalogPlan {
+    path: PathBuf,
+    catalog: LabelCatalog,
+    entries: Vec<EntryPlan>,
+}
+
+struct EntryPlan {
+    key: String,
+    request: TranslationRequest,
+    input: String,
+    decision: Decision,
+    candidate_decision: Option<Decision>,
+}
+
 pub fn translate_catalog(
     path: &Path,
     translator: &dyn Translator,
@@ -29,20 +43,14 @@ pub fn translate_catalog(
     let path = canonical_parent_path(path)?;
     let root = parent(&path);
     sync::locked(root, || {
-        translate_catalog_stage(&path, root, translator, settings, candidates)
+        plan_catalog(&path, settings)?.apply(root, translator, candidates)
     })
 }
 
-pub(crate) fn translate_catalog_stage(
-    path: &Path,
-    cache_root: &Path,
-    translator: &dyn Translator,
-    settings: &TranslationSettings,
-    candidates: bool,
-) -> Result<TranslationReport> {
-    let mut catalog = read(path)?;
-    let mut report = TranslationReport::default();
-    for (key, entry) in &mut catalog.entries {
+pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Result<CatalogPlan> {
+    let catalog = read(path)?;
+    let mut entries = Vec::new();
+    for (key, entry) in &catalog.entries {
         let request = request(entry, settings);
         let input = request.fingerprint()?;
         let current = entry
@@ -86,58 +94,99 @@ pub(crate) fn translate_catalog_stage(
                 "candidate {key} already matches this input; accept it or move it aside before generating a replacement"
             );
         }
-        match decision {
-            Decision::Reuse => {
-                entry.translation.as_mut().unwrap().stale = false;
-                report.reused += 1;
-            }
-            Decision::Protect | Decision::Generate => {
-                if decision == Decision::Protect {
-                    if entry.translation.as_ref().unwrap().provenance.is_some() {
-                        entry.translation.as_mut().unwrap().stale = true;
-                    }
-                    report.protected.push(key.clone());
-                    if !candidates {
-                        continue;
-                    }
-                    if candidate_decision == Some(Decision::Reuse) {
-                        report.reused += 1;
-                        continue;
-                    }
+        entries.push(EntryPlan {
+            key: key.clone(),
+            request,
+            input,
+            decision,
+            candidate_decision,
+        });
+    }
+    Ok(CatalogPlan {
+        path: path.to_owned(),
+        catalog,
+        entries,
+    })
+}
+
+impl CatalogPlan {
+    pub(crate) fn apply(
+        self,
+        cache_root: &Path,
+        translator: &dyn Translator,
+        candidates: bool,
+    ) -> Result<TranslationReport> {
+        let Self {
+            path,
+            mut catalog,
+            entries,
+        } = self;
+        let mut report = TranslationReport::default();
+        for EntryPlan {
+            key,
+            request,
+            input,
+            decision,
+            candidate_decision,
+        } in entries
+        {
+            let entry = catalog
+                .entries
+                .get_mut(&key)
+                .expect("planned catalog entry");
+            match decision {
+                Decision::Reuse => {
+                    entry.translation.as_mut().unwrap().stale = false;
+                    report.reused += 1;
                 }
-                let response =
-                    crate::translation::cached_response(&request, translator, cache_root)?;
-                let value = response["value"].clone();
-                let translation = LabelTranslation {
-                    provenance: Some(LabelProvenance {
-                        input_hash: input,
-                        generated_hash: crate::vault::digest(&value),
-                    }),
-                    value,
-                    stale: false,
-                };
-                if decision == Decision::Protect {
-                    let candidate = candidate_path(path, key);
-                    fs::create_dir_all(candidate.parent().unwrap())?;
-                    write(
-                        &candidate,
-                        &Candidate {
-                            key: key.clone(),
-                            source: entry.source.clone(),
-                            context: entry.context.clone(),
-                            translation,
-                        },
-                    )?;
-                } else {
-                    entry.translation = Some(translation);
+                Decision::Protect | Decision::Generate => {
+                    if decision == Decision::Protect {
+                        if entry.translation.as_ref().unwrap().provenance.is_some() {
+                            entry.translation.as_mut().unwrap().stale = true;
+                        }
+                        report.protected.push(key.clone());
+                        if !candidates {
+                            continue;
+                        }
+                        if candidate_decision == Some(Decision::Reuse) {
+                            report.reused += 1;
+                            continue;
+                        }
+                    }
+                    let response =
+                        crate::translation::cached_response(&request, translator, cache_root)?;
+                    let value = response["value"].clone();
+                    let translation = LabelTranslation {
+                        provenance: Some(LabelProvenance {
+                            input_hash: input,
+                            generated_hash: crate::vault::digest(&value),
+                        }),
+                        value,
+                        stale: false,
+                    };
+                    if decision == Decision::Protect {
+                        let candidate = candidate_path(&path, &key);
+                        fs::create_dir_all(candidate.parent().unwrap())?;
+                        write(
+                            &candidate,
+                            &Candidate {
+                                key: key.clone(),
+                                source: entry.source.clone(),
+                                context: entry.context.clone(),
+                                translation,
+                            },
+                        )?;
+                    } else {
+                        entry.translation = Some(translation);
+                    }
+                    report.generated += 1;
                 }
-                report.generated += 1;
             }
         }
+        catalog.validate()?;
+        write(&path, &catalog)?;
+        Ok(report)
     }
-    catalog.validate()?;
-    write(path, &catalog)?;
-    Ok(report)
 }
 
 pub fn accept_catalog_translation(
