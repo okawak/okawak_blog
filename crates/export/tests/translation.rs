@@ -186,6 +186,51 @@ fn reviewed_candidates_survive_retries_and_block_overwrites_after_source_changes
 }
 
 #[test]
+fn reviewed_candidates_block_generation_after_the_published_translation_is_removed_or_reset() {
+    for remove in [false, true] {
+        for candidates in [false, true] {
+            let source = TempDir::new().unwrap();
+            let output = TempDir::new().unwrap();
+            let fake = Fake::new();
+            write_note(source.path(), "本文");
+            export::export_japanese(source.path(), output.path()).unwrap();
+            export::translate_public(output.path(), &fake, &settings(), false).unwrap();
+            let path = english(output.path());
+            let machine = fs::read_to_string(&path).unwrap();
+            fs::write(&path, machine.replace("English 記事", "Manual title")).unwrap();
+            write_note(source.path(), "新しい本文");
+            export::export_japanese(source.path(), output.path()).unwrap();
+            export::translate_public(output.path(), &fake, &settings(), true).unwrap();
+            let candidate = output
+                .path()
+                .join(".export-candidates")
+                .join(path.file_name().unwrap());
+            let reviewed = fs::read_to_string(&candidate)
+                .unwrap()
+                .replace("English 記事", "Reviewed title");
+            fs::write(&candidate, &reviewed).unwrap();
+            if remove {
+                fs::remove_file(&path).unwrap();
+            } else {
+                fs::write(&path, &machine).unwrap();
+            }
+            write_note(source.path(), "さらに新しい本文");
+            export::export_japanese(source.path(), output.path()).unwrap();
+            let before = fs::read(&path).ok();
+            let error = export::translate_public(output.path(), &fake, &settings(), candidates)
+                .unwrap_err();
+            assert!(
+                error.to_string().contains("manually edited candidate"),
+                "{error}"
+            );
+            assert_eq!(fs::read(&path).ok(), before);
+            assert_eq!(fs::read_to_string(&candidate).unwrap(), reviewed);
+            assert_eq!(fake.calls.get(), 2);
+        }
+    }
+}
+
+#[test]
 fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose() {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
