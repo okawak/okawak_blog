@@ -72,6 +72,32 @@ pub(crate) fn translate_catalog_stage(
                     if !candidates {
                         continue;
                     }
+                    let candidate_path = candidate_path(path, key);
+                    if candidate_path.exists() {
+                        let candidate: Candidate =
+                            serde_json::from_slice(&fs::read(&candidate_path)?)?;
+                        if candidate.key != *key {
+                            bail!("catalog candidate identity changed");
+                        }
+                        match decide(
+                            &input,
+                            Some(&crate::vault::digest(&candidate.translation.value)),
+                            candidate
+                                .translation
+                                .provenance
+                                .as_ref()
+                                .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
+                        ) {
+                            Decision::Reuse => {
+                                report.reused += 1;
+                                continue;
+                            }
+                            Decision::Protect => bail!(
+                                "manually edited candidate {key}; move it aside before generating a replacement"
+                            ),
+                            Decision::Generate => {}
+                        }
+                    }
                 }
                 let response =
                     crate::translation::cached_response(&request, translator, cache_root)?;
