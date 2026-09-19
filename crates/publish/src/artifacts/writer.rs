@@ -1,7 +1,7 @@
 use super::builder::SiteDocuments;
 use crate::error::Result;
 
-use domain::{Category, Slug};
+use domain::{Category, Locale, Slug};
 use serde::Serialize;
 use std::{
     fs::{self, File},
@@ -16,8 +16,15 @@ pub(crate) struct SiteOutput {
 }
 
 impl SiteOutput {
+    #[cfg(test)]
     pub(crate) fn prepare(output_dir: impl AsRef<Path>) -> Result<Self> {
-        let root = output_dir.as_ref().join("site");
+        Self::prepare_locale(output_dir.as_ref(), Locale::Ja)
+    }
+
+    pub(crate) fn prepare_locale(output_dir: &Path, locale: Locale) -> Result<Self> {
+        let root = output_dir
+            .join("site")
+            .join(if locale == Locale::En { "en" } else { "" });
         for directory in ["articles", "categories", "metadata", "pages"] {
             fs::create_dir_all(root.join(directory))?;
         }

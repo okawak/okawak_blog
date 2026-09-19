@@ -10,20 +10,22 @@
 
 公開フローは次の通り。
 
-1. private な Obsidian リポジトリを git submodule として取得する
-2. `crates/publish` の vault module が Markdown を走査し、frontmatter と本文を読み取る
-3. classify module が公開種別を確定し、links module が公開URLの索引を構築する
-4. render module が単一の`pulldown-cmark` event pipeline内でWikiLinkを解決・安全化し、MarkdownのHTML変換とbookmark enrichmentを行う
-5. artifacts module が `site/` 配下の HTML / JSON を組み立てる
-6. GitHub Actions が artifact を immutable release として S3 に配置し、`current.json` を最後に切り替える
-7. `crates/server` が `crates/infra` 経由でrelease snapshotからpage documentを組み立て、TopcoatでSSRする
+1. ローカルの`export`がprivate Obsidianから公開対象を抽出する
+2. 公開参照を正規化し、必要な文章だけ翻訳して日英MarkdownをGit管理する
+3. `publish`が`content/ja`と`content/en`のversion付きMarkdownを検証する
+4. 公開IDの参照を言語別URLへ解決し、HTML変換・安全化・bookmark enrichmentを行う
+5. 日英artifactと配信可能な言語の索引を`site/`へ生成する
+6. GitHub Actionsがimmutable releaseとしてS3に配置し、`current.json`を最後に切り替える
+7. serverがinfra経由でartifact snapshotを読み、TopcoatでSSRする
 
 Markdown から HTML への変換はビルド時に完了させる。ランタイムは artifact の読取、ルーティング、メタ情報の付与に集中する。
 
 ```mermaid
 flowchart LR
     A[Private Obsidian Repo] --> B[git submodule]
-    B --> C[vault module]
+    B --> E1[local export and translation]
+    E1 --> E2[public Markdown in Git]
+    E2 --> C[publish input]
     C --> D[classify and links modules]
     D --> E[render module]
     E --> F[artifacts module]
@@ -69,26 +71,25 @@ okawak_blog/
   - 公開コンテンツの純粋なdomain model・ルールと、`publish` / readerが共有する契約
   - `lib.rs`を明示的な公開APIのfacadeとし、内部moduleをcrate外の契約にしない。`unreachable_pub`で不要な公開を検出する
   - `Category`、`Slug`、`PageKey`、`SectionPath`
-  - `content` moduleによる`Locale`とversion付き`PublicContentMeta`。公開Markdownの純粋な検証契約を所有する（[契約](../content/public-markdown.md)）。現行pipelineの入力切替とは独立した契約である。
+  - `content` moduleによる`Locale`とversion付き`PublicContentMeta`。公開Markdownの純粋な検証契約を所有する（[契約](../content/public-markdown.md)）。
   - `publication` moduleによる`ArticleMeta`、`PublishableArticle`、`CategoryLandingMeta`、`PublishableCategoryLanding`と記事・カテゴリ索引を構築する純粋ルール
   - `artifact` moduleによるartifact contract。`artifact/content.rs`にsite content document、`artifact/release.rs`にimmutable release pointerとその検証を置く
   - `page` moduleによる公開ページ契約。表示document、artifactからの組み立て、metadata、公開pathの生成を分離する
 - `crates/publish`
-  - 現行の配信経路は従来のObsidian入力を維持する。公開Markdownへの抽出コマンドは`export`に独立して実装されている。
   - 単一の`publish` crate
   - `lib.rs`は内部module宣言とcrate外向けAPIのre-exportに限定し、pipeline moduleが公開処理全体をorchestrationする
   - crate外向けAPIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
   - path処理の対応環境はmacOSとLinuxとし、Windows形式のpathは対象外とする
-  - vault moduleによるObsidian vault走査、Markdown読込、frontmatter parse
-  - links moduleによる全公開contentのvault相対source keyと公開URLの索引構築、およびtable用にescapeされたpipeの正規化を含むWikiLink link / image eventの公開URL解決
+  - input moduleによる公開Markdownの読込、frontmatter・言語・ID対応の検証。private入力と公開判定はexportの責務
+  - links moduleによる安定したcontent IDのURL解決。英語版があれば英語URL、なければ日本語URLへリンクする。未解決IDと未正規化WikiLinkは失敗させる
   - render moduleによるcontent kindごとのdocument組み立てと共通本文処理
-  - render/htmlによる入力Markdownを事前書換えしないWikiLinkと数式を含む`pulldown-cmark` event生成とHTML変換。数式spanには`.math-inline` / `.math-display`を使用する
+  - render/htmlによる入力Markdownを事前書換えしない公開リンクと数式を含む`pulldown-cmark` event生成とHTML変換。数式spanには`.math-inline` / `.math-display`を使用する
   - render/sanitizeによるlink・image URLとraw HTMLの安全化
   - render/bookmarkによるsimple bookmark構文の判定、enrichmentの制御、rich bookmark HTML生成
   - render/ogpによる共有HTTP clientと上限付き並行処理を使ったbookmark metadata取得、OGP・Twitter Card・HTML fallbackの解析
   - classify moduleによる公開種別の確定と`section_path`の導出
   - artifacts moduleによるartifact構築、`site/`配下への書込み、生成結果のvalidation
-  - `ObsidianFrontMatter`と`ContentKind`は`publish`入力形式として内部に保持する
+  - `PublicContentMeta`と`ContentKind`はdomainの共有契約。Obsidian固有frontmatterを保持しない
   - `publish`固有のerrorはcrate rootの`PublishError`に集約し、内部module固有のerror moduleを作らない
 - `crates/infra`
   - 公開Markdown抽出には関与しない。
@@ -132,7 +133,7 @@ flowchart TB
     end
 
     subgraph Publish["crates/publish (publish crate)"]
-        P1[vault]
+        P1[public Markdown input]
         P2[classify and links]
         P3[render]
         P4[artifacts]
@@ -154,7 +155,7 @@ flowchart TB
 
 ### frontmatter
 
-`publish`が扱う Markdown は YAML frontmatter を持つ。役割判定には `kind` を使う。
+`export`が読み取るObsidian MarkdownはYAML frontmatterを持つ。以下は執筆用のprivate入力形式であり、publishへは[公開Markdown契約](../content/public-markdown.md)に正規化して渡す。役割判定には`kind`を使う。
 
 採用している `kind` は次の 4 種類。
 
@@ -221,7 +222,7 @@ updated: "2025-01-16T09:30:00+09:00"
 
 ### ディレクトリ構造と `section_path`
 
-article は frontmatter の `category` と同名のディレクトリ配下に置く。`publish`はこの一致を検証し、category 相対 path から `section_path` を導出する。
+article は frontmatter の `category` と同名のディレクトリ配下に置く。`export`はこの一致を検証し、category 相対 path から `section_path` を導出する。
 
 例:
 
@@ -300,6 +301,12 @@ artifact の意味は次の通り。
 `PageArtifactDocument` は固定ページを保持する。homeは完成したpageではなく実行時に記事一覧やmetadataと合成する一部分なので、`HomeFragmentArtifactDocument` として独立させる。
 
 `publish`は描画済みカテゴリを`PublishableCategoryLanding`として組み立てる。frontmatterのtitleと描画済み本文はdomainの値オブジェクトで検証し、descriptionはArticleと同様に入力値を保持する。domainはlandingだけが存在するカテゴリも含めて`CategoryIndex`へ統合し、カテゴリ順、記事順、`SiteMetadata`の集計を確定する。artifact document単体のcategory、slug、title、timestamp、HTMLの不変条件もdomainで検証する。`publish` pipelineは記事が1件以上あり、必須のabout pageが存在することをartifact生成前に確認する。artifact builderはindexと描画済み本文を`CategoryArtifactDocument`へまとめ、writerはserializationとfilesystemへの書込みエラーを伝播する。Markdown変換、HTML生成、filesystemへの書込みは`publish`に残す。
+
+### 言語別artifact
+
+日本語の既存keyは維持し、英語は同じ構造を`site/en/`へ置く。集計は各言語で表示する記事の件数とし、日英を合算しない。日本語は記事1件以上・About・記事カテゴリのlandingを必須とする。英語は翻訳履歴があり更新待ちでないcontentだけを採用し、landingが未翻訳のカテゴリの記事を掲載しない。英語のAboutは存在するときだけ配信対象にする。
+
+`site/locales.json`の`SiteLocalesDocument`は同じreleaseで配信可能なpathとlocaleの対応を持つ。参照画像だけを`site/content-assets/`へコピーする。buildは一時領域で全言語を検証してからsiteを入れ替え、古いHTMLを残さない。
 
 ### S3 release 契約
 
@@ -484,17 +491,18 @@ runtime probeは次のように分ける。
 
 ## ローカル開発と本番運用
 
-ローカル開発は目的に応じてlocal artifactとS3 artifactを使い分ける。`publish`、artifact契約、UIを一続きで確認する場合は、private Obsidian submoduleからlocal artifactを生成する。
+ローカル開発は目的に応じてlocal artifactとS3 artifactを使い分ける。`publish`、artifact契約、UIを一続きで確認する場合は、Git管理する公開Markdownからlocal artifactを生成する。
 
 ```text
-Obsidian submodule
+public Markdown in content/
   -> mise run dev-local
   -> local publish process
   -> crates/publish/dist/site
   -> local reader
 ```
 
-`dev-local`はprivate Obsidian submoduleに未commit差分がないことを確認してremoteの最新commitをcheckoutし、`publish`の通常の厳格モードとTopcoat asset bundle生成が成功した場合だけTopcoat serverを起動する。同期時にlocal merge commitは作らない。同期、`publish`、bundleのいずれかに失敗した場合はserverを起動しない。local readerにはmemory cacheを適用しないため、生成済みartifactの更新を即時に読める。ただし起動中にsource Markdownを変更した場合、`publish`の再実行は明示的に行う。
+`dev-local`は公開Markdownをpublishし、Topcoat asset bundle生成が成功した場合だけserverを起動する。private原文の同期は`sync-obsidian`、抽出・翻訳は`export`として明示的に実行する。local readerにはmemory cacheを適用せず、起動中の公開Markdown変更後はpublishを明示的に再実行する。
+
 
 AWS認証、immutable release pointer、S3 cacheを含む本番相当のreader境界はS3用taskで確認する。
 

@@ -98,10 +98,9 @@ topcoat asset bundle --package server --bin server
 '''
 
 [tasks.dev-local]
-description = "Publish the local Obsidian source and serve its generated artifacts"
+description = "Build checked-in public Markdown and preview the generated artifacts"
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008", OKAWAK_BLOG_ADDR = "127.0.0.1:8008" }
 run = '''
-mise run sync-obsidian
 cargo run -p publish
 topcoat asset bundle --package server --bin server
 ./target/debug/server
