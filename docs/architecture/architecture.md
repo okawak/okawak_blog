@@ -62,6 +62,7 @@ okawak_blog/
   - 公開コンテンツの純粋なdomain model・ルールと、`publish` / readerが共有する契約
   - `lib.rs`を明示的な公開APIのfacadeとし、内部moduleをcrate外の契約にしない。`unreachable_pub`で不要な公開を検出する
   - `Category`、`Slug`、`PageKey`、`SectionPath`
+  - `content` moduleによる`Locale`とversion付き`PublicContentMeta`。公開Markdownの純粋な検証契約を所有する（[契約](../content/public-markdown.md)）。現行pipelineの入力切替とは独立した契約である。
   - `publication` moduleによる`ArticleMeta`、`PublishableArticle`、`CategoryLandingMeta`、`PublishableCategoryLanding`と記事・カテゴリ索引を構築する純粋ルール
   - `artifact` moduleによるartifact contract。`artifact/content.rs`にsite content document、`artifact/release.rs`にimmutable release pointerとその検証を置く
   - `page` moduleによる公開ページ契約。表示document、artifactからの組み立て、metadata、公開pathの生成を分離する
