@@ -16,7 +16,6 @@ pub struct LabelTranslation {
     pub value: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provenance: Option<LabelProvenance>,
-    #[serde(default)]
     pub stale: bool,
 }
 
@@ -118,6 +117,20 @@ mod tests {
                 provenance: None,
                 stale: false,
             }),
+        }
+    }
+    #[test]
+    fn label_translation_requires_explicit_freshness() {
+        let mut value = serde_json::to_value(entry()).unwrap();
+        value["translation"]
+            .as_object_mut()
+            .unwrap()
+            .remove("stale");
+        assert!(serde_json::from_value::<LabelEntry>(value.clone()).is_err());
+        for stale in [true, false] {
+            value["translation"]["stale"] = stale.into();
+            let entry = serde_json::from_value::<LabelEntry>(value.clone()).unwrap();
+            assert_eq!(entry.translation.unwrap().stale, stale);
         }
     }
     #[test]
