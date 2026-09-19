@@ -26,7 +26,11 @@ async fn locale_snapshots_read_separate_indexes_and_legacy_releases_remain_reada
         "{\"articles\":[]}",
     )
     .unwrap();
+    fs::write(temp.path().join("tags.json"), r#"{"統計":"統計"}"#).unwrap();
+    fs::write(temp.path().join("en/tags.json"), r#"{"統計":"Statistics"}"#).unwrap();
     let en = snapshot.localized(Locale::En).await.unwrap().unwrap();
+    assert_eq!(snapshot.read_tag_labels().await.unwrap()["統計"], "統計");
+    assert_eq!(en.read_tag_labels().await.unwrap()["統計"], "Statistics");
     assert!(en.read_article_index().await.unwrap().articles.is_empty());
     fs::write(temp.path().join("en/articles/index.json"), "broken").unwrap();
     assert!(en.read_article_index().await.is_err());
@@ -63,7 +67,11 @@ async fn cache_reuses_each_locale_without_mixing_indexes_or_assets() {
     );
     let snapshot = reader.snapshot().await.unwrap();
     let ja = snapshot.localized(Locale::Ja).await.unwrap().unwrap();
+    fs::write(temp.path().join("tags.json"), r#"{"統計":"統計"}"#).unwrap();
+    fs::write(temp.path().join("en/tags.json"), r#"{"統計":"Statistics"}"#).unwrap();
     let en = snapshot.localized(Locale::En).await.unwrap().unwrap();
+    assert_eq!(snapshot.read_tag_labels().await.unwrap()["統計"], "統計");
+    assert_eq!(en.read_tag_labels().await.unwrap()["統計"], "Statistics");
     let again = snapshot.localized(Locale::En).await.unwrap().unwrap();
     assert!(!Arc::ptr_eq(&ja, &en));
     assert!(Arc::ptr_eq(&en, &again));

@@ -74,6 +74,14 @@ impl ArtifactSnapshot for LocalArtifactReader {
         }
     }
 
+    async fn read_tag_labels(&self) -> Result<domain::TagLabels> {
+        match self.read_json("tags.json").await {
+            Ok(labels) => Ok(labels),
+            Err(error) if error.is_not_found() => Ok(Default::default()),
+            Err(error) => Err(error),
+        }
+    }
+
     async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
         match tokio::fs::read(self.site_root.join("content-assets").join(name.as_str())).await {
             Ok(bytes) => Ok(Some(bytes)),

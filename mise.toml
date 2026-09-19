@@ -277,3 +277,7 @@ echo "  mise run test-e2e-s3"
 echo "  mise run clippy"
 echo "  mise run check"
 '''
+
+[tasks.translate-ui]
+description = "Translate UI catalog only (no private Obsidian needed)"
+run = "cargo run -p export -- --ui-only"

@@ -110,6 +110,7 @@ impl ArtifactReader for CachingArtifactReader {
 struct CachingArtifactSnapshot {
     localized: KeyedCache<Option<DynArtifactSnapshot>>,
     locales: OnceCell<SiteLocalesDocument>,
+    tags: OnceCell<domain::TagLabels>,
     content_assets: KeyedCache<Option<Vec<u8>>>,
     inner: DynArtifactSnapshot,
     article_index: OnceCell<ArticleIndexDocument>,
@@ -125,6 +126,7 @@ impl CachingArtifactSnapshot {
         Self {
             localized: KeyedCache::new(),
             locales: OnceCell::new(),
+            tags: OnceCell::new(),
             content_assets: KeyedCache::new(),
             inner,
             article_index: OnceCell::new(),
@@ -160,6 +162,13 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
     async fn read_locales(&self) -> Result<SiteLocalesDocument> {
         self.locales
             .get_or_try_init(|| self.inner.read_locales())
+            .await
+            .cloned()
+    }
+
+    async fn read_tag_labels(&self) -> Result<domain::TagLabels> {
+        self.tags
+            .get_or_try_init(|| self.inner.read_tag_labels())
             .await
             .cloned()
     }

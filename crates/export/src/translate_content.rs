@@ -49,7 +49,9 @@ pub(crate) fn translate_stage(
         let decision = decide(
             &input,
             current_hash.as_deref(),
-            current.and_then(|d| d.meta.translation.as_ref()),
+            current
+                .and_then(|d| d.meta.translation.as_ref())
+                .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
         );
         let path = stage.join(format!("en/{}.md", original.meta.id));
         match decision {
@@ -82,22 +84,7 @@ pub(crate) fn translate_stage(
                         continue;
                     }
                 }
-                let cache = cache_root
-                    .join(".export-candidates/cache")
-                    .join(format!("{}.json", request.fingerprint()?));
-                let result = if cache.exists() {
-                    serde_json::from_slice(&fs::read(&cache)?)?
-                } else {
-                    let result = translator.translate(&request)?;
-                    request.validate(&result)?;
-                    fs::create_dir_all(cache.parent().unwrap())?;
-                    let mut temporary = tempfile::NamedTempFile::new_in(cache.parent().unwrap())?;
-                    use std::io::Write;
-                    temporary.write_all(&serde_json::to_vec_pretty(&result)?)?;
-                    temporary.persist(&cache)?;
-                    result
-                };
-                request.validate(&result)?;
+                let result = crate::translation::cached_response(&request, translator, cache_root)?;
                 let mut translated = fragments.apply(&original, &result)?;
                 translated.meta.locale = Locale::En;
                 translated.meta.translation = Some(TranslationProvenance {
@@ -116,18 +103,20 @@ pub(crate) fn translate_stage(
             }
         }
     }
-    // A failed run may leave successful unit responses in the ignored cache;
-    // copy them into the completed transaction so a retry never loses them.
-    let cache = cache_root.join(".export-candidates/cache");
-    if cache.exists() {
-        for file in markdown::all_files(&cache)? {
-            let dest = stage
-                .join(".export-candidates/cache")
-                .join(file.file_name().unwrap());
-            fs::create_dir_all(dest.parent().unwrap())?;
-            fs::copy(file, dest)?;
-        }
-    }
+    crate::tags::sync(stage)?;
+    let tags = crate::catalog::translate_catalog_stage(
+        &stage.join("tags.json"),
+        cache_root,
+        translator,
+        settings,
+        candidates,
+    )?;
+    report.generated += tags.generated;
+    report.reused += tags.reused;
+    report
+        .protected
+        .extend(tags.protected.into_iter().map(|key| format!("tag:{key}")));
+    crate::translation::copy_cache(cache_root, stage)?;
     Ok(report)
 }
 

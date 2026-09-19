@@ -24,6 +24,12 @@ pub async fn publish_with_bookmark_enricher(
     enrich: BookmarkEnricher,
 ) -> Result<()> {
     let documents = input::read(content_dir)?;
+    let tag_catalog: domain::LabelCatalog = match std::fs::read(content_dir.join("tags.json")) {
+        Ok(bytes) => serde_json::from_slice(&bytes)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Default::default(),
+        Err(error) => return Err(error.into()),
+    };
+    tag_catalog.validate()?;
     let japanese = input::eligible(&documents, Locale::Ja);
     let english = input::eligible(&documents, Locale::En);
     let asset_names = links::assets(&japanese)?
@@ -75,7 +81,26 @@ pub async fn publish_with_bookmark_enricher(
                 available.push(locale);
             }
         }
+        let labels: domain::TagLabels = docs
+            .iter()
+            .flat_map(|d| &d.meta.tags)
+            .map(|id| {
+                let value = tag_catalog
+                    .entries
+                    .get(id)
+                    .map(|entry| entry.value(locale))
+                    .unwrap_or(id);
+                (id.clone(), value.to_owned())
+            })
+            .collect();
         publish_locale(docs, &index, stage.path(), locale, Arc::clone(&enrich)).await?;
+        std::fs::write(
+            stage
+                .path()
+                .join("site")
+                .join(locale.artifact_key("tags.json")),
+            serde_json::to_vec(&labels)?,
+        )?;
     }
     locales.validate()?;
     std::fs::write(

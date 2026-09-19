@@ -33,3 +33,8 @@ pub use publication::{
     CategoryMetadata, PublishableArticle, PublishableCategoryLanding, PublishedArticleSummary,
     SiteMetadata, build_article_index, build_category_indexes, build_site_metadata,
 };
+
+mod labels;
+pub use labels::{
+    LabelCatalog, LabelEntry, LabelProvenance, LabelTranslation, TagLabels, placeholders,
+};

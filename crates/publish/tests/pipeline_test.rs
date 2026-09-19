@@ -647,6 +647,12 @@ fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> T {
 async fn publishes_english_separately_and_removes_stale_output() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
+    let article_path = fixture.content_dir().join("ja/tech-required-article.md");
+    let source = fs::read_to_string(&article_path)
+        .unwrap()
+        .replace("schema_version: 1", "schema_version: 1\ntags: [統計]");
+    fs::write(article_path, source).unwrap();
+    fs::write(fixture.content_dir().join("tags.json"), r#"{"schema_version":1,"entries":{"統計":{"source":"統計","context":"blog tag","translation":{"value":"Statistics","stale":false}}}}"#).unwrap();
     fs::create_dir_all(fixture.content_dir().join("en")).unwrap();
     for entry in fs::read_dir(fixture.content_dir().join("ja")).unwrap() {
         let path = entry.unwrap().path();
@@ -675,6 +681,15 @@ async fn publishes_english_separately_and_removes_stale_output() {
     let en_index: ArticleIndexDocument =
         read_json(fixture.site_root().join("en/articles/index.json"));
     assert_eq!(en_index.articles.len(), 1);
+    assert_eq!(
+        en_index.articles[0].tags,
+        ["統計"],
+        "article linkage retains stable tag IDs"
+    );
+    let labels: domain::TagLabels = read_json(fixture.site_root().join("en/tags.json"));
+    assert_eq!(labels["統計"], "Statistics");
+    let labels: domain::TagLabels = read_json(fixture.site_root().join("tags.json"));
+    assert_eq!(labels["統計"], "統計");
     let locales: domain::SiteLocalesDocument = read_json(fixture.site_root().join("locales.json"));
     assert_eq!(
         locales.path("/tech/tech-required-article", domain::Locale::En),

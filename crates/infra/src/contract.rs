@@ -29,6 +29,11 @@ pub trait ArtifactSnapshot: Send + Sync {
         Ok(SiteLocalesDocument::default())
     }
 
+    /// Labels are part of the content release; legacy releases use original IDs.
+    async fn read_tag_labels(&self) -> Result<domain::TagLabels> {
+        Ok(Default::default())
+    }
+
     async fn read_content_asset(&self, _name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
         Ok(None)
     }

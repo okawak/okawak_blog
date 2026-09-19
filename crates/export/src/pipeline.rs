@@ -118,6 +118,7 @@ fn export_with(
         for (name, bytes) in assets {
             fs::write(stage.join("assets").join(name), bytes)?;
         }
+        crate::tags::sync(stage)?;
         after_prepare(stage)
     })
 }

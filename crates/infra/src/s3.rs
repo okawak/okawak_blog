@@ -207,6 +207,14 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
         }
     }
 
+    async fn read_tag_labels(&self) -> Result<domain::TagLabels> {
+        match self.read_text("tags.json").await {
+            Ok(text) => Ok(serde_json::from_str(&text)?),
+            Err(error) if error.is_not_found() => Ok(Default::default()),
+            Err(error) => Err(error),
+        }
+    }
+
     async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
         let mut root = self.clone();
         root.locale = Locale::Ja;

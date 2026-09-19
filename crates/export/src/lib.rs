@@ -14,3 +14,8 @@ pub use codex::CodexTranslator;
 pub use pipeline::{export_japanese, export_translated};
 pub use translate_content::{TranslationReport, accept_translation, translate_public};
 pub use translation::{Texts, TranslationRequest, TranslationSettings, Translator};
+
+mod catalog;
+pub use catalog::{accept_catalog_translation, translate_catalog};
+
+mod tags;

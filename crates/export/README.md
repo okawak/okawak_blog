@@ -44,3 +44,18 @@ AI入力はpublic Markdownのtitle・summaryと、parserで抽出した文章fra
 - `--candidates` は保護された記事の候補を `.export-candidates/<id>.md` に作る。差分を確認し、`--accept <id>` で採用する。原文・設定が候補生成後に変わっていれば採用を拒否する。
 
 失敗したrunは公開ファイルを入れ替えない。成功済みの応答だけをGit対象外の `.export-candidates/cache/` に保存するので、再実行で利用できる。候補・cache・退避版は公開しない。timeoutや利用上限ではエラーになり、従量課金へ自動切替しない。
+
+## UIとタグの辞書
+
+`mise run export`は記事とタグを抽出・翻訳した後、`crates/server/locales/ui.json`も更新する。`mise run translate`は公開Markdownと両辞書だけを使い、`mise run translate-ui`はUI辞書だけを処理する。UI辞書の形式・初期値・採用操作は[serverの説明](../server/locales/README.md)を参照する。
+
+記事由来のタグは`content/tags.json`へ集約する。元のタグ文字列をキーにして、各項目に日本語の表示名`source`、用途`context`、英語の`translation.value`と生成履歴を保存する。同じタグを複数記事が使っても翻訳は一項目だけ。タグの対応はAIに渡さず、記事の`tags`は元のIDを保つ。不要になった項目は履歴を`.export-archive`へ退避して公開辞書から外す。
+
+```sh
+cargo run -p export -- --translate-only --candidates
+cargo run -p export -- --accept-tag '統計'
+```
+
+タグ候補は`content/.export-candidates/catalog/`にキー・原文・用途付きで保存する。履歴付き訳文を手で修正し、その原文・用途・関連用語集・翻訳設定が変わると上書きを保護し`stale`にする。入力が同じなら手動訳を保持してAIを呼ばない。履歴がない値は自動生成とみなさず、保持して保護対象として報告する。欠落・更新待ちの英語タグは日本語表示名、辞書項目がなければ元のタグIDを使う。
+
+記事・タグは一つのtransaction、UI辞書は別のtransactionで反映する。UIで失敗しても完了した公開コンテンツは保持される。再実行では成功済みの項目を再利用する。どちらも部分的に壊れたファイルを保存せず、最終的に両方の差分を確認してGitへ確定する。
