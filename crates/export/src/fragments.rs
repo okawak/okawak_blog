@@ -137,7 +137,7 @@ pub(crate) fn text_hash(document: &Document) -> Result<String> {
 fn escape(text: &str) -> String {
     let mut result = String::new();
     for ch in text.chars() {
-        if "\\`*_{}[]<>|$!#&".contains(ch) {
+        if ch.is_ascii_punctuation() {
             result.push('\\');
         }
         result.push(ch);

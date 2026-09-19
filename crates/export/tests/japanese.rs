@@ -459,3 +459,54 @@ fn email_and_web_autolinks_remain_external_references() {
     export::export_japanese(source.path(), output.path()).unwrap();
     assert!(outputs(output.path())[0].contains(body));
 }
+
+#[test]
+fn references_resolve_markdown_extensions_case_insensitively() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "[Target](target.MD) [[target.MD|Wiki]]",
+    );
+    note(source.path(), "tech/target.MD", "Target", true, "Body");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let article = outputs(output.path())
+        .into_iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    assert!(article.contains("[Target](content:"));
+    assert!(article.contains("[Wiki](content:"));
+}
+
+#[test]
+fn markdown_link_labels_preserve_escaped_nested_and_opaque_brackets() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let labels = [
+        r"see \] escaped",
+        "see [nested]",
+        "see `]` code",
+        "see <span title=\"]\">HTML</span>",
+    ];
+    let body = labels
+        .iter()
+        .map(|label| format!("[{label}](target.md)"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    note(source.path(), "tech/article.md", "Article", true, &body);
+    note(source.path(), "tech/target.md", "Target", true, "Body");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let article = outputs(output.path())
+        .into_iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    for label in labels {
+        assert!(
+            article.contains(&format!("[{label}](content:")),
+            "lost label: {label}\n{article}"
+        );
+    }
+}
