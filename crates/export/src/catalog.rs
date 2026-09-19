@@ -58,6 +58,34 @@ pub(crate) fn translate_catalog_stage(
                 .and_then(|t| t.provenance.as_ref())
                 .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
         );
+        let existing_candidate_path = candidate_path(path, key);
+        let candidate_decision = if decision != Decision::Reuse && existing_candidate_path.exists()
+        {
+            let candidate: Candidate =
+                serde_json::from_slice(&fs::read(&existing_candidate_path)?)?;
+            if candidate.key != *key {
+                bail!("catalog candidate identity changed");
+            }
+            Some(decide(
+                &input,
+                Some(&crate::vault::digest(&candidate.translation.value)),
+                candidate
+                    .translation
+                    .provenance
+                    .as_ref()
+                    .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
+            ))
+        } else {
+            None
+        };
+        if candidate_decision == Some(Decision::Protect) {
+            bail!("manually edited candidate {key}; move it aside before generating a replacement");
+        }
+        if decision == Decision::Generate && candidate_decision == Some(Decision::Reuse) {
+            bail!(
+                "candidate {key} already matches this input; accept it or move it aside before generating a replacement"
+            );
+        }
         match decision {
             Decision::Reuse => {
                 entry.translation.as_mut().unwrap().stale = false;
@@ -72,31 +100,9 @@ pub(crate) fn translate_catalog_stage(
                     if !candidates {
                         continue;
                     }
-                    let candidate_path = candidate_path(path, key);
-                    if candidate_path.exists() {
-                        let candidate: Candidate =
-                            serde_json::from_slice(&fs::read(&candidate_path)?)?;
-                        if candidate.key != *key {
-                            bail!("catalog candidate identity changed");
-                        }
-                        match decide(
-                            &input,
-                            Some(&crate::vault::digest(&candidate.translation.value)),
-                            candidate
-                                .translation
-                                .provenance
-                                .as_ref()
-                                .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
-                        ) {
-                            Decision::Reuse => {
-                                report.reused += 1;
-                                continue;
-                            }
-                            Decision::Protect => bail!(
-                                "manually edited candidate {key}; move it aside before generating a replacement"
-                            ),
-                            Decision::Generate => {}
-                        }
+                    if candidate_decision == Some(Decision::Reuse) {
+                        report.reused += 1;
+                        continue;
                     }
                 }
                 let response =
