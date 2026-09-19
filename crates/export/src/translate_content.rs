@@ -54,6 +54,36 @@ pub(crate) fn translate_stage(
                 .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
         );
         let path = stage.join(format!("en/{}.md", original.meta.id));
+        let candidate_path = stage.join(format!(".export-candidates/{}.md", original.meta.id));
+        let candidate_decision = if decision != Decision::Reuse && candidate_path.exists() {
+            let candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
+            if candidate.meta.id != original.meta.id || candidate.meta.locale != Locale::En {
+                bail!("candidate identity changed");
+            }
+            Some(decide(
+                &input,
+                Some(&text_hash(&candidate)?),
+                candidate
+                    .meta
+                    .translation
+                    .as_ref()
+                    .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
+            ))
+        } else {
+            None
+        };
+        if candidate_decision == Some(Decision::Protect) {
+            bail!(
+                "manually edited candidate {}; move it aside before generating a replacement",
+                original.meta.id
+            );
+        }
+        if decision == Decision::Generate && candidate_decision == Some(Decision::Reuse) {
+            bail!(
+                "candidate {} already matches this input; accept it or move it aside before generating a replacement",
+                original.meta.id
+            );
+        }
         match decision {
             Decision::Reuse => {
                 let mut preserved = current.unwrap().clone();
@@ -83,34 +113,9 @@ pub(crate) fn translate_stage(
                     if !candidates {
                         continue;
                     }
-                    let candidate_path =
-                        stage.join(format!(".export-candidates/{}.md", original.meta.id));
-                    if candidate_path.exists() {
-                        let candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
-                        if candidate.meta.id != original.meta.id
-                            || candidate.meta.locale != Locale::En
-                        {
-                            bail!("candidate identity changed");
-                        }
-                        match decide(
-                            &input,
-                            Some(&text_hash(&candidate)?),
-                            candidate
-                                .meta
-                                .translation
-                                .as_ref()
-                                .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
-                        ) {
-                            Decision::Reuse => {
-                                report.reused += 1;
-                                continue;
-                            }
-                            Decision::Protect => bail!(
-                                "manually edited candidate {}; move it aside before generating a replacement",
-                                original.meta.id
-                            ),
-                            Decision::Generate => {}
-                        }
+                    if candidate_decision == Some(Decision::Reuse) {
+                        report.reused += 1;
+                        continue;
                     }
                 }
                 let checked = ArticleTranslator {
