@@ -59,6 +59,14 @@ impl ArtifactPageLoader {
 
 #[async_trait]
 impl PageLoader for ArtifactPageLoader {
+    async fn load_locales(&self) -> PageLoadResult<domain::SiteLocalesDocument> {
+        self.snapshot()
+            .await?
+            .read_locales()
+            .await
+            .map_err(|error| error.to_string())
+    }
+
     async fn load_asset(&self, name: &ContentAssetName) -> PageLoadResult<Option<Vec<u8>>> {
         self.snapshot()
             .await?

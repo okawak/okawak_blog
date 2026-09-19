@@ -273,3 +273,5 @@ mise run restart-vps
 4. 最初にserver binaryとassetを配備する。新serverは旧releaseも日本語として読める。次に`Publish Content to S3`をmainから実行する。旧serverは新releaseの日本語を読めるが、英語ルートと新しいUIはserver更新後に利用できる。
 
 タグ表示名は記事と同じreleaseで更新されます。UIの定型文は[server辞書](crates/server/locales/README.md)をbinaryへ組み込むため、UI変更時はserverの再配備も必要です。英語homeの正規URLは`/en`で、`/en/`は既存のslash規則に従いredirectします。
+
+トップページ`/`への初回アクセスではブラウザの`Accept-Language`を使い、日本語を優先する環境は日本語、それ以外・未指定は英語homeへ案内します。上部の「日本語 / English」で変更すると選択を1年間cookieへ保存し、以後はブラウザの設定より優先します。記事への直接アクセスはURLの言語を維持します。切替先の記事が未翻訳なら対象言語のhomeへ移り、その言語自体が未公開なら選択を無効表示して日本語を継続します。JavaScript無効時も切り替えられます。

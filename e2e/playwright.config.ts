@@ -20,6 +20,7 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL,
+    locale: "ja-JP",
     trace: "retain-on-failure",
   },
   projects: [

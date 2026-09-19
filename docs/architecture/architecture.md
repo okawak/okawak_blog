@@ -399,7 +399,7 @@ conditional GETのmethod判定には`request::original_method(cx)`を使う。ru
 
 カテゴリ内の記事絞り込みは`src/category_articles.rs`のshardが所有する。shard内のsignalをサーバー側で読み、記事一覧と入力欄だけをDOM morphで更新する。UI用の純粋な部分一致ロジックは`src/article_filter.rs`に置き、タイトル・説明・表示中のタグ名を対象にする。ブラウザから届くカテゴリと言語はdomain型へ検証し、検索語は先頭100文字に制限する。初期pageとshardはリクエスト単位の`#[memoize]`でカテゴリと言語をkeyに同じpage documentを共有し、再描画時もstorageへ直接依存せず`PageLoader`を使う。sectionと記事に安定したIDを付け、入力フォーカスとshard外のmenu・生成本文を維持する。JavaScript無効時は全記事をSSRした一覧を利用できる。
 
-production `server`はhome、about、category、articleをSSRし、title、canonical、hreflang、html lang、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。言語切替は`locales.json`に掲載された実在する翻訳だけを示す。英語artifactがなければ英語の404を返し、日本語本文を英訳として配信しない。UI辞書の欠落・更新待ちは日本語、キー自体の欠落はキー文字列へfallbackしてログに記録する。CIでは型付きキーの全件存在、英訳の欠落・更新待ち、補間変数を検証する。
+production `server`はhome、about、category、articleをSSRし、title、canonical、hreflang、html lang、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。hreflangは`locales.json`に掲載された同じページの実在する翻訳だけを示す。英語artifactがなければ英語の404を返し、日本語本文を英訳として配信しない。UI辞書の欠落・更新待ちは日本語、キー自体の欠落はキー文字列へfallbackしてログに記録する。CIでは型付きキーの全件存在、英訳の欠落・更新待ち、補間変数を検証する。
 
 ## UI styling境界
 
@@ -432,6 +432,12 @@ productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrat
 `crates/server/build.rs`はapplication package内の`style/tailwind.css`をTopcoatのstylesheet assetへ変換するために維持する。Rustと`view!` macroの書式はrepository rootの`mise run format`から`cargo fmt`と`topcoat fmt`を順に適用する。
 
 shellのナビゲーションは言語別pathをリンク先に使い、request URIのpathと比較して現在位置を示す。queryは比較に含めず、404でも実際のURLに基づく選択状態を維持する。mobile menuの開閉文言も選択中の辞書からclient expressionへ渡す。言語名は日本語 / Englishの自称表記で示す。
+
+`server/src/language.rs`が初期言語選択と上部の言語切替componentを所有する。GET / HEADの`/`では保存済み`okawak_locale` cookie、`Accept-Language`の対応言語の優先度、英語の順に選び、英語homeが公開済みなら307で`/en`へ案内する。日本語の本文は引き続き`/`、英語の本文は`/en`で配信し、記事や固定ページの直接URLをブラウザ設定で変更しない。rootの日本語応答・304は`Vary: Accept-Language, Cookie`と`Cache-Control: private, no-cache`を持つ。
+
+上部の切替は正規pathに`?lang=ja|en`を付けた通常リンクで、mobile menuを開かずに操作できる。選択先は同じページの翻訳、対象言語のhomeの順で決め、homeも未公開なら無効表示にする。serverは選択をhost限定・Path=/・HttpOnly・SameSite=Lax・1年有効のcookieへ保存し、選択用queryを除いた公開URLへ303で移す。自動判定・選択保存のredirectは`no-store`で共有cacheしない。日本語homeのナビゲーションにも明示選択を付け、英語ブラウザで日本語記事を読んでいる場合も日本語homeへ戻れる。hreflangは引き続き同じページの実在する翻訳だけを示す。
+
+初期言語判定はconditional GETの304判定より先に行い、`PageLoader::load_locales`と本文描画に同じartifact snapshotを渡す。API・画像・Topcoat内部route・POSTによる再描画には適用しない。ブラウザの言語・cookieに関する処理はserver内に閉じ、domain・publish・infraへ依存を増やさない。
 
 ## Reader 経路
 

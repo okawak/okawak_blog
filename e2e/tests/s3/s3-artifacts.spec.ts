@@ -46,7 +46,7 @@ test("S3 release artifacts pass readiness and render a published article", async
   const articleIndex = (await articleIndexResponse.json()) as ArticleIndex;
   expect(articleIndex.articles.length).toBeGreaterThan(0);
 
-  const homeResponse = await page.goto("/");
+  const homeResponse = await page.goto("/?lang=ja");
   expect(homeResponse?.status()).toBe(200);
   await expect(page.locator("main")).toBeVisible();
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
@@ -82,7 +82,7 @@ test("S3 release serves the languages declared by the reviewed public build", as
     await verifyReleaseLocales(page, catalog, baseURL);
   } else {
     // Manual smoke can target an existing release without a matching local build.
-    await page.goto("/");
+    await page.goto("/?lang=ja");
     const english = page.locator('link[rel="alternate"][hreflang="en"]');
     if (await english.count()) {
       await page.goto((await english.getAttribute("href"))!);

@@ -139,25 +139,42 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
             return next.run(cx, body).await;
         };
 
-        if conditional_get.should_short_circuit() {
-            return Ok(not_modified_response(&conditional_get));
+        let negotiate = is_site_page_path(request::uri(cx).path())
+            && crate::language::is_negotiated_request(request::uri(cx));
+        let mut snapshot = conditional_get.snapshot();
+        if negotiate && snapshot.is_none() {
+            snapshot = app_context::<api::ArtifactReaderContext>(cx)
+                .0
+                .snapshot()
+                .await
+                .ok();
         }
-
-        let mut response = match conditional_get.snapshot() {
-            Some(snapshot) => {
-                let page_loader = PageLoaderContext::new(Arc::new(
-                    ArtifactPageLoader::from_snapshot(snapshot.clone()),
-                ));
-                let cx = cx.with(snapshot).with(page_loader);
-                next.run(&cx, body).await?
+        let scoped = snapshot.map(|snapshot| {
+            let loader = PageLoaderContext::new(Arc::new(ArtifactPageLoader::from_snapshot(
+                snapshot.clone(),
+            )));
+            cx.with(snapshot).with(loader)
+        });
+        let cx = scoped.as_ref().unwrap_or(cx);
+        // A Japanese home ETag must never suppress a redirect selected by an English browser.
+        if negotiate && let Some(response) = crate::language::redirect(cx).await {
+            return Ok(response);
+        }
+        let mut response = if conditional_get.should_short_circuit() {
+            not_modified_response(&conditional_get)
+        } else {
+            let mut response = next.run(cx, body).await?;
+            if conditional_get.should_return_not_modified_after_response(response.status()) {
+                not_modified_response(&conditional_get)
+            } else {
+                if conditional_get.should_attach_validators(response.status()) {
+                    conditional_get.insert_headers(response.headers_mut());
+                }
+                response
             }
-            None => next.run(cx, body).await?,
         };
-        if conditional_get.should_return_not_modified_after_response(response.status()) {
-            return Ok(not_modified_response(&conditional_get));
-        }
-        if conditional_get.should_attach_validators(response.status()) {
-            conditional_get.insert_headers(response.headers_mut());
+        if request::uri(cx).path() == "/" {
+            crate::language::vary_home(&mut response);
         }
         Ok(response)
     })
