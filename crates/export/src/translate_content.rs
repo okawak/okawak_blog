@@ -39,6 +39,8 @@ pub(crate) fn translate_stage(
     let mut report = TranslationReport::default();
     let originals = markdown::read_locale(stage, Locale::Ja)?;
     let english = markdown::read_locale(stage, Locale::En)?;
+    crate::tags::sync(stage)?;
+    let tags = crate::catalog::plan_catalog(&stage.join("tags.json"), settings)?;
     fs::create_dir_all(stage.join("en"))?;
     for original in originals {
         let fragments = Fragments::extract(&original);
@@ -142,14 +144,7 @@ pub(crate) fn translate_stage(
             }
         }
     }
-    crate::tags::sync(stage)?;
-    let tags = crate::catalog::translate_catalog_stage(
-        &stage.join("tags.json"),
-        cache_root,
-        translator,
-        settings,
-        candidates,
-    )?;
+    let tags = tags.apply(cache_root, translator, candidates)?;
     report.generated += tags.generated;
     report.reused += tags.reused;
     report
