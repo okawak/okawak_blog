@@ -29,6 +29,13 @@ for locale in $(jq -r '.routes["/"][]' "$root/locales.json"); do
         article_count: ([$index[0].articles[] | select(.category == $category)] | length)}] |
        sort_by(.category))
   ' "$locale_root/metadata/site.json" >/dev/null
+  for category_file in "$locale_root"/categories/*.json; do
+    [ -e "$category_file" ] || continue
+    category="${category_file##*/}"
+    category="${category%.json}"
+    jq -e --arg category "$category" 'any(.categories[]; .category == $category)' \
+      "$locale_root/metadata/site.json" >/dev/null
+  done
   while IFS= read -r category; do
     jq -e --arg category "$category" --slurpfile index "$locale_root/articles/index.json" '
       .category == $category and (.articles | sort_by(.slug)) ==
