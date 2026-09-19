@@ -234,8 +234,17 @@ pub(crate) fn read(path: &Path) -> Result<LabelCatalog> {
     if !fs::symlink_metadata(path)?.file_type().is_file() {
         bail!("catalog must be a regular file");
     }
-    let catalog: LabelCatalog = serde_json::from_slice(&fs::read(path)?)?;
-    catalog.validate()?;
+    let mut catalog: LabelCatalog = serde_json::from_slice(&fs::read(path)?)?;
+    catalog.validate_structure()?;
+    // A source edit may change interpolation variables. Preserve the old text for
+    // the normal update decision, but never expose an incompatible active value.
+    for entry in catalog.entries.values_mut() {
+        if let Some(translation) = &mut entry.translation
+            && domain::placeholders(&entry.source) != domain::placeholders(&translation.value)
+        {
+            translation.stale = true;
+        }
+    }
     Ok(catalog)
 }
 
