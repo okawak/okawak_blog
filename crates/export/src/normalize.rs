@@ -68,12 +68,14 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                     let exact: Vec<_> = index
                         .iter()
                         .filter(|(key, _, _, _)| {
-                            key == extensionless
-                                || key == &relative
-                                || (extensionless.is_empty() && key == &source.key)
+                            if extensionless.is_empty() {
+                                key == &source.key
+                            } else {
+                                key == &relative || (wiki && key == extensionless)
+                            }
                         })
                         .collect();
-                    let matches = if exact.is_empty() {
+                    let matches = if wiki && exact.is_empty() {
                         index
                             .iter()
                             .filter(|(key, _, _, _)| key.rsplit('/').next() == Some(extensionless))
@@ -101,9 +103,11 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                                 .iter()
                                 .filter(|p| {
                                     let key = p.strip_prefix(root).unwrap().to_string_lossy();
-                                    key == target
-                                        || key == relative
-                                        || p.file_name().and_then(|p| p.to_str()) == Some(target)
+                                    key == relative
+                                        || (wiki
+                                            && (key == target
+                                                || p.file_name().and_then(|p| p.to_str())
+                                                    == Some(target)))
                                 })
                                 .collect();
                             let [path] = matches.as_slice() else {
