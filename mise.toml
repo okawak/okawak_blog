@@ -73,6 +73,14 @@ git submodule update --remote --checkout --recursive "$obsidian_path"
 description = "Export only completed Obsidian notes to public Japanese Markdown"
 run = "cargo run -p export --"
 
+[tasks.export]
+description = "Export public Markdown and translate changed prose using local Codex"
+run = "cargo run -p export -- --translate"
+
+[tasks.translate]
+description = "Translate checked-in public Markdown without accessing Obsidian"
+run = "cargo run -p export -- --translate-only"
+
 [tasks.format]
 description = "Format Rust and Topcoat source files"
 run = '''
