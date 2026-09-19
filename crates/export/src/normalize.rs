@@ -52,7 +52,7 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                     let image = raw.starts_with('!');
                     let wiki = matches!(link_type, LinkType::WikiLink { .. });
                     let target = dest_url.trim().trim_end_matches('\\');
-                    if !wiki && external(target) {
+                    if !wiki && (external(target) || matches!(link_type, LinkType::Email)) {
                         if matches!(
                             link_type,
                             LinkType::Reference | LinkType::Collapsed | LinkType::Shortcut

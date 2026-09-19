@@ -449,3 +449,13 @@ fn reference_definitions_do_not_leave_vault_paths_or_unused_private_titles() {
     assert!(!article.contains("image.png"));
     assert!(article.contains("```md\n[example]: literal.md\n```"));
 }
+
+#[test]
+fn email_and_web_autolinks_remain_external_references() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let body = "<me@example.com> <https://example.com/a>";
+    note(source.path(), "tech/article.md", "Article", true, body);
+    export::export_japanese(source.path(), output.path()).unwrap();
+    assert!(outputs(output.path())[0].contains(body));
+}
