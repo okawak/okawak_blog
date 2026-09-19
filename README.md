@@ -4,7 +4,7 @@
 
 https://www.okawak.net
 
-`okawak_blog` は、Obsidian で書いた Markdown を Rust 製の`publish` pipelineが公開成果物へ変換して S3 に配置し、それを VPS 上の単一バイナリ Topcoat SSR サーバーと Cloudflare Tunnel で公開する、静的コンテンツ公開基盤 + SSR 表示基盤です。
+`okawak_blog` は、Obsidian で書いた Markdown を ローカルの`export`が日英の公開Markdownへ抽出し、`publish`とGitHub Actionsが配信用artifactを生成してS3に配置し、それを VPS 上の単一バイナリ Topcoat SSR サーバーと Cloudflare Tunnel で公開する、静的コンテンツ公開基盤 + SSR 表示基盤です。
 
 ## 関連文書
 
@@ -86,7 +86,8 @@ okawak_blog/
 ### 各層の責務
 
 - `crates/domain`: 公開成果物契約、site page contract、純粋関数を中心にした共有ドメイン層
-- `crates/publish`: `pipeline` moduleが、`vault`によるObsidian入力、`render`によるMarkdown変換とbookmark enrichment、`artifacts`による成果物生成を統括する単一の`publish` crate。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定する
+- `crates/export`: private入力の公開対象抽出、参照の正規化、ローカルCodexによる翻訳、手動編集の保護。
+- `crates/publish`: Gitの公開Markdownを検証し、言語別URL解決・HTML変換・bookmark enrichment・artifact生成を行う。private vaultやAIは不要。
 - `crates/infra`: storage非依存のartifact reader契約と、local / S3実装、source設定、cache。HTTP runtimeやUIには依存しない
 - `crates/server`: production `server` binaryを持つ単一のTopcoat application crate。storage非依存のpage load契約、UI / route / metadata、style、reader生成・注入、API、release-aware ETag / Last-Modifiedを構成する
 - `e2e`: server / artifact readerをまたぐ、固定artifactベースのbrowser E2E
@@ -128,7 +129,7 @@ Obsidian repo
 
 ## Obsidian Front Matter
 
-`publish`が扱う Markdown には、YAML front matter が必要です。現在の parser は LF 区切りの front matter を前提にしており、`is_completed: true` のものだけを公開対象として扱います。役割判定には `kind` を使います。
+`export`が扱う執筆用MarkdownにはYAML front matterが必要で、`is_completed: true`だけを抽出します。publishの入力は[公開Markdown契約](docs/content/public-markdown.md)を使います。役割判定には `kind` を使います。
 
 ```yaml
 ---
@@ -164,7 +165,7 @@ category: "tech"
 - `category`: `article` と `category` で使うカテゴリキーです。
 - `page`: `kind: page` のときに使う固定ページキーです。
 
-本文は closing `---` の次の行から始まり、Obsidian link や bookmark 埋め込みを含められます。front matter がない Markdown は`publish`でスキップされます。article は frontmatter の `category` と同名のディレクトリ配下に置く必要があります。category 配下のディレクトリ構造は path から `section_path` として導出され、category page 上の grouped navigation に使われます。
+本文は closing `---` の次の行から始まり、Obsidian link や bookmark 埋め込みを含められます。front matterがない執筆用Markdownはexportでスキップされます。article は frontmatter の `category` と同名のディレクトリ配下に置く必要があります。category 配下のディレクトリ構造は path から `section_path` として導出され、category page 上の grouped navigation に使われます。
 記事が存在するカテゴリでは、対応する`kind: category`のlanding pageが必要です。
 
 ## 運用モデル
@@ -205,7 +206,7 @@ mise run versions-check
 
 site UIはTopcoat componentとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/server/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
 
-private Obsidian repoを使う`publish`側の開発では、`mise run dev-local`がsubmoduleをremoteの最新commitへ同期してから`publish`を実行します。生成先の`crates/publish/dist/site`を既存のlocal readerでそのまま配信し、未公開content、Markdown変換、UIを一続きで確認します。`mise run dev`はGitHub Actionsが公開したS3 artifactを読み、本番相当のreader経路を確認します。同期だけを行う場合は`mise run sync-obsidian`を使います。自動同期はsubmodule内に未commit差分がある場合は停止し、merge commitを作らずremote revisionをcheckoutします。
+`mise run export-ja`は公開対象だけを日本語Markdownへ抽出し、`mise run export`は必要な英訳も生成します。`mise run translate`はGitの公開Markdownだけを翻訳します。手動編集・更新候補・用語集の運用は[export README](crates/export/README.md)を参照してください。`mise run dev-local`は公開Markdownからpublishとlocal配信を行います。原文同期は`mise run sync-obsidian`で明示的に実行し、未commit差分があるsubmoduleは同期しません。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
 production CSSはTopcoatのstandalone Tailwind integrationで生成し、そのversionを`mise.toml`の`TOPCOAT_TAILWIND_VERSION`とTopcoat build scriptで一致させます。`mise run versions-check`がこれらとTopcoat CLI / framework、E2EのBun versionを照合し、GitHub Actionsは`jdx/mise-action`経由で同じlocked toolchainを導入します。
 
@@ -214,9 +215,8 @@ browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-
 
 開発端末では、local previewに`mise run dev-local`、S3 readerの本番相当確認に`mise run dev`または`mise run test-e2e-s3`を使います。S3用taskはAWS CLIを実行せず、AWS SDKが設定済みprofileまたは環境変数credentialを読みます。bucketやcredentialは保存せず、`AWS_PROFILE`、region、`OKAWAK_BLOG_ARTIFACT_BUCKET`、必要な場合だけ`OKAWAK_BLOG_ARTIFACT_PREFIX`を実行時に渡します。詳細は[e2e/README.md](./e2e/README.md)を参照してください。
 
-`mise run dev-local`は次を順に行います。submoduleの同期または`publish`が失敗した場合、Topcoat開発サーバーは起動しません。
+`mise run dev-local`は次を順に行います。`publish`が失敗した場合、Topcoat開発サーバーは起動しません。
 
-- private Obsidian submoduleをremoteの最新状態へ同期する
 - `publish`を通常の厳格モードで実行する
 - `crates/publish/dist/site`へartifactを生成する
 - Topcoat asset bundleを生成し、`OKAWAK_BLOG_ARTIFACT_SOURCE=local`でTopcoat開発サーバーを起動する

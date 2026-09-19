@@ -22,7 +22,7 @@ pub(crate) async fn render_article(
         category: parsed_file.category,
         section_path: parsed_file.section_path,
         description: parsed_file.front_matter.summary,
-        tags: parsed_file.front_matter.tags.unwrap_or_default(),
+        tags: parsed_file.front_matter.tags,
         priority: parsed_file.front_matter.priority,
         created_at: Timestamp::new(parsed_file.front_matter.created)?,
         updated_at: Timestamp::new(parsed_file.front_matter.updated)?,

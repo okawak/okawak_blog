@@ -1,6 +1,6 @@
 # 公開Markdownの契約
 
-`domain::PublicContentMeta` はexportとpublish間で使用するschema version 1のfrontmatter契約である。Markdown本文の解析・ファイルI/Oは各consumerが所有する。この契約の追加だけでは現行publishのObsidian入力や公開workflowは変更しない。
+`domain::PublicContentMeta` はexportとpublish間で使用するschema version 1のfrontmatter契約である。Markdown本文の解析・ファイルI/Oは各consumerが所有する。`publish`はこの契約だけを入力にし、private vaultへアクセスしない。
 
 - `schema_version: 1`、`id`、`locale: ja | en`、`kind: article | category | page | home` を必須とする。
 - `title`、`created`、`updated`、元pathのSHA-256である `source_hash` を持つ。元path自体は公開しない。

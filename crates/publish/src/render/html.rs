@@ -11,10 +11,9 @@ pub(crate) fn convert_markdown_to_html(markdown_content: &str, link_index: &Inde
     options.insert(Options::ENABLE_TASKLISTS);
     options.insert(Options::ENABLE_SMART_PUNCTUATION);
     options.insert(Options::ENABLE_MATH);
-    options.insert(Options::ENABLE_WIKILINKS);
 
     let parser = Parser::new_ext(markdown_content, options);
-    let parser = links::resolve_wikilinks(parser, link_index);
+    let parser = links::resolve_links(parser, link_index);
     let mut html_output = String::with_capacity(markdown_content.len() * 2);
     html::push_html(&mut html_output, sanitize::events(parser).into_iter());
 

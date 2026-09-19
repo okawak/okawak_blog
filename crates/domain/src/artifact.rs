@@ -7,3 +7,6 @@ pub use content::{
     SiteMetadataDocument,
 };
 pub use release::{ARTIFACT_RELEASE_SCHEMA_VERSION, ArtifactReleasePointerDocument};
+
+mod locales;
+pub use locales::SiteLocalesDocument;
