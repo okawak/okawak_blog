@@ -12,7 +12,8 @@ use crate::i18n::{Message, japanese_path, t};
 const COOKIE: &str = "okawak_locale";
 
 pub(crate) fn is_negotiated_request(uri: &Uri) -> bool {
-    uri.path() == "/" || explicit_choice(uri).is_some()
+    // Preserve the router's canonicalization (and its query) before selecting a translation.
+    uri.path() == "/" || (!uri.path().ends_with('/') && explicit_choice(uri).is_some())
 }
 
 fn explicit_choice(uri: &Uri) -> Option<Locale> {

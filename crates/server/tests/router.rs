@@ -219,6 +219,48 @@ struct TestResponse {
     body: String,
 }
 
+#[tokio::test]
+async fn language_choices_preserve_the_existing_trailing_slash_redirect() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    for (path, canonical, destination) in [
+        (
+            "/about/?lang=en&from=nav%20link",
+            "/about?lang=en&from=nav%20link",
+            "/en/about?from=nav%20link",
+        ),
+        ("/en/about/?lang=ja", "/en/about?lang=ja", "/about"),
+        ("/en/?lang=ja", "/en?lang=ja", "/"),
+    ] {
+        for method in [Method::GET, Method::HEAD] {
+            let first = response(
+                &router,
+                Request::builder()
+                    .method(method.clone())
+                    .uri(path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(first.status, StatusCode::PERMANENT_REDIRECT, "{path}");
+            assert_eq!(first.headers[header::LOCATION], canonical);
+            assert!(!first.headers.contains_key(header::SET_COOKIE));
+            assert!(!first.headers.contains_key(header::ETAG));
+            let selected = response(
+                &router,
+                Request::builder()
+                    .method(method)
+                    .uri(canonical)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(selected.status, StatusCode::SEE_OTHER);
+            assert_eq!(selected.headers[header::LOCATION], destination);
+            assert!(selected.headers.contains_key(header::SET_COOKIE));
+        }
+    }
+}
+
 fn fixture_reader() -> DynArtifactReader {
     Arc::new(LocalArtifactReader::new(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site"),
