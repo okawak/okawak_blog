@@ -231,6 +231,53 @@ fn reviewed_candidates_block_generation_after_the_published_translation_is_remov
 }
 
 #[test]
+fn all_article_candidates_are_checked_before_any_ai_call() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let fake = Fake::new();
+    write_note(source.path(), "本文");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    export::translate_public(output.path(), &fake, &settings(), false).unwrap();
+    let path = english(output.path());
+    fs::write(
+        &path,
+        fs::read_to_string(&path)
+            .unwrap()
+            .replace("English 記事", "Manual title"),
+    )
+    .unwrap();
+    write_note(source.path(), "新しい本文");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    export::translate_public(output.path(), &fake, &settings(), true).unwrap();
+    let candidate = output
+        .path()
+        .join(".export-candidates")
+        .join(path.file_name().unwrap());
+    let reviewed = fs::read_to_string(&candidate)
+        .unwrap()
+        .replace("English 記事", "Reviewed title");
+    fs::write(&candidate, &reviewed).unwrap();
+    write_note(source.path(), "さらに新しい本文");
+    let first_note = fs::read_to_string(source.path().join("tech/a.md"))
+        .unwrap()
+        .replace("title: 記事", "title: First\npublish_id: 000-first")
+        .replace("さらに新しい本文", "別の記事");
+    fs::write(source.path().join("tech/first.md"), first_note).unwrap();
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let before = fs::read(&path).unwrap();
+    let cache = output.path().join(".export-candidates/cache");
+    let cache_count = fs::read_dir(&cache).unwrap().count();
+    for candidates in [false, true] {
+        assert!(export::translate_public(output.path(), &fake, &settings(), candidates).is_err());
+        assert_eq!(fake.calls.get(), 2);
+        assert_eq!(fs::read_dir(&cache).unwrap().count(), cache_count);
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(fs::read_to_string(&candidate).unwrap(), reviewed);
+        assert!(!output.path().join("en/000-first.md").exists());
+    }
+}
+
+#[test]
 fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose() {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();

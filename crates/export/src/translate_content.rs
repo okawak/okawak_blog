@@ -15,6 +15,16 @@ pub struct TranslationReport {
     pub protected: Vec<String>,
 }
 
+struct ArticlePlan<'a> {
+    original: Document,
+    current: Option<&'a Document>,
+    fragments: Fragments,
+    request: TranslationRequest,
+    input: String,
+    decision: Decision,
+    candidate_decision: Option<Decision>,
+}
+
 pub fn translate_public(
     output: &Path,
     translator: &dyn Translator,
@@ -39,7 +49,7 @@ pub(crate) fn translate_stage(
     let mut report = TranslationReport::default();
     let originals = markdown::read_locale(stage, Locale::Ja)?;
     let english = markdown::read_locale(stage, Locale::En)?;
-    fs::create_dir_all(stage.join("en"))?;
+    let mut plans = Vec::new();
     for original in originals {
         let fragments = Fragments::extract(&original);
         let request = TranslationRequest::new(fragments.texts.clone(), "Public blog article: ordered Markdown prose fragments. Return plain text only; preserve fragment boundaries.".into(), settings);
@@ -51,7 +61,6 @@ pub(crate) fn translate_stage(
             current_hash.as_deref(),
             current.and_then(|d| d.meta.translation.as_ref()),
         );
-        let path = stage.join(format!("en/{}.md", original.meta.id));
         let candidate_path = stage.join(format!(".export-candidates/{}.md", original.meta.id));
         let candidate_decision = if decision != Decision::Reuse && candidate_path.exists() {
             let candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
@@ -78,6 +87,29 @@ pub(crate) fn translate_stage(
                 original.meta.id
             );
         }
+        plans.push(ArticlePlan {
+            original,
+            current,
+            fragments,
+            request,
+            input,
+            decision,
+            candidate_decision,
+        });
+    }
+    // Inspect every candidate before any AI call, cache write or output update.
+    fs::create_dir_all(stage.join("en"))?;
+    for ArticlePlan {
+        original,
+        current,
+        fragments,
+        request,
+        input,
+        decision,
+        candidate_decision,
+    } in plans
+    {
+        let path = stage.join(format!("en/{}.md", original.meta.id));
         match decision {
             Decision::Reuse => {
                 let mut preserved = current.unwrap().clone();
