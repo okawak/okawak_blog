@@ -1,6 +1,6 @@
 //! Shared translation unit and manual-edit guard, independent of articles and UI.
 use anyhow::{Result, bail};
-use domain::TranslationProvenance;
+use domain::placeholders;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -38,12 +38,12 @@ pub(crate) enum Decision {
 pub(crate) fn decide(
     input: &str,
     current: Option<&str>,
-    provenance: Option<&TranslationProvenance>,
+    provenance: Option<(&str, &str)>,
 ) -> Decision {
     match (current, provenance) {
         (None, _) => Decision::Generate,
-        (Some(_), Some(p)) if p.input_hash == input => Decision::Reuse,
-        (Some(hash), Some(p)) if p.generated_hash == hash => Decision::Generate,
+        (Some(_), Some((previous_input, _))) if previous_input == input => Decision::Reuse,
+        (Some(hash), Some((_, generated_hash))) if generated_hash == hash => Decision::Generate,
         _ => Decision::Protect,
     }
 }
@@ -103,21 +103,43 @@ impl TranslationRequest {
     }
 }
 
-fn placeholders(value: &str) -> Vec<String> {
-    let mut placeholders = Vec::new();
-    let mut rest = value;
-    while let Some((_, after)) = rest.split_once('{') {
-        if let Some((key, after)) = after.split_once('}') {
-            if !key.is_empty() && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
-                placeholders.push(key.to_owned());
-            }
-            rest = after;
-        } else {
-            break;
+pub(crate) fn cached_response(
+    request: &TranslationRequest,
+    translator: &dyn Translator,
+    root: &std::path::Path,
+) -> Result<Texts> {
+    use std::{fs, io::Write};
+    let cache = root
+        .join(".export-candidates/cache")
+        .join(format!("{}.json", request.fingerprint()?));
+    let result = if cache.exists() {
+        serde_json::from_slice(&fs::read(&cache)?)?
+    } else {
+        let result = translator.translate(request)?;
+        request.validate(&result)?;
+        fs::create_dir_all(cache.parent().unwrap())?;
+        let mut temporary = tempfile::NamedTempFile::new_in(cache.parent().unwrap())?;
+        temporary.write_all(&serde_json::to_vec_pretty(&result)?)?;
+        temporary.persist(cache)?;
+        result
+    };
+    request.validate(&result)?;
+    Ok(result)
+}
+
+pub(crate) fn copy_cache(root: &std::path::Path, stage: &std::path::Path) -> Result<()> {
+    use std::fs;
+    let cache = root.join(".export-candidates/cache");
+    if cache.exists() {
+        for file in crate::markdown::all_files(&cache)? {
+            let dest = stage
+                .join(".export-candidates/cache")
+                .join(file.file_name().unwrap());
+            fs::create_dir_all(dest.parent().unwrap())?;
+            fs::copy(file, dest)?;
         }
     }
-    placeholders.sort();
-    placeholders
+    Ok(())
 }
 
 #[cfg(test)]
@@ -125,21 +147,17 @@ mod tests {
     use super::*;
     #[test]
     fn guard_preserves_manual_edits_even_when_input_is_unchanged() {
-        let provenance = TranslationProvenance {
-            input_hash: "old-input".into(),
-            generated_hash: "machine".into(),
-            stale: false,
-        };
+        let provenance = ("old-input", "machine");
         assert_eq!(
-            decide("old-input", Some("manual"), Some(&provenance)),
+            decide("old-input", Some("manual"), Some(provenance)),
             Decision::Reuse
         );
         assert_eq!(
-            decide("new-input", Some("manual"), Some(&provenance)),
+            decide("new-input", Some("manual"), Some(provenance)),
             Decision::Protect
         );
         assert_eq!(
-            decide("new-input", Some("machine"), Some(&provenance)),
+            decide("new-input", Some("machine"), Some(provenance)),
             Decision::Generate
         );
         assert_eq!(decide("new-input", Some("manual"), None), Decision::Protect);

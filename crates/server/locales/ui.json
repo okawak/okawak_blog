@@ -1,0 +1,389 @@
+{
+  "schema_version": 1,
+  "entries": {
+    "article.no_description": {
+      "source": "説明はまだありません。",
+      "context": "Article card fallback description.",
+      "translation": {
+        "value": "No description yet.",
+        "stale": false
+      }
+    },
+    "article.published": {
+      "source": "公開 ",
+      "context": "Prefix before publication date. Preserve a trailing space.",
+      "translation": {
+        "value": "Published ",
+        "stale": false
+      }
+    },
+    "article.tags": {
+      "source": "タグ",
+      "context": "Accessible label for article tags.",
+      "translation": {
+        "value": "Tags",
+        "stale": false
+      }
+    },
+    "article.updated": {
+      "source": "更新 ",
+      "context": "Prefix before update date. Preserve a trailing space.",
+      "translation": {
+        "value": "Updated ",
+        "stale": false
+      }
+    },
+    "category.articles": {
+      "source": "カテゴリの記事",
+      "context": "Accessible label for category filter region.",
+      "translation": {
+        "value": "Articles in this category",
+        "stale": false
+      }
+    },
+    "category.daily": {
+      "source": "日常",
+      "context": "Display name for stable category ID daily.",
+      "translation": {
+        "value": "Daily",
+        "stale": false
+      }
+    },
+    "category.general": {
+      "source": "一般",
+      "context": "Section heading for articles without a section path.",
+      "translation": {
+        "value": "General",
+        "stale": false
+      }
+    },
+    "category.label": {
+      "source": "カテゴリ",
+      "context": "Category page eyebrow.",
+      "translation": {
+        "value": "Category",
+        "stale": false
+      }
+    },
+    "category.physics": {
+      "source": "物理",
+      "context": "Display name for stable category ID physics.",
+      "translation": {
+        "value": "Physics",
+        "stale": false
+      }
+    },
+    "category.stats": {
+      "source": "統計",
+      "context": "Display name for stable category ID stats.",
+      "translation": {
+        "value": "Statistics",
+        "stale": false
+      }
+    },
+    "category.tech": {
+      "source": "技術",
+      "context": "Display name for stable category ID tech.",
+      "translation": {
+        "value": "Technology",
+        "stale": false
+      }
+    },
+    "count.articles.many": {
+      "source": "{count}件の記事",
+      "context": "Article count when count is greater than one; preserve {count}.",
+      "translation": {
+        "value": "{count} articles",
+        "stale": false
+      }
+    },
+    "count.articles.one": {
+      "source": "{count}件の記事",
+      "context": "Article count when count is one; preserve {count}.",
+      "translation": {
+        "value": "{count} article",
+        "stale": false
+      }
+    },
+    "count.articles.zero": {
+      "source": "{count}件の記事",
+      "context": "Article count when count is zero; preserve {count}.",
+      "translation": {
+        "value": "{count} articles",
+        "stale": false
+      }
+    },
+    "count.categories.many": {
+      "source": "{count}カテゴリ",
+      "context": "Category count when count is greater than one.",
+      "translation": {
+        "value": "{count} categories",
+        "stale": false
+      }
+    },
+    "count.categories.one": {
+      "source": "{count}カテゴリ",
+      "context": "Category count when count is one.",
+      "translation": {
+        "value": "{count} category",
+        "stale": false
+      }
+    },
+    "count.categories.zero": {
+      "source": "{count}カテゴリ",
+      "context": "Category count when count is zero.",
+      "translation": {
+        "value": "{count} categories",
+        "stale": false
+      }
+    },
+    "empty.articles": {
+      "source": "記事がありません",
+      "context": "Empty home list.",
+      "translation": {
+        "value": "No articles yet",
+        "stale": false
+      }
+    },
+    "empty.matches": {
+      "source": "該当する記事はありません。",
+      "context": "Empty filtered category list.",
+      "translation": {
+        "value": "No matching articles.",
+        "stale": false
+      }
+    },
+    "error.article": {
+      "source": "記事の読み込みに失敗しました",
+      "context": "Article read error.",
+      "translation": {
+        "value": "Unable to load this article",
+        "stale": false
+      }
+    },
+    "error.category": {
+      "source": "カテゴリの読み込みに失敗しました",
+      "context": "Category read error.",
+      "translation": {
+        "value": "Unable to load this category",
+        "stale": false
+      }
+    },
+    "error.home": {
+      "source": "記事の読み込みに失敗しました",
+      "context": "Home read error.",
+      "translation": {
+        "value": "Unable to load articles",
+        "stale": false
+      }
+    },
+    "error.not_found.description": {
+      "source": "お探しのページは見つかりませんでした。",
+      "context": "404 description.",
+      "translation": {
+        "value": "The page you requested could not be found.",
+        "stale": false
+      }
+    },
+    "error.not_found.message": {
+      "source": "ページが見つかりませんでした。",
+      "context": "404 visible message.",
+      "translation": {
+        "value": "Page not found.",
+        "stale": false
+      }
+    },
+    "error.not_found.title": {
+      "source": "ページが見つかりません",
+      "context": "404 page title.",
+      "translation": {
+        "value": "Page not found",
+        "stale": false
+      }
+    },
+    "error.page": {
+      "source": "ページの読み込みに失敗しました",
+      "context": "Static page read error.",
+      "translation": {
+        "value": "Unable to load this page",
+        "stale": false
+      }
+    },
+    "filter.label": {
+      "source": "記事を絞り込む",
+      "context": "Label for search input.",
+      "translation": {
+        "value": "Filter articles",
+        "stale": false
+      }
+    },
+    "filter.placeholder": {
+      "source": "タイトル・説明・タグ",
+      "context": "Category filter placeholder.",
+      "translation": {
+        "value": "Title, description, or tags",
+        "stale": false
+      }
+    },
+    "footer.copyright": {
+      "source": "© {year} okawak. All Rights Reserved.",
+      "context": "Copyright notice. Preserve {year}.",
+      "translation": {
+        "value": "© {year} okawak. All Rights Reserved.",
+        "stale": false
+      }
+    },
+    "footer.powered": {
+      "source": "Powered by ",
+      "context": "Attribution prefix before Topcoat link. Preserve trailing space.",
+      "translation": {
+        "value": "Powered by ",
+        "stale": false
+      }
+    },
+    "home.description": {
+      "source": "新しい順に、公開済みの記事を紹介します。",
+      "context": "Recent articles introduction.",
+      "translation": {
+        "value": "Browse published articles, newest first.",
+        "stale": false
+      }
+    },
+    "home.eyebrow": {
+      "source": "探窟メモ",
+      "context": "Short home hero eyebrow.",
+      "translation": {
+        "value": "Exploration Notes",
+        "stale": false
+      }
+    },
+    "home.fallback": {
+      "source": "最近の記事とカテゴリをまとめています。",
+      "context": "Home text when optional home content is missing.",
+      "translation": {
+        "value": "Explore recent articles and categories.",
+        "stale": false
+      }
+    },
+    "home.intro": {
+      "source": "気になったことをメモしておくブログです。",
+      "context": "Home hero introduction.",
+      "translation": {
+        "value": "Notes on things that catch my curiosity.",
+        "stale": false
+      }
+    },
+    "home.recent": {
+      "source": "最近の記事",
+      "context": "Heading and accessible label for latest articles.",
+      "translation": {
+        "value": "Recent articles",
+        "stale": false
+      }
+    },
+    "meta.article": {
+      "source": "{category}カテゴリの記事です。",
+      "context": "Article meta fallback when summary missing.",
+      "translation": {
+        "value": "An article in the {category} category.",
+        "stale": false
+      }
+    },
+    "meta.category": {
+      "source": "{category}カテゴリの{articles}。",
+      "context": "Category meta fallback when summary missing.",
+      "translation": {
+        "value": "{articles} in the {category} category.",
+        "stale": false
+      }
+    },
+    "meta.home": {
+      "source": "{categories}で{articles}を公開しています。",
+      "context": "Home meta description. Values already include localized count and noun.",
+      "translation": {
+        "value": "{articles} published across {categories}.",
+        "stale": false
+      }
+    },
+    "meta.page": {
+      "source": "{title}ページです。",
+      "context": "Static page meta fallback.",
+      "translation": {
+        "value": "The {title} page.",
+        "stale": false
+      }
+    },
+    "nav.about": {
+      "source": "About",
+      "context": "About navigation link.",
+      "translation": {
+        "value": "About",
+        "stale": false
+      }
+    },
+    "nav.close": {
+      "source": "ナビゲーションメニューを閉じる",
+      "context": "Accessible label when mobile menu is open.",
+      "translation": {
+        "value": "Close navigation menu",
+        "stale": false
+      }
+    },
+    "nav.github": {
+      "source": "okawakのGitHubプロフィールを開く",
+      "context": "External social profile accessible label.",
+      "translation": {
+        "value": "Open okawak GitHub profile",
+        "stale": false
+      }
+    },
+    "nav.home": {
+      "source": "ホーム",
+      "context": "Home navigation link.",
+      "translation": {
+        "value": "Home",
+        "stale": false
+      }
+    },
+    "nav.language": {
+      "source": "言語",
+      "context": "Accessible label for language switch links.",
+      "translation": {
+        "value": "Language",
+        "stale": false
+      }
+    },
+    "nav.main": {
+      "source": "メインナビゲーション",
+      "context": "Accessible label for header navigation.",
+      "translation": {
+        "value": "Main navigation",
+        "stale": false
+      }
+    },
+    "nav.open": {
+      "source": "ナビゲーションメニューを開く",
+      "context": "Accessible label when mobile menu is closed.",
+      "translation": {
+        "value": "Open navigation menu",
+        "stale": false
+      }
+    },
+    "page.label": {
+      "source": "ページ",
+      "context": "Static page eyebrow.",
+      "translation": {
+        "value": "Page",
+        "stale": false
+      }
+    },
+    "site.name": {
+      "source": "ぶくせんの探窟メモ",
+      "context": "Blog name in header and page titles.",
+      "translation": {
+        "value": "Bukusen’s Exploration Notes",
+        "stale": false
+      }
+    }
+  }
+}
