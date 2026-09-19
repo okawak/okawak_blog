@@ -232,9 +232,15 @@ type ContentAssetResult = std::result::Result<Option<Vec<u8>>, Arc<crate::InfraE
 type ContentAssetCell = Arc<OnceCell<ContentAssetResult>>;
 
 #[derive(Default)]
+struct ContentAssetEntry {
+    cell: ContentAssetCell,
+    readers: usize,
+}
+
+#[derive(Default)]
 struct ContentAssetCache {
     // Only map access is synchronous; storage I/O happens outside this lock.
-    entries: std::sync::Mutex<HashMap<String, ContentAssetCell>>,
+    entries: std::sync::Mutex<HashMap<String, ContentAssetEntry>>,
 }
 
 impl ContentAssetCache {
@@ -245,7 +251,9 @@ impl ContentAssetCache {
     {
         let cell = {
             let mut entries = self.entries.lock().unwrap();
-            Arc::clone(entries.entry(key.into()).or_default())
+            let entry = entries.entry(key.into()).or_default();
+            entry.readers += 1;
+            Arc::clone(&entry.cell)
         };
         let read = ContentAssetRead {
             cache: self,
@@ -269,9 +277,13 @@ struct ContentAssetRead<'a> {
 impl Drop for ContentAssetRead<'_> {
     fn drop(&mut self) {
         let mut entries = self.cache.entries.lock().unwrap();
-        // The map and this final reader own the last two references. Keep successes;
-        // release misses, errors and cancelled loads when no reader needs the cell.
-        if Arc::strong_count(&self.cell) == 2 && !matches!(self.cell.get(), Some(Ok(Some(_)))) {
+        let entry = entries
+            .get_mut(self.key)
+            .expect("active content asset read");
+        entry.readers -= 1;
+        // Count completion while locked; Arc fields may be dropped later on another
+        // thread. Only successful bytes survive the final reader of this flight.
+        if entry.readers == 0 && !matches!(self.cell.get(), Some(Ok(Some(_)))) {
             entries.remove(self.key);
         }
     }
@@ -667,6 +679,30 @@ mod tests {
             Some(b"retry".to_vec())
         );
         assert_eq!(reads.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn simultaneous_reader_completion_does_not_retain_missing_assets() {
+        let cache = Arc::new(ContentAssetCache::default());
+        for _ in 0..1024 {
+            let mut readers = tokio::task::JoinSet::new();
+            for _ in 0..16 {
+                let cache = Arc::clone(&cache);
+                readers.spawn(async move {
+                    cache
+                        .get_or_try_init("missing", || async {
+                            tokio::task::yield_now().await;
+                            Ok(None)
+                        })
+                        .await
+                        .unwrap()
+                });
+            }
+            while let Some(reader) = readers.join_next().await {
+                assert!(reader.unwrap().is_none());
+            }
+            assert!(cache.entries.lock().unwrap().is_empty());
+        }
     }
 
     #[tokio::test]
