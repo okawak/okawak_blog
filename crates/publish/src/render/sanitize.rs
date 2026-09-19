@@ -6,7 +6,29 @@ pub(super) fn events<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'
     let mut result = Vec::new();
     let mut bookmark_buffer = String::new();
 
-    for event in parser {
+    let mut parser = parser.peekable();
+    while let Some(event) = parser.next() {
+        if let Event::Html(html) | Event::InlineHtml(html) = &event {
+            let text = html.trim();
+            let opening = text.strip_suffix("</a>").unwrap_or(text);
+            if let Some(id) = opening
+                .strip_prefix("<a id=\"section-")
+                .and_then(|s| s.strip_suffix("\">"))
+            {
+                let valid =
+                    !id.is_empty() && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-');
+                let complete = text.ends_with("</a>");
+                let closing = matches!(parser.peek(), Some(Event::Html(s) | Event::InlineHtml(s)) if s.as_ref() == "</a>");
+                if valid && (complete || closing) {
+                    if !complete {
+                        parser.next();
+                    }
+                    flush_bookmark_buffer(&mut bookmark_buffer, &mut result);
+                    result.push(Event::Html(format!("{opening}</a>").into()));
+                    continue;
+                }
+            }
+        }
         match event {
             Event::Html(html) | Event::InlineHtml(html) => {
                 sanitize_raw_html(html, &mut bookmark_buffer, &mut result)
@@ -248,5 +270,14 @@ mod tests {
 
         assert_eq!(result.matches(r#"<div class="bookmark">"#).count(), 2);
         assert!(!result.contains("&lt;div"));
+    }
+    #[test]
+    fn preserves_only_empty_generated_heading_anchors() {
+        assert!(
+            sanitize("<a id=\"section-123abc\"></a>\n\n# Heading")
+                .contains("<a id=\"section-123abc\"></a>")
+        );
+        assert!(!sanitize("<a id=\"section-123\" onclick=\"bad()\"></a>").contains("<a id="));
+        assert!(!sanitize("<a id=\"section-123\">content</a>").contains("<a id="));
     }
 }

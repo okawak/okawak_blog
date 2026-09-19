@@ -11,7 +11,6 @@ anyhow.workspace = true
 domain = { path = "../domain" }
 futures.workspace = true
 html-escape.workspace = true
-ignore.workspace = true
 indoc.workspace = true
 pulldown-cmark.workspace = true
 regex.workspace = true
@@ -20,7 +19,7 @@ scraper.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
-sha2.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
@@ -29,4 +28,3 @@ url.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
-tempfile.workspace = true

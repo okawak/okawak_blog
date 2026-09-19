@@ -37,7 +37,7 @@ fn offline_bookmark_enricher() -> BookmarkEnricher {
 async fn test_publish_with_empty_directory() {
     let fixture = PublishFixture::new();
 
-    let result = publish(fixture.obsidian_dir(), fixture.output_dir()).await;
+    let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
     assert!(matches!(result, Err(PublishError::NoArticles)));
 }
@@ -48,7 +48,7 @@ async fn test_publish_requires_about_page() {
     fixture.write_required_article();
     fixture.write_tech_category_landing();
 
-    let result = publish(fixture.obsidian_dir(), fixture.output_dir()).await;
+    let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
     assert!(matches!(result, Err(PublishError::MissingAboutPage)));
     assert!(!fixture.output_dir().exists());
@@ -59,7 +59,7 @@ async fn test_publish_writes_article_index_and_metadata() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
 
-    publish(fixture.obsidian_dir(), fixture.output_dir())
+    publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
 
@@ -85,19 +85,18 @@ async fn test_publish_resolves_links_to_all_content_kinds() {
         "tech/links.md",
         "Links",
         "tech",
-        true,
         indoc! {r#"
-            [[about|About]]
-            [[home|Home]]
-            [[tech/category|Tech]]
-            ![[about|About image]]
+            [About](content:about)
+            [Home](content:home)
+            [Tech](content:tech-category)
+            [About page](content:about)
         "#},
     );
     fixture.write_about_page();
     fixture.write_home_fragment("home.md");
     fixture.write_tech_category_landing();
 
-    publish(fixture.obsidian_dir(), fixture.output_dir())
+    publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
 
@@ -109,40 +108,23 @@ async fn test_publish_resolves_links_to_all_content_kinds() {
         r#"href="/about">About</a>"#,
         r#"href="/">Home</a>"#,
         r#"href="/tech">Tech</a>"#,
-        r#"src="/about" alt="About image""#,
+        r#"href="/about">About page</a>"#,
     ] {
         assert!(html.contains(expected), "missing {expected}");
     }
 }
 
 #[tokio::test]
-async fn test_publish_skips_unpublishable_files() {
+async fn test_publish_rejects_markdown_without_public_frontmatter() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
-    fixture.write_article(
-        "tech/incomplete.md",
-        "Incomplete Article",
-        "tech",
-        false,
-        "# Incomplete Article",
+    fixture.write("notes.md", "# Unversioned Markdown");
+    assert!(
+        publish(fixture.content_dir(), fixture.output_dir())
+            .await
+            .is_err()
     );
-    fixture.write(
-        "notes.md",
-        indoc! {r#"
-            # Notes
-
-            Markdown without frontmatter is not publishable.
-        "#},
-    );
-
-    publish(fixture.obsidian_dir(), fixture.output_dir())
-        .await
-        .unwrap();
-
-    let article_index: ArticleIndexDocument =
-        read_json(fixture.site_root().join("articles/index.json"));
-    assert_eq!(article_index.articles.len(), 1);
-    assert_eq!(article_index.articles[0].title, "Required Article");
+    assert!(!fixture.output_dir().exists());
 }
 
 #[tokio::test]
@@ -150,7 +132,7 @@ async fn test_publish_writes_static_page() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
 
-    publish(fixture.obsidian_dir(), fixture.output_dir())
+    publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
 
@@ -166,7 +148,7 @@ async fn test_publish_writes_home_fragment_separately_from_pages() {
     fixture.write_required_site();
     fixture.write_home_fragment("home.md");
 
-    publish(fixture.obsidian_dir(), fixture.output_dir())
+    publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
 
@@ -186,7 +168,7 @@ async fn test_publish_rejects_duplicate_home_files() {
     fixture.write_home_fragment("home.md");
     fixture.write_home_fragment("another-home.md");
 
-    let result = publish(fixture.obsidian_dir(), fixture.output_dir()).await;
+    let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
     assert!(matches!(
         result,
@@ -210,7 +192,6 @@ async fn test_publish_writes_category_landing() {
             summary: "  Technology landing  "
             created: "2025-01-01T00:00:00+09:00"
             updated: "2025-01-01T00:00:00+09:00"
-            is_completed: true
             ---
 
             # Tech
@@ -219,7 +200,7 @@ async fn test_publish_writes_category_landing() {
         "#},
     );
 
-    publish(fixture.obsidian_dir(), fixture.output_dir())
+    publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
 
@@ -244,7 +225,7 @@ async fn test_publish_rejects_missing_category_landing_before_writing() {
     fixture.write_required_article();
     fixture.write_about_page();
 
-    let result = publish(fixture.obsidian_dir(), fixture.output_dir()).await;
+    let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
     assert!(matches!(
         result,
@@ -279,22 +260,21 @@ async fn test_publish_rejects_incomplete_category_landing(#[case] title: &str, #
             category: tech
             created: "2025-01-01T00:00:00+09:00"
             updated: "2025-01-01T00:00:00+09:00"
-            is_completed: true
             ---
 
             {body}
         "#},
     );
 
-    let result = publish(fixture.obsidian_dir(), fixture.output_dir()).await;
+    let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
     assert!(result.is_err());
 }
 
 #[tokio::test]
-async fn test_publish_rejects_non_existent_obsidian_directory() {
+async fn test_publish_rejects_non_existent_content_directory() {
     let fixture = PublishFixture::new();
-    let missing_dir = fixture.obsidian_dir().join("missing");
+    let missing_dir = fixture.content_dir().join("missing");
 
     let result = publish(&missing_dir, fixture.output_dir()).await;
 
@@ -314,7 +294,6 @@ async fn test_publish_uses_injected_bookmark_enricher() {
         "tech/bookmark.md",
         "Bookmark Article",
         "tech",
-        true,
         indoc! {r#"
             Here is a bookmark:
 
@@ -325,7 +304,7 @@ async fn test_publish_uses_injected_bookmark_enricher() {
     );
 
     publish_with_bookmark_enricher(
-        fixture.obsidian_dir(),
+        fixture.content_dir(),
         fixture.output_dir(),
         offline_bookmark_enricher(),
     )
@@ -342,7 +321,7 @@ async fn test_publish_uses_injected_bookmark_enricher() {
 }
 
 #[tokio::test]
-async fn test_publish_processes_a_realistic_vault() {
+async fn test_publish_processes_realistic_public_markdown() {
     let fixture = PublishFixture::new();
     fixture.write_about_page();
     fixture.write_tech_category_landing();
@@ -350,7 +329,6 @@ async fn test_publish_processes_a_realistic_vault() {
         "tech/rust-performance.md",
         "Rustでのパフォーマンス最適化",
         "tech",
-        true,
         indoc! {r#"
             # Rustでのパフォーマンス最適化
 
@@ -363,7 +341,6 @@ async fn test_publish_processes_a_realistic_vault() {
         "tech/basic-rust-concepts.md",
         "基本的なRust概念",
         "tech",
-        true,
         indoc! {r#"
             # 基本的なRust概念
 
@@ -374,7 +351,6 @@ async fn test_publish_processes_a_realistic_vault() {
         "tech/memory-best-practices.md",
         "メモリ管理のベストプラクティス",
         "tech",
-        true,
         indoc! {r#"
             # メモリ管理のベストプラクティス
 
@@ -383,19 +359,8 @@ async fn test_publish_processes_a_realistic_vault() {
             $O(n)$
         "#},
     );
-    fixture.write_article(
-        "blog/development-diary.md",
-        "開発日記: ブログシステムを作ってみた",
-        "blog",
-        false,
-        indoc! {r#"
-            # 開発日記
 
-            まだ作成中です。
-        "#},
-    );
-
-    publish(fixture.obsidian_dir(), fixture.output_dir())
+    publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
 
@@ -467,7 +432,6 @@ async fn test_publish_handles_many_articles() {
             &format!("tech/article-{index:03}.md"),
             &format!("Test Article {index}"),
             "tech",
-            true,
             &formatdoc! {r#"
                 # Test Article {index}
 
@@ -476,7 +440,7 @@ async fn test_publish_handles_many_articles() {
         );
     }
 
-    publish(fixture.obsidian_dir(), fixture.output_dir())
+    publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
 
@@ -495,13 +459,12 @@ async fn test_publish_rejects_content_errors_without_writing_artifacts() {
             ---
             title: "Invalid YAML"
             tags: [invalid yaml structure
-            is_completed: true
             category: tech
             ---
         "#},
     );
 
-    let result = publish(fixture.obsidian_dir(), fixture.output_dir()).await;
+    let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
     assert!(matches!(
         result,
@@ -512,26 +475,26 @@ async fn test_publish_rejects_content_errors_without_writing_artifacts() {
 
 struct PublishFixture {
     _temp_dir: TempDir,
-    obsidian_dir: PathBuf,
+    content_dir: PathBuf,
     output_dir: PathBuf,
 }
 
 impl PublishFixture {
     fn new() -> Self {
         let temp_dir = TempDir::new().unwrap();
-        let obsidian_dir = temp_dir.path().join("obsidian");
+        let content_dir = temp_dir.path().join("content");
         let output_dir = temp_dir.path().join("dist");
-        fs::create_dir_all(&obsidian_dir).unwrap();
+        fs::create_dir_all(content_dir.join("ja")).unwrap();
 
         Self {
             _temp_dir: temp_dir,
-            obsidian_dir,
+            content_dir,
             output_dir,
         }
     }
 
-    fn obsidian_dir(&self) -> &Path {
-        &self.obsidian_dir
+    fn content_dir(&self) -> &Path {
+        &self.content_dir
     }
 
     fn output_dir(&self) -> &Path {
@@ -543,19 +506,29 @@ impl PublishFixture {
     }
 
     fn write(&self, relative_path: impl AsRef<Path>, content: &str) {
-        let path = self.obsidian_dir.join(relative_path);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, content).unwrap();
+        let id = relative_path
+            .as_ref()
+            .with_extension("")
+            .to_string_lossy()
+            .replace('/', "-");
+        let kind = if content.contains("kind:") {
+            ""
+        } else {
+            "kind: article\n"
+        };
+        let header = format!(
+            "---\nschema_version: 1\nid: {id}\nlocale: ja\nsource_hash: '{}'\n{kind}",
+            "0".repeat(64)
+        );
+        let content = content.replacen("---\n", &header, 1);
+        fs::write(
+            self.content_dir.join("ja").join(format!("{id}.md")),
+            content,
+        )
+        .unwrap();
     }
 
-    fn write_article(
-        &self,
-        relative_path: &str,
-        title: &str,
-        category: &str,
-        is_completed: bool,
-        body: &str,
-    ) {
+    fn write_article(&self, relative_path: &str, title: &str, category: &str, body: &str) {
         self.write(
             relative_path,
             &formatdoc! {r#"
@@ -563,7 +536,6 @@ impl PublishFixture {
                 title: "{title}"
                 created: "2025-01-01T00:00:00+09:00"
                 updated: "2025-01-01T00:00:00+09:00"
-                is_completed: {is_completed}
                 category: "{category}"
                 ---
 
@@ -577,7 +549,6 @@ impl PublishFixture {
             "tech/required-article.md",
             "Required Article",
             "tech",
-            true,
             indoc! {r#"
                 # Required Article
 
@@ -597,7 +568,6 @@ impl PublishFixture {
                 summary: "About this site"
                 created: "2025-01-01T00:00:00+09:00"
                 updated: "2025-01-01T00:00:00+09:00"
-                is_completed: true
                 ---
 
                 # About
@@ -617,7 +587,6 @@ impl PublishFixture {
                 summary: "Home intro"
                 created: "2025-01-01T00:00:00+09:00"
                 updated: "2025-01-01T00:00:00+09:00"
-                is_completed: true
                 ---
 
                 # Welcome
@@ -638,7 +607,6 @@ impl PublishFixture {
                 summary: "Technology articles"
                 created: "2025-01-01T00:00:00+09:00"
                 updated: "2025-01-01T00:00:00+09:00"
-                is_completed: true
                 ---
 
                 # Tech
@@ -673,4 +641,90 @@ fn collect_html_files(root: &Path) -> Vec<PathBuf> {
 
 fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> T {
     serde_json::from_reader(File::open(path).unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn publishes_english_separately_and_removes_stale_output() {
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    fs::create_dir_all(fixture.content_dir().join("en")).unwrap();
+    for entry in fs::read_dir(fixture.content_dir().join("ja")).unwrap() {
+        let path = entry.unwrap().path();
+        let source = fs::read_to_string(&path).unwrap();
+        let english = source.replace("locale: ja", "locale: en").replacen(
+            "---\n",
+            &format!(
+                "---\ntranslation:\n  input_hash: '{}'\n  generated_hash: '{}'\n  stale: false\n",
+                "a".repeat(64),
+                "b".repeat(64)
+            ),
+            1,
+        );
+        fs::write(
+            fixture
+                .content_dir()
+                .join("en")
+                .join(path.file_name().unwrap()),
+            english,
+        )
+        .unwrap();
+    }
+    publish(fixture.content_dir(), fixture.output_dir())
+        .await
+        .unwrap();
+    let en_index: ArticleIndexDocument =
+        read_json(fixture.site_root().join("en/articles/index.json"));
+    assert_eq!(en_index.articles.len(), 1);
+    let locales: domain::SiteLocalesDocument = read_json(fixture.site_root().join("locales.json"));
+    assert_eq!(
+        locales.path("/tech/tech-required-article", domain::Locale::En),
+        Some("/en/tech/tech-required-article".into())
+    );
+    let article = fixture.content_dir().join("en/tech-required-article.md");
+    fs::write(
+        &article,
+        fs::read_to_string(&article)
+            .unwrap()
+            .replace("stale: false", "stale: true"),
+    )
+    .unwrap();
+    publish(fixture.content_dir(), fixture.output_dir())
+        .await
+        .unwrap();
+    let en_index: ArticleIndexDocument =
+        read_json(fixture.site_root().join("en/articles/index.json"));
+    assert!(en_index.articles.is_empty());
+    assert!(
+        !fixture
+            .site_root()
+            .join("en/articles/tech/tech-required-article.html")
+            .exists()
+    );
+    let ja_index: ArticleIndexDocument = read_json(fixture.site_root().join("articles/index.json"));
+    assert_eq!(ja_index.articles.len(), 1);
+}
+
+#[tokio::test]
+async fn rejects_unresolved_public_reference_without_replacing_existing_release() {
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    publish(fixture.content_dir(), fixture.output_dir())
+        .await
+        .unwrap();
+    let before = fs::read(fixture.site_root().join("articles/index.json")).unwrap();
+    fixture.write_article(
+        "tech/broken.md",
+        "Broken",
+        "tech",
+        "[Private](content:missing)",
+    );
+    assert!(
+        publish(fixture.content_dir(), fixture.output_dir())
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        fs::read(fixture.site_root().join("articles/index.json")).unwrap(),
+        before
+    );
 }

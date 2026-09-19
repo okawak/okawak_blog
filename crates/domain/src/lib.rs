@@ -10,7 +10,7 @@ mod publication;
 pub use artifact::{
     ARTIFACT_RELEASE_SCHEMA_VERSION, ArticleIndexDocument, ArticleSummaryDocument,
     ArtifactReleasePointerDocument, CategoryArtifactDocument, CategoryMetadataDocument,
-    HomeFragmentArtifactDocument, PageArtifactDocument, SiteMetadataDocument,
+    HomeFragmentArtifactDocument, PageArtifactDocument, SiteLocalesDocument, SiteMetadataDocument,
 };
 pub use content::{ContentKind, Locale, PublicContentMeta, TranslationProvenance};
 pub use entities::{Category, PageKey, SectionPath, Slug, Timestamp, Title};

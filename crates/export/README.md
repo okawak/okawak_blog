@@ -18,7 +18,7 @@ WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する
 
 中断で `.content.export-lock` が残った場合は、exportプロセスが終了したことを確認して削除する。`.content.export-backup` が残った場合、contentがなければbackupをcontentへ戻す。contentがある場合は新旧を比較して採用版を確定してからbackupを除去する。一時ディレクトリや退避版をGitへ追加しない。
 
-公開Markdownはpush時点で公開されるため、commit前に差分を確認する。日本語の正本はObsidianであり、通常は公開版を直接編集しない。この段階ではpublishと公開workflowは従来入力を使う。
+公開Markdownはpush時点で公開されるため、commit前に差分を確認する。日本語の正本はObsidianであり、通常は公開版を直接編集しない。`publish`と`dev-local`は公開Markdownだけを入力にする。
 
 ## 翻訳
 

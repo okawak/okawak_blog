@@ -72,18 +72,26 @@ fn export_with(
         }
         for source in sources {
             let english_path = stage.join(format!("en/{}.md", source.document.meta.id));
-            if english_path.exists()
-                && previous
+            if english_path.exists() {
+                let mut english = markdown::Document::parse(&fs::read_to_string(&english_path)?)?;
+                let mut provenance = english.meta.translation.take();
+                if previous
                     .iter()
                     .find(|d| d.meta.id == source.document.meta.id)
                     .map(crate::fragments::text_hash)
                     .transpose()?
                     != Some(crate::fragments::text_hash(&source.document)?)
-            {
-                let mut english = markdown::Document::parse(&fs::read_to_string(&english_path)?)?;
-                if let Some(provenance) = &mut english.meta.translation {
+                    && let Some(provenance) = &mut provenance
+                {
                     provenance.stale = true;
                 }
+                let title = english.meta.title.clone();
+                let summary = english.meta.summary.clone();
+                english.meta = source.document.meta.clone();
+                english.meta.locale = Locale::En;
+                english.meta.title = title;
+                english.meta.summary = summary;
+                english.meta.translation = provenance;
                 fs::write(english_path, english.encode()?)?;
             }
             fs::write(

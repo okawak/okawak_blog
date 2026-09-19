@@ -1,170 +1,29 @@
-# Publish
+# publish
 
-Obsidian の Markdown ファイルから公開成果物を生成します。
+Git管理した公開Markdownから配信用HTML／JSONを生成する。private Obsidian・AI・S3 uploadは扱わない。
 
-## 概要
-
-サブモジュールに登録しているObsidianのリポジトリ内にあるMarkdownファイルを読み取り、以下の処理を行います：
-
-- フロントマター（YAML形式）の解析
-- Obsidianリンクの解決とHTML変換
-- OGPメタデータを利用したリッチブックマーク生成
-- KaTeX数式の処理
-- HTMLファイルの生成
-
-## 機能
-
-### コア機能
-
-- **Markdown解析**: pulldown-cmarkを使用した高速なMarkdown処理
-- **フロントマター対応**: YAML形式のメタデータ解析
-- **リンク解決**: Obsidianの内部リンク（[[記事名]]）を適切なHTMLリンクに変換
-- **リッチブックマーク**: HTTPリンクからOGPメタデータを取得し、カード形式で表示
-- **数式処理**: KaTeX形式の数式をHTMLクラス付きで出力
-- **並列処理**: 複数ファイルの効率的な並列処理（将来実装予定）
-
-### サポートする形式
-
-#### フロントマター
-```yaml
----
-title: "記事のタイトル"
-tags: ["rust", "blog", "tech"]
-summary: "記事の概要説明"
-priority: 1
-created: "2025-01-15T10:00:00+09:00"
-updated: "2025-01-15T15:30:00+09:00"
-is_completed: true
-category: "tech"
----
-```
-
-article は frontmatter の `category` と同名のディレクトリ配下に置いてください。たとえば `category: tech` の記事は `tech/` 配下に配置し、不一致の場合は publish に失敗します。
-
-#### リンク形式
-- 内部リンク: `[[記事名]]`
-- 表示テキスト付きリンク: `[[記事名|表示テキスト]]`
-- 通常のMarkdownリンク: `[表示テキスト](URL)`
-
-#### 数式
-- インライン数式: `$E = mc^2$`
-- ブロック数式: `$$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$$`
-
-#### リッチブックマーク
-
-通常のHTMLブックマーク要素：
-```html
-<div class="bookmark">
-  <a href="https://example.com">Example Site</a>
-</div>
-```
-
-上記の形式で記述すると、OGPメタデータを取得して以下のようなリッチブックマークに変換されます：
-
-```html
-<div class="bookmark">
-  <a href="https://example.com" target="_blank" rel="noopener noreferrer" class="bookmark-link">
-    <div class="bookmark-container">
-      <div class="bookmark-info">
-        <div class="bookmark-title">サイトタイトル</div>
-        <div class="bookmark-description">サイトの説明文</div>
-        <div class="bookmark-link-info">
-          <img class="bookmark-favicon" src="https://example.com/favicon.ico" alt="favicon">
-          <span class="bookmark-domain">example.com</span>
-        </div>
-      </div>
-      <div class="bookmark-image">
-        <img src="https://example.com/ogp-image.jpg" alt="サイトタイトル" loading="lazy">
-      </div>
-    </div>
-  </a>
-</div>
-```
-
-## 使用方法
-
-### 基本的な使用
-
-```bash
-# デフォルト設定で実行
+```sh
 cargo run -p publish
-
-# 本番環境向けリリースビルド
-cargo run --release -p publish
+cargo run -p publish -- --input content --output crates/publish/dist
+mise run dev-local
 ```
 
-repository rootの`mise run dev-local`はprivate Obsidian submoduleをremoteの最新状態へ同期し、通常の`publish`で生成したlocal artifactをTopcoat開発サーバーで配信します。
+入力は `content/ja/<id>.md`、任意の `content/en/<id>.md` と参照asset。正確なfrontmatterは [公開Markdown契約](../../docs/content/public-markdown.md) を参照する。執筆用Markdownは先に [export](../export/README.md) で抽出する。`is_completed`やWikiLinkを含むObsidian形式は直接受け付けない。
 
-### ディレクトリ構成
+日本語は既存の `site/articles/`、`site/categories/`、`site/pages/`、`site/home.json`、`site/metadata/site.json` を生成し、英語は同じ構造を `site/en/` に生成する。各言語の集計は、その言語で公開する記事の件数である。`site/locales.json` は配信可能なpathの言語対応表であり、参照画像だけを `site/content-assets/` に配置する。
 
-- 入力ディレクトリ: `./crates/publish/obsidian/Publish` (固定)
-- 出力ディレクトリ: `./crates/publish/dist` (固定)
+日本語は記事1件以上・About・記事カテゴリのlandingを必須にする。英語は翻訳履歴があり更新待ちでない版だけを採用し、未翻訳landingのカテゴリの記事は掲載しない。英語Aboutは任意。`content:<id>#<anchor>` は英訳が配信対象なら `/en/...`、そうでなければ日本語URLへ解決する。未解決ID、未知のschema、identity不整合、未正規化参照はエラーにする。
 
-`publish`のpath処理はmacOSとLinuxを対象とし、Windows形式のpathには対応しません。
+全言語を一時ディレクトリで生成・検証してからsiteを入れ替える。失敗時は既存siteを保持し、成功時は削除された記事のHTMLも消える。中断で `dist/.site-backup` が残った場合は、新旧siteを比較して復旧してから再実行する。
 
-## GitHub Actions連携
+本文はpulldown-cmarkのevent pipelineでHTMLに変換し、URLとraw HTMLを安全化する。数式とコードは既存の描画を維持する。exportが作る空の見出しanchorと、従来のsimple bookmark構文だけをraw HTMLとして許可する。bookmarkは既存のOGP取得処理で拡張する。
 
-AWS S3 への同期は GitHub Actions workflow が担当します。
-この crate の責務は、ローカルに `site/` 配下の公開成果物を生成するところまでです。
-
-`publish`はdeploy可能な完全なartifactだけを生成します。入力ファイルに解析・検証エラーがある場合や、記事が0件、必須artifactが欠落している場合は非0で終了します。
-
-## アーキテクチャ
-
-### モジュール構成
-
-```
-src/
-├── main.rs
-├── lib.rs
-├── artifacts.rs
-├── bookmark.rs
-├── classify.rs
-├── error.rs
-├── ingest.rs
-├── ingest/
-│   ├── converter.rs
-│   ├── parser.rs
-│   └── scanner.rs
-├── links.rs
-├── render.rs
-└── slug.rs
+```html
+<div class="bookmark">
+  <a href="https://example.com">Example</a>
+</div>
 ```
 
-`lib.rs`はorchestrationとcrate外向けAPIを担います。公開するのは`publish`、
-`publish_with_bookmark_enricher`、`BookmarkEnricher`、`PublishError`、`Result`です。
-それ以外のmoduleは`publish`内部に閉じ、`error.rs`に`publish`全体のerrorを集約します。
-分類済み入力型は`classify.rs`、内部リンク索引の構築と解決規則は`links.rs`、
-render済み出力型は`render.rs`が所有します。
-共有するartifactとsiteの契約だけを`crates/domain`に置きます。
+`lib.rs`はmodule宣言と公開APIのre-exportのみ。`pipeline`が処理順、`input`が公開契約の読込、`classify`が描画用の種別分割、`links`が言語別URL解決、`render`がHTML変換、`artifacts`が出力を担当する。公開APIはpublish entrypoint、bookmark enricher注入、`PublishError`／`Result`に限定する。
 
-### 処理フロー
-
-1. **スキャン**: 指定ディレクトリ内のMarkdownファイルを検索
-2. **解析**: 各ファイルのフロントマターを解析
-3. **フィルタリング**: `is_completed: true` のファイルのみを処理対象とする
-4. **リンク索引**: 公開対象の記事から内部リンク索引を構築
-5. **変換**: Markdown→HTML変換とリッチブックマーク処理
-6. **出力**: HTMLファイルの生成
-
-## 開発
-
-### セットアップ
-
-```bash
-# 依存関係のインストール
-cargo build
-
-# テストの実行
-cargo test
-```
-
-### テスト
-
-```bash
-# publish crateの全テスト実行
-cargo test -p publish
-
-# publish pipelineの統合テストのみ
-cargo test -p publish --test pipeline_test
-```
+通常テストは公開fixtureとfake bookmark enricherを使う。`cargo test -p publish` で実行でき、private入力・AI・AWSは不要。

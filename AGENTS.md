@@ -9,11 +9,11 @@
 
 ## 設計と責務
 
-private Obsidian Markdownをビルド時の`publish` pipelineで公開artifactへ変換し、Topcoat SSRで配信する基盤。
+private Obsidianからローカルの`export`が日英の公開Markdownを作り、`publish`が配信用artifactへ変換してTopcoat SSRで配信する基盤。
 設計・module構成は[architecture](docs/architecture/architecture.md)に従う。参照優先順位は同文書 → GitHub Issue / PR → [README](README.md)。計画・進捗はIssue / PRに置き、恒久文書には現行の設計だけを書く。
 
 - 正本はprivate Obsidian repository。`export`が抽出した公開用Markdownは通常ファイルとしてGit管理できる。非公開ノートやprivate入力を丸ごとcommitしない。入力のgit submoduleは必要時だけ初期化・更新する。
-- `crates/export`: ローカルで公開対象を抽出・正規化し、公開文章だけをCodexで翻訳する。手動編集を保護し、通常テストはfake translatorを使う。現時点のpublish入力は従来経路を維持する。詳細は`crates/export/README.md`を参照する。
+- `crates/export`: ローカルで公開対象を抽出・正規化し、公開文章だけをCodexで翻訳する。手動編集を保護し、通常テストはfake translatorを使う。publishは公開Markdownだけを入力にする。詳細は`crates/export/README.md`を参照する。
 - Markdown / frontmatter / link / embedの解決とHTML生成はビルド時に完了させる。SSRはartifact読取・routing・metadata付与に集中し、本番は単一server binaryを優先する。
 - `crates/domain`: 公開コンテンツの純粋model・ルールとcrate間の共有契約。I/O、`async`、AWS SDK、HTTP frameworkを持ち込まない。
 - `crates/publish`: 入力・変換・artifact生成を担う単一crate。`lib.rs`はmodule宣言とre-exportのみ。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定し、内部の責務分割は設計文書に従う。
@@ -35,7 +35,7 @@ private Obsidian Markdownをビルド時の`publish` pipelineで公開artifact�
 rootの[mise.toml](mise.toml)を正とし、`mise tasks ls`で確認して`mise run <task>`を優先する。E2E依存操作もrootの`e2e-*` taskを使う。
 
 - 通常確認: `format`、`test`、`clippy`、`check`、`test-e2e`。
-- `dev-local`: private submoduleをremote最新へ同期し、厳格モードのpublish成果物をlocal配信する。同期・publish失敗時はserverを起動しない。
+- `dev-local`: Gitの公開Markdownからpublish成果物をlocal配信する。原文同期・export・翻訳は明示的な別タスク。publish失敗時はserverを起動しない。
 - `sync-obsidian`: 同期のみ。未commit差分があれば停止し、cleanならmerge commitを作らずremote最新をcheckoutする。
 - `dev` / `test-e2e-s3`: S3配信の開発確認 / 明示的な実S3 smoke。`OKAWAK_BLOG_ARTIFACT_BUCKET`必須。`dev`はtaskが`OKAWAK_BLOG_ARTIFACT_SOURCE=s3`を設定する。
 - `service/`: systemd・Cloudflare Tunnel・運用補助。通常のVPS操作は管理端末の`*-vps` taskを使い、VPS内部用taskは`mise tasks ls --hidden`で確認する。`mise.local.toml`は管理端末専用。S3設定・credentials・health/readinessの詳細は[service/README.md](service/README.md)と[service unit](service/okawak_blog.service)を参照する。

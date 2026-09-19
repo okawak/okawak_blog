@@ -25,7 +25,7 @@ pub enum PublishError {
     #[error("invalid file path: {0}")]
     InvalidPath(String),
 
-    #[error("invalid Obsidian source directory: {0}")]
+    #[error("invalid public content directory: {0}")]
     InvalidSourceDirectory(String),
 
     #[error("failed to parse file content: {0}")]
