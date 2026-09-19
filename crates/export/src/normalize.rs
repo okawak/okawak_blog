@@ -1,6 +1,6 @@
 //! Resolve references using only the explicitly public source set.
 use crate::vault::{Source, digest};
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use pulldown_cmark::{Event, LinkType, Options, Parser, Tag};
 use std::{
     collections::BTreeMap,
@@ -68,7 +68,7 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                                 format!(
                                     "{}[{}](<{}>{title})",
                                     if image { "!" } else { "" },
-                                    label.replace('[', "\\[").replace(']', "\\]"),
+                                    label,
                                     target.replace('<', "%3C").replace('>', "%3E")
                                 ),
                             ));
@@ -98,7 +98,15 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                     {
                         bail!("private or unsupported reference");
                     }
-                    let extensionless = target.strip_suffix(".md").unwrap_or(target);
+                    let extensionless = if Path::new(target)
+                        .extension()
+                        .and_then(|s| s.to_str())
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
+                    {
+                        &target[..target.len() - 3]
+                    } else {
+                        target
+                    };
                     let relative = resolve_relative(&source.key, extensionless)?;
                     let exact: Vec<_> = index
                         .iter()
@@ -174,6 +182,8 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                             .unwrap_or(&default_label)
                             .trim_end_matches('\\')
                             .to_owned()
+                            .replace('[', "\\[")
+                            .replace(']', "\\]")
                     } else {
                         markdown_label(raw, image)?.to_owned()
                     };
@@ -182,13 +192,7 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                     } else {
                         ""
                     };
-                    edits.push((
-                        range,
-                        format!(
-                            "{marker}[{}]({href})",
-                            label.replace('[', "\\[").replace(']', "\\]")
-                        ),
-                    ));
+                    edits.push((range, format!("{marker}[{label}]({href})")));
                 }
                 Event::Start(Tag::Heading { .. }) => {
                     let heading = heading_text(&body[range.clone()]);
@@ -259,10 +263,40 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
 }
 
 fn markdown_label(raw: &str, image: bool) -> Result<&str> {
-    raw[usize::from(image) + 1..]
-        .split_once(']')
-        .map(|(label, _)| label)
-        .context("unsupported link syntax")
+    let start = usize::from(image) + 1;
+    let opaque: Vec<_> = Parser::new_ext(raw, options())
+        .into_offset_iter()
+        .filter_map(|(event, range)| {
+            matches!(
+                event,
+                Event::Code(_) | Event::InlineHtml(_) | Event::Html(_)
+            )
+            .then_some(range)
+        })
+        .collect();
+    let mut depth = 1;
+    let mut escaped = false;
+    for (index, ch) in raw.char_indices().filter(|(index, _)| *index >= start) {
+        if opaque.iter().any(|range| range.contains(&index)) {
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' => escaped = true,
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(&raw[start..index]);
+                }
+            }
+            _ => {}
+        }
+    }
+    bail!("unsupported link syntax")
 }
 
 pub(crate) fn options() -> Options {
