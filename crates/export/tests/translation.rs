@@ -152,9 +152,114 @@ fn inline_html_text_is_preserved_while_surrounding_prose_is_translated() {
     );
     assert!(translated.contains("<kbd>HTML_SECRET</kbd>"));
     assert!(translated.contains("English 前文"));
-    assert!(translated.contains("English  後文"));
-    assert!(translated.contains("English  続き"));
-    assert!(translated.contains("English  最後"));
+    assert!(translated.contains(" English 後文"));
+    assert!(translated.contains(" English 続き"));
+    assert!(translated.contains(" English 最後"));
+}
+
+#[test]
+fn autolinks_are_untouched_and_self_closing_html_does_not_hide_prose() {
+    struct Check;
+    impl Translator for Check {
+        fn translate(&self, request: &TranslationRequest) -> anyhow::Result<Texts> {
+            assert!(
+                !request
+                    .texts
+                    .values()
+                    .any(|text| text.contains("https://") || text.contains("me@example.com"))
+            );
+            Ok(request
+                .texts
+                .iter()
+                .map(|(key, value)| (key.clone(), format!("EN {}", value.trim())))
+                .collect())
+        }
+    }
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    write_note(
+        source.path(),
+        "<https://example.com/a> <me@example.com> 文 <span /> 続き <x/> 最後",
+    );
+    export::export_japanese(source.path(), output.path()).unwrap();
+    export::translate_public(output.path(), &Check, &settings(), false).unwrap();
+    let text = fs::read_to_string(english(output.path())).unwrap();
+    assert!(text.contains("<https://example.com/a> <me@example.com>"));
+    assert!(text.contains("EN 文"));
+    assert!(text.contains("EN 続き"));
+    assert!(text.contains("EN 最後"));
+}
+
+#[test]
+fn trimmed_translations_keep_the_original_fragment_boundary_whitespace() {
+    struct Trim;
+    impl Translator for Trim {
+        fn translate(&self, request: &TranslationRequest) -> anyhow::Result<Texts> {
+            Ok(request
+                .texts
+                .iter()
+                .map(|(key, value)| {
+                    (
+                        key.clone(),
+                        match value.trim() {
+                            "前" => "Before",
+                            "強調" => "emphasis",
+                            "後" => "After",
+                            _ => "Title",
+                        }
+                        .into(),
+                    )
+                })
+                .collect())
+        }
+    }
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    write_note(source.path(), "前 **強調** 後");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    export::translate_public(output.path(), &Trim, &settings(), false).unwrap();
+    assert!(
+        fs::read_to_string(english(output.path()))
+            .unwrap()
+            .contains("Before **emphasis** After")
+    );
+}
+
+#[test]
+fn invalid_article_response_is_not_cached_and_retry_can_succeed() {
+    struct Retry(Cell<usize>);
+    impl Translator for Retry {
+        fn translate(&self, request: &TranslationRequest) -> anyhow::Result<Texts> {
+            self.0.set(self.0.get() + 1);
+            Ok(request
+                .texts
+                .iter()
+                .map(|(key, value)| {
+                    (
+                        key.clone(),
+                        if self.0.get() == 1 && key.starts_with("text_") {
+                            "bad\nfragment".into()
+                        } else {
+                            format!("EN {value}")
+                        },
+                    )
+                })
+                .collect())
+        }
+    }
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    write_note(source.path(), "本文");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let retry = Retry(Cell::new(0));
+    assert!(export::translate_public(output.path(), &retry, &settings(), false).is_err());
+    export::translate_public(output.path(), &retry, &settings(), false).unwrap();
+    assert_eq!(retry.0.get(), 2);
+    assert!(
+        fs::read_to_string(english(output.path()))
+            .unwrap()
+            .contains("EN 本文")
+    );
 }
 
 #[test]

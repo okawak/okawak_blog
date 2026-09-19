@@ -39,30 +39,65 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                 Event::Start(Tag::Link {
                     link_type,
                     dest_url,
+                    title,
                     ..
                 })
                 | Event::Start(Tag::Image {
                     link_type,
                     dest_url,
+                    title,
                     ..
                 }) => {
                     let raw = &body[range.clone()];
                     let image = raw.starts_with('!');
                     let wiki = matches!(link_type, LinkType::WikiLink { .. });
                     let target = dest_url.trim().trim_end_matches('\\');
-                    if !wiki && external(target) {
+                    if !wiki && (external(target) || matches!(link_type, LinkType::Email)) {
+                        if matches!(
+                            link_type,
+                            LinkType::Reference | LinkType::Collapsed | LinkType::Shortcut
+                        ) {
+                            let label = markdown_label(raw, image)?;
+                            let title = if title.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" \"{}\"", title.replace('\\', "\\\\").replace('"', "\\\""))
+                            };
+                            edits.push((
+                                range,
+                                format!(
+                                    "{}[{}](<{}>{title})",
+                                    if image { "!" } else { "" },
+                                    label.replace('[', "\\[").replace(']', "\\]"),
+                                    target.replace('<', "%3C").replace('>', "%3E")
+                                ),
+                            ));
+                        }
                         continue;
                     }
+                    let (target, anchor) = target
+                        .split_once('#')
+                        .map(|(t, a)| (t, Some(a)))
+                        .unwrap_or((target, None));
+                    let decode = |value: &str| -> Result<String> {
+                        if wiki {
+                            Ok(value.to_owned())
+                        } else {
+                            Ok(percent_encoding::percent_decode_str(value)
+                                .decode_utf8()?
+                                .into_owned())
+                        }
+                    };
+                    let target = decode(target)?;
+                    let anchor = anchor.map(decode).transpose()?;
+                    let target = target.as_str();
+                    let anchor = anchor.as_deref();
                     if target.contains(['\\', '\0'])
                         || target.starts_with('/')
                         || target.contains("://")
                     {
                         bail!("private or unsupported reference");
                     }
-                    let (target, anchor) = target
-                        .split_once('#')
-                        .map(|(t, a)| (t, Some(a)))
-                        .unwrap_or((target, None));
                     let extensionless = target.strip_suffix(".md").unwrap_or(target);
                     let relative = resolve_relative(&source.key, extensionless)?;
                     let exact: Vec<_> = index
@@ -140,12 +175,7 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                             .trim_end_matches('\\')
                             .to_owned()
                     } else {
-                        let start = usize::from(image) + 1;
-                        raw[start..]
-                            .split_once(']')
-                            .map(|(label, _)| label)
-                            .context("unsupported link syntax")?
-                            .to_owned()
+                        markdown_label(raw, image)?.to_owned()
                     };
                     let marker = if image && href.starts_with("/content-assets/") {
                         "!"
@@ -206,9 +236,33 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
         for (range, value) in edits.into_iter().rev() {
             normalized.replace_range(range, &value);
         }
+        // All resolved references are inline now. Repeat to remove shadowed
+        // duplicate definitions too; parser ranges leave fenced examples intact.
+        loop {
+            let parser = Parser::new_ext(&normalized, options());
+            let mut definitions: Vec<_> = parser
+                .reference_definitions()
+                .iter()
+                .map(|(_, definition)| definition.span.clone())
+                .collect();
+            if definitions.is_empty() {
+                break;
+            }
+            definitions.sort_by_key(|range| range.start);
+            for range in definitions.into_iter().rev() {
+                normalized.replace_range(range, "");
+            }
+        }
         source.document.body = normalized;
     }
     Ok(assets)
+}
+
+fn markdown_label(raw: &str, image: bool) -> Result<&str> {
+    raw[usize::from(image) + 1..]
+        .split_once(']')
+        .map(|(label, _)| label)
+        .context("unsupported link syntax")
 }
 
 pub(crate) fn options() -> Options {
