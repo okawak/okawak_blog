@@ -1,7 +1,7 @@
-use domain::{
-    PageKey, StaticPageDocument, build_static_page_canonical_path, build_static_page_description,
-    build_static_page_title,
-};
+use crate::i18n::{Message, t};
+use crate::metadata::*;
+use domain::Locale;
+use domain::{PageKey, StaticPageDocument, build_static_page_canonical_path};
 use topcoat::{
     Result,
     context::Cx,
@@ -16,19 +16,36 @@ const ABOUT_PAGE_KEY: &str = "about";
 
 #[page]
 async fn about(cx: &Cx) -> Result<impl View> {
+    render_about(cx, Locale::Ja).await
+}
+
+pub(crate) async fn render_about(cx: &Cx, locale: Locale) -> Result<impl View> {
     let page = PageKey::new(ABOUT_PAGE_KEY.to_string())?;
 
-    match page_loader(cx).loader().load_static_page(&page).await {
-        Ok(Some(document)) => Ok(view! { about_document(document: document) }.boxed()),
-        Ok(None) => Ok(view! { not_found_page(canonical_path: "/about".to_string()) }.boxed()),
+    match page_loader(cx)
+        .loader()
+        .load_static_page(locale, &page)
+        .await
+    {
+        Ok(Some(presentation)) => {
+            Ok(view! { cx => about_document(presentation: presentation, locale: locale) }.boxed())
+        }
+        Ok(None) => {
+            Ok(view! { cx => not_found_page(canonical_path: locale.path("/about")) }.boxed())
+        }
         Err(error) => {
             tracing::error!(%error, page = ABOUT_PAGE_KEY, "static page artifact read failed");
             Ok(view! {
+                cx =>
                 internal_server_error_page(
-                    title: format!("About | {}", crate::SITE_NAME),
-                    description: "About ページです。".to_string(),
-                    canonical_path: "/about".to_string(),
-                    message: "ページの読み込みに失敗しました"
+                    title: format!(
+                        "{} | {}",
+                        t(locale, Message::NavAbout),
+                        t(locale, Message::SiteName),
+                    ),
+                    description: t(locale, Message::NavAbout).to_string(),
+                    canonical_path: locale.path("/about"),
+                    message: Message::ErrorPage
                 )
             }
             .boxed())
@@ -37,10 +54,16 @@ async fn about(cx: &Cx) -> Result<impl View> {
 }
 
 #[component]
-async fn about_document(document: StaticPageDocument) -> Result<impl View> {
-    let title = build_static_page_title(&document, crate::SITE_NAME);
-    let description = build_static_page_description(&document);
-    let canonical_url = crate::build_site_url(&build_static_page_canonical_path(&document));
+async fn about_document(
+    presentation: crate::page_loader::Presentation<StaticPageDocument>,
+    locale: Locale,
+) -> Result<impl View> {
+    let crate::page_loader::Presentation {
+        document, locales, ..
+    } = presentation;
+    let title = build_static_page_title(&document, locale);
+    let description = build_static_page_description(&document, locale);
+    let canonical_path = locale.path(&build_static_page_canonical_path(&document));
     let page_title = document.title;
     // The publish pipeline escapes raw Markdown HTML and neutralizes unsafe href schemes before
     // persisting this fragment. It is therefore the trusted HTML boundary for Topcoat as well.
@@ -49,7 +72,9 @@ async fn about_document(document: StaticPageDocument) -> Result<impl View> {
     Ok(view! {
         site_shell(
             status: StatusCode::OK,
-            metadata: ShellMetadata::website(title, description, canonical_url),
+            metadata: ShellMetadata::website(locale, title, description, canonical_path).with_locales(
+                locales,
+            ),
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-8 px-4 py-8 text-left sm:px-6 sm:py-12"
             >
@@ -62,7 +87,7 @@ async fn about_document(document: StaticPageDocument) -> Result<impl View> {
                         <p
                             class="m-0 text-sm tracking-[0.16em] text-muted-foreground uppercase"
                         >
-                            "Page"
+                            (t(locale, Message::PageLabel))
                         </p>
                         <h1
                             class="m-0 text-3xl leading-tight font-bold text-primary after:mx-auto after:mt-3 after:block after:h-1 after:w-12 after:rounded-full after:bg-primary sm:text-4xl"

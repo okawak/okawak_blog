@@ -1,20 +1,25 @@
 //! Shared article card component used by listing pages.
 
-use domain::{SiteArticleCard, build_article_path};
+use crate::i18n::{Message, t};
+use domain::{Locale, SiteArticleCard, TagLabels, build_article_path};
 use topcoat::{
     Result,
     view::{View, component, view},
 };
 
 #[component]
-pub(crate) async fn article_card(article: &SiteArticleCard) -> Result<impl View> {
-    let article_href = build_article_path(&article.category, &article.slug);
+pub(crate) async fn article_card(
+    article: &SiteArticleCard,
+    locale: Locale,
+    labels: &TagLabels,
+) -> Result<impl View> {
+    let article_href = locale.path(&build_article_path(&article.category, &article.slug));
     let description = article
         .description
         .as_deref()
-        .unwrap_or("説明はまだありません。");
-    let created_at_label = crate::format::format_display_date(&article.created_at);
-    let updated_at_label = crate::format::format_display_date(&article.updated_at);
+        .unwrap_or(t(locale, Message::ArticleNoDescription));
+    let created_at_label = crate::format::format_display_date(&article.created_at, locale);
+    let updated_at_label = crate::format::format_display_date(&article.updated_at, locale);
 
     Ok(view! {
         <article
@@ -35,18 +40,18 @@ pub(crate) async fn article_card(article: &SiteArticleCard) -> Result<impl View>
                         <span
                             class="inline-flex w-fit items-center rounded-md border border-primary/40 bg-background/40 px-2.5 py-0.5 text-xs font-semibold text-primary transition-colors focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
                         >
-                            (&article.category_display_name)
+                            (crate::i18n::category_name(locale, article.category))
                         </span>
                         <span class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                             <span>
-                                "公開 "
+                                (t(locale, Message::ArticlePublished))
                                 <time datetime=(article.created_at.as_str())>
                                     (created_at_label)
                                 </time>
                             </span>
                             <span aria-hidden="true">"/"</span>
                             <span>
-                                "更新 "
+                                (t(locale, Message::ArticleUpdated))
                                 <time datetime=(article.updated_at.as_str())>
                                     (updated_at_label)
                                 </time>
@@ -64,14 +69,14 @@ pub(crate) async fn article_card(article: &SiteArticleCard) -> Result<impl View>
                     if !article.tags.is_empty() {
                         <ul
                             class="m-0 flex list-none flex-wrap gap-2 p-0"
-                            aria-label="タグ"
+                            aria-label=(t(locale, Message::ArticleTags))
                         >
                             for tag in &article.tags {
                                 <li>
                                     <span
                                         class="inline-flex w-fit items-center rounded-md border border-transparent bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/80 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
                                     >
-                                        (format!("#{tag}"))
+                                        (format!("#{}", labels.get(tag).unwrap_or(tag)))
                                     </span>
                                 </li>
                             }

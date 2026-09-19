@@ -20,7 +20,6 @@ impl TryFrom<&ArticleSummaryDocument> for SiteArticleCard {
             slug: summary.slug,
             title: summary.title,
             category,
-            category_display_name: category.display_name().to_string(),
             section_path: summary.section_path,
             description: summary.description,
             tags: summary.tags,
@@ -49,7 +48,6 @@ pub fn build_home_page_document(
             let category_name = category.category;
             SiteCategorySummary {
                 category: category_name,
-                category_display_name: category_name.display_name().to_string(),
                 article_count: category.article_count,
             }
         })
@@ -107,7 +105,6 @@ pub fn build_category_page_document(
     Ok(CategoryPageDocument {
         category,
         title: artifact.title.trim().to_string(),
-        category_display_name: category.display_name().to_string(),
         description: artifact.description.clone(),
         html: artifact.html.clone(),
         sections,
@@ -159,11 +156,7 @@ fn build_category_section_groups(articles: &[SiteArticleCard]) -> Vec<CategorySe
 }
 
 fn build_section_heading(section_path: &SectionPath) -> String {
-    if section_path.is_empty() {
-        "General".to_string()
-    } else {
-        section_path.segments().join(" / ")
-    }
+    section_path.segments().join(" / ")
 }
 
 #[cfg(test)]
@@ -203,7 +196,6 @@ mod tests {
         assert_eq!(card.slug.as_str(), "intro00000001");
         assert_eq!(card.title.as_str(), "Intro");
         assert_eq!(card.category, Category::Tech);
-        assert_eq!(card.category_display_name, "Technology");
     }
 
     #[test]
@@ -225,7 +217,6 @@ mod tests {
 
         assert_eq!(document.total_articles, 1);
         assert_eq!(document.categories.len(), 1);
-        assert_eq!(document.categories[0].category_display_name, "Technology");
         assert_eq!(document.articles[0].title.as_str(), "Intro");
         assert_eq!(document.fragment, None);
     }
@@ -291,7 +282,6 @@ mod tests {
 
         assert_eq!(document.category, Category::Daily);
         assert_eq!(document.title, "Daily Notes");
-        assert_eq!(document.category_display_name, "Daily");
         assert_eq!(document.description, Some("Daily landing".to_string()));
         assert!(document.html.contains("Daily Notes"));
         assert_eq!(document.articles.len(), 1);
@@ -377,7 +367,7 @@ mod tests {
         let document = build_category_page_document(&artifact).unwrap();
 
         assert_eq!(document.sections.len(), 3);
-        assert_eq!(document.sections[0].heading, "General");
+        assert!(document.sections[0].heading.is_empty());
         assert_eq!(document.sections[1].heading, "rust");
         assert_eq!(document.sections[2].heading, "rust / async");
     }

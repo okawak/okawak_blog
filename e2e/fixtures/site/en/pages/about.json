@@ -1,0 +1,7 @@
+{
+  "page": "about",
+  "title": "Fixture About",
+  "description": "English About description",
+  "html": "<h1>About artifact</h1><p>About fixture body</p><ul><li>Artifact-driven publishing</li><li>Topcoat SSR</li></ul>",
+  "updated_at": "2026-01-02T00:00:00+09:00"
+}

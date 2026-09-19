@@ -1,11 +1,13 @@
 //! Shared HTML shell, metadata, and error views.
 
+use crate::i18n::{Message, japanese_path, locale_from_path, t};
 use chrono::Datelike;
+use domain::{Locale, SiteLocalesDocument};
 use topcoat::{
     Result,
     context::Cx,
     icon::icon,
-    router::{StatusCode, href},
+    router::{StatusCode, request},
     runtime::signal,
     view::{Child, Unescaped, View, component, view},
 };
@@ -13,49 +15,65 @@ use topcoat::{
 use crate::assets::{FAVICON, STYLESHEET};
 use crate::icons::GITHUB;
 
-const NOT_FOUND_TITLE: &str = "ページが見つかりません";
-const NOT_FOUND_DESCRIPTION: &str = "お探しのページは見つかりませんでした。";
-
 pub(crate) struct ShellMetadata {
     title: String,
     description: String,
-    canonical_url: String,
+    canonical_path: String,
     og_type: &'static str,
+    locale: Locale,
+    locales: SiteLocalesDocument,
 }
 
 impl ShellMetadata {
-    pub(crate) fn website(title: String, description: String, canonical_url: String) -> Self {
+    pub(crate) fn website(
+        locale: Locale,
+        title: String,
+        description: String,
+        canonical_path: String,
+    ) -> Self {
         Self {
             title,
             description,
-            canonical_url,
+            canonical_path,
             og_type: "website",
+            locale,
+            locales: Default::default(),
         }
     }
-
-    pub(crate) fn article(title: String, description: String, canonical_url: String) -> Self {
+    pub(crate) fn article(
+        locale: Locale,
+        title: String,
+        description: String,
+        canonical_path: String,
+    ) -> Self {
         Self {
-            title,
-            description,
-            canonical_url,
             og_type: "article",
+            ..Self::website(locale, title, description, canonical_path)
         }
+    }
+    pub(crate) fn with_locales(mut self, locales: SiteLocalesDocument) -> Self {
+        self.locales = locales;
+        self
     }
 }
 
 #[component]
 pub(crate) async fn not_found_page(canonical_path: String) -> Result<impl View> {
-    let canonical_url = crate::build_site_url(&canonical_path);
-
+    let locale = locale_from_path(&canonical_path);
     Ok(view! {
         site_shell(
             status: StatusCode::NOT_FOUND,
             metadata: ShellMetadata::website(
-                format!("{NOT_FOUND_TITLE} | {}", crate::SITE_NAME),
-                NOT_FOUND_DESCRIPTION.to_string(),
-                canonical_url,
+                locale,
+                format!(
+                    "{} | {}",
+                    t(locale, Message::ErrorNotFoundTitle),
+                    t(locale, Message::SiteName),
+                ),
+                t(locale, Message::ErrorNotFoundDescription).to_string(),
+                canonical_path,
             ),
-            <div>"ページが見つかりませんでした。"</div>
+            <div>(t(locale, Message::ErrorNotFoundBody))</div>
         )
     })
 }
@@ -66,16 +84,15 @@ pub(crate) async fn article_internal_server_error_page(
     description: String,
     canonical_path: String,
 ) -> Result<impl View> {
-    let canonical_url = crate::build_site_url(&canonical_path);
-
+    let locale = locale_from_path(&canonical_path);
     Ok(view! {
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
-            metadata: ShellMetadata::article(title, description, canonical_url),
+            metadata: ShellMetadata::article(locale, title, description, canonical_path),
             <div
                 class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground"
             >
-                "記事の読み込みに失敗しました"
+                (t(locale, Message::ErrorArticle))
             </div>
         )
     })
@@ -86,18 +103,17 @@ pub(crate) async fn internal_server_error_page(
     title: String,
     description: String,
     canonical_path: String,
-    message: &'static str,
+    message: Message,
 ) -> Result<impl View> {
-    let canonical_url = crate::build_site_url(&canonical_path);
-
+    let locale = locale_from_path(&canonical_path);
     Ok(view! {
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
-            metadata: ShellMetadata::website(title, description, canonical_url),
+            metadata: ShellMetadata::website(locale, title, description, canonical_path),
             <div
                 class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground"
             >
-                (message)
+                (t(locale, message))
             </div>
         )
     })
@@ -110,10 +126,24 @@ pub(crate) async fn site_shell(
     metadata: ShellMetadata,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
-    let home_href = href!("/");
-    let about_href = href!("/about");
-    let home_is_current = home_href.is_current(cx);
-    let about_is_current = about_href.is_current(cx);
+    let locale = metadata.locale;
+    let home_href = locale.path("/");
+    let about_href = locale.path("/about");
+    let requested_path = request::uri(cx).path();
+    let home_is_current = requested_path.trim_end_matches('/') == home_href.trim_end_matches('/');
+    let about_is_current = requested_path == about_href;
+    let show_about = locale == Locale::Ja || metadata.locales.path("/about", locale).is_some();
+    let available = metadata
+        .locales
+        .routes
+        .get(japanese_path(&metadata.canonical_path));
+    let alternates = available
+        .into_iter()
+        .flatten()
+        .map(|other| (*other, other.path(japanese_path(&metadata.canonical_path))))
+        .collect::<Vec<_>>();
+    let menu_open_label = t(locale, Message::NavOpen).to_string();
+    let menu_close_label = t(locale, Message::NavClose).to_string();
     let year = chrono::Local::now().year();
     let menu_open = signal(cx, || false);
     let math_render_script = Unescaped::new_unchecked(
@@ -193,14 +223,16 @@ window.okawakScheduleCodeHighlight = function(root) {
     let ShellMetadata {
         title,
         description,
-        canonical_url,
+        canonical_path,
         og_type,
+        ..
     } = metadata;
+    let canonical_url = crate::build_site_url(&canonical_path);
 
     Ok(view! {
         (status)
         <!DOCTYPE html>
-        <html lang="ja">
+        <html lang=(locale.as_str())>
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -211,6 +243,17 @@ window.okawakScheduleCodeHighlight = function(root) {
                 <meta property="og:description" content=(description)>
                 <meta property="og:url" content=(canonical_url)>
                 <meta property="og:type" content=(og_type)>
+                <meta
+                    property="og:locale"
+                    content=(if locale == Locale::Ja { "ja_JP" } else { "en_US" })
+                >
+                for (other, path) in &alternates {
+                    <link
+                        rel="alternate"
+                        hreflang=(other.as_str())
+                        href=(crate::build_site_url(path))
+                    >
+                }
                 <link rel="stylesheet" href=(STYLESHEET)>
                 <link
                     rel="stylesheet"
@@ -257,13 +300,13 @@ window.okawakScheduleCodeHighlight = function(root) {
                             class="relative mx-auto flex h-full max-w-[var(--site-content-width)] items-center justify-between gap-3 px-4 sm:px-6"
                         >
                             <a
-                                href="/"
+                                href=(home_href.clone())
                                 class="min-w-0 text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                             >
                                 <h1
                                     class="m-0 truncate text-xl leading-tight font-bold sm:text-2xl"
                                 >
-                                    (crate::SITE_NAME)
+                                    (t(locale, Message::SiteName))
                                 </h1>
                             </a>
 
@@ -277,9 +320,9 @@ window.okawakScheduleCodeHighlight = function(root) {
                                     "false"
                                 })
                                 :aria-label=$(if menu_open.get() {
-                                    "ナビゲーションメニューを閉じる"
+                                    menu_close_label.clone()
                                 } else {
-                                    "ナビゲーションメニューを開く"
+                                    menu_open_label.clone()
                                 })
                                 @click=$(|_e| menu_open.toggle())
                             >
@@ -313,7 +356,7 @@ window.okawakScheduleCodeHighlight = function(root) {
 
                             <nav
                                 id="site-header-nav"
-                                aria-label="メインナビゲーション"
+                                aria-label=(t(locale, Message::NavMain))
                                 :class=$(if menu_open.get() {
                                     "flex absolute inset-x-4 top-[calc(100%+0.5rem)] flex-col gap-3 rounded-lg border border-border bg-card/98 p-4 shadow-[0_18px_36px_rgb(0_0_0/0.55)] backdrop-blur-sm md:static md:flex md:flex-row md:items-center md:gap-6 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
                                 } else {
@@ -334,23 +377,41 @@ window.okawakScheduleCodeHighlight = function(root) {
                                             })
                                             @click=$(|_e| menu_open.set(false))
                                         >
-                                            "ホーム"
+                                            (t(locale, Message::NavHome))
                                         </a>
                                     </li>
-                                    <li>
-                                        <a
-                                            href=(about_href)
-                                            aria-current=(about_is_current.then_some("page"))
-                                            class=(if about_is_current {
-                                                "block rounded-md border-b-2 border-primary px-3 py-2 text-sm font-medium text-foreground no-underline"
-                                            } else {
-                                                "block rounded-md border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-primary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                            })
-                                            @click=$(|_e| menu_open.set(false))
-                                        >
-                                            "About"
-                                        </a>
-                                    </li>
+                                    if show_about {
+                                        <li>
+                                            <a
+                                                href=(about_href)
+                                                aria-current=(about_is_current.then_some("page"))
+                                                class=(if about_is_current {
+                                                    "block rounded-md border-b-2 border-primary px-3 py-2 text-sm font-medium text-foreground no-underline"
+                                                } else {
+                                                    "block rounded-md border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-primary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                                })
+                                                @click=$(|_e| menu_open.set(false))
+                                            >
+                                                (t(locale, Message::NavAbout))
+                                            </a>
+                                        </li>
+                                    }
+                                    if alternates.len() > 1 {
+                                        <li aria-label=(t(locale, Message::NavLanguage))>
+                                            for (other, path) in &alternates {
+                                                if *other != locale {
+                                                    <a
+                                                        href=(path)
+                                                        hreflang=(other.as_str())
+                                                        lang=(other.as_str())
+                                                        class="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-primary"
+                                                    >
+                                                        (if *other == Locale::Ja { "日本語" } else { "English" })
+                                                    </a>
+                                                }
+                                            }
+                                        </li>
+                                    }
                                 </ul>
 
                                 <div
@@ -359,7 +420,7 @@ window.okawakScheduleCodeHighlight = function(root) {
                                     <a
                                         href="https://github.com/okawak"
                                         class="inline-flex size-10 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                        aria-label="Open okawak GitHub profile"
+                                        aria-label=(t(locale, Message::NavGithub))
                                         rel="noopener noreferrer"
                                         target="_blank"
                                     >
@@ -375,11 +436,15 @@ window.okawakScheduleCodeHighlight = function(root) {
                     >
                         <div class="mx-auto max-w-[var(--site-content-width)]">
                             <p class="my-2 leading-relaxed">
-                                (format!("© {year} okawak. All Rights Reserved."))
+                                (crate::i18n::interpolate(
+                                    locale,
+                                    Message::FooterCopyright,
+                                    &[("year", year.to_string())],
+                                ))
                             </p>
                             <p class="my-2 leading-relaxed">
                                 <small>
-                                    "Powered by "
+                                    (t(locale, Message::FooterPowered))
                                     <a
                                         href="https://github.com/tokio-rs/topcoat"
                                         target="_blank"

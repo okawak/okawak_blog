@@ -1,22 +1,38 @@
-use crate::{ArticlePageDocument, CategoryPageDocument, HomePageDocument, StaticPageDocument};
+use crate::i18n::{Message, article_count, category_count, category_name, interpolate, t};
+use domain::{
+    ArticlePageDocument, CategoryPageDocument, HomePageDocument, Locale, StaticPageDocument,
+};
 
-pub fn build_home_page_title(site_name: &str) -> String {
-    site_name.to_string()
+pub(crate) fn build_home_page_title(locale: Locale) -> String {
+    t(locale, Message::SiteName).to_string()
 }
 
-pub fn build_home_page_description(document: &HomePageDocument) -> String {
-    format!(
-        "{} published across {}.",
-        format_count(document.total_articles, "article", "articles"),
-        format_count(document.categories.len(), "category", "categories")
+pub(crate) fn build_home_page_description(document: &HomePageDocument, locale: Locale) -> String {
+    interpolate(
+        locale,
+        Message::MetaHome,
+        &[
+            ("articles", article_count(locale, document.total_articles)),
+            (
+                "categories",
+                category_count(locale, document.categories.len()),
+            ),
+        ],
     )
 }
 
-pub fn build_article_page_title(document: &ArticlePageDocument, site_name: &str) -> String {
-    format!("{} | {}", document.article.title.as_str(), site_name)
+pub(crate) fn build_article_page_title(document: &ArticlePageDocument, locale: Locale) -> String {
+    format!(
+        "{} | {}",
+        document.article.title.as_str(),
+        t(locale, Message::SiteName)
+    )
 }
 
-pub fn build_article_page_description(document: &ArticlePageDocument) -> String {
+pub(crate) fn build_article_page_description(
+    document: &ArticlePageDocument,
+    locale: Locale,
+) -> String {
     document
         .article
         .description
@@ -24,54 +40,68 @@ pub fn build_article_page_description(document: &ArticlePageDocument) -> String 
         .filter(|description| !description.trim().is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| {
-            format!(
-                "An article in the {} category.",
-                document.article.category_display_name
+            interpolate(
+                locale,
+                Message::MetaArticle,
+                &[(
+                    "category",
+                    category_name(locale, document.article.category).into(),
+                )],
             )
         })
 }
 
-pub fn build_category_page_title(document: &CategoryPageDocument, site_name: &str) -> String {
-    format!("{} | {}", document.title, site_name)
+pub(crate) fn build_category_page_title(document: &CategoryPageDocument, locale: Locale) -> String {
+    format!("{} | {}", document.title, t(locale, Message::SiteName))
 }
 
-pub fn build_category_page_description(document: &CategoryPageDocument) -> String {
+pub(crate) fn build_category_page_description(
+    document: &CategoryPageDocument,
+    locale: Locale,
+) -> String {
     document
         .description
         .as_deref()
         .filter(|description| !description.trim().is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| {
-            format!(
-                "{} in the {} category.",
-                format_count(document.articles.len(), "article", "articles"),
-                document.category_display_name
+            interpolate(
+                locale,
+                Message::MetaCategory,
+                &[
+                    ("articles", article_count(locale, document.articles.len())),
+                    ("category", category_name(locale, document.category).into()),
+                ],
             )
         })
 }
 
-pub fn build_static_page_title(document: &StaticPageDocument, site_name: &str) -> String {
-    format!("{} | {}", document.title, site_name)
+pub(crate) fn build_static_page_title(document: &StaticPageDocument, locale: Locale) -> String {
+    format!("{} | {}", document.title, t(locale, Message::SiteName))
 }
 
-pub fn build_static_page_description(document: &StaticPageDocument) -> String {
+pub(crate) fn build_static_page_description(
+    document: &StaticPageDocument,
+    locale: Locale,
+) -> String {
     document
         .description
         .as_deref()
         .filter(|description| !description.trim().is_empty())
         .map(str::to_owned)
-        .unwrap_or_else(|| format!("The {} page.", document.title))
-}
-
-fn format_count(count: usize, singular: &str, plural: &str) -> String {
-    let noun = if count == 1 { singular } else { plural };
-    format!("{count} {noun}")
+        .unwrap_or_else(|| {
+            interpolate(
+                locale,
+                Message::MetaPage,
+                &[("title", document.title.clone())],
+            )
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
+    use domain::{
         Category, PageKey, SectionPath, SiteArticleCard, SiteCategorySummary, Slug, Title,
     };
 
@@ -81,7 +111,6 @@ mod tests {
                 slug: Slug::new("intro00000001".to_string()).unwrap(),
                 title: Title::new("Intro".to_string()).unwrap(),
                 category: Category::Tech,
-                category_display_name: "Technology".to_string(),
                 section_path: SectionPath::default(),
                 description: description.map(str::to_string),
                 tags: vec![],
@@ -97,7 +126,6 @@ mod tests {
         CategoryPageDocument {
             category: Category::Tech,
             title: "Rust".to_string(),
-            category_display_name: "Technology".to_string(),
             description: description.map(str::to_string),
             html: "<article><h1>Rust</h1></article>".to_string(),
             sections: vec![],
@@ -112,12 +140,10 @@ mod tests {
             categories: vec![
                 SiteCategorySummary {
                     category: Category::Tech,
-                    category_display_name: "Technology".to_string(),
                     article_count: 2,
                 },
                 SiteCategorySummary {
                     category: Category::Daily,
-                    category_display_name: "Daily".to_string(),
                     article_count: 1,
                 },
             ],
@@ -125,9 +151,12 @@ mod tests {
             fragment: None,
         };
 
-        assert_eq!(build_home_page_title("Example Blog"), "Example Blog");
         assert_eq!(
-            build_home_page_description(&document),
+            build_home_page_title(Locale::En),
+            t(Locale::En, Message::SiteName)
+        );
+        assert_eq!(
+            build_home_page_description(&document, Locale::En),
             "3 articles published across 2 categories."
         );
     }
@@ -137,16 +166,19 @@ mod tests {
         let document = article_page(Some("summary"));
 
         assert_eq!(
-            build_article_page_title(&document, "Example Blog"),
-            "Intro | Example Blog"
+            build_article_page_title(&document, Locale::En),
+            format!("Intro | {}", t(Locale::En, Message::SiteName))
         );
-        assert_eq!(build_article_page_description(&document), "summary");
+        assert_eq!(
+            build_article_page_description(&document, Locale::En),
+            "summary"
+        );
     }
 
     #[test]
     fn article_description_falls_back_when_missing() {
         assert_eq!(
-            build_article_page_description(&article_page(None)),
+            build_article_page_description(&article_page(None), Locale::En),
             "An article in the Technology category."
         );
     }
@@ -154,7 +186,7 @@ mod tests {
     #[test]
     fn article_description_falls_back_when_blank() {
         assert_eq!(
-            build_article_page_description(&article_page(Some("   "))),
+            build_article_page_description(&article_page(Some("   ")), Locale::En),
             "An article in the Technology category."
         );
     }
@@ -164,16 +196,19 @@ mod tests {
         let document = category_page(Some("Rust articles"));
 
         assert_eq!(
-            build_category_page_title(&document, "Example Blog"),
-            "Rust | Example Blog"
+            build_category_page_title(&document, Locale::En),
+            format!("Rust | {}", t(Locale::En, Message::SiteName))
         );
-        assert_eq!(build_category_page_description(&document), "Rust articles");
+        assert_eq!(
+            build_category_page_description(&document, Locale::En),
+            "Rust articles"
+        );
     }
 
     #[test]
     fn category_description_falls_back_when_missing() {
         assert_eq!(
-            build_category_page_description(&category_page(None)),
+            build_category_page_description(&category_page(None), Locale::En),
             "1 article in the Technology category."
         );
     }
@@ -188,9 +223,12 @@ mod tests {
         };
 
         assert_eq!(
-            build_static_page_title(&document, "Example Blog"),
-            "About | Example Blog"
+            build_static_page_title(&document, Locale::En),
+            format!("About | {}", t(Locale::En, Message::SiteName))
         );
-        assert_eq!(build_static_page_description(&document), "About this site");
+        assert_eq!(
+            build_static_page_description(&document, Locale::En),
+            "About this site"
+        );
     }
 }
