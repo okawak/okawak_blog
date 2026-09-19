@@ -36,12 +36,12 @@ AI入力はpublic Markdownのtitle・summaryと、parserで抽出した文章fra
 
 実行時はpublic fragmentだけの一時workspaceを使い、Codexのfilesystem権限をminimal＋workspaceの読取に限定する。ユーザー設定・rules・AGENTSの読込、shell・apps・plugins・hooks・browser等のツールを無効にする。`read-only`だけでは全filesystemを読めるため、専用permission profileを指定する。CLIが設定を拒否した場合は停止する。認証・権限設定は[公式reference](https://learn.chatgpt.com/docs/config-file/config-reference)を参照する。
 
-追跡情報は英語版frontmatterに保存する。入力hashは原文文章・Markdown構造・有効な用語集・モデル・指示・fragment方式versionを対象とし、日時・タグ等の管理情報は含めない。生成hashはtitle・summary・本文を対象とし、手動修正を検出する。AI応答のcacheは文章入力だけで決まるため、コードのみの更新では再翻訳せず新しい構造へ組み立て直す。
+追跡情報は英語版frontmatterに保存する。入力hashは原文文章・Markdown構造・有効な用語集・モデル・指示・fragment方式とMarkdown再構築のversionを対象とし、日時・タグ等の管理情報は含めない。生成hashはtitle・summary・本文を対象とし、手動修正を検出する。AI応答のcacheは文章入力と翻訳設定で決まるため、コードやエスケープ方式のみの更新では再翻訳せず新しい構造へ組み立て直す。
 
 - 入力に変更がなければ、手動編集済みでも再利用する。
 - 入力変更があり、最後の生成物から編集されていなければ更新する。
 - 手動編集または履歴欠落があれば保護する。原文の更新時は更新待ちとして扱う。
-- `--candidates` は保護された記事の候補を `.export-candidates/<id>.md` に作る。差分を確認し、`--accept <id>` で採用する。原文・設定が候補生成後に変わっていれば採用を拒否する。
+- `--candidates` は保護された記事の候補を `.export-candidates/<id>.md` に作る。差分を確認し、`--accept <id>` で採用する。原文の文章・Markdown構造や翻訳設定が候補生成後に変わっていれば採用を拒否する。カテゴリ・タグ・日時等の管理情報だけの変更は最新の日本語版から反映し、候補のtitle・summary・本文と生成履歴を保持する。
 
 失敗したrunは公開ファイルを入れ替えない。成功済みの応答だけをGit対象外の `.export-candidates/cache/` に保存するので、再実行で利用できる。候補・cache・退避版は公開しない。timeoutや利用上限ではエラーになり、従量課金へ自動切替しない。
 
@@ -60,4 +60,4 @@ cargo run -p export -- --accept-tag '統計'
 
 記事・タグは一つのtransaction、UI辞書は別のtransactionで反映する。UIで失敗しても完了した公開コンテンツは保持される。再実行では成功済みの項目を再利用する。どちらも部分的に壊れたファイルを保存せず、最終的に両方の差分を確認してGitへ確定する。
 
-`--ui-catalog ui.json`のような相対pathも利用できる。辞書単独の操作は親directoryを走査・入れ替えず、対象JSONを一時ファイルから置換する。同じ公開treeのexportとはlockを共有する。失敗時も完成した候補・cacheはGit対象外の作業領域に残り、辞書本体は全項目の検証成功後に確定する。
+`--ui-catalog ui.json`のような相対pathも利用できる。辞書単独の操作は親directoryを走査・入れ替えず、対象JSONを一時ファイルから置換する。親directoryのsymlinkを解決してから、同じ公開treeのexportとlockを共有する。辞書ファイル自体のsymlinkは拒否する。失敗時も完成した候補・cacheはGit対象外の作業領域に残り、辞書本体は全項目の検証成功後に確定する。
