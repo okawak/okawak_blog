@@ -53,6 +53,8 @@ AI入力はpublic Markdownのtitle・summaryと、parserで抽出した文章fra
 
 記事由来のタグは`content/tags.json`へ集約する。元のタグ文字列をキーにして、各項目に日本語の表示名`source`、用途`context`、英語の`translation.value`と生成履歴を保存する。同じタグを複数記事が使っても翻訳は一項目だけ。タグの対応はAIに渡さず、記事の`tags`は元のIDを保つ。不要になった項目は履歴を`.export-archive`へ退避して公開辞書から外す。
 
+辞書の原文で補間変数を追加・削除・改名した場合も差分翻訳できる。生成後に未編集の訳は更新し、手動編集・履歴不明の訳は保持して`stale`にする。更新待ちの古い補間変数を持つ訳は表示に使わず原文へfallbackし、生成・候補採用・公開時には有効な訳の補間変数の一致を検証する。
+
 ```sh
 cargo run -p export -- --translate-only --candidates
 cargo run -p export -- --accept-tag '統計'

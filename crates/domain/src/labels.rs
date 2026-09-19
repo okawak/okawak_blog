@@ -55,6 +55,21 @@ impl Default for LabelCatalog {
 
 impl LabelCatalog {
     pub fn validate(&self) -> Result<()> {
+        self.validate_structure()?;
+        for entry in self.entries.values() {
+            if let Some(translation) = &entry.translation
+                && !translation.stale
+                && placeholders(&entry.source) != placeholders(&translation.value)
+            {
+                return Err(DomainError::validation("label translation placeholders"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate editable data before reconciling translations with a changed source.
+    /// Publishing must use `validate`, which also checks each active translation.
+    pub fn validate_structure(&self) -> Result<()> {
         if self.schema_version != 1 {
             return Err(DomainError::validation("label schema"));
         }
@@ -70,7 +85,6 @@ impl LabelCatalog {
             if let Some(t) = &entry.translation
                 && (t.value.trim().is_empty()
                     || t.value.contains(['\0', '\r'])
-                    || placeholders(&entry.source) != placeholders(&t.value)
                     || t.provenance.as_ref().is_some_and(|p| {
                         [&p.input_hash, &p.generated_hash]
                             .iter()
@@ -140,10 +154,21 @@ mod tests {
         entry.translation.as_mut().unwrap().stale = true;
         assert_eq!(entry.value(Locale::En), "{count}件");
         entry.translation.as_mut().unwrap().value = "lost variable".into();
-        let catalog = LabelCatalog {
+        let mut catalog = LabelCatalog {
             entries: [("count".into(), entry)].into(),
             ..Default::default()
         };
+        // Stale text is preserved for editing while rendering falls back to source.
+        assert!(catalog.validate().is_ok());
+        catalog
+            .entries
+            .get_mut("count")
+            .unwrap()
+            .translation
+            .as_mut()
+            .unwrap()
+            .stale = false;
+        assert!(catalog.validate_structure().is_ok());
         assert!(catalog.validate().is_err());
         assert!(
             LabelCatalog {
