@@ -135,6 +135,57 @@ fn code_only_update_reassembles_from_cached_translation_without_ai() {
 }
 
 #[test]
+fn reviewed_candidates_survive_retries_and_block_overwrites_after_source_changes() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let fake = Fake::new();
+    write_note(source.path(), "本文");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    export::translate_public(output.path(), &fake, &settings(), false).unwrap();
+    let path = english(output.path());
+    fs::write(
+        &path,
+        fs::read_to_string(&path)
+            .unwrap()
+            .replace("English 記事", "Manual title"),
+    )
+    .unwrap();
+    write_note(source.path(), "新しい本文");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    export::translate_public(output.path(), &fake, &settings(), true).unwrap();
+    let candidate = output
+        .path()
+        .join(".export-candidates")
+        .join(path.file_name().unwrap());
+    let reviewed = fs::read_to_string(&candidate)
+        .unwrap()
+        .replace("English 記事", "Reviewed title");
+    fs::write(&candidate, &reviewed).unwrap();
+    let retry = export::translate_public(output.path(), &fake, &settings(), true).unwrap();
+    assert_eq!(fs::read_to_string(&candidate).unwrap(), reviewed);
+    assert_eq!(retry.generated, 0);
+    assert_eq!(fake.calls.get(), 2);
+    write_note(source.path(), "さらに新しい本文");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let before = fs::read(&path).unwrap();
+    let error = export::translate_public(output.path(), &fake, &settings(), true).unwrap_err();
+    assert!(
+        error.to_string().contains("manually edited candidate"),
+        "{error}"
+    );
+    assert_eq!(fs::read_to_string(&candidate).unwrap(), reviewed);
+    assert_eq!(fs::read(&path).unwrap(), before);
+    assert_eq!(fake.calls.get(), 2);
+    fs::remove_file(&candidate).unwrap();
+    export::translate_public(output.path(), &fake, &settings(), true).unwrap();
+    assert!(
+        fs::read_to_string(&candidate)
+            .unwrap()
+            .contains("English さらに新しい本文")
+    );
+}
+
+#[test]
 fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose() {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
