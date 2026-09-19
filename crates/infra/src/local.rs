@@ -5,8 +5,9 @@ use std::{
 
 use async_trait::async_trait;
 use domain::{
-    ArticleIndexDocument, Category, CategoryArtifactDocument, HomeFragmentArtifactDocument,
-    PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
+    ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
+    HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, SiteLocalesDocument,
+    SiteMetadataDocument, Slug,
 };
 
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, Result};
@@ -14,12 +15,14 @@ use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, Result};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalArtifactReader {
     site_root: PathBuf,
+    locale: Locale,
 }
 
 impl LocalArtifactReader {
     pub fn new(site_root: impl AsRef<Path>) -> Self {
         Self {
             site_root: site_root.as_ref().to_path_buf(),
+            locale: Locale::Ja,
         }
     }
 
@@ -28,7 +31,7 @@ impl LocalArtifactReader {
     }
 
     fn artifact_path(&self, relative: &str) -> PathBuf {
-        self.site_root.join(relative)
+        self.site_root.join(self.locale.artifact_key(relative))
     }
 
     async fn read_json<T>(&self, relative: &str) -> Result<T>
@@ -49,6 +52,36 @@ impl ArtifactReader for LocalArtifactReader {
 
 #[async_trait]
 impl ArtifactSnapshot for LocalArtifactReader {
+    async fn localized(&self, locale: Locale) -> Result<Option<DynArtifactSnapshot>> {
+        if locale == Locale::En && self.read_locales().await?.path("/", locale).is_none() {
+            return Ok(None);
+        }
+        let mut localized = self.clone();
+        localized.locale = locale;
+        Ok(Some(Arc::new(localized)))
+    }
+
+    async fn read_locales(&self) -> Result<SiteLocalesDocument> {
+        let mut root = self.clone();
+        root.locale = Locale::Ja;
+        match root.read_json::<SiteLocalesDocument>("locales.json").await {
+            Ok(document) => {
+                document.validate()?;
+                Ok(document)
+            }
+            Err(error) if error.is_not_found() => Ok(SiteLocalesDocument::default()),
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
+        match tokio::fs::read(self.site_root.join("content-assets").join(name.as_str())).await {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
         self.read_json("articles/index.json").await
     }

@@ -1,6 +1,7 @@
 #![warn(unreachable_pub)]
 
 mod artifact;
+mod asset;
 mod content;
 mod entities;
 mod error;
@@ -12,6 +13,7 @@ pub use artifact::{
     ArtifactReleasePointerDocument, CategoryArtifactDocument, CategoryMetadataDocument,
     HomeFragmentArtifactDocument, PageArtifactDocument, SiteLocalesDocument, SiteMetadataDocument,
 };
+pub use asset::ContentAssetName;
 pub use content::{ContentKind, Locale, PublicContentMeta, TranslationProvenance};
 pub use entities::{Category, PageKey, SectionPath, Slug, Timestamp, Title};
 pub use error::{DomainError, Result};
