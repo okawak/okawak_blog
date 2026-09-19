@@ -59,6 +59,12 @@ okawak_blog/
 
 各 crate の責務は次の通り。
 
+- `crates/export`
+  - ローカルの公開対象抽出、public Markdownの参照正規化、stable IDと翻訳履歴の管理
+  - `translation`による記事・辞書で共有できる翻訳requestと更新判定、`fragments`によるMarkdown文章の抽出・再構築
+  - `codex`によるChatGPT認証のローカル実行境界。AIへvaultを渡さず、public文章だけの作業領域と読取権限へ限定する
+  - `sync`による出力全体のstaging・入替・中断時の復旧境界。uploadは行わない
+
 - `crates/domain`
   - 公開コンテンツの純粋なdomain model・ルールと、`publish` / readerが共有する契約
   - `lib.rs`を明示的な公開APIのfacadeとし、内部moduleをcrate外の契約にしない。`unreachable_pub`で不要な公開を検出する

@@ -4,6 +4,31 @@ use domain::Locale;
 use std::{collections::HashSet, fs, path::Path};
 
 pub fn export_japanese(source: &Path, output: &Path) -> Result<()> {
+    export_with(source, output, |_| Ok(()))
+}
+
+pub fn export_translated(
+    source: &Path,
+    output: &Path,
+    translator: &dyn crate::Translator,
+    settings: &crate::TranslationSettings,
+    candidates: bool,
+) -> Result<crate::TranslationReport> {
+    let mut report = crate::TranslationReport::default();
+    export_with(source, output, |stage| {
+        report = crate::translate_content::translate_stage(
+            stage, output, translator, settings, candidates,
+        )?;
+        Ok(())
+    })?;
+    Ok(report)
+}
+
+fn export_with(
+    source: &Path,
+    output: &Path,
+    after_prepare: impl FnOnce(&Path) -> Result<()>,
+) -> Result<()> {
     if fs::symlink_metadata(source)?.file_type().is_symlink() {
         bail!("symlink source is not allowed");
     }
@@ -46,6 +71,21 @@ pub fn export_japanese(source: &Path, output: &Path) -> Result<()> {
             }
         }
         for source in sources {
+            let english_path = stage.join(format!("en/{}.md", source.document.meta.id));
+            if english_path.exists()
+                && previous
+                    .iter()
+                    .find(|d| d.meta.id == source.document.meta.id)
+                    .map(crate::fragments::text_hash)
+                    .transpose()?
+                    != Some(crate::fragments::text_hash(&source.document)?)
+            {
+                let mut english = markdown::Document::parse(&fs::read_to_string(&english_path)?)?;
+                if let Some(provenance) = &mut english.meta.translation {
+                    provenance.stale = true;
+                }
+                fs::write(english_path, english.encode()?)?;
+            }
             fs::write(
                 stage.join(format!("ja/{}.md", source.document.meta.id)),
                 source.document.encode()?,
@@ -70,6 +110,6 @@ pub fn export_japanese(source: &Path, output: &Path) -> Result<()> {
         for (name, bytes) in assets {
             fs::write(stage.join("assets").join(name), bytes)?;
         }
-        Ok(())
+        after_prepare(stage)
     })
 }
