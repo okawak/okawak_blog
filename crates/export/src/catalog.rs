@@ -26,7 +26,7 @@ pub fn translate_catalog(
     settings: &TranslationSettings,
     candidates: bool,
 ) -> Result<TranslationReport> {
-    let path = std::path::absolute(path)?;
+    let path = canonical_parent_path(path)?;
     let root = parent(&path);
     sync::locked(root, || {
         translate_catalog_stage(&path, root, translator, settings, candidates)
@@ -113,7 +113,7 @@ pub fn accept_catalog_translation(
     key: &str,
     settings: &TranslationSettings,
 ) -> Result<()> {
-    let path = std::path::absolute(path)?;
+    let path = canonical_parent_path(path)?;
     sync::locked(parent(&path), || {
         let mut catalog = read(&path)?;
         let entry = catalog
@@ -182,6 +182,12 @@ fn candidate_path(path: &Path, key: &str) -> PathBuf {
     parent(path)
         .join(".export-candidates/catalog")
         .join(format!("{}.json", crate::vault::digest(identity)))
+}
+fn canonical_parent_path(path: &Path) -> Result<PathBuf> {
+    let name = path.file_name().context("catalog needs a file name")?;
+    // Resolve directory aliases for the shared tree lock, but retain the final
+    // component so read() can continue rejecting symlink catalog files.
+    Ok(parent(path).canonicalize()?.join(name))
 }
 fn parent(path: &Path) -> &Path {
     path.parent()
