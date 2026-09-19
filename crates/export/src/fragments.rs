@@ -17,11 +17,15 @@ impl Fragments {
         }
         let mut ranges = Vec::new();
         let mut code = false;
+        let mut html_elements = Vec::new();
         for (event, range) in Parser::new_ext(&document.body, options()).into_offset_iter() {
             match event {
                 Event::Start(Tag::CodeBlock(_)) => code = true,
                 Event::End(TagEnd::CodeBlock) => code = false,
-                Event::Text(text) if !code && !text.trim().is_empty() => {
+                Event::InlineHtml(html) => track_inline_html(&html, &mut html_elements),
+                Event::Text(text)
+                    if !code && html_elements.is_empty() && !text.trim().is_empty() =>
+                {
                     let key = format!("text_{:05}", ranges.len());
                     texts.insert(key.clone(), text.to_string());
                     ranges.push((key, range));
@@ -47,6 +51,47 @@ impl Fragments {
             translated.body.replace_range(range.clone(), &escape(value));
         }
         Ok(translated)
+    }
+}
+
+// InlineHtml events are already individual HTML tokens recognized by the
+// Markdown parser. Track their element names without interpreting attributes.
+fn track_inline_html(token: &str, elements: &mut Vec<String>) {
+    let Some(tag) = token.strip_prefix('<') else {
+        return;
+    };
+    let closing = tag.starts_with('/');
+    let tag = tag.strip_prefix('/').unwrap_or(tag);
+    if !tag.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        return; // Comments, declarations and processing instructions.
+    }
+    let name: String = tag
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ':')
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    if closing {
+        if let Some(position) = elements.iter().rposition(|element| element == &name) {
+            elements.truncate(position);
+        }
+    } else if !matches!(
+        name.as_str(),
+        "area"
+            | "base"
+            | "br"
+            | "col"
+            | "embed"
+            | "hr"
+            | "img"
+            | "input"
+            | "link"
+            | "meta"
+            | "param"
+            | "source"
+            | "track"
+            | "wbr"
+    ) {
+        elements.push(name);
     }
 }
 

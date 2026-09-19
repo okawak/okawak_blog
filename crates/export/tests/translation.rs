@@ -26,10 +26,9 @@ impl Translator for Fake {
             anyhow::bail!("simulated quota limit");
         }
         assert!(
-            !request
-                .texts
-                .values()
-                .any(|v| v.contains("CODE_SECRET") || v.contains("x^2"))
+            !request.texts.values().any(|v| v.contains("CODE_SECRET")
+                || v.contains("HTML_SECRET")
+                || v.contains("x^2"))
         );
         Ok(request
             .texts
@@ -136,6 +135,29 @@ fn code_only_update_reassembles_from_cached_translation_without_ai() {
 }
 
 #[test]
+fn inline_html_text_is_preserved_while_surrounding_prose_is_translated() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let fake = Fake::new();
+    write_note(
+        source.path(),
+        "前文 <span data-label=\"raw > value\">HTML_SECRET <b>HTML_SECRET</b></span> 後文<br> 続き <!-- <span> --> 最後\n\n<kbd>HTML_SECRET</kbd>",
+    );
+    export::export_japanese(source.path(), output.path()).unwrap();
+    export::translate_public(output.path(), &fake, &settings(), false).unwrap();
+    let translated = fs::read_to_string(english(output.path())).unwrap();
+    assert!(
+        translated
+            .contains("<span data-label=\"raw > value\">HTML_SECRET <b>HTML_SECRET</b></span>")
+    );
+    assert!(translated.contains("<kbd>HTML_SECRET</kbd>"));
+    assert!(translated.contains("English 前文"));
+    assert!(translated.contains("English  後文"));
+    assert!(translated.contains("English  続き"));
+    assert!(translated.contains("English  最後"));
+}
+
+#[test]
 fn missing_provenance_is_protected() {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
@@ -217,11 +239,17 @@ done
             texts: Texts::from([("title".into(), "記事".into())]),
             context: "title".into(),
             model: "fake".into(),
-            instruction: "translate".into(),
+            instruction: "Use British English for spelling.".into(),
             glossary: Texts::new(),
         })
         .unwrap();
     assert_eq!(result["title"], "Translated");
+    let prompt = fs::read_to_string(temp.path().join("prompt")).unwrap();
+    let (instructions, source_json) = prompt.split_once("\nUNTRUSTED_SOURCE_JSON\n").unwrap();
+    assert!(instructions.contains("Use British English for spelling."));
+    let source: serde_json::Value = serde_json::from_str(source_json).unwrap();
+    assert_eq!(source["texts"]["title"], "記事");
+    assert!(source.get("instruction").is_none());
     let args = fs::read_to_string(temp.path().join("args")).unwrap();
     for required in [
         "--ignore-user-config",
