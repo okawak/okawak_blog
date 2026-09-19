@@ -93,7 +93,9 @@ fn is_under_path(path: &str, prefix: &str) -> bool {
 }
 
 fn is_site_page_path(path: &str) -> bool {
-    !is_under_path(path, "/api") && !is_under_path(path, "/_topcoat")
+    !is_under_path(path, "/api")
+        && !is_under_path(path, "/_topcoat")
+        && !is_under_path(path, "/content-assets")
 }
 
 fn render_unmatched_path<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
