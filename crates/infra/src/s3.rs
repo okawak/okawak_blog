@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use aws_sdk_s3::Client;
 use domain::{
     ArticleIndexDocument, ArtifactReleasePointerDocument, Category, CategoryArtifactDocument,
-    HomeFragmentArtifactDocument, PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
+    ContentAssetName, HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey,
+    SiteLocalesDocument, SiteMetadataDocument, Slug,
 };
 
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, InfraError, Result};
@@ -61,6 +62,7 @@ pub struct S3ArtifactReader {
 
 #[derive(Debug, Clone)]
 pub struct S3ArtifactSnapshot {
+    locale: Locale,
     client: Client,
     location: S3ArtifactLocation,
     cache_identity: Option<String>,
@@ -105,6 +107,7 @@ impl S3ArtifactSnapshot {
         last_modified: Option<SystemTime>,
     ) -> Self {
         Self {
+            locale: Locale::Ja,
             client,
             location,
             cache_identity,
@@ -113,7 +116,11 @@ impl S3ArtifactSnapshot {
     }
 
     async fn read_text(&self, relative: &str) -> Result<String> {
-        let key = self.location.key_for(relative);
+        Ok(String::from_utf8(self.read_bytes(relative).await?)?)
+    }
+
+    async fn read_bytes(&self, relative: &str) -> Result<Vec<u8>> {
+        let key = self.location.key_for(&self.locale.artifact_key(relative));
         let response = self
             .client
             .get_object()
@@ -127,7 +134,7 @@ impl S3ArtifactSnapshot {
                 InfraError::s3_read(self.location.bucket(), key.clone(), source)
             })?;
 
-        Ok(String::from_utf8(bytes.into_bytes().to_vec())?)
+        Ok(bytes.into_bytes().to_vec())
     }
 
     async fn read_json<T>(&self, relative: &str) -> Result<T>
@@ -176,6 +183,41 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
 
     fn last_modified(&self) -> Option<SystemTime> {
         self.last_modified
+    }
+
+    async fn localized(&self, locale: Locale) -> Result<Option<DynArtifactSnapshot>> {
+        if locale == Locale::En && self.read_locales().await?.path("/", locale).is_none() {
+            return Ok(None);
+        }
+        let mut localized = self.clone();
+        localized.locale = locale;
+        Ok(Some(Arc::new(localized)))
+    }
+
+    async fn read_locales(&self) -> Result<SiteLocalesDocument> {
+        let mut root = self.clone();
+        root.locale = Locale::Ja;
+        match root.read_json::<SiteLocalesDocument>("locales.json").await {
+            Ok(document) => {
+                document.validate()?;
+                Ok(document)
+            }
+            Err(error) if error.is_not_found() => Ok(SiteLocalesDocument::default()),
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
+        let mut root = self.clone();
+        root.locale = Locale::Ja;
+        match root
+            .read_bytes(&format!("content-assets/{}", name.as_str()))
+            .await
+        {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(error) if error.is_not_found() => Ok(None),
+            Err(error) => Err(error),
+        }
     }
 
     async fn read_article_index(&self) -> Result<ArticleIndexDocument> {

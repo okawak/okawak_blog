@@ -1,8 +1,9 @@
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactReader, DynArtifactSnapshot, Result};
 use async_trait::async_trait;
 use domain::{
-    ArticleIndexDocument, Category, CategoryArtifactDocument, HomeFragmentArtifactDocument,
-    PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
+    ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
+    HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, SiteLocalesDocument,
+    SiteMetadataDocument, Slug,
 };
 use std::{
     collections::HashMap,
@@ -107,6 +108,9 @@ impl ArtifactReader for CachingArtifactReader {
 }
 
 struct CachingArtifactSnapshot {
+    localized: KeyedCache<Option<DynArtifactSnapshot>>,
+    locales: OnceCell<SiteLocalesDocument>,
+    content_assets: KeyedCache<Option<Vec<u8>>>,
     inner: DynArtifactSnapshot,
     article_index: OnceCell<ArticleIndexDocument>,
     site_metadata: OnceCell<SiteMetadataDocument>,
@@ -119,6 +123,9 @@ struct CachingArtifactSnapshot {
 impl CachingArtifactSnapshot {
     fn new(inner: DynArtifactSnapshot) -> Self {
         Self {
+            localized: KeyedCache::new(),
+            locales: OnceCell::new(),
+            content_assets: KeyedCache::new(),
             inner,
             article_index: OnceCell::new(),
             site_metadata: OnceCell::new(),
@@ -138,6 +145,29 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
 
     fn last_modified(&self) -> Option<SystemTime> {
         self.inner.last_modified()
+    }
+
+    async fn localized(&self, locale: Locale) -> Result<Option<DynArtifactSnapshot>> {
+        self.localized
+            .get_or_try_init(locale.to_string(), || async {
+                Ok(self.inner.localized(locale).await?.map(|snapshot| {
+                    Arc::new(CachingArtifactSnapshot::new(snapshot)) as DynArtifactSnapshot
+                }))
+            })
+            .await
+    }
+
+    async fn read_locales(&self) -> Result<SiteLocalesDocument> {
+        self.locales
+            .get_or_try_init(|| self.inner.read_locales())
+            .await
+            .cloned()
+    }
+
+    async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
+        self.content_assets
+            .get_or_try_init(name.as_str().into(), || self.inner.read_content_asset(name))
+            .await
     }
 
     async fn read_article_index(&self) -> Result<ArticleIndexDocument> {

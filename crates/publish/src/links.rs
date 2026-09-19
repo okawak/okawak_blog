@@ -9,14 +9,7 @@ pub(crate) fn assets(documents: &[Document]) -> Result<BTreeSet<String>> {
             if let Event::Start(Tag::Image { dest_url, .. } | Tag::Link { dest_url, .. }) = event
                 && let Some(name) = dest_url.strip_prefix("/content-assets/")
             {
-                let valid = name.split_once('.').is_some_and(|(hash, ext)| {
-                    hash.len() == 64
-                        && hash.bytes().all(|b| b.is_ascii_hexdigit())
-                        && ["png", "jpg", "jpeg", "gif", "webp", "avif"].contains(&ext)
-                });
-                if !valid {
-                    return Err(PublishError::Parse("invalid public asset name".into()));
-                }
+                domain::ContentAssetName::new(name)?;
                 names.insert(name.to_owned());
             }
         }
