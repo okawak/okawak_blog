@@ -10,6 +10,7 @@ description = "Export explicitly published Obsidian content into public Markdown
 anyhow.workspace = true
 domain = { path = "../domain" }
 pulldown-cmark.workspace = true
+percent-encoding.workspace = true
 scraper.workspace = true
 serde.workspace = true
 serde_json.workspace = true
