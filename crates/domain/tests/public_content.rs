@@ -48,3 +48,20 @@ fn unknown_frontmatter_is_not_part_of_the_public_contract() {
     value["private_notes"] = "secret".into();
     assert!(serde_json::from_value::<PublicContentMeta>(value).is_err());
 }
+
+#[test]
+fn translation_provenance_requires_an_explicit_stale_state() {
+    let mut value = serde_json::to_value(metadata()).unwrap();
+    value["locale"] = "en".into();
+    value["translation"] = serde_json::json!({
+        "input_hash": "b".repeat(64),
+        "generated_hash": "c".repeat(64)
+    });
+    assert!(serde_json::from_value::<PublicContentMeta>(value.clone()).is_err());
+    for stale in [true, false] {
+        value["translation"]["stale"] = stale.into();
+        let parsed = serde_json::from_value::<PublicContentMeta>(value.clone()).unwrap();
+        parsed.validate().unwrap();
+        assert_eq!(parsed.translation.unwrap().stale, stale);
+    }
+}
