@@ -95,7 +95,11 @@ pub(crate) fn translate_stage(
                         match decide(
                             &input,
                             Some(&text_hash(&candidate)?),
-                            candidate.meta.translation.as_ref(),
+                            candidate
+                                .meta
+                                .translation
+                                .as_ref()
+                                .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
                         ) {
                             Decision::Reuse => {
                                 report.reused += 1;
