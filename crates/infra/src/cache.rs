@@ -361,7 +361,7 @@ mod tests {
         ) -> Result<CategoryArtifactDocument> {
             Ok(CategoryArtifactDocument {
                 category: category.as_str().to_string(),
-                title: category.display_name().to_string(),
+                title: category.as_str().to_string(),
                 description: None,
                 html: category.as_str().to_string(),
                 updated_at: String::new(),
