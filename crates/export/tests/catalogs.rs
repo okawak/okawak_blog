@@ -152,6 +152,45 @@ fn tags_are_translated_once_per_id_and_removed_with_unpublished_sources() {
 }
 
 #[test]
+fn blocked_tag_candidates_stop_before_translating_any_article() {
+    let source = tempfile::tempdir().unwrap();
+    let output = tempfile::tempdir().unwrap();
+    fs::create_dir_all(source.path().join("tech")).unwrap();
+    fs::write(source.path().join("tech/a.md"), "---\ntitle: Article\ncategory: tech\nis_completed: true\ntags: [統計]\ncreated: '2025-01-01T00:00:00+09:00'\nupdated: '2025-01-01T00:00:00+09:00'\n---\n本文\n").unwrap();
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let path = output.path().join("tags.json");
+    let fake = Fake(Cell::new(0));
+    export::translate_catalog(&path, &fake, &settings(), false).unwrap();
+    let mut catalog: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    let entry = catalog.entries.get_mut("統計").unwrap();
+    entry.translation.as_mut().unwrap().value = "Manual statistics".into();
+    entry.context = "second context".into();
+    save(&path, &catalog);
+    export::translate_catalog(&path, &fake, &settings(), true).unwrap();
+    let candidate = fs::read_dir(output.path().join(".export-candidates/catalog"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let mut reviewed: serde_json::Value =
+        serde_json::from_slice(&fs::read(&candidate).unwrap()).unwrap();
+    reviewed["translation"]["value"] = "Reviewed statistics".into();
+    fs::write(&candidate, serde_json::to_vec_pretty(&reviewed).unwrap()).unwrap();
+    catalog.entries.get_mut("統計").unwrap().context = "third context".into();
+    save(&path, &catalog);
+    let before = fs::read(&path).unwrap();
+    let candidate_before = fs::read(&candidate).unwrap();
+    for candidates in [false, true] {
+        assert!(export::translate_public(output.path(), &fake, &settings(), candidates).is_err());
+        assert_eq!(fake.0.get(), 2);
+        assert!(!output.path().join("en").exists());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(fs::read(&candidate).unwrap(), candidate_before);
+    }
+}
+
+#[test]
 fn authored_labels_without_generation_history_are_preserved_and_reported() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("ui.json");
@@ -299,6 +338,14 @@ fn reviewed_catalog_candidates_survive_retries_and_reject_overwrites() {
     assert_eq!(retry.generated, 0);
     assert_eq!(fake.0.get(), 2);
     catalog.entries.get_mut("label").unwrap().context = "third context".into();
+    catalog.entries.insert(
+        "first".into(),
+        LabelEntry {
+            source: "先行項目".into(),
+            context: "must not translate before candidate checks".into(),
+            translation: None,
+        },
+    );
     save(&path, &catalog);
     let catalog_before = fs::read(&path).unwrap();
     let error = export::translate_catalog(&path, &fake, &settings(), true).unwrap_err();
@@ -333,7 +380,7 @@ fn reviewed_catalog_candidates_survive_retries_and_reject_overwrites() {
     }
     fs::remove_file(&candidate).unwrap();
     export::translate_catalog(&path, &fake, &settings(), true).unwrap();
-    assert_eq!(fake.0.get(), 3);
+    assert_eq!(fake.0.get(), 4);
 }
 
 #[test]
