@@ -13,7 +13,7 @@ private Obsidian Markdownをビルド時の`publish` pipelineで公開artifact�
 設計・module構成は[architecture](docs/architecture/architecture.md)に従う。参照優先順位は同文書 → GitHub Issue / PR → [README](README.md)。計画・進捗はIssue / PRに置き、恒久文書には現行の設計だけを書く。
 
 - 正本はprivate Obsidian repository。`export`が抽出した公開用Markdownは通常ファイルとしてGit管理できる。非公開ノートやprivate入力を丸ごとcommitしない。入力のgit submoduleは必要時だけ初期化・更新する。
-- `crates/export`: ローカルで公開対象を抽出し、公開Markdown契約へ正規化する。現時点のpublish入力は従来経路を維持する。exportの詳細は`crates/export/README.md`を参照する。
+- `crates/export`: ローカルで公開対象を抽出・正規化し、公開文章だけをCodexで翻訳する。手動編集を保護し、通常テストはfake translatorを使う。現時点のpublish入力は従来経路を維持する。詳細は`crates/export/README.md`を参照する。
 - Markdown / frontmatter / link / embedの解決とHTML生成はビルド時に完了させる。SSRはartifact読取・routing・metadata付与に集中し、本番は単一server binaryを優先する。
 - `crates/domain`: 公開コンテンツの純粋model・ルールとcrate間の共有契約。I/O、`async`、AWS SDK、HTTP frameworkを持ち込まない。
 - `crates/publish`: 入力・変換・artifact生成を担う単一crate。`lib.rs`はmodule宣言とre-exportのみ。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定し、内部の責務分割は設計文書に従う。

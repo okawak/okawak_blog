@@ -1,0 +1,9 @@
+{
+  "model": "gpt-5.6-sol",
+  "instruction": "Translate technical blog prose naturally and accurately. Preserve proper names and do not add explanations. Return plain text for each supplied fragment.",
+  "glossary": {
+    "Rust": "Rust",
+    "Obsidian": "Obsidian",
+    "Topcoat": "Topcoat"
+  }
+}
