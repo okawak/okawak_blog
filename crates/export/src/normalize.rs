@@ -122,6 +122,7 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                     // public note such as image.png.md has the same stem.
                     let prefer_asset = image
                         && !wiki
+                        && image_extension(Path::new(target)).is_some()
                         && root.join(resolve_relative(&source.key, target)?).is_file();
                     let matches = if prefer_asset {
                         Vec::new()
@@ -163,16 +164,9 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                             let [path] = matches.as_slice() else {
                                 bail!("missing or ambiguous public image");
                             };
-                            let extension = path
-                                .extension()
-                                .and_then(|s| s.to_str())
-                                .unwrap_or_default()
-                                .to_ascii_lowercase();
-                            if !["png", "jpg", "jpeg", "gif", "webp", "avif"]
-                                .contains(&extension.as_str())
-                            {
+                            let Some(extension) = image_extension(path) else {
                                 bail!("unsupported public image format");
-                            }
+                            };
                             let data = fs::read(path)?;
                             let name = format!("{}.{}", digest(&data), extension);
                             assets.insert(name.clone(), data);
@@ -267,6 +261,13 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
         source.document.body = normalized;
     }
     Ok(assets)
+}
+
+fn image_extension(path: &Path) -> Option<String> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    ["png", "jpg", "jpeg", "gif", "webp", "avif"]
+        .contains(&extension.as_str())
+        .then_some(extension)
 }
 
 fn escape_unescaped_brackets(label: &str) -> String {
