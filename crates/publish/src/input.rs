@@ -14,17 +14,18 @@ pub(crate) struct Document {
 }
 
 pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
-    if !root.is_dir() {
+    if !public_directory_exists(root)? {
         return Err(PublishError::InvalidSourceDirectory(
             root.display().to_string(),
         ));
     }
+    public_directory_exists(&root.join("assets"))?;
     let mut documents = Vec::new();
     let mut routes = HashSet::new();
     let mut identities = HashSet::new();
     for locale in Locale::ALL {
         let directory = root.join(locale.as_str());
-        if !directory.exists() {
+        if !public_directory_exists(&directory)? {
             continue;
         }
         for entry in fs::read_dir(directory)? {
@@ -94,6 +95,19 @@ pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
     Ok(documents)
 }
 
+fn public_directory_exists(path: &Path) -> Result<bool> {
+    // A trailing slash makes the OS follow a directory symlink even for lstat.
+    let path: std::path::PathBuf = path.components().collect();
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.is_dir() => Ok(true),
+        Ok(_) => Err(PublishError::InvalidSourceDirectory(
+            path.display().to_string(),
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
+
 pub(crate) fn eligible(documents: &[Document], locale: Locale) -> Vec<Document> {
     let candidates: Vec<_> = documents
         .iter()
@@ -123,4 +137,41 @@ pub(crate) fn eligible(documents: &[Document], locale: Locale) -> Vec<Document> 
 fn invalid(message: &str) -> PublishError {
     tracing::error!(message, "invalid public input");
     PublishError::ContentErrors { count: 1 }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    #[test]
+    fn rejects_symlinked_public_input_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let external = temp.path().join("external");
+        fs::create_dir(&external).unwrap();
+        assert!(read(&external).is_ok());
+        for target_exists in [true, false] {
+            let target = if target_exists {
+                external.clone()
+            } else {
+                temp.path().join("missing")
+            };
+            for location in ["root", "ja", "en", "assets"] {
+                let root = temp
+                    .path()
+                    .join(format!("public-{location}-{target_exists}"));
+                if location == "root" {
+                    symlink(&target, &root).unwrap();
+                } else {
+                    fs::create_dir(&root).unwrap();
+                    symlink(&target, root.join(location)).unwrap();
+                }
+                assert!(read(&root).is_err(), "accepted symlink: {root:?}");
+                assert!(
+                    read(&root.join("")).is_err(),
+                    "accepted trailing slash: {root:?}"
+                );
+            }
+        }
+    }
 }
