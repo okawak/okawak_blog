@@ -18,11 +18,26 @@ for locale in $(jq -r '.routes["/"][]' "$root/locales.json"); do
   jq -e '.articles | type == "array"' "$locale_root/articles/index.json" >/dev/null
   jq -e 'type == "object" and ([.[] | type == "string"] | all)' "$locale_root/tags.json" >/dev/null
   article_count="$(jq '.articles | length' "$locale_root/articles/index.json")"
-  jq -e --argjson count "$article_count" '.total_articles == $count' "$locale_root/metadata/site.json" >/dev/null
+  jq -e --arg locale "$locale" --slurpfile routes "$root/locales.json" \
+    --slurpfile index "$locale_root/articles/index.json" '
+    [$routes[0].routes | to_entries[] | select(.value | index($locale)) | .key |
+      select(test("^/[^/]+$") and . != "/about") | ltrimstr("/")] as $categories |
+    .total_articles == ($index[0].articles | length) and
+    ([.categories[].article_count] | add // 0) == .total_articles and
+    (.categories | sort_by(.category)) ==
+      ([$categories[] as $category | {category: $category,
+        article_count: ([$index[0].articles[] | select(.category == $category)] | length)}] |
+       sort_by(.category))
+  ' "$locale_root/metadata/site.json" >/dev/null
+  while IFS= read -r category; do
+    jq -e --arg category "$category" --slurpfile index "$locale_root/articles/index.json" '
+      .category == $category and (.articles | sort_by(.slug)) ==
+        ([$index[0].articles[] | select(.category == $category)] | sort_by(.slug))
+    ' "$locale_root/categories/$category.json" >/dev/null
+  done < <(jq -r '.categories[].category' "$locale_root/metadata/site.json")
   while IFS=$'\t' read -r category slug; do
     jq -e --arg route "/$category/$slug" --arg locale "$locale" '.routes[$route] | index($locale) != null' "$root/locales.json" >/dev/null
     test -s "$locale_root/articles/$category/$slug.html"
-    jq -e --arg slug "$slug" 'any(.articles[]; .slug == $slug)' "$locale_root/categories/$category.json" >/dev/null
   done < <(jq -r '.articles[] | [.category, .slug] | @tsv' "$locale_root/articles/index.json")
   while IFS= read -r route; do
     case "$route" in

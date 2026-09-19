@@ -62,4 +62,38 @@ jq '.routes["/about"] = ["ja"]' "$validation_tmp/japanese-about/locales.json" > 
 mv "$validation_tmp/locales.json" "$validation_tmp/japanese-about/locales.json"
 rm "$validation_tmp/japanese-about/en/pages/about.json"
 bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/japanese-about"
+for category_mode in missing wrong-count extra duplicate missing-route; do
+  cp -R "$repo_root/e2e/fixtures/site" "$validation_tmp/category-$category_mode"
+  jq --arg mode "$category_mode" '
+    if $mode == "missing" then .categories = []
+    elif $mode == "wrong-count" then .categories[0].article_count = 99
+    elif $mode == "extra" then .categories += [{"category":"extra","article_count":0}]
+    elif $mode == "duplicate" then .categories += [.categories[0]]
+    else .categories = [] end
+  ' "$validation_tmp/category-$category_mode/en/metadata/site.json" > "$validation_tmp/metadata.json"
+  mv "$validation_tmp/metadata.json" "$validation_tmp/category-$category_mode/en/metadata/site.json"
+  if [ "$category_mode" = missing-route ]; then
+    jq '.routes["/tech"] = ["ja"]' "$validation_tmp/category-$category_mode/locales.json" > "$validation_tmp/locales.json"
+    mv "$validation_tmp/locales.json" "$validation_tmp/category-$category_mode/locales.json"
+  fi
+  if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/category-$category_mode" >/dev/null 2>&1; then
+    echo "Category metadata must match routes and article counts: $category_mode" >&2
+    exit 1
+  fi
+done
+cp -R "$repo_root/e2e/fixtures/site" "$validation_tmp/extra-category-article"
+jq '.articles += [.articles[0]]' "$validation_tmp/extra-category-article/en/categories/tech.json" > "$validation_tmp/category.json"
+mv "$validation_tmp/category.json" "$validation_tmp/extra-category-article/en/categories/tech.json"
+if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/extra-category-article" >/dev/null 2>&1; then
+  echo "Category articles must match the locale index exactly" >&2
+  exit 1
+fi
+# A published landing with no articles still belongs in category metadata.
+cp -R "$repo_root/e2e/fixtures/site" "$validation_tmp/empty-category"
+jq '.routes["/daily"] = ["ja"]' "$validation_tmp/empty-category/locales.json" > "$validation_tmp/locales.json"
+mv "$validation_tmp/locales.json" "$validation_tmp/empty-category/locales.json"
+jq '.categories += [{"category":"daily","article_count":0}]' "$validation_tmp/empty-category/metadata/site.json" > "$validation_tmp/metadata.json"
+mv "$validation_tmp/metadata.json" "$validation_tmp/empty-category/metadata/site.json"
+jq '.category = "daily" | .articles = []' "$validation_tmp/empty-category/categories/tech.json" > "$validation_tmp/empty-category/categories/daily.json"
+bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/empty-category"
 echo "Public artifact gate tests passed"
