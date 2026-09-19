@@ -13,3 +13,9 @@
 `Locale::path()` は既存の日本語pathを保持し、英語には `/en` を付ける。artifact keyも日本語を保持し、英語に `en/` を付ける。未対応localeのparseは失敗する。UI側のfallbackはserverの責務である。
 
 この文書はデータ契約を記載する。移行計画と進捗は [#261](https://github.com/okawak/okawak_blog/issues/261) を参照する。
+
+## タグ表示名
+
+`content/tags.json`は記事由来タグの表示名を管理するschema v1の`LabelCatalog`。記事frontmatterの`tags`は元の文字列を安定IDとして保持する。exportが公開対象だけからIDを集約し、共通翻訳処理でラベルを更新する。各項目は`source`、`context`、任意の`translation`（`value` / `stale` / `provenance`）を持つ。詳細は[exportの操作手順](../../crates/export/README.md)を参照する。
+
+publishは各言語で使用するタグだけを`site/tags.json` / `site/en/tags.json`へ`ID → 表示名`として保存する。英語の欠落・更新待ちは日本語名、項目欠落はIDにfallbackする。記事の索引内ではタグIDを変更しない。辞書が存在する場合のschema・補間変数・生成履歴の不正はpublishを停止する。旧公開入力で辞書がない場合はIDを表示名として扱う。

@@ -347,8 +347,9 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
             .contains("English 更新した本文")
     );
     assert!(!candidate_path.exists());
-    export::translate_public(output.path(), &fake, &settings(), false).unwrap();
-    assert_eq!(fake.calls.get(), 2);
+    let report = export::translate_public(output.path(), &fake, &settings(), false).unwrap();
+    // The article is reused; translating the newly added tag is independent.
+    assert_eq!(report.reused, 1);
     assert_eq!(meta(&path).title, "Reviewed candidate title");
 }
 

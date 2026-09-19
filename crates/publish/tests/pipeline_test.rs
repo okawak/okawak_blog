@@ -647,6 +647,12 @@ fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> T {
 async fn publishes_english_separately_and_removes_stale_output() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
+    let article_path = fixture.content_dir().join("ja/tech-required-article.md");
+    let source = fs::read_to_string(&article_path)
+        .unwrap()
+        .replace("schema_version: 1", "schema_version: 1\ntags: [統計]");
+    fs::write(article_path, source).unwrap();
+    fs::write(fixture.content_dir().join("tags.json"), r#"{"schema_version":1,"entries":{"統計":{"source":"統計","context":"blog tag","translation":{"value":"Statistics","stale":false}}}}"#).unwrap();
     write_english_copies(&fixture);
     publish(fixture.content_dir(), fixture.output_dir())
         .await
@@ -654,6 +660,15 @@ async fn publishes_english_separately_and_removes_stale_output() {
     let en_index: ArticleIndexDocument =
         read_json(fixture.site_root().join("en/articles/index.json"));
     assert_eq!(en_index.articles.len(), 1);
+    assert_eq!(
+        en_index.articles[0].tags,
+        ["統計"],
+        "article linkage retains stable tag IDs"
+    );
+    let labels: domain::TagLabels = read_json(fixture.site_root().join("en/tags.json"));
+    assert_eq!(labels["統計"], "Statistics");
+    let labels: domain::TagLabels = read_json(fixture.site_root().join("tags.json"));
+    assert_eq!(labels["統計"], "統計");
     let locales: domain::SiteLocalesDocument = read_json(fixture.site_root().join("locales.json"));
     assert_eq!(
         locales.path("/tech/tech-required-article", domain::Locale::En),
@@ -774,4 +789,38 @@ async fn rejects_unresolved_public_reference_without_replacing_existing_release(
         fs::read(fixture.site_root().join("articles/index.json")).unwrap(),
         before
     );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn rejects_linked_tag_catalog_without_replacing_existing_release() {
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    publish(fixture.content_dir(), fixture.output_dir())
+        .await
+        .unwrap();
+    let before = fs::read(fixture.site_root().join("tags.json")).unwrap();
+    let external = tempfile::tempdir().unwrap();
+    let target = external.path().join("tags.json");
+    fs::write(
+        &target,
+        serde_json::to_vec(&domain::LabelCatalog::default()).unwrap(),
+    )
+    .unwrap();
+    let link = fixture.content_dir().join("tags.json");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    for target_exists in [true, false] {
+        if !target_exists {
+            fs::remove_file(&target).unwrap();
+        }
+        assert!(
+            publish(fixture.content_dir(), fixture.output_dir())
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(fixture.site_root().join("tags.json")).unwrap(),
+            before
+        );
+    }
 }
