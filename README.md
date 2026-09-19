@@ -1,4 +1,4 @@
-[![Publish Obsidian to S3](https://github.com/okawak/okawak_blog/actions/workflows/upload.yml/badge.svg)](https://github.com/okawak/okawak_blog/actions/workflows/upload.yml) [![Security audit](https://github.com/okawak/okawak_blog/actions/workflows/security.yml/badge.svg)](https://github.com/okawak/okawak_blog/actions/workflows/security.yml)
+[![Publish Content to S3](https://github.com/okawak/okawak_blog/actions/workflows/upload.yml/badge.svg)](https://github.com/okawak/okawak_blog/actions/workflows/upload.yml) [![Security audit](https://github.com/okawak/okawak_blog/actions/workflows/security.yml/badge.svg)](https://github.com/okawak/okawak_blog/actions/workflows/security.yml)
 
 # ぶくせんの探窟メモ
 
@@ -17,7 +17,7 @@ https://www.okawak.net
 
 - 記事は Obsidian で執筆する
 - 記事ソースは private な Obsidian リポジトリで管理する
-- 記事ソースはこの public リポジトリへ直接 commit せず、git submodule として参照する
+- private原文は必要時にローカルでsubmoduleから取得し、選別済みの日英公開Markdownだけをこのリポジトリへcommitする
 - GitHub Actions またはローカル実行の`publish`が公開成果物を生成する
 - 生成した HTML / index JSON を S3 に配置する
 - Topcoat SSR サーバーが S3 上の成果物を読んで配信する
@@ -42,15 +42,15 @@ https://www.okawak.net
 
 主役は常駐 API サーバーではなく、公開成果物生成パイプラインです。
 
-1. Obsidian の Markdown を読む
-2. Front Matter を解釈・検証する
-3. 内部リンクや埋め込みを解決する
-4. Markdown を公開用 HTML に変換する
-5. 記事一覧やカテゴリ一覧などの index データを生成する
-6. 成果物を S3 にアップロードする
-7. Topcoat SSR サーバーがそれを読んで公開する
+1. ローカルの`export`がObsidianの公開対象だけを抽出・正規化する
+2. 記事・タグ・UI辞書の必要な項目だけをローカルCodexで翻訳する
+3. 訳文を確認・修正し、日英Markdownと辞書をGitで確定する
+4. `publish`が公開Markdownから言語別HTML・index JSONを生成する
+5. Actionsが同じimmutable S3 releaseへuploadし、公開前に日英を検証する
+6. 成功後に`current.json`を切り替える
+7. Topcoat SSRが日本語の既存URLと`/en/...`で配信する
 
-この境界に合わせて、`publish`側の実装は `crates/publish/` に、公開成果物の読取は `crates/infra/`、配信とUIは `crates/server/` に置きます。`crates/domain/` は両者で共有する契約と純粋ルールを置く場所として扱います。
+抽出と翻訳は`crates/export/`、`publish`側の実装は `crates/publish/` に、公開成果物の読取は `crates/infra/`、配信とUIは `crates/server/` に置きます。`crates/domain/` は両者で共有する契約と純粋ルールを置く場所として扱います。
 
 ### ビルド時変換
 
@@ -116,16 +116,17 @@ site/
 ## データフロー
 
 ```text
-Obsidian repo
-  -> git submodule
+private Obsidian（ローカルsubmodule）
+  -> export / 翻訳・レビュー
+  -> 日英Markdown・辞書をGit管理
   -> publish
-  -> HTML / index JSON を生成
+  -> 言語別HTML / index JSON を生成
   -> AWS S3
   -> Topcoat SSR server
   -> Browser
 ```
 
-`publish`が読む `obsidian` の Markdown は、この public repo へ通常ファイルとして同梱しない。source of truth は private な別リポジトリであり、ローカル開発と GitHub Actions の両方で git submodule として取得する。
+日本語の正本はprivate Obsidianです。`export`が公開対象だけを`content/ja`へ抽出し、英語の`content/en`とタグ辞書を作ります。公開用Markdownと辞書はGit管理し、`publish`とActionsはこれらだけを読みます。Actionsにprivate ObsidianやAIの認証情報は不要です。HTML・index JSON・翻訳候補・cacheはGit対象外です。
 
 ## Obsidian Front Matter
 
@@ -206,12 +207,12 @@ mise run versions-check
 
 site UIはTopcoat componentとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/server/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
 
-`mise run export-ja`は公開対象だけを日本語Markdownへ抽出し、`mise run export`は必要な英訳も生成します。`mise run translate`はGitの公開Markdownだけを翻訳します。手動編集・更新候補・用語集の運用は[export README](crates/export/README.md)を参照してください。`mise run dev-local`は公開Markdownからpublishとlocal配信を行います。原文同期は`mise run sync-obsidian`で明示的に実行し、未commit差分があるsubmoduleは同期しません。
+`mise run export-ja`は公開対象だけを日本語Markdownへ抽出し、`mise run export`は必要な英訳も生成します。`mise run translate`はGitの公開Markdown・タグ・UI辞書を翻訳します。UIだけなら`mise run translate-ui`を使えます。手動編集・更新候補・用語集の運用は[export README](crates/export/README.md)を参照してください。`mise run dev-local`は公開Markdownからpublishとlocal配信を行います。原文同期は`mise run sync-obsidian`で明示的に実行し、未commit差分があるsubmoduleは同期しません。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
 production CSSはTopcoatのstandalone Tailwind integrationで生成し、そのversionを`mise.toml`の`TOPCOAT_TAILWIND_VERSION`とTopcoat build scriptで一致させます。`mise run versions-check`がこれらとTopcoat CLI / framework、E2EのBun versionを照合し、GitHub Actionsは`jdx/mise-action`経由で同じlocked toolchainを導入します。
 
 共通toolを手動更新するときは、`mise.toml`のversionを更新して`mise lock --platform macos-arm64,linux-x64`を実行します。Bun本体はRenovateの`mise` managerで`mise.toml`と`mise.lock`を更新します。Topcoat本体・CLIとTailwindは手動更新を維持します。Bun package、Rust crate、Rust toolchain、GitHub Actionsの更新もそれぞれの標準manifestと[Renovate設定](./renovate.json)で管理します。GitHub Appの導入、security設定、更新PRの確認は[依存関係の更新](./docs/operations/dependency-updates.md)を参照してください。
-browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-install-browser`、実行は `mise run test-e2e` を使ってください。E2E は root の `e2e/` に置き、通常CIではprivate Obsidian submoduleやS3に依存しない固定artifactで実行します。S3への公開はGitHub Actionsの`Publish Obsidian to S3`を`main`から手動実行します。workflowは対象commitのRust CI成功と最新`main`であることを先に確認し、immutable releaseを実S3 smoke testで検証します。pointer切替直前にも最新`main`を再確認してから`current.json`を更新します。ローカルからS3へ直接syncする経路は標準の公開手順にしません。
+browser E2E の依存管理にも Bun を使います。初回は `mise run e2e-install-browser`、実行は `mise run test-e2e` を使ってください。E2E は root の `e2e/` に置き、通常CIではprivate Obsidian submoduleやS3に依存しない固定artifactで実行します。S3への公開はGitHub Actionsの`Publish Content to S3`を`main`から手動実行します。workflowは対象commitのRust CI成功と最新`main`であることを先に確認し、日英のartifactを検証し、同じimmutable releaseを実S3 smoke testで確認します。`publisher_commit`と`content_commit`は公開repositoryの同じcommitを記録します。pointer切替直前にも最新`main`を再確認してから`current.json`を更新します。ローカルからS3へ直接syncする経路は標準の公開手順にしません。
 
 開発端末では、local previewに`mise run dev-local`、S3 readerの本番相当確認に`mise run dev`または`mise run test-e2e-s3`を使います。S3用taskはAWS CLIを実行せず、AWS SDKが設定済みprofileまたは環境変数credentialを読みます。bucketやcredentialは保存せず、`AWS_PROFILE`、region、`OKAWAK_BLOG_ARTIFACT_BUCKET`、必要な場合だけ`OKAWAK_BLOG_ARTIFACT_PREFIX`を実行時に渡します。詳細は[e2e/README.md](./e2e/README.md)を参照してください。
 
@@ -263,3 +264,12 @@ mise run logs-vps
 mise run logs-recent-vps
 mise run restart-vps
 ```
+
+## 多言語運用の移行と確認
+
+1. 依存するPRを順に統合し、通常CIを通す。公開Markdownのpush時点でGitHub上では文章が公開されるため、push前に対象・訳文・辞書の差分を確認する。
+2. `mise run export-ja`で原文から公開版を同期し、`mise run export`で必要な英訳を生成する。英訳は手で修正でき、原文更新時は手動訳を保護して更新候補を作る。操作は[export README](crates/export/README.md)を参照する。
+3. `mise run dev-local`で日英を確認し、Markdownと辞書だけをGitへ確定する。未作成・更新待ちの英訳は英語一覧から外れ、英語URLは404になる。日本語の公開は継続できる。
+4. 最初にserver binaryとassetを配備する。新serverは旧releaseも日本語として読める。次に`Publish Content to S3`をmainから実行する。旧serverは新releaseの日本語を読めるが、英語ルートと新しいUIはserver更新後に利用できる。
+
+タグ表示名は記事と同じreleaseで更新されます。UIの定型文は[server辞書](crates/server/locales/README.md)をbinaryへ組み込むため、UI変更時はserverの再配備も必要です。英語homeの正規URLは`/en`で、`/en/`は既存のslash規則に従いredirectします。

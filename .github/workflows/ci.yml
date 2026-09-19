@@ -36,6 +36,9 @@ jobs:
           rustup show
           rustup component add clippy
 
+      - name: Validate public artifact gate
+        run: mise run test-public-artifacts
+
       - name: Validate service scripts
         run: mise run test-service
 

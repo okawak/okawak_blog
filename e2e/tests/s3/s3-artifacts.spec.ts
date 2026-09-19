@@ -71,3 +71,23 @@ test("S3 release artifacts pass readiness and render a published article", async
     "article",
   );
 });
+
+test("S3 release serves the languages declared by the reviewed public build", async ({ page }) => {
+  const expectedRoot = process.env.OKAWAK_BLOG_EXPECTED_ARTIFACT_ROOT;
+  if (expectedRoot) {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { verifyReleaseLocales } = await import("../../helpers/release-locales");
+    const catalog = JSON.parse(readFileSync(join(expectedRoot, "locales.json"), "utf8"));
+    await verifyReleaseLocales(page, catalog, baseURL);
+  } else {
+    // Manual smoke can target an existing release without a matching local build.
+    await page.goto("/");
+    const english = page.locator('link[rel="alternate"][hreflang="en"]');
+    if (await english.count()) {
+      await page.goto((await english.getAttribute("href"))!);
+      await expect(page.locator("html")).toHaveAttribute("lang", "en");
+      await expect(page.locator("main")).toBeVisible();
+    }
+  }
+});

@@ -69,3 +69,11 @@ test("English SSR works without JavaScript and untranslated pages do not masquer
     await context.close();
   }
 });
+
+test("publication smoke validates both locales against the public fixture", async ({ page }) => {
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { verifyReleaseLocales } = await import("../helpers/release-locales");
+  const catalog = JSON.parse(readFileSync(join(__dirname, "../fixtures/site/locales.json"), "utf8"));
+  await verifyReleaseLocales(page, catalog, baseURL);
+});
