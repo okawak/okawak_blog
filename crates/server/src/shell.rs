@@ -127,10 +127,15 @@ pub(crate) async fn site_shell(
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
     let locale = metadata.locale;
-    let home_href = locale.path("/");
+    let home_path = locale.path("/");
+    let home_href = if locale == Locale::Ja {
+        crate::language::choice_href(&home_path, locale)
+    } else {
+        home_path.clone()
+    };
     let about_href = locale.path("/about");
     let requested_path = request::uri(cx).path();
-    let home_is_current = requested_path.trim_end_matches('/') == home_href.trim_end_matches('/');
+    let home_is_current = requested_path.trim_end_matches('/') == home_path.trim_end_matches('/');
     let about_is_current = requested_path == about_href;
     let show_about = locale == Locale::Ja || metadata.locales.path("/about", locale).is_some();
     let available = metadata
@@ -143,6 +148,15 @@ pub(crate) async fn site_shell(
         .map(|other| (*other, other.path(japanese_path(&metadata.canonical_path))))
         .collect::<Vec<_>>();
     let menu_open_label = t(locale, Message::NavOpen).to_string();
+    let switch_locales = if status != StatusCode::OK {
+        crate::app::page_loader(cx)
+            .loader()
+            .load_locales()
+            .await
+            .unwrap_or_default()
+    } else {
+        metadata.locales.clone()
+    };
     let menu_close_label = t(locale, Message::NavClose).to_string();
     let year = chrono::Local::now().year();
     let menu_open = signal(cx, || false);
@@ -301,7 +315,7 @@ window.okawakScheduleCodeHighlight = function(root) {
                         >
                             <a
                                 href=(home_href.clone())
-                                class="min-w-0 text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                                class="mr-auto min-w-0 text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                             >
                                 <h1
                                     class="m-0 truncate text-xl leading-tight font-bold sm:text-2xl"
@@ -309,6 +323,12 @@ window.okawakScheduleCodeHighlight = function(root) {
                                     (t(locale, Message::SiteName))
                                 </h1>
                             </a>
+
+                            crate::language::language_switcher(
+                                locale: locale,
+                                path: &canonical_path,
+                                locales: &switch_locales
+                            )
 
                             <button
                                 type="button"
@@ -394,22 +414,6 @@ window.okawakScheduleCodeHighlight = function(root) {
                                             >
                                                 (t(locale, Message::NavAbout))
                                             </a>
-                                        </li>
-                                    }
-                                    if alternates.len() > 1 {
-                                        <li aria-label=(t(locale, Message::NavLanguage))>
-                                            for (other, path) in &alternates {
-                                                if *other != locale {
-                                                    <a
-                                                        href=(path)
-                                                        hreflang=(other.as_str())
-                                                        lang=(other.as_str())
-                                                        class="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-primary"
-                                                    >
-                                                        (if *other == Locale::Ja { "日本語" } else { "English" })
-                                                    </a>
-                                                }
-                                            }
                                         </li>
                                     }
                                 </ul>

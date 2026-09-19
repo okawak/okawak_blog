@@ -142,8 +142,6 @@ test("GitHub icon stays accessible without an icon font", async ({ page }) => {
   // Reach the profile link through the same keyboard sequence as a visitor.
   await page.getByRole("navigation").getByRole("link", { name: "About", exact: true }).focus();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", { name: "English", exact: true })).toBeFocused();
-  await page.keyboard.press("Tab");
   await expect(github).toBeFocused();
   expect(await github.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe("solid");
   expect(iconFontRequests).toEqual([]);
@@ -285,6 +283,7 @@ test("same-page fragments keep the current document", async ({ page }) => {
 test("server-rendered pages remain navigable without JavaScript", async ({ browser }) => {
   const context = await browser.newContext({
     baseURL: BASE_URL,
+    locale: "ja-JP",
     javaScriptEnabled: false,
   });
   const page = await context.newPage();
