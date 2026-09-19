@@ -254,3 +254,48 @@ fn catalog_updates_respect_the_public_tree_transaction_lock() {
     );
     assert_eq!(fake.0.get(), 0);
 }
+
+#[test]
+fn catalog_directory_alias_uses_the_real_public_tree_lock_for_update_and_acceptance() {
+    let tmp = tempfile::tempdir().unwrap();
+    let content = tmp.path().join("content");
+    let alias = tmp.path().join("content-link");
+    fs::create_dir(&content).unwrap();
+    std::os::unix::fs::symlink(&content, &alias).unwrap();
+    let path = content.join("tags.json");
+    let linked_path = alias.join("tags.json");
+    let mut catalog = LabelCatalog::default();
+    catalog.entries.insert(
+        "tag".into(),
+        LabelEntry {
+            source: "タグ".into(),
+            context: "tag label".into(),
+            translation: None,
+        },
+    );
+    save(&path, &catalog);
+    let fake = Fake(Cell::new(0));
+    export::translate_catalog(&path, &fake, &settings(), false).unwrap();
+    catalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    let entry = catalog.entries.get_mut("tag").unwrap();
+    entry.translation.as_mut().unwrap().value = "Manual tag".into();
+    entry.context = "new tag context".into();
+    save(&path, &catalog);
+    export::translate_catalog(&path, &fake, &settings(), true).unwrap();
+    let lock = tmp.path().join(".content.export-lock");
+    fs::write(&lock, "another export").unwrap();
+    let before = fs::read(&path).unwrap();
+    assert!(export::translate_catalog(&linked_path, &fake, &settings(), false).is_err());
+    assert!(export::accept_catalog_translation(&linked_path, "tag", &settings()).is_err());
+    assert_eq!(fs::read(&path).unwrap(), before);
+    assert_eq!(fs::read_to_string(&lock).unwrap(), "another export");
+    assert!(!tmp.path().join(".content-link.export-lock").exists());
+    fs::remove_file(lock).unwrap();
+    export::accept_catalog_translation(&linked_path, "tag", &settings()).unwrap();
+    let accepted: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(
+        accepted.entries["tag"].translation.as_ref().unwrap().value,
+        "EN タグ"
+    );
+    assert_eq!(fake.0.get(), 2);
+}

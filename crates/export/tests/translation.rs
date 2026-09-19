@@ -135,6 +135,129 @@ fn code_only_update_reassembles_from_cached_translation_without_ai() {
 }
 
 #[test]
+fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let fake = Fake::new();
+    write_note(source.path(), "本文");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    export::translate_public(output.path(), &fake, &settings(), false).unwrap();
+    let path = english(output.path());
+    fs::write(
+        &path,
+        fs::read_to_string(&path)
+            .unwrap()
+            .replace("English 記事", "Manual title"),
+    )
+    .unwrap();
+    write_note(source.path(), "更新した本文");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    export::translate_public(output.path(), &fake, &settings(), true).unwrap();
+    let candidate_path = output
+        .path()
+        .join(".export-candidates")
+        .join(path.file_name().unwrap());
+    fs::write(
+        &candidate_path,
+        fs::read_to_string(&candidate_path)
+            .unwrap()
+            .replace("English 記事", "Reviewed candidate title"),
+    )
+    .unwrap();
+    let moved = fs::read_to_string(source.path().join("tech/a.md"))
+        .unwrap()
+        .replace(
+            "category: tech",
+            "category: daily\ntags: [NewTag]\npriority: 42",
+        )
+        .replace(
+            "updated: '2025-01-01T00:00:00+09:00'",
+            "updated: '2025-02-01T00:00:00+09:00'",
+        );
+    fs::remove_file(source.path().join("tech/a.md")).unwrap();
+    fs::create_dir_all(source.path().join("daily/new")).unwrap();
+    fs::write(source.path().join("daily/new/a.md"), moved).unwrap();
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let id = path.file_stem().unwrap().to_str().unwrap().parse().unwrap();
+    export::accept_translation(output.path(), &id, &settings()).unwrap();
+    fn meta(path: &Path) -> domain::PublicContentMeta {
+        let text = fs::read_to_string(path).unwrap();
+        serde_yaml::from_str(
+            text.strip_prefix("---\n")
+                .unwrap()
+                .split_once("\n---\n")
+                .unwrap()
+                .0,
+        )
+        .unwrap()
+    }
+    let actual = meta(&path);
+    let mut expected = meta(&output.path().join("ja").join(path.file_name().unwrap()));
+    expected.locale = domain::Locale::En;
+    expected.title = "Reviewed candidate title".into();
+    expected.translation = actual.translation.clone();
+    assert_eq!(actual, expected);
+    assert_eq!(actual.path(), format!("/en/daily/{id}"));
+    assert!(
+        fs::read_to_string(&path)
+            .unwrap()
+            .contains("English 更新した本文")
+    );
+    assert!(!candidate_path.exists());
+    let report = export::translate_public(output.path(), &fake, &settings(), false).unwrap();
+    // The article is reused; translating the newly added tag is independent.
+    assert_eq!(report.reused, 1);
+    assert_eq!(meta(&path).title, "Reviewed candidate title");
+}
+
+#[test]
+fn translated_plain_text_cannot_introduce_markdown_structure() {
+    struct Plain<'a>(&'a str);
+    impl Translator for Plain<'_> {
+        fn translate(&self, request: &TranslationRequest) -> anyhow::Result<Texts> {
+            Ok(request
+                .texts
+                .keys()
+                .map(|key| {
+                    (
+                        key.clone(),
+                        if key == "title" { "Title" } else { self.0 }.into(),
+                    )
+                })
+                .collect())
+        }
+    }
+    for prose in [
+        "1. First",
+        "- item",
+        "+ item",
+        "1) item",
+        "~~removed~~",
+        "===",
+        "---",
+    ] {
+        let source = TempDir::new().unwrap();
+        let output = TempDir::new().unwrap();
+        write_note(source.path(), "本文");
+        export::export_japanese(source.path(), output.path()).unwrap();
+        export::translate_public(output.path(), &Plain(prose), &settings(), false).unwrap();
+        let text = fs::read_to_string(english(output.path())).unwrap();
+        let body = text
+            .strip_prefix("---\n")
+            .unwrap()
+            .split_once("\n---\n")
+            .unwrap()
+            .1;
+        let mut html = String::new();
+        pulldown_cmark::html::push_html(
+            &mut html,
+            pulldown_cmark::Parser::new_ext(body, pulldown_cmark::Options::ENABLE_STRIKETHROUGH),
+        );
+        assert_eq!(html, format!("<p>{prose}</p>\n"), "{prose}");
+    }
+}
+
+#[test]
 fn inline_html_text_is_preserved_while_surrounding_prose_is_translated() {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
