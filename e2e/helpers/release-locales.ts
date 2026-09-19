@@ -18,7 +18,7 @@ export async function verifyReleaseLocales(page: Page, catalog: LocaleCatalog, b
     const sample = ["/", paths.includes("/about") ? "/about" : undefined, category, article].filter((path): path is string => Boolean(path));
     for (const japanesePath of sample) {
       const route = locale === "en" ? (japanesePath === "/" ? "/en" : `/en${japanesePath}`) : japanesePath;
-      const response = await page.goto(route);
+      const response = await page.goto(route === "/" ? "/?lang=ja" : route);
       expect(response?.status(), `${locale}: ${route}`).toBe(200);
       await expect(page.locator("html")).toHaveAttribute("lang", locale);
       const canonical = `${baseURL}${route === "/" ? "" : route}`;

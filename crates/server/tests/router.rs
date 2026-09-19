@@ -23,6 +23,195 @@ use topcoat::{
 
 use server::{app::create_router as create_router_with_assets, assets};
 
+#[tokio::test]
+async fn home_selects_browser_language_with_english_default_and_saved_preference() {
+    let router = create_router(fixture_reader(), false);
+    for (language, cookie, expected) in [
+        (None, None, "en"),
+        (Some("ja-JP, en;q=0.8"), None, "ja"),
+        (Some("ja;q=0.5, en-US;q=0.9"), None, "en"),
+        (Some("JA-jp;q=1, en;q=0.8"), None, "ja"),
+        (Some("fr-FR"), None, "en"),
+        (Some("ja;q=0, en;q=0.5"), None, "en"),
+        (Some("ja;q=bogus, en;q=0.5"), None, "en"),
+        (Some("en"), Some("okawak_locale=ja"), "ja"),
+        (Some("ja"), Some("unrelated=x; okawak_locale=en"), "en"),
+        (Some("ja"), Some("okawak_locale=unknown"), "ja"),
+    ] {
+        let mut request = Request::builder().uri("/?from=entry%20link");
+        if let Some(language) = language {
+            request = request.header(header::ACCEPT_LANGUAGE, language);
+        }
+        if let Some(cookie) = cookie {
+            request = request.header(header::COOKIE, cookie);
+        }
+        let result = response(&router, request.body(Body::empty()).unwrap()).await;
+        if expected == "en" {
+            assert_eq!(
+                result.status,
+                StatusCode::TEMPORARY_REDIRECT,
+                "{language:?} {cookie:?}"
+            );
+            assert_eq!(result.headers[header::LOCATION], "/en?from=entry%20link");
+            assert_eq!(result.headers[header::CACHE_CONTROL], "no-store");
+        } else {
+            assert_eq!(result.status, StatusCode::OK, "{language:?} {cookie:?}");
+            assert!(result.body.contains("<html lang=\"ja\">"));
+            assert_eq!(result.headers[header::CACHE_CONTROL], "private, no-cache");
+        }
+        assert_eq!(result.headers[header::VARY], "Accept-Language, Cookie");
+        assert!(!result.headers.contains_key(header::SET_COOKIE));
+    }
+}
+
+#[tokio::test]
+async fn manual_language_choice_is_saved_and_falls_back_to_the_published_home() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    for (path, language, location) in [
+        (
+            "/tech/e2e-article?lang=en&from=menu%20link",
+            "en",
+            "/en/tech/e2e-article?from=menu%20link",
+        ),
+        ("/daily?lang=en", "en", "/en"),
+        ("/?lang=ja", "ja", "/"),
+        ("/en/tech/e2e-article?lang=ja", "ja", "/tech/e2e-article"),
+    ] {
+        let result = response(
+            &router,
+            Request::builder()
+                .uri(path)
+                .header(header::ACCEPT_LANGUAGE, "en")
+                .header(header::COOKIE, "okawak_locale=en")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::SEE_OTHER, "{path}");
+        assert_eq!(result.headers[header::LOCATION], location);
+        assert_eq!(
+            result.headers[header::SET_COOKIE],
+            format!("okawak_locale={language}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax")
+        );
+        assert_eq!(result.headers[header::CACHE_CONTROL], "no-store");
+        assert!(!result.headers.contains_key(header::ETAG));
+    }
+}
+
+#[tokio::test]
+async fn language_selection_precedes_conditional_get_and_shares_the_snapshot() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let reader: DynArtifactReader = Arc::new(CountingReader {
+        inner: fixture_reader(),
+        snapshot_calls: calls.clone(),
+    });
+    let router = create_router(validator_reader(reader), true);
+    let first = response(
+        &router,
+        Request::builder()
+            .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(first.status, StatusCode::OK);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    for (method, language, expected) in [
+        (Method::GET, "en", StatusCode::TEMPORARY_REDIRECT),
+        (Method::HEAD, "en", StatusCode::TEMPORARY_REDIRECT),
+        (Method::GET, "ja", StatusCode::NOT_MODIFIED),
+    ] {
+        calls.store(0, Ordering::SeqCst);
+        let result = response(
+            &router,
+            Request::builder()
+                .method(method)
+                .uri("/")
+                .header(header::ACCEPT_LANGUAGE, language)
+                .header(header::IF_NONE_MATCH, &first.headers[header::ETAG])
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, expected);
+        assert_eq!(result.headers[header::VARY], "Accept-Language, Cookie");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+}
+
+#[tokio::test]
+async fn explicit_page_urls_and_legacy_japanese_releases_keep_their_language() {
+    let router = create_router(fixture_reader(), false);
+    for (path, locale) in [("/en", "en"), ("/tech/e2e-article", "ja"), ("/about", "ja")] {
+        let result = response(
+            &router,
+            Request::builder()
+                .uri(path)
+                .header(header::ACCEPT_LANGUAGE, "fr")
+                .header(header::COOKIE, "okawak_locale=en")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::OK);
+        assert!(result.body.contains(&format!("<html lang=\"{locale}\">")));
+    }
+    let legacy = create_router(empty_fixture_reader(), false);
+    let result = response(
+        &legacy,
+        Request::builder().uri("/").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(result.status, StatusCode::OK);
+    assert!(result.body.contains("<html lang=\"ja\">"));
+}
+
+#[tokio::test]
+async fn language_negotiation_shares_a_snapshot_without_http_validators() {
+    for (uri, language) in [("/", "ja"), ("/", "en"), ("/about?lang=en", "ja")] {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let reader: DynArtifactReader = Arc::new(CountingReader {
+            inner: fixture_reader(),
+            snapshot_calls: calls.clone(),
+        });
+        let router = create_router(reader, false);
+        let result = response(
+            &router,
+            Request::builder()
+                .uri(uri)
+                .header(header::ACCEPT_LANGUAGE, language)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert!(result.status.is_success() || result.status.is_redirection());
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "{uri} {language}");
+    }
+}
+
+#[tokio::test]
+async fn language_choice_does_not_modify_api_or_post_responses() {
+    let router = create_router(fixture_reader(), false);
+    for (uri, method) in [
+        ("/api/articles?lang=en", Method::GET),
+        ("/api/health?lang=ja", Method::GET),
+        ("/tech?lang=en", Method::POST),
+    ] {
+        let result = response(
+            &router,
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert!(!result.headers.contains_key(header::SET_COOKIE));
+        assert!(!result.headers.contains_key(header::LOCATION));
+    }
+}
+
 struct TestResponse {
     status: StatusCode,
     headers: HeaderMap,
@@ -452,7 +641,11 @@ async fn home_renders_the_published_summary_as_html() {
     let router = create_router(fixture_reader(), false);
     let response = response(
         &router,
-        Request::builder().uri("/").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
 
@@ -485,7 +678,11 @@ async fn home_renders_the_published_summary_as_html() {
             .contains("<meta property=\"og:url\" content=\"https://www.okawak.net\">")
     );
     assert!(response.body.contains("<p>Fixture home content</p>"));
-    assert!(response.body.contains("href=\"/\" aria-current=\"page\""));
+    assert!(
+        response
+            .body
+            .contains("href=\"/?lang=ja\" aria-current=\"page\"")
+    );
     assert!(response.body.contains("href=\"/tech\""));
     assert!(response.body.contains("href=\"/tech/e2e-article\""));
     assert!(response.body.contains(">E2E Article</h3>"));
@@ -508,14 +705,23 @@ async fn navigation_marks_only_the_current_destination_including_query_urls() {
     ] {
         let response = response(
             &router,
-            Request::builder().uri(path).body(Body::empty()).unwrap(),
+            Request::builder()
+                .uri(path)
+                .header(header::ACCEPT_LANGUAGE, "ja")
+                .body(Body::empty())
+                .unwrap(),
         )
         .await;
         for destination in ["/", "/about"] {
+            let href = if destination == "/" {
+                "/?lang=ja"
+            } else {
+                destination
+            };
             assert_eq!(
                 response
                     .body
-                    .contains(&format!("href=\"{destination}\" aria-current=\"page\"")),
+                    .contains(&format!("href=\"{href}\" aria-current=\"page\"")),
                 expected == Some(destination),
                 "{path}: current destination {destination}",
             );
@@ -527,6 +733,7 @@ async fn navigation_marks_only_the_current_destination_including_query_urls() {
 async fn error_pages_keep_navigation_tied_to_the_requested_url() {
     let router = create_router(Arc::new(FailingSnapshotReader), false);
     for path in ["/", "/about"] {
+        let href = if path == "/" { "/?lang=ja" } else { path };
         let response = response(
             &router,
             Request::builder()
@@ -539,7 +746,7 @@ async fn error_pages_keep_navigation_tied_to_the_requested_url() {
         assert!(
             response
                 .body
-                .contains(&format!("href=\"{path}\" aria-current=\"page\""))
+                .contains(&format!("href=\"{href}\" aria-current=\"page\""))
         );
         assert_eq!(response.body.matches("aria-current=\"page\"").count(), 1);
     }
@@ -550,7 +757,11 @@ async fn home_shell_exposes_topcoat_mobile_navigation_contract() {
     let router = create_router(fixture_reader(), false);
     let response = response(
         &router,
-        Request::builder().uri("/").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
 
@@ -591,7 +802,11 @@ async fn home_renders_empty_state_without_treating_it_as_an_error() {
     let router = create_router(empty_fixture_reader(), false);
     let response = response(
         &router,
-        Request::builder().uri("/").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
 
@@ -623,7 +838,11 @@ async fn home_uses_fallback_copy_when_optional_fragment_is_missing() {
 
     let response = response(
         &router,
-        Request::builder().uri("/").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
 
@@ -648,7 +867,11 @@ async fn home_returns_internal_server_error_for_invalid_optional_fragment() {
     let router = create_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
     let response = response(
         &router,
-        Request::builder().uri("/").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
 
@@ -662,7 +885,11 @@ async fn home_returns_internal_server_error_when_required_artifact_is_missing() 
     let router = create_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
     let response = response(
         &router,
-        Request::builder().uri("/").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
 
@@ -675,7 +902,11 @@ async fn home_returns_internal_server_error_page_when_snapshot_fails() {
     let router = create_router(Arc::new(FailingSnapshotReader), false);
     let response = response(
         &router,
-        Request::builder().uri("/").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
 
@@ -688,7 +919,11 @@ async fn home_supports_release_aware_conditional_get() {
     let router = create_router(validator_reader(fixture_reader()), true);
     let first = response(
         &router,
-        Request::builder().uri("/").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
     let etag = first
@@ -703,6 +938,7 @@ async fn home_supports_release_aware_conditional_get() {
         &router,
         Request::builder()
             .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
             .header(header::IF_NONE_MATCH, etag)
             .body(Body::empty())
             .unwrap(),
@@ -724,7 +960,11 @@ async fn conditional_get_and_home_share_one_snapshot() {
 
     let response = response(
         &router,
-        Request::builder().uri("/").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
 

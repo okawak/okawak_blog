@@ -12,6 +12,8 @@ pub(crate) type PageLoadResult<T> = Result<T, String>;
 
 #[async_trait]
 pub(crate) trait PageLoader: Send + Sync {
+    async fn load_locales(&self) -> PageLoadResult<SiteLocalesDocument>;
+
     async fn load_asset(&self, name: &ContentAssetName) -> PageLoadResult<Option<Vec<u8>>>;
 
     async fn load_home(

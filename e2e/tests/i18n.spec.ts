@@ -2,6 +2,72 @@ import { expect, test } from "@playwright/test";
 
 const baseURL = "http://127.0.0.1:8008";
 
+test("home follows the browser locale and uses English for unsupported languages", async ({ browser }) => {
+  for (const [locale, path, lang] of [["en-US", "/en", "en"], ["ja-JP", "/", "ja"], ["fr-FR", "/en", "en"]]) {
+    const context = await browser.newContext({ locale });
+    try {
+      const page = await context.newPage();
+      await page.goto(baseURL);
+      await expect(page).toHaveURL(`${baseURL}${path}`);
+      await expect(page.locator("html")).toHaveAttribute("lang", lang);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test("header language choices persist and direct article URLs keep their locale", async ({ browser }, testInfo) => {
+  const context = await browser.newContext({ locale: "en-US" });
+  try {
+    const page = await context.newPage();
+    await page.goto(baseURL);
+    const switcher = page.locator("header").getByRole("group");
+    await expect(switcher.getByRole("link", { name: "English" })).toHaveAttribute("aria-current", "true");
+    await switcher.getByRole("link", { name: "日本語" }).click();
+    await expect(page).toHaveURL(`${baseURL}/`);
+    await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+    const cookie = (await context.cookies()).find(cookie => cookie.name === "okawak_locale");
+    expect(cookie).toMatchObject({ value: "ja", httpOnly: true, sameSite: "Lax" });
+    await page.goto(baseURL);
+    await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+    await page.goto(`${baseURL}/en/tech/e2e-article`);
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await switcher.getByRole("link", { name: "日本語" }).click();
+    await expect(page).toHaveURL(`${baseURL}/tech/e2e-article`);
+    await page.setViewportSize({ width: 320, height: 740 });
+    await expect(switcher.getByRole("link", { name: "English" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "ナビゲーションメニューを開く" })).toHaveAttribute("aria-expanded", "false");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+    await page.screenshot({ path: testInfo.outputPath("language-menu-mobile.png") });
+    await switcher.getByRole("link", { name: "English" }).click();
+    await expect(page).toHaveURL(`${baseURL}/en/tech/e2e-article`);
+    await page.goto(baseURL);
+    await expect(page).toHaveURL(`${baseURL}/en`);
+  } finally {
+    await context.close();
+  }
+});
+
+test("language switching works without JavaScript and returns from missing pages", async ({ browser }) => {
+  const context = await browser.newContext({ locale: "en-US", javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    const response = await page.goto(`${baseURL}/tech/untranslated`);
+    expect(response?.status()).toBe(404);
+    await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+    const english = page.locator("header").getByRole("link", { name: "English" });
+    await expect(english).toHaveAttribute("href", "/en?lang=en");
+    await english.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(`${baseURL}/en`);
+    await page.locator("header").getByRole("link", { name: "日本語" }).click();
+    await page.goto(baseURL);
+    await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+  } finally {
+    await context.close();
+  }
+});
+
 test("language links select existing translations and matching metadata", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
