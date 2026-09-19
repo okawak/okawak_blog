@@ -3,9 +3,11 @@
 set -euo pipefail
 root="${1:?Usage: validate_public_artifacts.sh SITE_ROOT}"
 jq -e '
+  .routes["/"] as $home_locales |
   .schema_version == 1 and (.routes | type == "object") and
   (.routes["/"] | index("ja") != null) and
-  ([.routes[][] | . == "ja" or . == "en"] | all)
+  ([.routes[][] | . == "ja" or . == "en"] | all) and
+  ([.routes[] | (. - $home_locales | length) == 0] | all)
 ' "$root/locales.json" >/dev/null
 
 for locale in $(jq -r '.routes["/"][]' "$root/locales.json"); do
