@@ -219,7 +219,8 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
     }
 }
 
-type ContentAssetCell = Arc<OnceCell<Option<Vec<u8>>>>;
+type ContentAssetResult = std::result::Result<Option<Vec<u8>>, Arc<crate::InfraError>>;
+type ContentAssetCell = Arc<OnceCell<ContentAssetResult>>;
 
 #[derive(Default)]
 struct ContentAssetCache {
@@ -242,7 +243,11 @@ impl ContentAssetCache {
             key,
             cell,
         };
-        read.cell.get_or_try_init(load).await.cloned()
+        read.cell
+            .get_or_init(|| async { load().await.map_err(Arc::new) })
+            .await
+            .clone()
+            .map_err(crate::InfraError::Shared)
     }
 }
 
@@ -257,7 +262,7 @@ impl Drop for ContentAssetRead<'_> {
         let mut entries = self.cache.entries.lock().unwrap();
         // The map and this final reader own the last two references. Keep successes;
         // release misses, errors and cancelled loads when no reader needs the cell.
-        if Arc::strong_count(&self.cell) == 2 && !matches!(self.cell.get(), Some(Some(_))) {
+        if Arc::strong_count(&self.cell) == 2 && !matches!(self.cell.get(), Some(Ok(Some(_)))) {
             entries.remove(self.key);
         }
     }
@@ -621,6 +626,38 @@ mod tests {
         reader.abort();
         assert!(reader.await.unwrap_err().is_cancelled());
         assert!(cache.entries.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn concurrent_asset_read_errors_are_shared_but_later_requests_retry() {
+        let cache = ContentAssetCache::default();
+        let reads = AtomicUsize::new(0);
+        let fail = || async {
+            reads.fetch_add(1, Ordering::SeqCst);
+            tokio::task::yield_now().await;
+            Err(InfraError::Io(std::io::Error::other("temporary failure")))
+        };
+        let (first, second) = tokio::join!(
+            cache.get_or_try_init("same", fail),
+            cache.get_or_try_init("same", fail)
+        );
+        assert_eq!(
+            first.unwrap_err().to_string(),
+            second.unwrap_err().to_string()
+        );
+        assert_eq!(reads.load(Ordering::SeqCst), 1);
+        assert!(cache.entries.lock().unwrap().is_empty());
+        assert_eq!(
+            cache
+                .get_or_try_init("same", || async {
+                    reads.fetch_add(1, Ordering::SeqCst);
+                    Ok(Some(b"retry".to_vec()))
+                })
+                .await
+                .unwrap(),
+            Some(b"retry".to_vec())
+        );
+        assert_eq!(reads.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]
