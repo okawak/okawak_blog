@@ -70,7 +70,6 @@ pub enum ContentKind {
 pub struct TranslationProvenance {
     pub input_hash: String,
     pub generated_hash: String,
-    #[serde(default)]
     pub stale: bool,
 }
 

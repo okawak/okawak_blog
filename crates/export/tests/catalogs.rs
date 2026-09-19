@@ -179,3 +179,78 @@ fn authored_labels_without_generation_history_are_preserved_and_reported() {
     let actual: LabelCatalog = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
     assert_eq!(actual, catalog);
 }
+
+#[test]
+fn filename_only_catalog_updates_and_accepts_without_replacing_working_directory() {
+    const CHILD: &str = "OKAWAK_CATALOG_RELATIVE_PATH_TEST";
+    if std::env::var_os(CHILD).is_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "filename_only_catalog_updates_and_accepts_without_replacing_working_directory",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .current_dir(tmp.path())
+            .status()
+            .unwrap();
+        assert!(status.success());
+        return;
+    }
+    use std::os::unix::fs::MetadataExt;
+    let directory_id = fs::metadata(".").unwrap().ino();
+    fs::create_dir_all("unrelated/empty").unwrap();
+    std::os::unix::fs::symlink("not-read", "unrelated-link").unwrap();
+    let path = std::path::Path::new("ui.json");
+    let mut catalog = LabelCatalog {
+        entries: [(
+            "button".into(),
+            LabelEntry {
+                source: "実行".into(),
+                context: "button".into(),
+                translation: None,
+            },
+        )]
+        .into(),
+        ..Default::default()
+    };
+    save(path, &catalog);
+    let fake = Fake(Cell::new(0));
+    export::translate_catalog(path, &fake, &settings(), false).unwrap();
+    catalog = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    let entry = catalog.entries.get_mut("button").unwrap();
+    entry.translation.as_mut().unwrap().value = "Manual translation".into();
+    entry.context = "updated button context".into();
+    save(path, &catalog);
+    export::translate_catalog(path, &fake, &settings(), true).unwrap();
+    export::accept_catalog_translation(path, "button", &settings()).unwrap();
+    export::translate_catalog(path, &fake, &settings(), false).unwrap();
+    assert_eq!(fake.0.get(), 2);
+    assert_eq!(fs::metadata(".").unwrap().ino(), directory_id);
+    assert!(std::path::Path::new("unrelated/empty").is_dir());
+    assert_eq!(
+        fs::read_link("unrelated-link").unwrap(),
+        std::path::Path::new("not-read")
+    );
+}
+
+#[test]
+fn catalog_updates_respect_the_public_tree_transaction_lock() {
+    let tmp = tempfile::tempdir().unwrap();
+    let content = tmp.path().join("content");
+    fs::create_dir(&content).unwrap();
+    let path = content.join("tags.json");
+    save(&path, &LabelCatalog::default());
+    let lock = tmp.path().join(".content.export-lock");
+    fs::write(&lock, "owned by another export").unwrap();
+    let before = fs::read(&path).unwrap();
+    let fake = Fake(Cell::new(0));
+    assert!(export::translate_catalog(&path, &fake, &settings(), false).is_err());
+    assert_eq!(fs::read(&path).unwrap(), before);
+    assert_eq!(
+        fs::read_to_string(&lock).unwrap(),
+        "owned by another export"
+    );
+    assert_eq!(fake.0.get(), 0);
+}

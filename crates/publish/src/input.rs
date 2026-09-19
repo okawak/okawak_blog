@@ -80,6 +80,9 @@ pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
                 || ja.category != en.meta.category
                 || ja.page != en.meta.page
                 || ja.tags != en.meta.tags
+                || ja.section_path != en.meta.section_path
+                || ja.priority != en.meta.priority
+                || ja.updated != en.meta.updated
                 || ja.source_hash != en.meta.source_hash
                 || ja.created != en.meta.created)
         {
