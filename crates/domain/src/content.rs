@@ -25,6 +25,7 @@ impl Locale {
     pub fn path(self, japanese_path: &str) -> String {
         match self {
             Self::Ja => japanese_path.to_owned(),
+            Self::En if japanese_path == "/" => "/en".into(),
             Self::En => format!("/en{japanese_path}"),
         }
     }

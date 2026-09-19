@@ -2,13 +2,14 @@
 
 use async_trait::async_trait;
 use domain::{
-    ArticlePageDocument, Category, CategoryPageDocument, HomePageDocument, PageKey, Slug,
-    StaticPageDocument, build_article_page_document, build_category_page_document,
-    build_home_page_document, build_static_page_document, find_article_summary,
+    ArticlePageDocument, Category, CategoryPageDocument, ContentAssetName, HomePageDocument,
+    Locale, PageKey, Slug, StaticPageDocument, build_article_page_document,
+    build_category_page_document, build_home_page_document, build_static_page_document,
+    find_article_summary,
 };
 use infra::{DynArtifactReader, DynArtifactSnapshot};
 
-use crate::page_loader::{PageLoadResult, PageLoader};
+use crate::page_loader::{PageLoadResult, PageLoader, Presentation};
 
 #[derive(Clone)]
 enum ArtifactPageSource {
@@ -42,12 +43,37 @@ impl ArtifactPageLoader {
             ArtifactPageSource::Snapshot(snapshot) => Ok(snapshot.clone()),
         }
     }
+    async fn for_locale(
+        &self,
+        locale: Locale,
+    ) -> PageLoadResult<Option<(DynArtifactSnapshot, DynArtifactSnapshot)>> {
+        let root = self.snapshot().await?;
+        let selected = if locale == Locale::Ja {
+            Some(root.clone())
+        } else {
+            root.localized(locale).await.map_err(|e| e.to_string())?
+        };
+        Ok(selected.map(|selected| (root, selected)))
+    }
 }
 
 #[async_trait]
 impl PageLoader for ArtifactPageLoader {
-    async fn load_home(&self) -> PageLoadResult<HomePageDocument> {
-        let snapshot = self.snapshot().await?;
+    async fn load_asset(&self, name: &ContentAssetName) -> PageLoadResult<Option<Vec<u8>>> {
+        self.snapshot()
+            .await?
+            .read_content_asset(name)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    async fn load_home(
+        &self,
+        locale: Locale,
+    ) -> PageLoadResult<Option<Presentation<HomePageDocument>>> {
+        let Some((root, snapshot)) = self.for_locale(locale).await? else {
+            return Ok(None);
+        };
         let (article_index, site_metadata, home_fragment) = tokio::try_join!(
             snapshot.read_article_index(),
             snapshot.read_site_metadata(),
@@ -61,16 +87,21 @@ impl PageLoader for ArtifactPageLoader {
         )
         .map_err(|error| error.to_string())?;
 
-        build_home_page_document(&article_index, &site_metadata, home_fragment.as_ref())
-            .map_err(|error| error.to_string())
+        let document =
+            build_home_page_document(&article_index, &site_metadata, home_fragment.as_ref())
+                .map_err(|error| error.to_string())?;
+        presentation(document, &root, &snapshot).await.map(Some)
     }
 
     async fn load_article(
         &self,
+        locale: Locale,
         category: &Category,
         slug: &Slug,
-    ) -> PageLoadResult<Option<ArticlePageDocument>> {
-        let snapshot = self.snapshot().await?;
+    ) -> PageLoadResult<Option<Presentation<ArticlePageDocument>>> {
+        let Some((root, snapshot)) = self.for_locale(locale).await? else {
+            return Ok(None);
+        };
         let article_index = snapshot
             .read_article_index()
             .await
@@ -84,39 +115,61 @@ impl PageLoader for ArtifactPageLoader {
             Err(error) => return Err(error.to_string()),
         };
 
-        build_article_page_document(summary, &html)
-            .map(Some)
-            .map_err(|error| error.to_string())
+        let document =
+            build_article_page_document(summary, &html).map_err(|error| error.to_string())?;
+        presentation(document, &root, &snapshot).await.map(Some)
     }
 
     async fn load_category(
         &self,
+        locale: Locale,
         category: &Category,
-    ) -> PageLoadResult<Option<CategoryPageDocument>> {
-        let snapshot = self.snapshot().await?;
+    ) -> PageLoadResult<Option<Presentation<CategoryPageDocument>>> {
+        let Some((root, snapshot)) = self.for_locale(locale).await? else {
+            return Ok(None);
+        };
         let artifact = match snapshot.read_category_document(category).await {
             Ok(artifact) => artifact,
             Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error.to_string()),
         };
 
-        build_category_page_document(&artifact)
-            .map(Some)
-            .map_err(|error| error.to_string())
+        let document =
+            build_category_page_document(&artifact).map_err(|error| error.to_string())?;
+        presentation(document, &root, &snapshot).await.map(Some)
     }
 
-    async fn load_static_page(&self, page: &PageKey) -> PageLoadResult<Option<StaticPageDocument>> {
-        let snapshot = self.snapshot().await?;
+    async fn load_static_page(
+        &self,
+        locale: Locale,
+        page: &PageKey,
+    ) -> PageLoadResult<Option<Presentation<StaticPageDocument>>> {
+        let Some((root, snapshot)) = self.for_locale(locale).await? else {
+            return Ok(None);
+        };
         let artifact = match snapshot.read_page_document(page).await {
             Ok(artifact) => artifact,
             Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error.to_string()),
         };
 
-        build_static_page_document(&artifact)
-            .map(Some)
-            .map_err(|error| error.to_string())
+        let document = build_static_page_document(&artifact).map_err(|error| error.to_string())?;
+        presentation(document, &root, &snapshot).await.map(Some)
     }
+}
+
+async fn presentation<T>(
+    document: T,
+    root: &DynArtifactSnapshot,
+    selected: &DynArtifactSnapshot,
+) -> PageLoadResult<Presentation<T>> {
+    let (locales, labels) = tokio::try_join!(root.read_locales(), selected.read_tag_labels())
+        .map_err(|e| e.to_string())?;
+    Ok(Presentation {
+        document,
+        labels,
+        locales,
+    })
 }
 
 #[cfg(test)]
@@ -177,7 +230,7 @@ mod tests {
         let started = Arc::new(AtomicU8::new(0));
         let loader =
             ArtifactPageLoader::from_snapshot(Arc::new(PendingHomeSnapshot(started.clone())));
-        let mut load = loader.load_home();
+        let mut load = loader.load_home(Locale::Ja);
         let mut cx = Context::from_waker(Waker::noop());
 
         assert!(load.as_mut().poll(&mut cx).is_pending());

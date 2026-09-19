@@ -167,6 +167,19 @@ struct ValidatorSnapshot {
 
 #[async_trait]
 impl ArtifactSnapshot for ValidatorSnapshot {
+    async fn localized(&self, locale: domain::Locale) -> Result<Option<DynArtifactSnapshot>> {
+        self.inner.localized(locale).await
+    }
+    async fn read_locales(&self) -> Result<domain::SiteLocalesDocument> {
+        self.inner.read_locales().await
+    }
+    async fn read_tag_labels(&self) -> Result<domain::TagLabels> {
+        self.inner.read_tag_labels().await
+    }
+    async fn read_content_asset(&self, name: &domain::ContentAssetName) -> Result<Option<Vec<u8>>> {
+        self.inner.read_content_asset(name).await
+    }
+
     fn cache_identity(&self) -> Option<&str> {
         Some("release-1")
     }
@@ -451,7 +464,7 @@ async fn home_renders_the_published_summary_as_html() {
     assert_html_document(&response.body);
     assert!(response.body.contains("<title>ぶくせんの探窟メモ</title>"));
     assert!(response.body.contains(
-        "<meta name=\"description\" content=\"1 article published across 1 category.\">"
+        "<meta name=\"description\" content=\"1カテゴリで1件の記事を公開しています。\">"
     ));
     assert!(
         response
@@ -464,7 +477,7 @@ async fn home_renders_the_published_summary_as_html() {
             .contains("<meta property=\"og:title\" content=\"ぶくせんの探窟メモ\">")
     );
     assert!(response.body.contains(
-        "<meta property=\"og:description\" content=\"1 article published across 1 category.\">"
+        "<meta property=\"og:description\" content=\"1カテゴリで1件の記事を公開しています。\">"
     ));
     assert!(
         response
@@ -565,7 +578,7 @@ async fn home_shell_exposes_topcoat_mobile_navigation_contract() {
     assert!(
         response
             .body
-            .contains("aria-label=\"Open okawak GitHub profile\"")
+            .contains("aria-label=\"okawakのGitHubプロフィールを開く\"")
     );
     assert!(!response.body.contains("font-awesome"));
     assert!(!response.body.contains("fa-github"));
@@ -584,7 +597,7 @@ async fn home_renders_empty_state_without_treating_it_as_an_error() {
 
     assert_eq!(response.status, StatusCode::OK);
     assert!(response.body.contains(
-        "<meta name=\"description\" content=\"0 articles published across 0 categories.\">"
+        "<meta name=\"description\" content=\"0カテゴリで0件の記事を公開しています。\">"
     ));
     assert!(response.body.contains("記事がありません"));
     assert!(!response.body.contains("記事の読み込みに失敗しました"));
@@ -618,7 +631,7 @@ async fn home_uses_fallback_copy_when_optional_fragment_is_missing() {
     assert!(
         response
             .body
-            .contains("公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。")
+            .contains("最近の記事とカテゴリをまとめています。")
     );
 }
 
@@ -927,7 +940,7 @@ async fn category_shard_validates_browser_arguments_and_keeps_errors_out_of_the_
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(topcoat::router::request::IDENTITY_HEADER, identity)
                 .body(Body::from(
-                    serde_json::json!({ "args": [category], "signals": {} }).to_string(),
+                    serde_json::json!({ "args": [category, "ja"], "signals": {} }).to_string(),
                 ))
                 .unwrap(),
         )
@@ -1016,7 +1029,7 @@ async fn article_renders_the_published_document_as_html() {
             .body
             .contains("<meta property=\"og:type\" content=\"article\">")
     );
-    assert!(response.body.contains(">Technology</p>"));
+    assert!(response.body.contains(">技術</p>"));
     assert!(response.body.contains(">E2E Article</h1>"));
     assert!(response.body.contains("Article fixture description"));
     assert!(response.body.contains("#rust"));
@@ -1575,4 +1588,199 @@ async fn conditional_get_and_articles_share_one_snapshot() {
 
     assert_eq!(response.status, StatusCode::OK);
     assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn english_routes_render_matching_metadata_links_and_release_validators() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    for path in ["/en", "/en/about", "/en/tech", "/en/tech/e2e-article"] {
+        let response = response(
+            &router,
+            Request::builder().uri(path).body(Body::empty()).unwrap(),
+        )
+        .await;
+        assert_eq!(response.status, StatusCode::OK, "{path}");
+        assert!(response.body.contains("<html lang=\"en\">"), "{path}");
+        assert!(
+            response.body.contains(&format!(
+                "<link rel=\"canonical\" href=\"https://www.okawak.net{path}\">"
+            )),
+            "{path}"
+        );
+        assert!(response.body.contains("hreflang=\"ja\""));
+        assert!(response.body.contains("hreflang=\"en\""));
+        assert!(response.body.contains("content=\"en_US\""));
+        assert!(response.body.contains("Main navigation"));
+        assert!(!response.body.contains("記事を絞り込む"));
+        assert!(response.headers.contains_key(header::ETAG));
+    }
+    let ja = response(
+        &router,
+        Request::builder()
+            .uri("/tech/e2e-article")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let en = response(
+        &router,
+        Request::builder()
+            .uri("/en/tech/e2e-article")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_ne!(ja.headers[header::ETAG], en.headers[header::ETAG]);
+    assert!(en.body.contains("#Rust programming"));
+    assert!(en.body.contains("Translated E2E Article"));
+    let conditional = response(
+        &router,
+        Request::builder()
+            .uri("/en/tech/e2e-article")
+            .header(header::IF_NONE_MATCH, &en.headers[header::ETAG])
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(conditional.status, StatusCode::NOT_MODIFIED);
+}
+
+#[tokio::test]
+async fn untranslated_english_pages_return_english_404_without_fake_alternates() {
+    let router = create_router(fixture_reader(), false);
+    let missing = response(
+        &router,
+        Request::builder()
+            .uri("/en/daily")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
+    assert!(missing.body.contains("<html lang=\"en\">"));
+    assert!(missing.body.contains("Page not found."));
+    assert!(!missing.body.contains("rel=\"alternate\""));
+    let legacy = create_router(empty_fixture_reader(), false);
+    let missing = response(
+        &legacy,
+        Request::builder().uri("/en").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
+    assert!(missing.body.contains("<html lang=\"en\">"));
+}
+
+#[tokio::test]
+async fn english_shard_keeps_labels_and_rejects_unsupported_locale() {
+    let router = create_router(fixture_reader(), false);
+    let page = response(
+        &router,
+        Request::builder()
+            .uri("/en/tech")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let (_, marker) = page.body.split_once("::topcoat::shard::start(").unwrap();
+    let mut arguments = marker.split('"');
+    let shard = arguments.nth(1).unwrap();
+    let identity = arguments.nth(1).unwrap();
+    for (locale, expected) in [("en", StatusCode::OK), ("fr", StatusCode::BAD_REQUEST)] {
+        let result = response(
+            &router,
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/_topcoat/runtime/shards/{shard}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(topcoat::router::request::IDENTITY_HEADER, identity)
+                .body(Body::from(
+                    serde_json::json!({"args":["tech",locale],"signals":{}}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, expected);
+        if expected == StatusCode::OK {
+            assert!(result.body.contains("Filter articles"));
+            assert!(result.body.contains("#Browser testing"));
+            assert!(result.body.contains("1 article"));
+            assert!(!result.body.contains("記事を絞り込む"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn content_images_are_shared_across_locales_and_do_not_use_page_validators() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    let root =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site/content-assets");
+    let path = std::fs::read_dir(root)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let res = router
+        .handle(
+            Request::builder()
+                .uri(format!(
+                    "/content-assets/{}",
+                    path.file_name().unwrap().to_string_lossy()
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()[header::CONTENT_TYPE], "image/png");
+    assert_eq!(
+        res.headers()[header::CACHE_CONTROL],
+        "public, max-age=31536000, immutable"
+    );
+    assert_eq!(res.headers()["x-content-type-options"], "nosniff");
+    let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    assert_eq!(bytes.as_ref(), std::fs::read(path).unwrap());
+}
+
+#[tokio::test]
+async fn missing_content_assets_do_not_render_the_site_error_page() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    for path in [
+        format!("/content-assets/{}.png", "0".repeat(64)),
+        "/content-assets/not-a-hash.png".into(),
+        "/content-assets".into(),
+        "/content-assets/nested/missing.png".into(),
+    ] {
+        let result = response(
+            &router,
+            Request::builder().uri(&path).body(Body::empty()).unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::NOT_FOUND, "{path}");
+        assert!(
+            !result
+                .content_type
+                .as_deref()
+                .unwrap_or_default()
+                .starts_with("text/html"),
+            "{path}"
+        );
+        assert!(!result.body.contains("<!DOCTYPE html>"), "{path}");
+        assert!(result.headers.get(header::ETAG).is_none());
+    }
+    let page = response(
+        &router,
+        Request::builder()
+            .uri("/content-assets-missing")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(page.status, StatusCode::NOT_FOUND);
+    assert!(
+        page.content_type
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("text/html")
+    );
 }

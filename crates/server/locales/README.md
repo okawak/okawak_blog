@@ -14,4 +14,6 @@ cargo run -p export -- --accept-ui filter.label
 
 候補はこのdirectoryの`.export-candidates/catalog/`にJSONで保存する。キー・原文・用途・訳文を確認し、必要なら候補の`translation.value`を修正して採用する。原文や設定が変わった古い候補は採用できない。候補・cacheはGit対象外。
 
+`src/i18n.rs`の型付き`Message`がruntimeのキーを定義し、原文欠落・英訳欠落をCIで検出する。新しい文言を追加するときは辞書と型付きキーの両方を更新する。runtimeでは英訳の欠落・更新待ちは日本語へfallbackし、キーがない場合はキー文字列を表示してログへ記録する。
+
 UI文言はserver binaryと一緒に配布する。記事のS3 uploadだけでUI辞書は更新されない。記事由来のタグ表示名は`content/tags.json`から記事と同じreleaseへ含めるため、新しいタグにserverの再デプロイは不要。

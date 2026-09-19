@@ -1,0 +1,20 @@
+{
+  "category": "tech",
+  "title": "Fixture Tech",
+  "description": "English category description",
+  "html": "<article><h2>Tech landing</h2><p>Category fixture body</p><img data-testid=\"wide-landing-content\" width=\"1200\" height=\"24\" alt=\"Wide landing fixture\"></article>",
+  "updated_at": "2026-01-02T00:00:00+09:00",
+  "articles": [
+    {
+      "slug": "e2e-article",
+      "title": "Translated E2E Article",
+      "category": "tech",
+      "section_path": ["rust", "async"],
+      "description": "English article description",
+      "tags": ["rust", "e2e"],
+      "priority": 10,
+      "created_at": "2026-01-01T00:00:00+09:00",
+      "updated_at": "2026-01-02T00:00:00+09:00"
+    }
+  ]
+}

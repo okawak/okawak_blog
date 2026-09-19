@@ -1,15 +1,9 @@
 mod builder;
-mod metadata;
 mod path;
 
 pub use builder::{
     build_article_page_document, build_category_page_document, build_home_page_document,
     build_static_page_document, find_article_summary,
-};
-pub use metadata::{
-    build_article_page_description, build_article_page_title, build_category_page_description,
-    build_category_page_title, build_home_page_description, build_home_page_title,
-    build_static_page_description, build_static_page_title,
 };
 pub use path::{
     build_article_page_canonical_path, build_article_path, build_category_page_canonical_path,
@@ -24,7 +18,6 @@ pub struct SiteArticleCard {
     pub slug: Slug,
     pub title: Title,
     pub category: Category,
-    pub category_display_name: String,
     pub section_path: SectionPath,
     pub description: Option<String>,
     pub tags: Vec<String>,
@@ -36,7 +29,6 @@ pub struct SiteArticleCard {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SiteCategorySummary {
     pub category: Category,
-    pub category_display_name: String,
     pub article_count: usize,
 }
 
@@ -65,7 +57,6 @@ pub struct ArticlePageDocument {
 pub struct CategoryPageDocument {
     pub category: Category,
     pub title: String,
-    pub category_display_name: String,
     pub description: Option<String>,
     pub html: String,
     pub sections: Vec<CategorySectionGroup>,

@@ -2,7 +2,8 @@
 
 use std::str::FromStr;
 
-use domain::Category;
+use crate::i18n::{Message, t};
+use domain::{Category, Locale};
 use topcoat::{
     Result,
     context::Cx,
@@ -18,11 +19,16 @@ use crate::{
 };
 
 #[shard]
-pub(crate) async fn category_articles(cx: &Cx, category: String) -> Result<impl View> {
+pub(crate) async fn category_articles(
+    cx: &Cx,
+    category: String,
+    locale: String,
+) -> Result<impl View> {
     // Shard arguments are user input even when the first render supplied them.
     let category = Category::from_str(&category).map_err(|_| bad_request("invalid category"))?;
+    let locale = Locale::from_str(&locale).map_err(|_| bad_request("invalid locale"))?;
     let query = signal(cx, String::new);
-    let mut document = load_category(cx, category)
+    let presentation = load_category(cx, category, locale)
         .await
         .clone()
         .map_err(|error| {
@@ -30,7 +36,12 @@ pub(crate) async fn category_articles(cx: &Cx, category: String) -> Result<impl 
             topcoat::router::error::internal_server_error(std::io::Error::other(error))
         })?
         .ok_or_else(not_found)?;
-    filter_sections(&mut document.sections, query.read());
+    let crate::page_loader::Presentation {
+        mut document,
+        labels,
+        ..
+    } = presentation;
+    filter_sections(&mut document.sections, query.read(), &labels);
     let count: usize = document
         .sections
         .iter()
@@ -41,27 +52,27 @@ pub(crate) async fn category_articles(cx: &Cx, category: String) -> Result<impl 
         <section
             id="category-articles"
             class="grid gap-6"
-            aria-label="カテゴリの記事"
+            aria-label=(t(locale, Message::CategoryArticles))
         >
             <div class="grid gap-3">
                 <label for="category-article-query" class="font-semibold">
-                    "記事を絞り込む"
+                    (t(locale, Message::FilterLabel))
                 </label>
                 <input
                     id="category-article-query"
                     type="search"
                     maxlength=(MAX_QUERY_CHARS)
-                    placeholder="タイトル・説明・タグ"
+                    placeholder=(t(locale, Message::FilterPlaceholder))
                     class="w-full rounded-lg border border-border bg-card px-4 py-3 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                     :value=$(query.get())
                     @input=$(|event: Event| query.set(event.target.value))
                 >
                 <p role="status" class="m-0 text-sm text-muted-foreground">
-                    (format!("{count}件の記事"))
+                    (crate::i18n::article_count(locale, count))
                 </p>
             </div>
             if count == 0 {
-                <p>"該当する記事はありません。"</p>
+                <p>(t(locale, Message::EmptyMatches))</p>
             }
             for section in &document.sections {
                 <section
@@ -72,11 +83,19 @@ pub(crate) async fn category_articles(cx: &Cx, category: String) -> Result<impl 
                     class="grid gap-4"
                 >
                     <h2 class="m-0 text-xl font-semibold text-foreground">
-                        (&section.heading)
+                        (if section.section_path.is_empty() {
+                            t(locale, Message::CategoryGeneral)
+                        } else {
+                            &section.heading
+                        })
                     </h2>
                     <div class="grid gap-4">
                         for article in &section.articles {
-                            article_card(article: article)
+                            article_card(
+                                article: article,
+                                locale: locale,
+                                labels: &labels
+                            )
                         }
                     </div>
                 </section>

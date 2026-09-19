@@ -1,14 +1,20 @@
 //! Topcoat route tree root and application router composition.
 
+use crate::i18n::{Message, t};
+use crate::metadata::*;
+use domain::Locale;
+
 mod about;
 mod api;
 mod category_name;
+mod content_assets;
+mod en;
 
 use std::sync::Arc;
 
 use domain::{
     Category, CategoryPageDocument, HomePageDocument, build_category_path,
-    build_home_page_canonical_path, build_home_page_description, build_home_page_title,
+    build_home_page_canonical_path,
 };
 use infra::DynArtifactReader;
 use topcoat::{
@@ -35,17 +41,25 @@ use crate::{
 
 #[page]
 async fn home(cx: &Cx) -> Result<impl View> {
-    match page_loader(cx).loader().load_home().await {
-        Ok(document) => Ok(view! { home_document(document: document) }.boxed()),
+    render_home(cx, Locale::Ja).await
+}
+
+pub(crate) async fn render_home(cx: &Cx, locale: Locale) -> Result<impl View> {
+    match page_loader(cx).loader().load_home(locale).await {
+        Ok(Some(presentation)) => {
+            Ok(view! { cx => home_document(presentation: presentation, locale: locale) }.boxed())
+        }
+        Ok(None) => Ok(view! { cx => not_found_page(canonical_path: locale.path("/")) }.boxed()),
         Err(error) => {
             tracing::error!(%error, "home page artifact read failed");
-            let description = "公開済みの記事を読み込めませんでした。".to_string();
+            let description = t(locale, Message::ErrorHome).to_string();
             Ok(view! {
+                cx =>
                 internal_server_error_page(
-                    title: build_home_page_title(crate::SITE_NAME),
+                    title: build_home_page_title(locale),
                     description: description,
-                    canonical_path: "/".to_string(),
-                    message: "記事の読み込みに失敗しました"
+                    canonical_path: locale.path("/"),
+                    message: Message::ErrorHome
                 )
             }
             .boxed())
@@ -63,8 +77,12 @@ pub(crate) fn page_loader(cx: &Cx) -> &PageLoaderContext {
 pub(crate) async fn load_category(
     cx: &Cx,
     category: Category,
-) -> PageLoadResult<Option<CategoryPageDocument>> {
-    page_loader(cx).loader().load_category(&category).await
+    locale: Locale,
+) -> PageLoadResult<Option<crate::page_loader::Presentation<CategoryPageDocument>>> {
+    page_loader(cx)
+        .loader()
+        .load_category(locale, &category)
+        .await
 }
 
 fn is_under_path(path: &str, prefix: &str) -> bool {
@@ -75,7 +93,9 @@ fn is_under_path(path: &str, prefix: &str) -> bool {
 }
 
 fn is_site_page_path(path: &str) -> bool {
-    !is_under_path(path, "/api") && !is_under_path(path, "/_topcoat")
+    !is_under_path(path, "/api")
+        && !is_under_path(path, "/_topcoat")
+        && !is_under_path(path, "/content-assets")
 }
 
 fn render_unmatched_path<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
@@ -169,16 +189,26 @@ pub fn create_router(
 }
 
 #[component]
-async fn home_document(document: HomePageDocument) -> Result<impl View> {
-    let title = build_home_page_title(crate::SITE_NAME);
-    let description = build_home_page_description(&document);
-    let canonical_url = crate::build_site_url(build_home_page_canonical_path());
+async fn home_document(
+    presentation: crate::page_loader::Presentation<HomePageDocument>,
+    locale: Locale,
+) -> Result<impl View> {
+    let crate::page_loader::Presentation {
+        document,
+        labels,
+        locales,
+    } = presentation;
+    let title = build_home_page_title(locale);
+    let description = build_home_page_description(&document, locale);
+    let canonical_path = locale.path(build_home_page_canonical_path());
     let is_empty = document.articles.is_empty();
 
     Ok(view! {
         site_shell(
             status: StatusCode::OK,
-            metadata: ShellMetadata::website(title, description, canonical_url),
+            metadata: ShellMetadata::website(locale, title, description, canonical_path).with_locales(
+                locales,
+            ),
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-12 px-4 py-8 text-left sm:px-6 sm:py-12"
             >
@@ -186,16 +216,16 @@ async fn home_document(document: HomePageDocument) -> Result<impl View> {
                     class="rounded-2xl border border-border/70 bg-gradient-to-br from-card via-card to-secondary/70 px-6 py-10 text-center shadow-[0_18px_42px_rgb(0_0_0/0.28)] sm:px-10"
                 >
                     <p class="m-0 text-sm tracking-[0.16em] text-primary uppercase">
-                        "Artifact-Driven Blog"
+                        (t(locale, Message::HomeEyebrow))
                     </p>
                     <h1
                         class="m-0 mt-4 text-3xl leading-tight font-bold after:mx-auto after:mt-3 after:block after:h-1 after:w-12 after:rounded-full after:bg-primary sm:text-4xl"
                     >
-                        (crate::SITE_NAME)
+                        (t(locale, Message::SiteName))
                     </h1>
                     <div class="mx-auto mt-5 max-w-3xl">
                         <p class="m-0 leading-8 text-muted-foreground">
-                            "気になったことをメモしておくブログです。Obsidian から生成した成果物をもとに、Topcoat で公開ページを組み立てています。"
+                            (t(locale, Message::HomeIntro))
                         </p>
                     </div>
                 </section>
@@ -205,10 +235,10 @@ async fn home_document(document: HomePageDocument) -> Result<impl View> {
                         <h2
                             class="m-0 text-2xl font-semibold after:mt-2 after:block after:h-1 after:w-12 after:rounded-full after:bg-primary"
                         >
-                            "最近の記事"
+                            (t(locale, Message::HomeRecent))
                         </h2>
                         <p class="m-0 text-muted-foreground">
-                            "新しい順に、公開済みの記事を紹介します。"
+                            (t(locale, Message::HomeDescription))
                         </p>
                     </div>
 
@@ -216,10 +246,14 @@ async fn home_document(document: HomePageDocument) -> Result<impl View> {
                         <div
                             class="rounded-xl bg-secondary p-8 text-center text-muted-foreground"
                         >
-                            "記事がありません"
+                            (t(locale, Message::EmptyArticles))
                         </div>
                     } else {
-                        home_page_content(document: document)
+                        home_page_content(
+                            document: document,
+                            locale: locale,
+                            labels: labels
+                        )
                     }
                 </section>
             </div>
@@ -228,8 +262,12 @@ async fn home_document(document: HomePageDocument) -> Result<impl View> {
 }
 
 #[component]
-async fn home_page_content(document: HomePageDocument) -> Result<impl View> {
-    let page_description = build_home_page_description(&document);
+async fn home_page_content(
+    document: HomePageDocument,
+    locale: Locale,
+    labels: domain::TagLabels,
+) -> Result<impl View> {
+    let page_description = build_home_page_description(&document, locale);
 
     Ok(view! {
         <div class="grid gap-6 lg:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
@@ -244,7 +282,7 @@ async fn home_page_content(document: HomePageDocument) -> Result<impl View> {
                     }
                     None => {
                         <p class="m-0 leading-8 text-muted-foreground">
-                            "公開済みの artifact をもとに、最近の記事とカテゴリをまとめています。"
+                            (t(locale, Message::HomeFallback))
                         </p>
                     }
                 }
@@ -256,13 +294,13 @@ async fn home_page_content(document: HomePageDocument) -> Result<impl View> {
                                 class="inline-flex w-fit items-center gap-2 rounded-full border border-border bg-background/45 px-3 py-1.5 text-sm font-semibold text-foreground transition-colors focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
                             >
                                 <a
-                                    href=(build_category_path(&category.category))
+                                    href=(locale.path(&build_category_path(&category.category)))
                                     class="font-semibold text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                 >
-                                    (&category.category_display_name)
+                                    (crate::i18n::category_name(locale, category.category))
                                 </a>
                                 <span class="text-xs font-normal text-muted-foreground">
-                                    (format!("{}本", category.article_count))
+                                    (crate::i18n::article_count(locale, category.article_count))
                                 </span>
                             </span>
                         </li>
@@ -270,9 +308,12 @@ async fn home_page_content(document: HomePageDocument) -> Result<impl View> {
                 </ul>
             </div>
 
-            <section class="grid content-start gap-4" aria-label="最近の記事">
+            <section
+                class="grid content-start gap-4"
+                aria-label=(t(locale, Message::HomeRecent))
+            >
                 for article in &document.articles {
-                    article_card(article: article)
+                    article_card(article: article, locale: locale, labels: &labels)
                 }
             </section>
         </div>

@@ -74,7 +74,7 @@ okawak_blog/
   - `content` moduleによる`Locale`とversion付き`PublicContentMeta`。公開Markdownの純粋な検証契約を所有する（[契約](../content/public-markdown.md)）。
   - `publication` moduleによる`ArticleMeta`、`PublishableArticle`、`CategoryLandingMeta`、`PublishableCategoryLanding`と記事・カテゴリ索引を構築する純粋ルール
   - `artifact` moduleによるartifact contract。`artifact/content.rs`にsite content document、`artifact/release.rs`にimmutable release pointerとその検証を置く
-  - `page` moduleによる公開ページ契約。表示document、artifactからの組み立て、metadata、公開pathの生成を分離する
+  - `page` moduleによる公開ページ契約。言語非依存のdocument、artifactからの組み立て、公開pathの生成を所有する
 - `crates/publish`
   - 単一の`publish` crate
   - `lib.rs`は内部module宣言とcrate外向けAPIのre-exportに限定し、pipeline moduleが公開処理全体をorchestrationする
@@ -364,7 +364,7 @@ flowchart LR
 
 ## Site 表示モデル
 
-`crates/domain/src/page.rs` に表示documentを置き、`page/builder.rs`でartifactからの組み立て、`page/metadata.rs`で表示metadata、`page/path.rs`で公開pathを扱う。いずれもI/Oを持たないpureなpage contractである。
+`crates/domain/src/page.rs`に言語非依存のdocumentを置き、`page/builder.rs`でartifactからの組み立て、`page/path.rs`で公開pathを扱う。カテゴリとタグは識別子を保ち、`Category::display_name()`や固定の表示名を持たない。表示metadataは`crates/server/src/metadata.rs`がUI辞書で組み立てる。
 
 主な document は次の通り。
 
@@ -384,21 +384,21 @@ flowchart LR
 - `StaticPageDocument`
   - `about` などの固定ページ用contract
 
-`crates/server`のTopcoat pageはstorage非依存の`PageLoader`からこのpage contractを受け取り、metadataとUIを組み立てる。同じcrate内の`ArtifactPageLoader`だけがartifact読取とpage document構築を実装し、conditional GETが取得したsnapshotをrequest contextのloaderへ渡す。validatorを使わないrequestでもloader内でsnapshotを1回だけ取得する。local / S3 readerと`DynArtifactSnapshot`をpage / component moduleへ持ち込まない。
+`crates/server`のTopcoat pageはstorage非依存の`PageLoader`からこのpage contractと同じreleaseのタグ表示名・言語別URL一覧を`Presentation<T>`として受け取り、metadataとUIを組み立てる。同じcrate内の`ArtifactPageLoader`だけがartifact読取とpage document構築を実装し、conditional GETが取得したsnapshotをrequest contextのloaderへ渡す。validatorを使わないrequestでもloader内でsnapshotを1回だけ取得する。local / S3 readerと`DynArtifactSnapshot`をpage / component moduleへ持ち込まない。
 
 homeのarticle index、site metadata、optional home fragmentは、同じsnapshotから並列に読む。home fragmentの不在だけを省略可能として扱い、それ以外の読取失敗はpageの500応答へ伝える。必要な読取とpage document構築を終えてから初期HTMLとHTTP statusを確定する。
 
 公開routeのpage document読取はTopcoat async componentを正式経路とする。手書きの`/api/page/*`は持たず、404とstorage errorのstatus / error viewをroute境界で統一する。`/api/articles`はpage documentを組み立てない互換endpointとして維持する。
 
-公開routeは`crates/server/src/app.rs`をrootとするTopcoat `module_router!()`から登録する。`/about`と`/api/*`はstatic module、`/{category_name}`と`/{category_name}/{article_slug}`は`path_param!()`を宣言するnested moduleとしてURL構造へ対応させる。route moduleはfile moduleで構成し、`mod.rs`を使わない。release-aware conditional GETはmodule pathに依存しないglobal layerとして`app.rs`で明示的に登録する。
+公開routeは`crates/server/src/app.rs`をrootとするTopcoat `module_router!()`から登録する。`/about`と`/api/*`はstatic module、`/{category_name}`と`/{category_name}/{article_slug}`は`path_param!()`を宣言するnested moduleとしてURL構造へ対応させる。英語routeは`app/en.rs`以下の同型のfile moduleで構成し、page種別ごとの描画処理を共有する。日本語URLを維持し、英語homeは`/en`、他は`/en/...`とする。`/en/`は既存の末尾slash規則に従い`/en`へredirectする。画像は`app/content_assets/asset_name.rs`から`PageLoader`経由で読み、`/content-assets/<hash>.<ext>`で言語共通に配信する。route moduleはfile moduleで構成し、`mod.rs`を使わない。release-aware conditional GETはmodule pathに依存しないglobal layerとして`app.rs`で明示的に登録する。
 
 routerはTopcoat 0.8.1の`.runtime()`と`.discover_shards()`を登録し、`TrailingSlash::Redirect`で末尾スラッシュを宣言済みURLへ308リダイレクトする。queryは維持し、redirectにはartifact validatorを付けない。`/_topcoat`配下のframework endpointをサイト用404 HTMLの対象から除外する。
 
 conditional GETのmethod判定には`request::original_method(cx)`を使う。runtimeのpage再描画はPOSTを内部でGETへrewriteするため、rewrite後のmethodで判定するとsignal状態に依存するHTMLへ通常pageと同じvalidatorを付けてしまう。元のrequestがPOSTならartifact cacheの対象にしない。
 
-カテゴリ内の記事絞り込みは`src/category_articles.rs`のshardが所有する。shard内のsignalをサーバー側で読み、記事一覧と入力欄だけをDOM morphで更新する。UI用の純粋な部分一致ロジックは`src/article_filter.rs`に置き、タイトル・説明・タグを対象にする。ブラウザから届くカテゴリはdomain型へ検証し、検索語は先頭100文字に制限する。初期pageとshardはリクエスト単位の`#[memoize]`で同じpage documentを共有し、再描画時もstorageへ直接依存せず`PageLoader`を使う。sectionと記事に安定したIDを付け、入力フォーカスとshard外のmenu・生成本文を維持する。JavaScript無効時は全記事をSSRした一覧を利用できる。
+カテゴリ内の記事絞り込みは`src/category_articles.rs`のshardが所有する。shard内のsignalをサーバー側で読み、記事一覧と入力欄だけをDOM morphで更新する。UI用の純粋な部分一致ロジックは`src/article_filter.rs`に置き、タイトル・説明・表示中のタグ名を対象にする。ブラウザから届くカテゴリと言語はdomain型へ検証し、検索語は先頭100文字に制限する。初期pageとshardはリクエスト単位の`#[memoize]`でカテゴリと言語をkeyに同じpage documentを共有し、再描画時もstorageへ直接依存せず`PageLoader`を使う。sectionと記事に安定したIDを付け、入力フォーカスとshard外のmenu・生成本文を維持する。JavaScript無効時は全記事をSSRした一覧を利用できる。
 
-production `server`はhome、about、category、articleをSSRし、title、canonical、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。
+production `server`はhome、about、category、articleをSSRし、title、canonical、hreflang、html lang、Open Graph metadataと本文を同じsnapshotから初期HTMLへ組み立てる。言語切替は`locales.json`に掲載された実在する翻訳だけを示す。英語artifactがなければ英語の404を返し、日本語本文を英訳として配信しない。UI辞書の欠落・更新待ちは日本語、キー自体の欠落はキー文字列へfallbackしてログに記録する。CIでは型付きキーの全件存在、英訳の欠落・更新待ち、補間変数を検証する。
 
 ## UI styling境界
 
@@ -430,7 +430,7 @@ productionは`style/tailwind.css`をTopcoatのstandalone Tailwind build integrat
 
 `crates/server/build.rs`はapplication package内の`style/tailwind.css`をTopcoatのstylesheet assetへ変換するために維持する。Rustと`view!` macroの書式はrepository rootの`mise run format`から`cargo fmt`と`topcoat fmt`を順に適用する。
 
-shellのナビゲーションはTopcoatの`Href::is_current`でrequest URLとの一致を判定し、同じHrefをlink先に使う。pageから選択状態用のpathは渡さず、query付きURLでも該当linkを選択状態にする。未一致URLの404でも判定できるよう、Hrefのtargetはpath literalで定義する。
+shellのナビゲーションは言語別pathをリンク先に使い、request URIのpathと比較して現在位置を示す。queryは比較に含めず、404でも実際のURLに基づく選択状態を維持する。mobile menuの開閉文言も選択中の辞書からclient expressionへ渡す。言語名は日本語 / Englishの自称表記で示す。
 
 ## Reader 経路
 

@@ -1,9 +1,9 @@
+use crate::i18n::{Message, t};
+use crate::metadata::*;
+use domain::Locale;
 use std::str::FromStr;
 
-use domain::{
-    ArticlePageDocument, Category, Slug, build_article_page_canonical_path,
-    build_article_page_description, build_article_page_title,
-};
+use domain::{ArticlePageDocument, Category, Slug, build_article_page_canonical_path};
 use topcoat::{
     Result,
     context::Cx,
@@ -19,28 +19,47 @@ path_param!(article_slug);
 
 #[page]
 async fn article_page(cx: &Cx) -> Result<impl View> {
-    let category_param = path_param::<CategoryName>(cx);
-    let slug_param = path_param::<ArticleSlug>(cx);
+    render_article(
+        cx,
+        Locale::Ja,
+        path_param::<CategoryName>(cx),
+        path_param::<ArticleSlug>(cx),
+    )
+    .await
+}
+
+pub(crate) async fn render_article(
+    cx: &Cx,
+    locale: Locale,
+    category_param: &str,
+    slug_param: &str,
+) -> Result<impl View> {
     let normalized_slug = normalize_article_slug_param(slug_param);
     let requested_path = request::uri(cx).path().to_string();
-    let fallback_title = format!("{normalized_slug} | {}", crate::SITE_NAME);
-    let fallback_description = format!("{category_param} カテゴリの記事です。");
+    let fallback_title = format!("{normalized_slug} | {}", t(locale, Message::SiteName));
+    let fallback_description = t(locale, Message::ErrorArticle).to_string();
     let category = match Category::from_str(category_param) {
         Ok(category) => category,
-        Err(_) => return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
+        Err(_) => {
+            return Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed());
+        }
     };
     let slug = match Slug::new(normalized_slug.to_string()) {
         Ok(slug) => slug,
-        Err(_) => return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
+        Err(_) => {
+            return Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed());
+        }
     };
 
     match page_loader(cx)
         .loader()
-        .load_article(&category, &slug)
+        .load_article(locale, &category, &slug)
         .await
     {
-        Ok(Some(document)) => Ok(view! { article_document(document: document) }.boxed()),
-        Ok(None) => Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
+        Ok(Some(presentation)) => Ok(
+            view! { cx => article_document(presentation: presentation, locale: locale) }.boxed(),
+        ),
+        Ok(None) => Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed()),
         Err(error) => {
             tracing::error!(
                 %error,
@@ -49,6 +68,7 @@ async fn article_page(cx: &Cx) -> Result<impl View> {
                 "article page artifact read failed"
             );
             Ok(view! {
+                cx =>
                 article_internal_server_error_page(
                     title: fallback_title,
                     description: fallback_description,
@@ -61,16 +81,23 @@ async fn article_page(cx: &Cx) -> Result<impl View> {
 }
 
 #[component]
-async fn article_document(document: ArticlePageDocument) -> Result<impl View> {
-    let title = build_article_page_title(&document, crate::SITE_NAME);
-    let description = build_article_page_description(&document);
-    let canonical_path = build_article_page_canonical_path(&document);
-    let canonical_url = crate::build_site_url(&canonical_path);
+async fn article_document(
+    presentation: crate::page_loader::Presentation<ArticlePageDocument>,
+    locale: Locale,
+) -> Result<impl View> {
+    let crate::page_loader::Presentation {
+        document,
+        labels,
+        locales,
+    } = presentation;
+    let title = build_article_page_title(&document, locale);
+    let description = build_article_page_description(&document, locale);
+    let canonical_path = locale.path(&build_article_page_canonical_path(&document));
     let article = document.article;
     let page_title = article.title.as_str().to_string();
-    let category = article.category_display_name;
-    let created_at_label = crate::format::format_display_date(&article.created_at);
-    let updated_at_label = crate::format::format_display_date(&article.updated_at);
+    let category = crate::i18n::category_name(locale, article.category);
+    let created_at_label = crate::format::format_display_date(&article.created_at, locale);
+    let updated_at_label = crate::format::format_display_date(&article.updated_at, locale);
     let created_at = article.created_at;
     let updated_at = article.updated_at;
     let article_description = article.description;
@@ -82,7 +109,9 @@ async fn article_document(document: ArticlePageDocument) -> Result<impl View> {
     Ok(view! {
         site_shell(
             status: StatusCode::OK,
-            metadata: ShellMetadata::article(title, description, canonical_url),
+            metadata: ShellMetadata::article(locale, title, description, canonical_path).with_locales(
+                locales,
+            ),
             <article
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-8 px-4 py-8 text-left sm:px-6 sm:py-12"
             >
@@ -103,14 +132,14 @@ async fn article_document(document: ArticlePageDocument) -> Result<impl View> {
                         class="m-0 flex flex-wrap justify-center gap-x-2 gap-y-1 leading-7 text-muted-foreground"
                     >
                         <span>
-                            "公開 "
+                            (t(locale, Message::ArticlePublished))
                             <time datetime=(created_at.as_str())>
                                 (created_at_label)
                             </time>
                         </span>
                         <span aria-hidden="true">"/"</span>
                         <span>
-                            "更新 "
+                            (t(locale, Message::ArticleUpdated))
                             <time datetime=(updated_at.as_str())>
                                 (updated_at_label)
                             </time>
@@ -126,14 +155,14 @@ async fn article_document(document: ArticlePageDocument) -> Result<impl View> {
                     if !tags.is_empty() {
                         <ul
                             class="m-0 flex list-none flex-wrap justify-center gap-2 p-0"
-                            aria-label="タグ"
+                            aria-label=(t(locale, Message::ArticleTags))
                         >
                             for tag in &tags {
                                 <li>
                                     <span
                                         class="inline-flex w-fit items-center rounded-full border border-border bg-background/45 px-3 py-1 text-xs font-normal text-muted-foreground transition-colors focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
                                     >
-                                        (format!("#{tag}"))
+                                        (format!("#{}", labels.get(tag).unwrap_or(tag)))
                                     </span>
                                 </li>
                             }
