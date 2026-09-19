@@ -111,7 +111,7 @@ struct CachingArtifactSnapshot {
     localized: KeyedCache<Option<DynArtifactSnapshot>>,
     locales: OnceCell<SiteLocalesDocument>,
     tags: OnceCell<domain::TagLabels>,
-    content_assets: KeyedCache<Option<Vec<u8>>>,
+    content_assets: Mutex<HashMap<String, Vec<u8>>>,
     inner: DynArtifactSnapshot,
     article_index: OnceCell<ArticleIndexDocument>,
     site_metadata: OnceCell<SiteMetadataDocument>,
@@ -127,7 +127,7 @@ impl CachingArtifactSnapshot {
             localized: KeyedCache::new(),
             locales: OnceCell::new(),
             tags: OnceCell::new(),
-            content_assets: KeyedCache::new(),
+            content_assets: Mutex::new(HashMap::new()),
             inner,
             article_index: OnceCell::new(),
             site_metadata: OnceCell::new(),
@@ -174,9 +174,19 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
     }
 
     async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
-        self.content_assets
-            .get_or_try_init(name.as_str().into(), || self.inner.read_content_asset(name))
-            .await
+        if let Some(bytes) = self.content_assets.lock().await.get(name.as_str()).cloned() {
+            return Ok(Some(bytes));
+        }
+        // Asset names come from requests. Retain only assets present in this release,
+        // so arbitrary missing names and failed reads cannot grow the cache.
+        let bytes = self.inner.read_content_asset(name).await?;
+        if let Some(bytes) = &bytes {
+            self.content_assets
+                .lock()
+                .await
+                .insert(name.as_str().into(), bytes.clone());
+        }
+        Ok(bytes)
     }
 
     async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
@@ -497,6 +507,41 @@ mod tests {
         assert!(snapshot.read_article_index().await.is_err());
         assert!(snapshot.read_article_index().await.is_ok());
         assert_eq!(article_reads.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn content_asset_cache_retains_only_successful_reads() {
+        let root = tempfile::tempdir().unwrap();
+        let assets = root.path().join("content-assets");
+        std::fs::create_dir(&assets).unwrap();
+        let found = ContentAssetName::new(format!("{:064x}.png", 0)).unwrap();
+        std::fs::write(assets.join(found.as_str()), b"image").unwrap();
+        let snapshot =
+            CachingArtifactSnapshot::new(Arc::new(crate::LocalArtifactReader::new(root.path())));
+
+        assert_eq!(
+            snapshot.read_content_asset(&found).await.unwrap(),
+            Some(b"image".to_vec())
+        );
+        std::fs::remove_file(assets.join(found.as_str())).unwrap();
+        assert_eq!(
+            snapshot.read_content_asset(&found).await.unwrap(),
+            Some(b"image".to_vec())
+        );
+        for id in 1..=128 {
+            let missing = ContentAssetName::new(format!("{id:064x}.png")).unwrap();
+            assert!(
+                snapshot
+                    .read_content_asset(&missing)
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+        }
+        let failed = ContentAssetName::new(format!("{:064x}.png", 129)).unwrap();
+        std::fs::create_dir(assets.join(failed.as_str())).unwrap();
+        assert!(snapshot.read_content_asset(&failed).await.is_err());
+        assert_eq!(snapshot.content_assets.lock().await.len(), 1);
     }
 
     #[tokio::test]
