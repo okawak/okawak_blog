@@ -157,7 +157,7 @@ pub fn accept_translation(output: &Path, id: &Slug, settings: &TranslationSettin
     sync::transaction(output, |stage| {
         let original = Document::parse(&fs::read_to_string(stage.join(format!("ja/{id}.md")))?)?;
         let candidate_path = stage.join(format!(".export-candidates/{id}.md"));
-        let candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
+        let mut candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
         let fragments = Fragments::extract(&original);
         let request = TranslationRequest::new(fragments.texts, "Public blog article: ordered Markdown prose fragments. Return plain text only; preserve fragment boundaries.".into(), settings);
         let provenance = candidate
@@ -165,20 +165,37 @@ pub fn accept_translation(output: &Path, id: &Slug, settings: &TranslationSettin
             .translation
             .as_ref()
             .context("candidate has no provenance")?;
-        if candidate.meta.id != *id
+        if original.meta.id != *id
+            || original.meta.locale != Locale::Ja
+            || candidate.meta.id != *id
             || candidate.meta.locale != Locale::En
+            || provenance.stale
             || provenance.input_hash != content_input(&request, &original)?
         {
             bail!("candidate no longer matches current source/settings");
         }
+        // Candidate prose may have been reviewed manually while management
+        // fields changed in Japanese. Those fields always come from the source.
+        let title = candidate.meta.title;
+        let summary = candidate.meta.summary;
+        let provenance = candidate.meta.translation;
+        candidate.meta = original.meta;
+        candidate.meta.locale = Locale::En;
+        candidate.meta.title = title;
+        candidate.meta.summary = summary;
+        candidate.meta.translation = provenance;
         fs::create_dir_all(stage.join("en"))?;
-        fs::rename(candidate_path, stage.join(format!("en/{id}.md")))?;
+        fs::write(stage.join(format!("en/{id}.md")), candidate.encode()?)?;
+        fs::remove_file(candidate_path)?;
         Ok(())
     })
 }
 
 fn content_input(request: &TranslationRequest, original: &Document) -> Result<String> {
     Ok(crate::vault::digest(serde_json::to_vec(&(
+        // Rebuild generated Markdown when escaping changes, retaining the
+        // separate plain-text response cache and protecting manual edits.
+        "markdown-reassembly-v1",
         request.fingerprint()?,
         &original.body,
     ))?))
