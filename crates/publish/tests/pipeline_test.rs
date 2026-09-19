@@ -790,3 +790,37 @@ async fn rejects_unresolved_public_reference_without_replacing_existing_release(
         before
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn rejects_linked_tag_catalog_without_replacing_existing_release() {
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    publish(fixture.content_dir(), fixture.output_dir())
+        .await
+        .unwrap();
+    let before = fs::read(fixture.site_root().join("tags.json")).unwrap();
+    let external = tempfile::tempdir().unwrap();
+    let target = external.path().join("tags.json");
+    fs::write(
+        &target,
+        serde_json::to_vec(&domain::LabelCatalog::default()).unwrap(),
+    )
+    .unwrap();
+    let link = fixture.content_dir().join("tags.json");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    for target_exists in [true, false] {
+        if !target_exists {
+            fs::remove_file(&target).unwrap();
+        }
+        assert!(
+            publish(fixture.content_dir(), fixture.output_dir())
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(fixture.site_root().join("tags.json")).unwrap(),
+            before
+        );
+    }
+}

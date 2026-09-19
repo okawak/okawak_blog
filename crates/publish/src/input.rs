@@ -1,6 +1,6 @@
 //! Read the public Markdown contract. No vault paths or publication flags.
 use crate::{PublishError, Result};
-use domain::{ContentKind, Locale, PublicContentMeta};
+use domain::{ContentKind, LabelCatalog, Locale, PublicContentMeta};
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -11,6 +11,18 @@ use std::{
 pub(crate) struct Document {
     pub(crate) meta: PublicContentMeta,
     pub(crate) body: String,
+}
+
+pub(crate) fn read_tag_catalog(root: &Path) -> Result<LabelCatalog> {
+    let path = root.join("tags.json");
+    let catalog: LabelCatalog = match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.is_file() => serde_json::from_slice(&fs::read(path)?)?,
+        Ok(_) => return Err(invalid("public tag catalog must be a regular file")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Default::default(),
+        Err(error) => return Err(error.into()),
+    };
+    catalog.validate()?;
+    Ok(catalog)
 }
 
 pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
