@@ -82,6 +82,12 @@ pub(crate) fn translate_stage(
                         continue;
                     }
                 }
+                let checked = ArticleTranslator {
+                    translator,
+                    fragments: &fragments,
+                    original: &original,
+                };
+                let translator: &dyn Translator = &checked;
                 let cache = cache_root
                     .join(".export-candidates/cache")
                     .join(format!("{}.json", request.fingerprint()?));
@@ -129,6 +135,22 @@ pub(crate) fn translate_stage(
         }
     }
     Ok(report)
+}
+
+// Validate reconstruction before a fresh response can enter the reusable cache.
+struct ArticleTranslator<'a> {
+    translator: &'a dyn Translator,
+    fragments: &'a Fragments,
+    original: &'a Document,
+}
+
+impl Translator for ArticleTranslator<'_> {
+    fn translate(&self, request: &TranslationRequest) -> Result<crate::translation::Texts> {
+        let result = self.translator.translate(request)?;
+        request.validate(&result)?;
+        self.fragments.apply(self.original, &result)?.encode()?;
+        Ok(result)
+    }
 }
 
 pub fn accept_translation(output: &Path, id: &Slug, settings: &TranslationSettings) -> Result<()> {

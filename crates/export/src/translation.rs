@@ -69,7 +69,7 @@ impl TranslationRequest {
 
     pub(crate) fn fingerprint(&self) -> Result<String> {
         Ok(crate::vault::digest(serde_json::to_vec(&(
-            "text-fragments-v2",
+            "text-fragments-v3",
             self,
         ))?))
     }

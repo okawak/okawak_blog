@@ -1,12 +1,19 @@
 //! Reassemble translated prose into the original Markdown; non-text bytes never go to AI.
 use crate::{markdown::Document, normalize::options, translation::Texts};
 use anyhow::{Result, bail};
-use pulldown_cmark::{Event, Parser, Tag, TagEnd};
+use pulldown_cmark::{Event, LinkType, Parser, Tag, TagEnd};
 use std::ops::Range;
 
 pub(crate) struct Fragments {
     pub(crate) texts: Texts,
-    ranges: Vec<(String, Range<usize>)>,
+    ranges: Vec<Fragment>,
+}
+
+struct Fragment {
+    key: String,
+    range: Range<usize>,
+    leading: String,
+    trailing: String,
 }
 
 impl Fragments {
@@ -17,18 +24,32 @@ impl Fragments {
         }
         let mut ranges = Vec::new();
         let mut code = false;
+        let mut autolink = false;
         let mut html_elements = Vec::new();
         for (event, range) in Parser::new_ext(&document.body, options()).into_offset_iter() {
             match event {
                 Event::Start(Tag::CodeBlock(_)) => code = true,
                 Event::End(TagEnd::CodeBlock) => code = false,
+                Event::Start(Tag::Link {
+                    link_type: LinkType::Autolink | LinkType::Email,
+                    ..
+                }) => autolink = true,
+                Event::End(TagEnd::Link) => autolink = false,
                 Event::InlineHtml(html) => track_inline_html(&html, &mut html_elements),
                 Event::Text(text)
-                    if !code && html_elements.is_empty() && !text.trim().is_empty() =>
+                    if !code
+                        && !autolink
+                        && html_elements.is_empty()
+                        && !text.trim().is_empty() =>
                 {
                     let key = format!("text_{:05}", ranges.len());
-                    texts.insert(key.clone(), text.to_string());
-                    ranges.push((key, range));
+                    texts.insert(key.clone(), text.trim().to_string());
+                    ranges.push(Fragment {
+                        key,
+                        range,
+                        leading: text[..text.len() - text.trim_start().len()].into(),
+                        trailing: text[text.trim_end().len()..].into(),
+                    });
                 }
                 _ => {}
             }
@@ -43,12 +64,20 @@ impl Fragments {
         let mut translated = source.clone();
         translated.meta.title = result["title"].clone();
         translated.meta.summary = result.get("summary").cloned();
-        for (key, range) in self.ranges.iter().rev() {
-            let value = &result[key];
+        for fragment in self.ranges.iter().rev() {
+            let value = &result[&fragment.key];
             if value.contains('\n') {
                 bail!("translated inline fragment contains a line break");
             }
-            translated.body.replace_range(range.clone(), &escape(value));
+            translated.body.replace_range(
+                fragment.range.clone(),
+                &format!(
+                    "{}{}{}",
+                    fragment.leading,
+                    escape(value.trim()),
+                    fragment.trailing
+                ),
+            );
         }
         Ok(translated)
     }
@@ -74,23 +103,25 @@ fn track_inline_html(token: &str, elements: &mut Vec<String>) {
         if let Some(position) = elements.iter().rposition(|element| element == &name) {
             elements.truncate(position);
         }
-    } else if !matches!(
-        name.as_str(),
-        "area"
-            | "base"
-            | "br"
-            | "col"
-            | "embed"
-            | "hr"
-            | "img"
-            | "input"
-            | "link"
-            | "meta"
-            | "param"
-            | "source"
-            | "track"
-            | "wbr"
-    ) {
+    } else if !token.trim_end().ends_with("/>")
+        && !matches!(
+            name.as_str(),
+            "area"
+                | "base"
+                | "br"
+                | "col"
+                | "embed"
+                | "hr"
+                | "img"
+                | "input"
+                | "link"
+                | "meta"
+                | "param"
+                | "source"
+                | "track"
+                | "wbr"
+        )
+    {
         elements.push(name);
     }
 }
