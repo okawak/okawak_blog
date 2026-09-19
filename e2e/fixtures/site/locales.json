@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "routes": {
+    "/": [
+      "ja",
+      "en"
+    ],
+    "/about": [
+      "ja",
+      "en"
+    ],
+    "/tech": [
+      "ja",
+      "en"
+    ],
+    "/tech/e2e-article": [
+      "ja",
+      "en"
+    ]
+  }
+}

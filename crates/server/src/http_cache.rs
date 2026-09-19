@@ -232,6 +232,9 @@ fn is_artifact_request(method: &Method, path: &str) -> bool {
     if path == "/api/articles" {
         return true;
     }
+    if path == "/content-assets" || path.starts_with("/content-assets/") {
+        return false;
+    }
     if path == "/api" || path.starts_with("/api/") {
         return false;
     }

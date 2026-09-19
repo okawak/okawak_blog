@@ -1,5 +1,4 @@
 {
-  "schema_version": 1,
   "entries": {
     "article.no_description": {
       "source": "説明はまだありません。",
@@ -73,9 +72,9 @@
         "stale": false
       }
     },
-    "category.stats": {
+    "category.statistics": {
       "source": "統計",
-      "context": "Display name for stable category ID stats.",
+      "context": "Display name for stable category ID statistics.",
       "translation": {
         "value": "Statistics",
         "stale": false
@@ -385,5 +384,6 @@
         "stale": false
       }
     }
-  }
+  },
+  "schema_version": 1
 }

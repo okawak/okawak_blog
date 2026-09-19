@@ -132,15 +132,6 @@ impl Category {
             Category::Physics => "physics",
         }
     }
-
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Category::Tech => "Technology",
-            Category::Daily => "Daily",
-            Category::Statistics => "Statistics",
-            Category::Physics => "Physics",
-        }
-    }
 }
 
 impl fmt::Display for Category {

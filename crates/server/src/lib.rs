@@ -21,7 +21,8 @@ mod page_loader;
 
 mod shell;
 
-pub(crate) const SITE_NAME: &str = "ぶくせんの探窟メモ";
+mod i18n;
+mod metadata;
 pub(crate) const SITE_ORIGIN: &str = "https://www.okawak.net";
 const SITE_ORIGIN_ENV: &str = "OKAWAK_BLOG_SITE_ORIGIN";
 

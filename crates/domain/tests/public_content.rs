@@ -18,7 +18,7 @@ fn locale_preserves_japanese_routes_and_separates_english_keys() {
         Locale::En.path("/tech/legacy123456"),
         "/en/tech/legacy123456"
     );
-    assert_eq!(Locale::En.path("/"), "/en/");
+    assert_eq!(Locale::En.path("/"), "/en");
     assert_eq!(
         Locale::En.artifact_key("articles/index.json"),
         "en/articles/index.json"

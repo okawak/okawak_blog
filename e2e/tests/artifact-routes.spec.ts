@@ -132,7 +132,7 @@ test("GitHub icon stays accessible without an icon font", async ({ page }) => {
   });
   await page.goto("/");
 
-  const github = page.getByRole("link", { name: "Open okawak GitHub profile" });
+  const github = page.getByRole("link", { name: "okawakのGitHubプロフィールを開く" });
   await expect(github).toHaveAttribute("href", "https://github.com/okawak");
   await expect(github.locator("svg")).toHaveAttribute("aria-hidden", "true");
   await expect(github.locator("svg")).toBeVisible();
@@ -141,6 +141,8 @@ test("GitHub icon stays accessible without an icon font", async ({ page }) => {
 
   // Reach the profile link through the same keyboard sequence as a visitor.
   await page.getByRole("navigation").getByRole("link", { name: "About", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "English", exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(github).toBeFocused();
   expect(await github.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe("solid");
@@ -167,7 +169,7 @@ test("home renders artifacts and uses full-page navigation", async ({ page }) =>
     page,
     SITE_NAME,
     "",
-    "1 article published across 1 category.",
+    "1カテゴリで1件の記事を公開しています。",
   );
 
   await page
@@ -212,7 +214,7 @@ test("home renders artifacts and uses full-page navigation", async ({ page }) =>
     page,
     SITE_NAME,
     "",
-    "1 article published across 1 category.",
+    "1カテゴリで1件の記事を公開しています。",
   );
   expect(browserErrors).toEqual([]);
 });
@@ -296,7 +298,7 @@ test("server-rendered pages remain navigable without JavaScript", async ({ brows
       page,
       SITE_NAME,
       "",
-      "1 article published across 1 category.",
+      "1カテゴリで1件の記事を公開しています。",
     );
 
     await page.getByRole("link", { name: "E2E Article" }).click();

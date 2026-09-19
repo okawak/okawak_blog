@@ -4,7 +4,11 @@ use domain::CategorySectionGroup;
 
 pub(crate) const MAX_QUERY_CHARS: usize = 100;
 
-pub(crate) fn filter_sections(sections: &mut Vec<CategorySectionGroup>, query: &str) {
+pub(crate) fn filter_sections(
+    sections: &mut Vec<CategorySectionGroup>,
+    query: &str,
+    labels: &domain::TagLabels,
+) {
     // Signals come from the browser; enforce the input bound on the server as well.
     let query = query.chars().take(MAX_QUERY_CHARS).collect::<String>();
     let query = query.trim().to_lowercase();
@@ -18,10 +22,13 @@ pub(crate) fn filter_sections(sections: &mut Vec<CategorySectionGroup>, query: &
                     .description
                     .as_deref()
                     .is_some_and(|description| description.to_lowercase().contains(&query))
-                || article
-                    .tags
-                    .iter()
-                    .any(|tag| tag.to_lowercase().contains(&query))
+                || article.tags.iter().any(|tag| {
+                    labels
+                        .get(tag)
+                        .unwrap_or(tag)
+                        .to_lowercase()
+                        .contains(&query)
+                })
         });
         !section.articles.is_empty()
     });
@@ -36,7 +43,7 @@ mod tests {
         let card = |slug: &str, title: &str, description: Option<&str>, tags: &[&str]| {
             serde_json::from_value::<SiteArticleCard>(serde_json::json!({
                 "slug": slug, "title": title, "category": "tech",
-                "category_display_name": "Technology", "section_path": [],
+                "section_path": [],
                 "description": description, "tags": tags, "priority": null,
                 "created_at": "2026-01-01T00:00:00+09:00",
                 "updated_at": "2026-01-01T00:00:00+09:00"
@@ -66,7 +73,7 @@ mod tests {
     fn matches_title_description_and_tags_without_case_or_surrounding_whitespace() {
         for query in [" rust ", "非同期", "PROGRAMMING"] {
             let mut actual = sections();
-            filter_sections(&mut actual, query);
+            filter_sections(&mut actual, query, &Default::default());
             assert_eq!(actual, vec![sections().remove(0)], "{query}");
         }
     }
@@ -74,14 +81,14 @@ mod tests {
     #[test]
     fn blank_query_preserves_all_cards_and_order() {
         let mut actual = sections();
-        filter_sections(&mut actual, "　 \n ");
+        filter_sections(&mut actual, "　 \n ", &Default::default());
         assert_eq!(actual, sections());
     }
 
     #[test]
     fn unmatched_query_removes_empty_groups() {
         let mut actual = sections();
-        filter_sections(&mut actual, "missing");
+        filter_sections(&mut actual, "missing", &Default::default());
         assert!(actual.is_empty());
     }
 
@@ -92,6 +99,7 @@ mod tests {
         filter_sections(
             &mut actual,
             &format!("{}ignored", "あ".repeat(MAX_QUERY_CHARS)),
+            &Default::default(),
         );
         assert_eq!(actual.len(), 1);
     }
