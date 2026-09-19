@@ -2,6 +2,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum InfraError {
+    /// One in-flight storage failure shared by concurrent readers.
+    #[error(transparent)]
+    Shared(std::sync::Arc<InfraError>),
     #[error("invalid artifact contract: {0}")]
     Domain(#[from] domain::DomainError),
     #[error("failed to read artifact file: {0}")]
@@ -42,6 +45,7 @@ impl InfraError {
 
     pub fn is_not_found(&self) -> bool {
         match self {
+            Self::Shared(error) => error.is_not_found(),
             Self::Io(error) => error.kind() == std::io::ErrorKind::NotFound,
             Self::S3Read { source, .. } => Self::error_is_not_found(source.as_ref()),
             _ => false,
@@ -92,5 +96,17 @@ mod tests {
         );
 
         assert!(error.is_not_found());
+    }
+
+    #[test]
+    fn shared_errors_preserve_not_found_classification_and_message() {
+        let original = InfraError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "missing object",
+        ));
+        let message = original.to_string();
+        let shared = InfraError::Shared(std::sync::Arc::new(original));
+        assert!(shared.is_not_found());
+        assert_eq!(shared.to_string(), message);
     }
 }
