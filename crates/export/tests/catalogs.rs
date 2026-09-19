@@ -120,6 +120,66 @@ fn invalid_placeholder_response_leaves_catalog_unchanged() {
 }
 
 #[test]
+fn changed_source_placeholders_regenerate_or_protect_existing_translations() {
+    for source in ["{count}/{total}件", "記事数", "{total}件"] {
+        for mode in ["generated", "manual", "unknown"] {
+            let tmp = tempfile::tempdir().unwrap();
+            let path = tmp.path().join("ui.json");
+            let mut catalog = LabelCatalog::default();
+            catalog.entries.insert(
+                "count".into(),
+                LabelEntry {
+                    source: "{count}件".into(),
+                    context: "article count".into(),
+                    translation: None,
+                },
+            );
+            save(&path, &catalog);
+            let fake = Fake(Cell::new(0));
+            export::translate_catalog(&path, &fake, &settings(), false).unwrap();
+            catalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            let entry = catalog.entries.get_mut("count").unwrap();
+            let translation = entry.translation.as_mut().unwrap();
+            if mode == "manual" {
+                translation.value = "{count} custom".into();
+            }
+            if mode == "unknown" {
+                translation.provenance = None;
+            }
+            let previous = translation.value.clone();
+            entry.source = source.into();
+            save(&path, &catalog);
+            let report = export::translate_catalog(&path, &fake, &settings(), false).unwrap();
+            catalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            catalog.validate().unwrap();
+            if mode == "generated" {
+                assert_eq!(report.generated, 1);
+                assert_eq!(fake.0.get(), 2);
+                assert_eq!(
+                    catalog.entries["count"].value(domain::Locale::En),
+                    format!("EN {source}")
+                );
+            } else {
+                assert_eq!(report.protected, ["count"]);
+                assert_eq!(fake.0.get(), 1);
+                let translation = catalog.entries["count"].translation.as_ref().unwrap();
+                assert_eq!(translation.value, previous);
+                assert!(translation.stale);
+                assert_eq!(catalog.entries["count"].value(domain::Locale::En), source);
+                export::translate_catalog(&path, &fake, &settings(), true).unwrap();
+                export::accept_catalog_translation(&path, "count", &settings()).unwrap();
+            }
+            export::translate_catalog(&path, &fake, &settings(), false).unwrap();
+            assert_eq!(
+                fake.0.get(),
+                2,
+                "unchanged input must reuse the updated translation"
+            );
+        }
+    }
+}
+
+#[test]
 fn tags_are_translated_once_per_id_and_removed_with_unpublished_sources() {
     let source = tempfile::tempdir().unwrap();
     let output = tempfile::tempdir().unwrap();
