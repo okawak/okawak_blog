@@ -510,3 +510,74 @@ fn markdown_link_labels_preserve_escaped_nested_and_opaque_brackets() {
         );
     }
 }
+
+#[test]
+fn wikilink_aliases_keep_existing_escapes_and_literal_brackets() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        r"[[target|see \[literal\]]] and [[target|a [bracket] label]] and [[target|two \\ slashes]] and [[tail]]",
+    );
+    note(source.path(), "tech/target.md", "Target", true, "Body");
+    note(source.path(), "tech/tail.md", r"trailing\", true, "Body");
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let article = outputs(output.path())
+        .into_iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    let body = article
+        .strip_prefix("---\n")
+        .unwrap()
+        .split_once("\n---\n")
+        .unwrap()
+        .1;
+    let mut html = String::new();
+    pulldown_cmark::html::push_html(&mut html, pulldown_cmark::Parser::new(body));
+    for label in [
+        "see [literal]",
+        "a [bracket] label",
+        r"two \ slashes",
+        r"trailing\",
+    ] {
+        assert!(html.contains(&format!(">{label}</a>")), "{html}");
+    }
+}
+
+#[test]
+fn markdown_image_prefers_the_asset_over_a_note_with_the_same_stem() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "![photo](image.png)\n![[image.png.md|Note embed]]\n![Markdown note](image.png.md)",
+    );
+    note(
+        source.path(),
+        "tech/image.png.md",
+        "Image note",
+        true,
+        "Body",
+    );
+    fs::write(source.path().join("tech/image.png"), b"public image").unwrap();
+    export::export_japanese(source.path(), output.path()).unwrap();
+    let article = outputs(output.path())
+        .into_iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    assert!(article.contains("![photo](/content-assets/"), "{article}");
+    assert!(article.contains("[Note embed](content:"), "{article}");
+    assert!(article.contains("[Markdown note](content:"), "{article}");
+    let assets: Vec<_> = fs::read_dir(output.path().join("assets"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    assert_eq!(assets.len(), 1);
+    assert_eq!(fs::read(&assets[0]).unwrap(), b"public image");
+}

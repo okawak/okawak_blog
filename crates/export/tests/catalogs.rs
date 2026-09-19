@@ -256,6 +256,65 @@ fn catalog_updates_respect_the_public_tree_transaction_lock() {
 }
 
 #[test]
+fn reviewed_catalog_candidates_survive_retries_and_reject_overwrites() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("ui.json");
+    let fake = Fake(Cell::new(0));
+    let mut catalog = LabelCatalog::default();
+    catalog.entries.insert(
+        "label".into(),
+        LabelEntry {
+            source: "表示".into(),
+            context: "initial context".into(),
+            translation: None,
+        },
+    );
+    save(&path, &catalog);
+    export::translate_catalog(&path, &fake, &settings(), false).unwrap();
+    catalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    catalog
+        .entries
+        .get_mut("label")
+        .unwrap()
+        .translation
+        .as_mut()
+        .unwrap()
+        .value = "Manual".into();
+    catalog.entries.get_mut("label").unwrap().context = "new context".into();
+    save(&path, &catalog);
+    export::translate_catalog(&path, &fake, &settings(), true).unwrap();
+    let candidate = fs::read_dir(tmp.path().join(".export-candidates/catalog"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let mut reviewed: serde_json::Value =
+        serde_json::from_slice(&fs::read(&candidate).unwrap()).unwrap();
+    reviewed["translation"]["value"] = "Reviewed candidate".into();
+    fs::write(&candidate, serde_json::to_vec_pretty(&reviewed).unwrap()).unwrap();
+    let before = fs::read(&candidate).unwrap();
+    let retry = export::translate_catalog(&path, &fake, &settings(), true).unwrap();
+    assert_eq!(fs::read(&candidate).unwrap(), before);
+    assert_eq!(retry.generated, 0);
+    assert_eq!(fake.0.get(), 2);
+    catalog.entries.get_mut("label").unwrap().context = "third context".into();
+    save(&path, &catalog);
+    let catalog_before = fs::read(&path).unwrap();
+    let error = export::translate_catalog(&path, &fake, &settings(), true).unwrap_err();
+    assert!(
+        error.to_string().contains("manually edited candidate"),
+        "{error}"
+    );
+    assert_eq!(fs::read(&candidate).unwrap(), before);
+    assert_eq!(fs::read(&path).unwrap(), catalog_before);
+    assert_eq!(fake.0.get(), 2);
+    fs::remove_file(&candidate).unwrap();
+    export::translate_catalog(&path, &fake, &settings(), true).unwrap();
+    assert_eq!(fake.0.get(), 3);
+}
+
+#[test]
 fn catalog_directory_alias_uses_the_real_public_tree_lock_for_update_and_acceptance() {
     let tmp = tempfile::tempdir().unwrap();
     let content = tmp.path().join("content");

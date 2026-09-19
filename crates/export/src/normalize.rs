@@ -118,7 +118,15 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                             }
                         })
                         .collect();
-                    let matches = if wiki && exact.is_empty() {
+                    // An explicit Markdown image names a file, even when a
+                    // public note such as image.png.md has the same stem.
+                    let prefer_asset = image
+                        && !wiki
+                        && image_extension(Path::new(target)).is_some()
+                        && root.join(resolve_relative(&source.key, target)?).is_file();
+                    let matches = if prefer_asset {
+                        Vec::new()
+                    } else if wiki && exact.is_empty() {
                         index
                             .iter()
                             .filter(|(key, _, _, _)| key.rsplit('/').next() == Some(extensionless))
@@ -156,16 +164,9 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                             let [path] = matches.as_slice() else {
                                 bail!("missing or ambiguous public image");
                             };
-                            let extension = path
-                                .extension()
-                                .and_then(|s| s.to_str())
-                                .unwrap_or_default()
-                                .to_ascii_lowercase();
-                            if !["png", "jpg", "jpeg", "gif", "webp", "avif"]
-                                .contains(&extension.as_str())
-                            {
+                            let Some(extension) = image_extension(path) else {
                                 bail!("unsupported public image format");
-                            }
+                            };
                             let data = fs::read(path)?;
                             let name = format!("{}.{}", digest(&data), extension);
                             assets.insert(name.clone(), data);
@@ -174,16 +175,16 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                         _ => bail!("missing, non-public or ambiguous note reference"),
                     };
                     let label = if wiki {
-                        raw.trim_start_matches('!')
+                        let inner = raw
+                            .trim_start_matches('!')
                             .trim_start_matches("[[")
-                            .trim_end_matches("]]")
+                            .strip_suffix("]]")
+                            .unwrap_or_default();
+                        let alias = inner
                             .split_once('|')
                             .map(|(_, l)| l)
-                            .unwrap_or(&default_label)
-                            .trim_end_matches('\\')
-                            .to_owned()
-                            .replace('[', "\\[")
-                            .replace(']', "\\]")
+                            .unwrap_or(&default_label);
+                        escape_unescaped_brackets(alias)
                     } else {
                         markdown_label(raw, image)?.to_owned()
                     };
@@ -260,6 +261,29 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
         source.document.body = normalized;
     }
     Ok(assets)
+}
+
+fn image_extension(path: &Path) -> Option<String> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    ["png", "jpg", "jpeg", "gif", "webp", "avif"]
+        .contains(&extension.as_str())
+        .then_some(extension)
+}
+
+fn escape_unescaped_brackets(label: &str) -> String {
+    let mut escaped = false;
+    let mut result = String::new();
+    for ch in label.chars() {
+        if !escaped && matches!(ch, '[' | ']') {
+            result.push('\\');
+        }
+        result.push(ch);
+        escaped = !escaped && ch == '\\';
+    }
+    if escaped {
+        result.push('\\'); // Do not let a trailing slash escape the new label terminator.
+    }
+    result
 }
 
 fn markdown_label(raw: &str, image: bool) -> Result<&str> {
