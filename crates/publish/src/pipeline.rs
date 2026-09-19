@@ -24,12 +24,7 @@ pub async fn publish_with_bookmark_enricher(
     enrich: BookmarkEnricher,
 ) -> Result<()> {
     let documents = input::read(content_dir)?;
-    let tag_catalog: domain::LabelCatalog = match std::fs::read(content_dir.join("tags.json")) {
-        Ok(bytes) => serde_json::from_slice(&bytes)?,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Default::default(),
-        Err(error) => return Err(error.into()),
-    };
-    tag_catalog.validate()?;
+    let tag_catalog = input::read_tag_catalog(content_dir)?;
     let japanese = input::eligible(&documents, Locale::Ja);
     let english = input::eligible(&documents, Locale::En);
     let asset_names = links::assets(&japanese)?
