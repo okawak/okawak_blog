@@ -1007,6 +1007,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "domain",
+ "percent-encoding",
  "pulldown-cmark",
  "rstest",
  "scraper",

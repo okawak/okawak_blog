@@ -84,7 +84,12 @@ pub(crate) fn translate_stage(
                         continue;
                     }
                 }
-                let result = crate::translation::cached_response(&request, translator, cache_root)?;
+                let checked = ArticleTranslator {
+                    translator,
+                    fragments: &fragments,
+                    original: &original,
+                };
+                let result = crate::translation::cached_response(&request, &checked, cache_root)?;
                 let mut translated = fragments.apply(&original, &result)?;
                 translated.meta.locale = Locale::En;
                 translated.meta.translation = Some(TranslationProvenance {
@@ -118,6 +123,22 @@ pub(crate) fn translate_stage(
         .extend(tags.protected.into_iter().map(|key| format!("tag:{key}")));
     crate::translation::copy_cache(cache_root, stage)?;
     Ok(report)
+}
+
+// Validate reconstruction before a fresh response can enter the reusable cache.
+struct ArticleTranslator<'a> {
+    translator: &'a dyn Translator,
+    fragments: &'a Fragments,
+    original: &'a Document,
+}
+
+impl Translator for ArticleTranslator<'_> {
+    fn translate(&self, request: &TranslationRequest) -> Result<crate::translation::Texts> {
+        let result = self.translator.translate(request)?;
+        request.validate(&result)?;
+        self.fragments.apply(self.original, &result)?.encode()?;
+        Ok(result)
+    }
 }
 
 pub fn accept_translation(output: &Path, id: &Slug, settings: &TranslationSettings) -> Result<()> {
