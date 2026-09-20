@@ -38,12 +38,11 @@ pub fn translate_catalog(
     path: &Path,
     translator: &dyn Translator,
     settings: &TranslationSettings,
-    candidates: bool,
 ) -> Result<TranslationReport> {
     let path = canonical_parent_path(path)?;
     let root = parent(&path);
     sync::locked(root, || {
-        plan_catalog(&path, settings)?.apply(root, translator, candidates)
+        plan_catalog(&path, settings)?.apply(root, translator)
     })
 }
 
@@ -114,7 +113,6 @@ impl CatalogPlan {
         self,
         cache_root: &Path,
         translator: &dyn Translator,
-        candidates: bool,
     ) -> Result<TranslationReport> {
         let Self {
             path,
@@ -145,9 +143,6 @@ impl CatalogPlan {
                             entry.translation.as_mut().unwrap().stale = true;
                         }
                         report.protected.push(key.clone());
-                        if !candidates {
-                            continue;
-                        }
                         if candidate_decision == Some(Decision::Reuse) {
                             report.reused += 1;
                             continue;

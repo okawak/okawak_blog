@@ -29,11 +29,10 @@ pub fn translate_public(
     output: &Path,
     translator: &dyn Translator,
     settings: &TranslationSettings,
-    candidates: bool,
 ) -> Result<TranslationReport> {
     let mut report = TranslationReport::default();
     sync::transaction(output, |stage| {
-        report = translate_stage(stage, output, translator, settings, candidates)?;
+        report = translate_stage(stage, output, translator, settings)?;
         Ok(())
     })?;
     Ok(report)
@@ -44,7 +43,6 @@ pub(crate) fn translate_stage(
     cache_root: &Path,
     translator: &dyn Translator,
     settings: &TranslationSettings,
-    candidates: bool,
 ) -> Result<TranslationReport> {
     let mut report = TranslationReport::default();
     let originals = markdown::read_locale(stage, Locale::Ja)?;
@@ -144,9 +142,6 @@ pub(crate) fn translate_stage(
                     }
                     fs::write(&path, preserved.encode()?)?;
                     report.protected.push(original.meta.id.to_string());
-                    if !candidates {
-                        continue;
-                    }
                     if candidate_decision == Some(Decision::Reuse) {
                         report.reused += 1;
                         continue;
@@ -176,7 +171,7 @@ pub(crate) fn translate_stage(
             }
         }
     }
-    let tags = tags.apply(cache_root, translator, candidates)?;
+    let tags = tags.apply(cache_root, translator)?;
     report.generated += tags.generated;
     report.reused += tags.reused;
     report
