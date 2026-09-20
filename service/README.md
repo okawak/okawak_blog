@@ -45,11 +45,11 @@ curl --fail -H 'Cache-Control: no-cache' \
   "https://www.okawak.net/api/ready?deploy-check=$(date +%s)"
 ```
 
-`production-deploy`・`quick-deploy`・`build-deployment`はVPS内部用として通常の`mise tasks ls`から隠しています。初期構築や障害対応で直接操作する場合は、VPSのインストール先で`mise tasks ls --hidden`を参照できます。旧`stop`・`service`・`bin`・`deploy` taskは一括配備へ集約し、旧`status`・`logs`・`logs-recent`・`restart`は管理端末の`*-vps`へ移行しました。
+`production-deploy`・`quick-deploy`・`build-deployment`はVPS内部用として通常の`mise tasks ls`から隠しています。初期構築や障害対応で直接操作する場合は、VPSのインストール先で`mise tasks ls --hidden`を参照できます。
 
 ## VPS build tool
 
-production buildはTopcoat CLIを使います。Topcoat CLIのversionは`mise.toml`と`mise.lock`でframeworkと同じ0.7.0へ固定します。
+production buildはTopcoat CLIを使います。CLIのversionは`mise.toml`と`mise.lock`、frameworkのversionはworkspaceの`Cargo.toml`を正本とし、同じversionへ揃えます。
 
 VPSの運用userで次を実行します。以下は`/opt/okawak_blog`の例です。別の場所に配置している場合は、`cd`先をそのパスに置き換えます。
 
@@ -67,12 +67,15 @@ cd /opt/okawak_blog
 mise settings get locked
 topcoat fmt --version
 mise run check-deps
+mise run versions-check
 git status --short
 ```
 
-Topcoat CLIが0.7.0で、`mise run check-deps`が成功し、Git差分が空であれば正常です。`mise run build-project`とproduction用のstaged buildはTopcoatのstandalone Tailwind integrationを使い、Bun package installへ依存しません。
+Topcoat CLIがworkspaceのTopcoat frameworkと同じversionで、`mise run check-deps`と`mise run versions-check`が成功し、Git差分が空であれば正常です。`mise run build-project`とproduction用のstaged buildはTopcoatのstandalone Tailwind integrationを使い、Bun package installへ依存しません。
 
 `mise run production-deploy`は稼働中のasset directoryを直接buildしません。`target/assets-staged`にhash付きCSS / JavaScript / faviconを揃え、service停止後に`bin/okawak_blog`と、Topcoatがbinaryの隣から読む`bin/assets`を同じreleaseへ切り替えます。stagingはWebAssemblyを拒否します。起動後のhealth / readinessが失敗した場合は旧binary・旧assets・旧systemd unitを復元し、調査用の失敗bundleを`bin/assets.failed`へ残します。
+
+`bin/assets.failed`が存在する間は次の配備を開始しません。失敗原因の調査が終わり、bundleが不要になったことを確認してからVPSのrepository rootで`rm -rf bin/assets.failed`を実行し、管理端末から`mise run deploy-vps`を再実行します。
 
 配備時はsystemd unitの`WorkingDirectory`をVPSのrepository root、`ExecStart`を配備したbinaryの絶対パスへ置き換えてインストールします。上書き前のunitは同じsystemd directoryの`okawak_blog.service.rollback`へ退避し、失敗時は`daemon-reload`と再起動の前に復元します。初回配備で旧unitがなければ新unitを削除します。unit復元に失敗した場合はbackupを残し、再起動を止めて手動復旧を案内します。Git管理下のunit fileは変更しません。`ProtectHome=true`は維持するため、インストール先には`/opt`や`/srv`など、serviceから読める場所を使います。
 
@@ -132,7 +135,7 @@ curl --fail http://127.0.0.1:8008/api/ready
 
 ## Cloudflare Tunnel
 
-公開経路の運用、hostname、更新、障害対応は[Cloudflare Tunnel runbook](../docs/operations/cloudflare-tunnel.md)に従います。Tunnel、Published application、DNSはCloudflare Dashboardで管理し、Cloudflare resourceをTerraformへimportしません。
+導入、更新、token配置、Dashboard設定、検証、障害対応は[Cloudflare Tunnel runbook](../docs/operations/cloudflare-tunnel.md)を正本とします。Tunnel、Published application、DNSはCloudflare Dashboardで管理し、Cloudflare resourceをTerraformへimportしません。
 
 repositoryの`cloudflared.service`はremote-managed Tunnelを次の境界で起動します。
 
@@ -141,77 +144,8 @@ repositoryの`cloudflared.service`はremote-managed Tunnelを次の境界で起�
 - tokenをunit、environment、`mise.toml`、Git管理下のfileへ埋め込まない
 - package管理版を使うため`--no-autoupdate`を指定する
 - `okawak_blog.service`との依存は`Wants`に留め、application restart中もTunnel processを維持する
-
-Oracle Linux 9ではCloudflare公式RPM repositoryを使用します。repository経由にすることで、以後は`dnf upgrade cloudflared`で更新できます。
-
-```bash
-curl -fsSL \
-  https://pkg.cloudflare.com/cloudflared-ascii.repo |
-  sudo tee /etc/yum.repos.d/cloudflared.repo
-
-sudo dnf install -y cloudflared
-```
-
-VPSへunitを配置する前に、RPMが導入するbinary pathが`/usr/local/bin/cloudflared`であることと、`cloudflared --version`がtoken fileをsupportする`2025.4.0`以上であることを確認します。
-
-```bash
-command -v cloudflared
-cloudflared --version
-```
-
-専用userとtoken directoryを作ります。
-
-```bash
-getent passwd cloudflared || sudo useradd \
-  --system \
-  --home-dir /var/lib/cloudflared \
-  --shell /sbin/nologin \
-  cloudflared
-
-sudo install \
-  -d \
-  -o root \
-  -g cloudflared \
-  -m 0750 \
-  /etc/cloudflared
-```
-
-Dashboardから取得したtokenはshell argumentへ入れず、対話入力で配置します。tokenの値やfile内容を出力しません。
-
-```bash
-sudo bash -c '
-umask 027
-read -rsp "Tunnel token: " token
-printf "\n"
-printf "%s" "$token" > /etc/cloudflared/token
-'
-sudo chown root:cloudflared /etc/cloudflared/token
-sudo chmod 0640 /etc/cloudflared/token
-```
-
-unitを配置して起動します。
-
-```bash
-sudo install \
-  -o root \
-  -g root \
-  -m 0644 \
-  service/cloudflared.service \
-  /etc/systemd/system/cloudflared.service
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now cloudflared
-```
-
-```bash
-sudo systemctl is-enabled cloudflared
-sudo systemctl is-active cloudflared
-sudo systemctl status cloudflared --no-pager
-sudo journalctl -u cloudflared --since '10 minutes ago' --no-pager
-```
-
-本番hostnameは`okawak.net`と`www.okawak.net`です。どちらもCloudflare Tunnelへ接続し、OCIの80/443 ingressと直接公開用reverse proxyは使用しません。SSHは60022でLISTENし、22は新規VPSのbootstrap用ingressとしてのみ維持します。
+- 公開経路にOCIの80/443 ingressと直接公開用reverse proxyを使わない
 
 ## テスト
 
-`mise run test-service`で運用まわりのテストをまとめて実行します。systemd unitの設定テストは`service/tests/`、デプロイ・証明書更新スクリプトのテストは`scripts/tests/`に置きます。
+`mise run test-service`で運用まわりのテストをまとめて実行します。systemd unitの設定テストは`service/tests/`、submodule同期・デプロイ・証明書更新スクリプトのテストは`scripts/tests/`に置きます。

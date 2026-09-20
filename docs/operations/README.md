@@ -2,6 +2,8 @@
 
 本番VPSとcloud境界の運用手順をまとめます。恒久的な責務と依存方向は[architecture.md](../architecture/architecture.md)を一次情報とし、このdirectoryには検証、更新、障害対応の手順を置きます。
 
+[production setup](./production-setup.md)は構築順序、各componentのrunbookは具体的な導入・更新・障害対応、[service README](../../service/README.md)はGit管理するsystemd unitとruntime設定の現行契約を所有します。
+
 ## Runbooks
 
 - [依存関係の更新](./dependency-updates.md)
