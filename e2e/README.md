@@ -31,7 +31,7 @@ bucket名やcredentialはrepositoryへ保存せず、実行時に渡してくだ
 aws configure --profile blog-s3
 ```
 
-profileを使わず、`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、必要に応じて`AWS_SESSION_TOKEN`を実行環境へ設定する方法でも動作します。現在の`aws-config` dependencyはdefault featureを無効化しているため、SSOや`credential_process`を使うprofileはこのローカルtestの対象外です。
+profileを使わず、`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、必要に応じて`AWS_SESSION_TOKEN`を実行環境へ設定する方法でも動作します。workspaceの`aws-config`は`credentials-process` featureを明示的に有効化しているため、IAM Roles Anywhereなどの`credential_process` profileも利用できます。SSO featureは有効化していないため、このローカルtestの対象外です。
 
 ```bash
 # 開発サーバーを起動してブラウザから手動確認
@@ -66,8 +66,4 @@ credentialには対象keyへの`s3:GetObject`だけを付与したread-only prof
 
 S3 smoke testはOIDCで取得したupload workflowの一時credentialを再利用し、pull requestへAWS credentialを渡しません。失敗時のPlaywright traceはGitHub Actions artifactに7日間保存されます。
 
-## 言語別releaseの公開前検証
-
-通常fixtureに日英の対応表・翻訳タグを持ち、言語切替、初回SSR、絞り込み後の文言、モバイルメニュー、未翻訳404を検証する。公開workflowでは`OKAWAK_BLOG_EXPECTED_ARTIFACT_ROOT`に今回生成したsite directoryを渡し、その`locales.json`で宣言された各言語のhome・About・代表カテゴリ／記事を実S3から表示する。artifactの全件存在はupload前script、remoteへの転送は全object数とlocale表の一致で確認する。
-
-手動の`test-e2e-s3`で対応するローカルbuildを指定しない場合は、従来の日本語smokeに加え、homeに宣言された英語版を表示できるか確認する。通常CIはこのsmokeの表示検証をlocal fixtureでも実行し、AWS・private vault・実AIを必要としない。
+固定fixtureは言語切替、初回SSR、絞り込み後の文言、モバイルメニュー、未翻訳404を検証します。公開workflowは今回生成した`locales.json`に基づき、各言語のhome、存在するAbout、代表カテゴリ・記事を実S3から表示し、成功後だけ公開pointerを切り替えます。artifact集合と転送件数の検証は公開workflowのscriptが担当します。

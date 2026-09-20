@@ -31,7 +31,7 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 
 routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`path_param!()`で宣言し、route moduleに`mod.rs`は使いません。
 
-Topcoat frameworkとCLIは0.8.1に揃え、routerには`.runtime()`と`.discover_shards()`を登録します。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
+Topcoat frameworkとCLIはworkspaceで同じversionに揃え、routerには`.runtime()`と`.discover_shards()`を登録します。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
 
 runtimeのpage再描画はPOSTをGETへ内部rewriteします。conditional GETでは`request::original_method(cx)`を参照し、再描画応答に通常pageのvalidatorを適用しません。
 

@@ -49,7 +49,7 @@ repositoryの管理権限があるアカウントで、次を実施します。
 - Topcoat frameworkの更新時は`mise.toml`の`cargo:topcoat-cli`も同じversionへ揃え、`mise lock --platform macos-arm64,linux-x64`でlockfileを更新します。`mise install`後に`mise run versions-check`を通し、同じPRへ含めます。
 - Topcoat本体の除外は、推移依存の固定を意味しません。`topcoat-*` crateはTopcoat本体からversion範囲で参照されているため、週次lockfile更新などで変更されることがあります。`Cargo.lock`の該当差分もreviewして判断します。
 - GitHub Actionsの更新追従とSHA固定はRenovateで管理し、PRでは対応versionのcommentと参照先を確認します。Actions参照のmajor・SHA・commentを独自scriptで検証する処理は設けません。`mise run versions-check`はBun・Topcoat・Tailwindの共通build toolの整合と、workflowにtool versionや個別installerを持ち込まないことを確認します。
-- Bun本体やTailwindを手動更新する場合も、[READMEの共通tool更新手順](../../README.md#開発コマンド)に従って関連するversionを揃えます。
+- Bun本体やTailwindを手動更新する場合も、`mise.toml`と`mise.lock`の関連versionを揃え、`mise install`後に`mise run versions-check`を通します。
 - 更新PRを手動修正してcommitする際も、署名設定を確認して署名付きcommitを作成します。
 
 ## Renovate設定の検証

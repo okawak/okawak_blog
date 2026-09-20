@@ -84,9 +84,7 @@ curl --fail http://127.0.0.1:8008/api/health
 curl --fail http://127.0.0.1:8008/api/ready
 ```
 
-`production-deploy`は`origin/main`をpullし、Topcoat release binaryをbuildして、稼働中の`bin/assets`とは別の`target/assets-staged`へcontent-hash付きCSS、JavaScript、faviconを生成します。staging bundleはmanifest参照とfile実体を検証し、WebAssemblyを拒否します。bundleが完成した後だけapplication serviceを停止し、`bin/okawak_blog`と`bin/assets`を同じreleaseへ切り替えて起動します。起動後はhealth / readinessを確認し、失敗時は直前のbinaryとasset bundleを復元します。Cloudflare Tunnelは独立したserviceとして維持します。
-
-失敗したasset bundleを保存できた場合は`bin/assets.failed`へ残します。原因を確認して不要になった後に削除してから、管理端末で`mise run deploy-vps`を再実行します。
+`production-deploy`は`origin/main`を取得し、Topcoat release binaryとasset bundleをstagingで検証してから同じreleaseとして切り替えます。health / readiness失敗時のrollback、失敗bundle、systemd unitの復旧手順は[runtime service](../../service/README.md#vps-build-tool)を正本とします。Cloudflare Tunnelは独立したserviceとして維持します。
 
 ## 5. Cloudflare Tunnelを構築する
 
