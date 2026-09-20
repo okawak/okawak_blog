@@ -6,6 +6,7 @@
 - commit前に署名設定を確認し、署名付きで作る。既存差分を無断で破棄・上書きしない。
 - PRのreview threadに対応したら、修正をpushしてから該当threadをresolveする。
 - `terraform/`は読み取り専用。編集も、このdirectory内でのcommand実行もしない。
+- VPS操作は行わない。`ssh` / `scp`、`*-vps` task、VPS上のcommandを実行せず、明示依頼時も手順案内だけに留める。
 
 ## 設計と責務
 
@@ -39,4 +40,4 @@ rootの[mise.toml](mise.toml)を正とし、`mise tasks ls`で確認して`mise 
 - `dev-local`: Gitの公開Markdownからpublish成果物をlocal配信する。原文同期・export・翻訳は明示的な別タスク。publish失敗時はserverを起動しない。
 - `sync-obsidian`: 同期のみ。未commit差分があれば停止し、cleanならmerge commitを作らずremote最新をcheckoutする。
 - `dev` / `test-e2e-s3`: S3配信の開発確認 / 明示的な実S3 smoke。`OKAWAK_BLOG_ARTIFACT_BUCKET`必須。`dev`はtaskが`OKAWAK_BLOG_ARTIFACT_SOURCE=s3`を設定する。
-- `service/`: systemd・Cloudflare Tunnel・運用補助。通常のVPS操作は管理端末の`*-vps` taskを使い、VPS内部用taskは`mise tasks ls --hidden`で確認する。`mise.local.toml`は管理端末専用。S3設定・credentials・health/readinessの詳細は[service/README.md](service/README.md)と[service unit](service/okawak_blog.service)を参照する。
+- `service/`: systemd・Cloudflare Tunnel・VPSのユーザー向け運用手順。詳細は[service/README.md](service/README.md)と[service unit](service/okawak_blog.service)を参照する。
