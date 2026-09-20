@@ -71,6 +71,7 @@ fi
 EOF
   cat >"$stub_dir/curl" <<'EOF'
 #!/usr/bin/env bash
+printf 'curl %s\n' "$*" >>"$STUB_PROBE_LOG"
 if [[ "${STUB_CURL_FAIL:-false}" == "true" ]]; then
   exit 22
 fi
@@ -78,6 +79,7 @@ exit 0
 EOF
   cat >"$stub_dir/sleep" <<'EOF'
 #!/usr/bin/env bash
+printf 'sleep %s\n' "$*" >>"$STUB_PROBE_LOG"
 exit 0
 EOF
   chmod +x "$stub_dir"/*
@@ -133,6 +135,7 @@ prepare_case() {
   printf '#!/usr/bin/env bash\necho new binary\n' >"$case_dir/target/release/server"
   chmod +x "$case_dir/bin/okawak_blog" "$case_dir/target/release/server"
   : >"$case_dir/systemctl.log"
+  : >"$case_dir/probe.log"
 }
 
 run_activation() {
@@ -149,6 +152,7 @@ run_activation() {
     DEPLOY_PROBE_ATTEMPTS=1 \
     STUB_SERVICE_ACTIVE="${STUB_SERVICE_ACTIVE:-true}" \
     STUB_CURL_FAIL="$curl_fail" \
+    STUB_PROBE_LOG="$case_dir/probe.log" \
     STUB_SYSTEMCTL_LOG="$case_dir/systemctl.log" \
     STUB_SYSTEMD_DIR="$case_dir/systemd" \
     bash "$activation_script"
@@ -157,6 +161,8 @@ run_activation() {
 success_case="$test_root/success"
 prepare_case "$success_case"
 run_activation "$success_case" false
+[[ "$(head -1 "$success_case/probe.log")" == 'sleep 1' ]] \
+  || fail "activation did not wait before the first health probe"
 grep -Fxq "WorkingDirectory=$success_case" "$success_case/systemd/okawak_blog.service" \
   || fail "systemd working directory does not match the deployment directory"
 grep -Fxq "ExecStart=$success_case/bin/okawak_blog" "$success_case/systemd/okawak_blog.service" \

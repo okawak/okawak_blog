@@ -168,6 +168,7 @@ sudo install -o root -g root -m 0755 "$target_bin" "$installed_bin"
 sudo systemctl daemon-reload
 sudo systemctl start "$service_name.service"
 
+sleep 1
 ready=false
 for ((attempt = 1; attempt <= probe_attempts; attempt += 1)); do
   if curl --fail --silent --show-error --output /dev/null \
