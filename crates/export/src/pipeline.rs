@@ -12,13 +12,10 @@ pub fn export_translated(
     output: &Path,
     translator: &dyn crate::Translator,
     settings: &crate::TranslationSettings,
-    candidates: bool,
 ) -> Result<crate::TranslationReport> {
     let mut report = crate::TranslationReport::default();
     export_with(source, output, |stage| {
-        report = crate::translate_content::translate_stage(
-            stage, output, translator, settings, candidates,
-        )?;
+        report = crate::translate_content::translate_stage(stage, output, translator, settings)?;
         Ok(())
     })?;
     Ok(report)

@@ -95,15 +95,10 @@ impl Cli {
                 let args = self.export;
                 let settings = args.settings.load()?;
                 let translator = export::CodexTranslator::default();
-                let content = export::export_translated(
-                    &args.source,
-                    &args.output,
-                    &translator,
-                    &settings,
-                    true,
-                )?;
+                let content =
+                    export::export_translated(&args.source, &args.output, &translator, &settings)?;
                 report("Content", &content);
-                let ui = export::translate_catalog(&args.ui_catalog, &translator, &settings, true)?;
+                let ui = export::translate_catalog(&args.ui_catalog, &translator, &settings)?;
                 report("UI", &ui);
             }
             Some(Command::Accept { target }) => match target {
