@@ -57,17 +57,7 @@ fi
 
 [tasks.sync-obsidian]
 description = "Initialize and checkout the latest private Obsidian submodule revision"
-run = '''
-obsidian_path="obsidian"
-if [ ! -e "$obsidian_path/.git" ]; then
-  git submodule update --init --recursive "$obsidian_path"
-fi
-if [ -n "$(git -C "$obsidian_path" status --porcelain)" ]; then
-  echo "sync-obsidian: submodule has uncommitted changes; commit or stash them first" >&2
-  exit 1
-fi
-git submodule update --remote --checkout --recursive "$obsidian_path"
-'''
+run = "bash scripts/sync_obsidian.sh"
 
 [tasks.export]
 description = "Export public Markdown, translate changes, and prepare protected translation candidates"
@@ -190,9 +180,10 @@ description = "Run tests for all workspace crates"
 run = "cargo test --workspace"
 
 [tasks.test-service]
-description = "Validate systemd units, remote deployment, rollback, and certificate rotation"
+description = "Validate systemd units and operational scripts"
 run = '''
 bash service/tests/systemd_units_test.sh
+bash scripts/tests/sync_obsidian_test.sh
 bash scripts/tests/staged_deployment_test.sh
 bash scripts/tests/remote_deployment_test.sh
 bash scripts/tests/runtime_certificate_rotation_test.sh
