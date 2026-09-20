@@ -1,6 +1,5 @@
 fn main() {
     println!("cargo::rerun-if-changed=src");
-    println!("cargo::rerun-if-changed=style");
     println!("cargo::rerun-if-changed=styles.css");
 
     // `assets::STYLESHEET` registers the stylesheet rendered by this build integration.

@@ -27,8 +27,7 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 - `src/assets.rs`: application所有のbundle asset登録
 - `src/icons.rs`: 同梱したGitHub Octiconsの単一SVG（[MITライセンス](licenses/Octicons-MIT.txt)）をTopcoatのicon componentへ渡す
 - `components.toml`: Topcoat UIのtheme・component install state
-- `styles.css`: Topcoat UI theme token、site chrome、Tailwind CSS入力
-- `style/content.css`: `.content-prose`配下の生成HTML用plain CSS
+- `styles.css`: Topcoat UI theme token、site chrome、`.content-prose`配下の生成HTML用styleをまとめたTailwind CSS入力
 - `build.rs`: `styles.css`をTopcoatのstylesheet assetへ変換するbuild integration
 
 routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`path_param!()`で宣言し、route moduleに`mod.rs`は使いません。
