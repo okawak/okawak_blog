@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "entries": {
     "article.no_description": {
       "source": "説明はまだありません。",
@@ -384,6 +385,5 @@
         "stale": false
       }
     }
-  },
-  "schema_version": 1
+  }
 }
