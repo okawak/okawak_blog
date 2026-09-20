@@ -1,6 +1,7 @@
 //! File adapter for versioned text catalogs. UI keys and their meaning belong to server.
 use crate::{
-    TranslationReport, sync,
+    report::TranslationReport,
+    sync,
     translation::{Decision, TranslationRequest, TranslationSettings, Translator, decide},
 };
 use anyhow::{Context, Result, bail};
@@ -38,7 +39,7 @@ pub fn translate_catalog(
     path: &Path,
     translator: &dyn Translator,
     settings: &TranslationSettings,
-) -> Result<TranslationReport> {
+) -> Result<TranslationReport<String>> {
     let path = canonical_parent_path(path)?;
     let root = parent(&path);
     sync::locked(root, || {
@@ -113,7 +114,7 @@ impl CatalogPlan {
         self,
         cache_root: &Path,
         translator: &dyn Translator,
-    ) -> Result<TranslationReport> {
+    ) -> Result<TranslationReport<String>> {
         let Self {
             path,
             mut catalog,

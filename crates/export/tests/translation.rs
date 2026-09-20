@@ -1,4 +1,4 @@
-use export::{Texts, TranslationRequest, TranslationSettings, Translator};
+use export::{ProtectedContent, Texts, TranslationRequest, TranslationSettings, Translator};
 use std::{
     cell::Cell,
     fs,
@@ -99,7 +99,8 @@ fn changed_source_protects_manual_edits_and_candidate_requires_current_source() 
     write_note(source.path(), "更新した本文");
     export::export_japanese(source.path(), output.path()).unwrap();
     let report = export::translate_public(output.path(), &fake, &settings()).unwrap();
-    assert_eq!(report.protected.len(), 1);
+    let id: domain::Slug = path.file_stem().unwrap().to_str().unwrap().parse().unwrap();
+    assert_eq!(report.protected, [ProtectedContent::Article(id.clone())]);
     assert_eq!(report.generated, 1);
     assert_eq!(fake.calls.get(), 2);
     assert!(fs::read_to_string(&path).unwrap().contains("Manual title"));
@@ -107,7 +108,6 @@ fn changed_source_protects_manual_edits_and_candidate_requires_current_source() 
     let calls = fake.calls.get();
     export::translate_public(output.path(), &fake, &settings()).unwrap();
     assert_eq!(fake.calls.get(), calls, "the candidate must be reused");
-    let id = path.file_stem().unwrap().to_str().unwrap().parse().unwrap();
     export::accept_translation(output.path(), &id, &settings()).unwrap();
     assert!(
         fs::read_to_string(&path)
