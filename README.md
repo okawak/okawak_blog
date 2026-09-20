@@ -116,7 +116,7 @@ site/
 ## データフロー
 
 ```text
-private Obsidian（ローカルsubmodule）
+private Obsidian（ルートの obsidian/ submodule）
   -> export / 翻訳・レビュー
   -> 日英Markdown・辞書をGit管理
   -> publish

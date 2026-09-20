@@ -3,7 +3,7 @@
   "extends": ["config:best-practices"],
   "enabledManagers": ["cargo", "bun", "mise", "github-actions", "rust-toolchain"],
   "ignoreDeps": ["topcoat", "cargo:topcoat-cli"],
-  "ignorePaths": ["terraform/**", "crates/publish/obsidian/**"],
+  "ignorePaths": ["terraform/**", "obsidian/**"],
   "timezone": "Asia/Tokyo",
   "schedule": ["* * * * 1"],
   "automerge": false,

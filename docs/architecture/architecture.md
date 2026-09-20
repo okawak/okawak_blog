@@ -22,7 +22,7 @@ Markdown から HTML への変換はビルド時に完了させる。ランタ�
 
 ```mermaid
 flowchart LR
-    A[Private Obsidian Repo] --> B[git submodule]
+    A[Private Obsidian Repo] --> B[root obsidian/ submodule]
     B --> E1[local export and translation]
     E1 --> E2[public Markdown in Git]
     E2 --> C[publish input]
@@ -41,6 +41,8 @@ flowchart LR
 
 ```text
 okawak_blog/
+├── obsidian/          # private入力のgit submodule
+├── content/           # export済みの公開Markdown
 ├── crates/
 │   ├── domain/
 │   ├── export/
@@ -57,7 +59,7 @@ okawak_blog/
 └── terraform/
 ```
 
-各crateは`crates/`直下へ並べ、workspace memberは各パスを明示する。配信用の親ディレクトリを設けず、責務と依存方向はcrate境界で表す。
+private Obsidianは外部入力としてリポジトリルートの`obsidian/`に置き、`crates/export`の内部資産にはしない。各crateは`crates/`直下へ並べ、workspace memberは各パスを明示する。配信用の親ディレクトリを設けず、責務と依存方向はcrate境界で表す。
 
 各 crate の責務は次の通り。
 

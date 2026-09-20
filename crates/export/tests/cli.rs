@@ -56,7 +56,7 @@ exec "$FAKE_CODEX_TEST" --exact fake_codex_process --nocapture
     }
 
     fn write_note(&self, body: &str) {
-        let path = self.path("crates/publish/obsidian/Publish/tech/article.md");
+        let path = self.path("obsidian/Publish/tech/article.md");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, format!("---\npublish_id: '{ARTICLE}'\ntitle: 記事\ncategory: tech\ntags: [Rust]\nis_completed: true\ncreated: '2025-01-01T00:00:00+09:00'\nupdated: '2025-01-01T00:00:00+09:00'\n---\n{body}\n")).unwrap();
     }
@@ -249,7 +249,7 @@ fn accepting_candidates_needs_neither_private_input_nor_ai() {
     let calls = project.calls();
     let english = project.path(&format!("content/en/{ARTICLE}.md"));
     let candidate = project.path(&format!("content/.export-candidates/{ARTICLE}.md"));
-    let source = project.path("crates/publish/obsidian");
+    let source = project.path("obsidian");
     let away = project.path("unavailable-vault");
     fs::rename(&source, &away).unwrap();
     project.run(&["accept", "article", ARTICLE]);
@@ -314,11 +314,7 @@ fn invalid_or_ambiguous_arguments_fail_before_any_export_or_translation() {
 #[test]
 fn missing_private_input_does_not_fall_back_to_public_only_translation() {
     let project = Project::new();
-    fs::rename(
-        project.path("crates/publish/obsidian"),
-        project.path("unavailable-vault"),
-    )
-    .unwrap();
+    fs::rename(project.path("obsidian"), project.path("unavailable-vault")).unwrap();
     let result = project.invoke(&[]);
     assert!(!result.status.success());
     assert!(!project.path("content").exists());
@@ -329,7 +325,7 @@ fn missing_private_input_does_not_fall_back_to_public_only_translation() {
 fn explicit_paths_are_used_for_export_and_candidate_acceptance() {
     let project = Project::new();
     fs::rename(
-        project.path("crates/publish/obsidian/Publish"),
+        project.path("obsidian/Publish"),
         project.path("custom vault"),
     )
     .unwrap();

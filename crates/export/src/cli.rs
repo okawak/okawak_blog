@@ -19,7 +19,7 @@ pub(super) struct Cli {
 #[derive(Args)]
 struct ExportArgs {
     /// Obsidian directory containing explicitly published notes.
-    #[arg(long, default_value = "crates/publish/obsidian/Publish")]
+    #[arg(long, default_value = "obsidian/Publish")]
     source: PathBuf,
     /// Public Markdown directory.
     #[arg(long, default_value = "content")]
