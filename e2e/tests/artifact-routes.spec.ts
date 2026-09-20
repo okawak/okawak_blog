@@ -394,12 +394,29 @@ test("browser history reconstructs the closed mobile menu", async ({ page }) => 
   await expect(page.locator("#site-header-nav")).toHaveClass(/\bhidden\b/);
 });
 
-test("home article cards stay within the mobile viewport", async ({ page }) => {
+test("home article cards keep the warm surface and stay within the mobile viewport", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
   const articleCard = page.locator("main article").filter({ hasText: "E2E Article" });
   await expect(articleCard).toBeVisible();
+
+  const cardSurface = articleCard.locator(":scope > a > div");
+  const backgroundColors = await cardSurface.evaluate((element) => {
+    const probe = document.createElement("div");
+    probe.className = "bg-card/90";
+    document.body.append(probe);
+    const expected = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+
+    return {
+      actual: getComputedStyle(element).backgroundColor,
+      expected,
+    };
+  });
+  expect(backgroundColors.actual).toBe(backgroundColors.expected);
 
   const cardBox = await articleCard.boundingBox();
   expect(cardBox).not.toBeNull();

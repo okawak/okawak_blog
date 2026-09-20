@@ -38,7 +38,7 @@ pub(crate) async fn article_card(
             >
                 card(
                     attrs: attributes! {
-                        class="gap-3 py-5 transition-[transform,border-color] duration-300 group-hover:-translate-y-0.5 group-hover:border-primary group-focus-visible:border-primary"
+                        class="gap-3 border-border/80 bg-card/90 py-5 text-card-foreground shadow-[0_10px_30px_rgb(0_0_0/0.22)] transition-[transform,box-shadow,border-color] duration-300 group-hover:-translate-y-0.5 group-hover:border-primary group-hover:shadow-[0_16px_36px_rgb(0_0_0/0.32)] group-focus-visible:border-primary"
                     },
                     card_header(
                         attrs: attributes! { class="gap-3 px-5" },
