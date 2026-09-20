@@ -28,12 +28,13 @@ use topcoat::{
         response::{IntoResponse, Response},
     },
     runtime::{RouterBuilderRuntimeExt, RouterBuilderShardExt},
-    view::{Unescaped, View, ViewExt, component, view},
+    view::{Unescaped, View, ViewExt, class, component, view},
 };
 
 use crate::{
     article_card::article_card,
     artifact_page_loader::ArtifactPageLoader,
+    components::badge::{BadgeVariant, badge_variants},
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
     page_loader::{PageLoadResult, PageLoaderContext},
     shell::{ShellMetadata, internal_server_error_page, not_found_page, site_shell},
@@ -307,19 +308,18 @@ async fn home_page_content(
                 <ul class="m-0 flex list-none flex-wrap gap-3 p-0">
                     for category in &document.categories {
                         <li>
-                            <span
-                                class="inline-flex w-fit items-center gap-2 rounded-full border border-border bg-background/45 px-3 py-1.5 text-sm font-semibold text-foreground transition-colors focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                            <a
+                                href=(locale.path(&build_category_path(&category.category)))
+                                class=(class!(
+                                    badge_variants(BadgeVariant::Outline),
+                                    "gap-2 rounded-full px-3 py-1.5 text-sm no-underline transition-colors hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                                ))
                             >
-                                <a
-                                    href=(locale.path(&build_category_path(&category.category)))
-                                    class="font-semibold text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                >
-                                    (crate::i18n::category_name(locale, category.category))
-                                </a>
+                                (crate::i18n::category_name(locale, category.category))
                                 <span class="text-xs font-normal text-muted-foreground">
                                     (crate::i18n::article_count(locale, category.article_count))
                                 </span>
-                            </span>
+                            </a>
                         </li>
                     }
                 </ul>

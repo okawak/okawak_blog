@@ -13,6 +13,7 @@ use topcoat::{
 
 use super::super::page_loader;
 use super::CategoryName;
+use crate::components::badge::{BadgeVariant, badge};
 use crate::shell::{ShellMetadata, article_internal_server_error_page, not_found_page, site_shell};
 
 path_param!(article_slug);
@@ -159,11 +160,10 @@ async fn article_document(
                         >
                             for tag in &tags {
                                 <li>
-                                    <span
-                                        class="inline-flex w-fit items-center rounded-full border border-border bg-background/45 px-3 py-1 text-xs font-normal text-muted-foreground transition-colors focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                                    >
+                                    badge(
+                                        variant: BadgeVariant::Secondary,
                                         (format!("#{}", labels.get(tag).unwrap_or(tag)))
-                                    </span>
+                                    )
                                 </li>
                             }
                         </ul>

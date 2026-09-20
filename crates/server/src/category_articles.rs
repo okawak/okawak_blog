@@ -9,13 +9,18 @@ use topcoat::{
     context::Cx,
     router::error::{bad_request, not_found},
     runtime::{Event, shard, signal},
-    view::{View, view},
+    view::{View, attributes, view},
 };
 
 use crate::{
     app::load_category,
     article_card::article_card,
     article_filter::{MAX_QUERY_CHARS, filter_sections},
+    components::{
+        badge::{BadgeVariant, badge},
+        input::input,
+        label::label,
+    },
 };
 
 #[shard]
@@ -55,21 +60,25 @@ pub(crate) async fn category_articles(
             aria-label=(t(locale, Message::CategoryArticles))
         >
             <div class="grid gap-3">
-                <label for="category-article-query" class="font-semibold">
+                label(
+                    attrs: attributes! { for="category-article-query" },
                     (t(locale, Message::FilterLabel))
-                </label>
-                <input
-                    id="category-article-query"
-                    type="search"
-                    maxlength=(MAX_QUERY_CHARS)
-                    placeholder=(t(locale, Message::FilterPlaceholder))
-                    class="w-full rounded-lg border border-border bg-card px-4 py-3 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                    :value=$(query.get())
-                    @input=$(|event: Event| query.set(event.target.value))
-                >
-                <p role="status" class="m-0 text-sm text-muted-foreground">
+                )
+                input(
+                    attrs: attributes! {
+                        id="category-article-query"
+                        type="search"
+                        maxlength=(MAX_QUERY_CHARS)
+                        placeholder=(t(locale, Message::FilterPlaceholder))
+                        :value=$(query.get())
+                        @input=$(|event: Event| query.set(event.target.value))
+                    }
+                )
+                badge(
+                    variant: BadgeVariant::Secondary,
+                    attrs: attributes! { role="status" },
                     (crate::i18n::article_count(locale, count))
-                </p>
+                )
             </div>
             if count == 0 {
                 <p>(t(locale, Message::EmptyMatches))</p>
