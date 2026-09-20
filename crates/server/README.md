@@ -22,12 +22,14 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 - `src/article_card.rs`: 一覧routeが共有する記事card
 - `src/category_articles.rs`: signalをサーバー側で読み、カテゴリ記事一覧だけを再描画するshard
 - `src/article_filter.rs`: タイトル・説明・タグによる記事絞り込みの純粋ロジック
+- `src/components/`: `topcoat ui`が管理し、site向けに調整したvendored UI component
 - `src/shell.rs`: HTML shell、metadata、error view、生成contentのprogressive enhancement
 - `src/assets.rs`: application所有のbundle asset登録
 - `src/icons.rs`: 同梱したGitHub Octiconsの単一SVG（[MITライセンス](licenses/Octicons-MIT.txt)）をTopcoatのicon componentへ渡す
-- `style/tailwind.css`: theme token、site chrome、Tailwind CSS入力
+- `components.toml`: Topcoat UIのtheme・component install state
+- `styles.css`: Topcoat UI theme token、site chrome、Tailwind CSS入力
 - `style/content.css`: `.content-prose`配下の生成HTML用plain CSS
-- `build.rs`: `style/tailwind.css`をTopcoatのstylesheet assetへ変換するbuild integration
+- `build.rs`: `styles.css`をTopcoatのstylesheet assetへ変換するbuild integration
 
 routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`path_param!()`で宣言し、route moduleに`mod.rs`は使いません。
 
@@ -37,7 +39,7 @@ runtimeのpage再描画はPOSTをGETへ内部rewriteします。conditional GET�
 
 カテゴリの記事絞り込みはshard内の`signal(cx, String::new)`とtracked readで構成します。タイトル・説明・タグを大文字小文字を区別せず部分一致で検索し、入力はサーバー側でも先頭100文字に制限します。カテゴリ引数も再描画時に検証します。ページと初期shardは`#[memoize]`で同じpage documentを共有し、再描画では`PageLoader`から再取得します。記事・sectionの安定したIDを使うDOM morphにより、入力フォーカスとshard外の状態を維持します。JavaScript無効時も初期HTMLの全記事とリンクを利用できます。
 
-productionはpackage直下の`build.rs`から`style/tailwind.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。公開linkは独自client routerを介さず、ブラウザ標準のfull-page navigationを使います。mobile menuはTopcoat runtimeのsignalとevent expressionで構成します。
+productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。公開linkは独自client routerを介さず、ブラウザ標準のfull-page navigationを使います。言語切替はTopcoat UIの`toggle_group`を使い、選択肢はscript不要の通常linkとして扱います。mobile menuはTopcoat runtimeのsignalとevent expressionで構成します。
 
 GitHubアイコンはTopcoatのicon componentでinline SVGを描画し、icon fontや外部icon setの取得は行いません。リンクにaccessible nameを付け、装飾のSVGは支援技術から隠します。端末間の字体を揃えるNoto Sans JPはGoogle Fontsの可変ウェイト範囲`400..700`でCSSの重複を抑え、HTML headから直接参照します。`display=swap`でフォント取得中も本文を表示します。
 

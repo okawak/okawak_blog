@@ -4,10 +4,13 @@ use domain::{Locale, SiteLocalesDocument};
 use topcoat::{
     context::Cx,
     router::{Body, HeaderMap, HeaderValue, StatusCode, Uri, header, request, response::Response},
-    view::{View, component, view},
+    view::{View, attributes, component, view},
 };
 
-use crate::i18n::{Message, japanese_path, t};
+use crate::{
+    components::toggle::{ToggleSize, toggle_group, toggle_link},
+    i18n::{Message, japanese_path, t},
+};
 
 const COOKIE: &str = "okawak_locale";
 
@@ -188,36 +191,39 @@ pub(crate) async fn language_switcher(
     locales: &SiteLocalesDocument,
 ) -> topcoat::Result<impl View> {
     Ok(view! {
-        <div
-            role="group"
-            aria-label=(t(locale, Message::NavLanguage))
-            class="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-card/70 p-1 text-xs sm:text-sm"
-        >
+        toggle_group(
+            attrs: attributes! {
+                role="group"
+                aria-label=(t(locale, Message::NavLanguage))
+                class="shrink-0 border-primary/30 bg-background/45 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)]"
+            },
             for other in Locale::ALL {
                 if let Some(target) = destination(locales, path, other) {
-                    <a
-                        href=(choice_href(&target, other))
-                        lang=(other.as_str())
-                        aria-current=(if other == locale { Some("true") } else { None })
-                        class=(if other == locale {
-                            "rounded-md bg-primary px-2 py-1.5 font-medium text-primary-foreground no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                        } else {
-                            "rounded-md px-2 py-1.5 text-muted-foreground no-underline hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                        })
-                    >
+                    toggle_link(
+                        active: other == locale,
+                        size: ToggleSize::Sm,
+                        attrs: attributes! {
+                            href=(choice_href(&target, other))
+                            lang=(other.as_str())
+                            aria-current=(if other == locale {
+                                Some("true")
+                            } else {
+                                None
+                            })
+                        },
                         (if other == Locale::Ja { "日本語" } else { "English" })
-                    </a>
+                    )
                 } else {
                     <span
                         lang=(other.as_str())
                         aria-disabled="true"
-                        class="px-2 py-1.5 text-muted-foreground opacity-50"
+                        class="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-transparent px-2 text-xs font-medium text-muted-foreground opacity-50 select-none"
                     >
                         (if other == Locale::Ja { "日本語" } else { "English" })
                     </span>
                 }
             }
-        </div>
+        )
     })
 }
 
