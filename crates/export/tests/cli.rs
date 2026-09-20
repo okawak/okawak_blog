@@ -76,6 +76,7 @@ exec "$FAKE_CODEX_TEST" --exact fake_codex_process --nocapture
             .current_dir(self.0.path())
             .args(args)
             .env("PATH", self.path("bin"))
+            .env("RUST_LOG", "info")
             .env("FAKE_CODEX_TEST", std::env::current_exe().unwrap())
             .env("FAKE_CODEX_LOG", self.path("calls"))
             .output()
@@ -224,13 +225,16 @@ fn manual_edits_are_preserved_and_matching_candidates_are_reused() {
     );
     let candidate = project.path(&format!("content/.export-candidates/{ARTICLE}.md"));
     assert!(candidate.exists());
-    let stdout = String::from_utf8(result.stdout).unwrap();
+    let logs = String::from_utf8(result.stderr).unwrap();
     for command in [
         format!("cargo run -p export -- accept article '{ARTICLE}' --output 'content' --settings 'translation.json'"),
         "cargo run -p export -- accept tag 'Rust' --output 'content' --settings 'translation.json'".into(),
         "cargo run -p export -- accept ui 'greeting' --ui-catalog 'crates/server/locales/ui.json' --settings 'translation.json'".into(),
     ] {
-        assert!(stdout.contains(&command), "missing command: {command}");
+        assert!(
+            logs.contains(&command),
+            "missing command: {command}\nlogs:\n{logs}"
+        );
     }
 
     let calls = project.calls();

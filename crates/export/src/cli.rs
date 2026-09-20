@@ -110,7 +110,7 @@ impl Cli {
                     settings,
                 } => {
                     export::accept_translation(&output, &id, &settings.load()?)?;
-                    println!("Accepted article {id}");
+                    tracing::info!(article_id = %id, "translation candidate accepted");
                 }
                 AcceptTarget::Tag {
                     id,
@@ -122,7 +122,7 @@ impl Cli {
                         &id,
                         &settings.load()?,
                     )?;
-                    println!("Accepted tag {id}");
+                    tracing::info!(tag_id = %id, "translation candidate accepted");
                 }
                 AcceptTarget::Ui {
                     key,
@@ -130,7 +130,7 @@ impl Cli {
                     settings,
                 } => {
                     export::accept_catalog_translation(&ui_catalog, &key, &settings.load()?)?;
-                    println!("Accepted UI message {key}");
+                    tracing::info!(message_key = %key, "translation candidate accepted");
                 }
             },
         }
