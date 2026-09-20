@@ -1,12 +1,16 @@
 # export
 
-private Obsidianの公開対象だけを、Git管理できるMarkdownへ抽出するローカルコマンド。
+private Obsidianの公開対象だけをGit管理できるMarkdownへ抽出し、記事・タグ・UIの差分翻訳と更新候補の生成まで行うローカルコマンド。
 
 ```sh
-mise run export-ja
+mise run export
 # 明示的な入力・出力を使う場合
 cargo run -p export -- --source /path/to/vault/Publish --output content
 ```
+
+通常実行にモード指定は不要。未翻訳を生成し、未変更の訳文を再利用する。原文更新時は未編集訳だけを更新し、手動訳は保持して更新候補を作る。private入力が読めなければ停止し、公開Markdownだけの処理へ自動で切り替えない。
+
+CLIは`clap`で引数を検証する。通常実行のpath指定は`--source`、`--output`、`--ui-catalog`、`--settings`。候補の採用は`accept article <id>`、`accept tag <id>`、`accept ui <key>`で行い、path指定は各対象の後ろに置く（例: `accept article <id> --output /path/to/content --settings /path/to/translation.json`）。`--help`で対象ごとの使い方を確認できる。
 
 `is_completed: true` のノートだけを処理する。未知のfrontmatterはコピーせず、公開Markdown契約に必要なフィールドだけを書き出す。非公開ノートや公開ディレクトリ外のノートは参照先として取り込まない。symlink入力は拒否する。
 
@@ -25,9 +29,7 @@ WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する
 ```sh
 codex login
 mise run export             # 原文抽出と英訳を同一transactionで実行
-mise run translate          # 公開Markdownの英訳だけ。private入力は不要
-cargo run -p export -- --translate-only --candidates
-cargo run -p export -- --accept <id>
+cargo run -p export -- accept article <id>  # 更新候補を確認・修正した後に採用
 ```
 
 リポジトリルートの`translation.json`に記事・タグ・UI共通のモデル・翻訳指示・用語集を置く。コマンドはリポジトリルートから実行する。別の設定は`--settings PATH`で指定する。Codex CLI 0.154以降のChatGPTログインを使い、APIキー方式には切り替えない。実AIは通常テストでは呼ばない。
@@ -41,7 +43,7 @@ AI入力はpublic Markdownのtitle・summaryと、parserで抽出した文章fra
 - 入力に変更がなければ、手動編集済みでも再利用する。
 - 入力変更があり、最後の生成物から編集されていなければ更新する。
 - 手動編集または履歴欠落があれば保護する。原文の更新時は更新待ちとして扱う。
-- `--candidates` は保護された記事の候補を `.export-candidates/<id>.md` に作る。差分を確認し、`--accept <id>` で採用する。原文の文章・Markdown構造や翻訳設定が候補生成後に変わっていれば採用を拒否する。カテゴリ・タグ・日時等の管理情報だけの変更は最新の日本語版から反映し、候補のtitle・summary・本文と生成履歴を保持する。
+- 保護された記事の候補は `.export-candidates/<id>.md` に自動生成する。差分を確認し、`accept article <id>`で採用する。採用にはprivate入力やAIを使わず、現在の公開原文と設定で検証する。原文の文章・Markdown構造や翻訳設定が候補生成後に変わっていれば採用を拒否する。カテゴリ・タグ・日時等の管理情報だけの変更は最新の日本語版から反映し、候補のtitle・summary・本文と生成履歴を保持する。
 
 同じ入力の候補があれば、再実行でも手動編集を保持する。入力変更後の候補に手動編集がある場合や生成履歴がない場合は、候補を上書きせず停止する。古い候補をGit対象外の別pathへ退避してから再実行し、新しい候補と比較する。
 
@@ -49,15 +51,15 @@ AI入力はpublic Markdownのtitle・summaryと、parserで抽出した文章fra
 
 ## UIとタグの辞書
 
-`mise run export`は記事とタグを抽出・翻訳した後、`crates/server/locales/ui.json`も更新する。`mise run translate`は公開Markdownと両辞書だけを使い、`mise run translate-ui`はUI辞書だけを処理する。UI辞書の形式・初期値・採用操作は[serverの説明](../server/locales/README.md)を参照する。
+`mise run export`は記事とタグを抽出・翻訳した後、`crates/server/locales/ui.json`も更新する。いずれも未変更の翻訳・候補を再利用し、手動訳を保持したまま必要な更新候補を自動生成する。UI辞書の形式・初期値・採用操作は[serverの説明](../server/locales/README.md)を参照する。
 
 記事由来のタグは`content/tags.json`へ集約する。元のタグ文字列をキーにして、各項目に日本語の表示名`source`、用途`context`、英語の`translation.value`と生成履歴を保存する。同じタグを複数記事が使っても翻訳は一項目だけ。タグの対応はAIに渡さず、記事の`tags`は元のIDを保つ。不要になった項目は履歴を`.export-archive`へ退避して公開辞書から外す。
 
 辞書の原文で補間変数を追加・削除・改名した場合も差分翻訳できる。生成後に未編集の訳は更新し、手動編集・履歴不明の訳は保持して`stale`にする。更新待ちの古い補間変数を持つ訳は表示に使わず原文へfallbackし、生成・候補採用・公開時には有効な訳の補間変数の一致を検証する。
 
 ```sh
-cargo run -p export -- --translate-only --candidates
-cargo run -p export -- --accept-tag '統計'
+mise run export
+cargo run -p export -- accept tag '統計'
 ```
 
 タグ候補は`content/.export-candidates/catalog/`にキー・原文・用途付きで保存する。履歴付き訳文を手で修正し、その原文・用途・関連用語集・翻訳設定が変わると上書きを保護し`stale`にする。入力が同じなら手動訳を保持してAIを呼ばない。履歴がない値は自動生成とみなさず、保持して保護対象として報告する。欠落・更新待ちの英語タグは日本語表示名、辞書項目がなければ元のタグIDを使う。

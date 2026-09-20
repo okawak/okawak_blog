@@ -231,4 +231,4 @@ updated: "2026-04-12T10:00:00+09:00"
 - 同じカテゴリ配下で `kind=category` を複数作らない
 - 未完成の下書きは `is_completed: false` のままにする
 - category ごとの記事グルーピングは frontmatter ではなくディレクトリ構造で表現する
-- 原文更新後に`mise run export-ja`または`mise run export`を実行し、公開用Markdownの差分を確認する。英訳の手動修正・更新候補の採用は[exportの操作手順](../../crates/export/README.md)に従う
+- 原文更新後に`mise run export`を実行し、公開用Markdownの差分を確認する。英訳の手動修正・更新候補の採用は[exportの操作手順](../../crates/export/README.md)に従う

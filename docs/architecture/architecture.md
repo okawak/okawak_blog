@@ -65,6 +65,7 @@ okawak_blog/
   - ローカルの公開対象抽出、public Markdownの参照正規化、stable IDと翻訳履歴の管理
   - `translation`による記事・辞書で共有できる翻訳requestと更新判定、`fragments`によるMarkdown文章の抽出・再構築
   - 記事・タグ・UI共通のモデル・翻訳指示・用語集は、リポジトリルートの`translation.json`で管理する
+  - CLIは`clap`でpath指定と候補の採用対象を型として表す。通常実行は抽出・差分翻訳・更新候補生成を自動で行い、`accept article|tag|ui`による採用だけを明示操作にする
   - `codex`によるChatGPT認証のローカル実行境界。AIへvaultを渡さず、public文章だけの作業領域と読取権限へ限定する
   - `sync`による出力全体のstaging・入替・中断時の復旧境界。uploadは行わない
 
