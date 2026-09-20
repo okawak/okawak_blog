@@ -12,7 +12,7 @@ fn main() -> Result<()> {
     let mut ui_path = PathBuf::from("crates/server/locales/ui.json");
     let mut accept_ui = None;
     let mut accept_tag = None;
-    let mut settings_path = PathBuf::from("translation/settings.json");
+    let mut settings_path = PathBuf::from("translation.json");
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -43,7 +43,7 @@ fn main() -> Result<()> {
             "--output" => output = args.next().context("--output needs a path")?.into(),
             "--help" => {
                 println!(
-                    "export [--source PUBLIC_VAULT_ROOT] [--output content] [--translate | --translate-only | --accept ID] [--ui-only | --accept-ui KEY | --accept-tag ID] [--ui-catalog PATH] [--candidates] [--settings translation/settings.json]"
+                    "export [--source PUBLIC_VAULT_ROOT] [--output content] [--translate | --translate-only | --accept ID] [--ui-only | --accept-ui KEY | --accept-tag ID] [--ui-catalog PATH] [--candidates] [--settings translation.json]"
                 );
                 return Ok(());
             }
