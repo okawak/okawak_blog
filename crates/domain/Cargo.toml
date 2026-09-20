@@ -9,7 +9,7 @@ license.workspace = true
 [dependencies]
 # Keep domain dependencies pure and WASM-compatible.
 chrono.workspace = true
-serde.workspace = true
+serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 
 [dev-dependencies]

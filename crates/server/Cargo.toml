@@ -17,7 +17,7 @@ serde_json.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 topcoat = { workspace = true, features = ["asset", "discover", "icon", "router", "runtime", "serve", "tailwind", "tower", "ui"] }
 tracing.workspace = true
-tracing-subscriber.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [build-dependencies]
 topcoat = { workspace = true, features = ["tailwind"] }
