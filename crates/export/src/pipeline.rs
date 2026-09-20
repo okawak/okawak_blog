@@ -1,4 +1,8 @@
-use crate::{markdown, normalize, sync, vault};
+use crate::{
+    markdown, normalize,
+    report::{ProtectedContent, TranslationReport},
+    sync, vault,
+};
 use anyhow::{Result, bail};
 use domain::Locale;
 use std::{collections::HashSet, fs, path::Path};
@@ -12,8 +16,8 @@ pub fn export_translated(
     output: &Path,
     translator: &dyn crate::Translator,
     settings: &crate::TranslationSettings,
-) -> Result<crate::TranslationReport> {
-    let mut report = crate::TranslationReport::default();
+) -> Result<TranslationReport<ProtectedContent>> {
+    let mut report = TranslationReport::default();
     export_with(source, output, |stage| {
         report = crate::translate_content::translate_stage(stage, output, translator, settings)?;
         Ok(())

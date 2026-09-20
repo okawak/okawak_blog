@@ -1,5 +1,5 @@
 use domain::{LabelCatalog, LabelEntry};
-use export::{Texts, TranslationRequest, TranslationSettings, Translator};
+use export::{ProtectedContent, Texts, TranslationRequest, TranslationSettings, Translator};
 use std::{cell::Cell, fs};
 
 struct Fake(Cell<usize>);
@@ -193,10 +193,15 @@ fn tags_are_translated_once_per_id_and_removed_with_unpublished_sources() {
     export::translate_public(output.path(), &fake, &settings()).unwrap();
     assert_eq!(fake.0.get(), 3, "two articles and one shared tag");
     let path = output.path().join("tags.json");
-    let catalog: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    let mut catalog: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     assert_eq!(catalog.entries["統計"].value(domain::Locale::En), "EN 統計");
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
-    assert_eq!(fake.0.get(), 3);
+    let tag = catalog.entries.get_mut("統計").unwrap();
+    tag.translation.as_mut().unwrap().value = "Manual label".into();
+    tag.context = "Updated tag context".into();
+    save(&path, &catalog);
+    let report = export::translate_public(output.path(), &fake, &settings()).unwrap();
+    assert_eq!(report.protected, [ProtectedContent::Tag("統計".into())]);
+    assert_eq!(fake.0.get(), 4);
     fs::remove_dir_all(source.path().join("tech")).unwrap();
     export::export_japanese(source.path(), output.path()).unwrap();
     let catalog: LabelCatalog = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();

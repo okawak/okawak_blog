@@ -1,19 +1,13 @@
 use crate::{
     fragments::{Fragments, text_hash},
     markdown::{self, Document},
+    report::{ProtectedContent, TranslationReport},
     sync,
     translation::{Decision, TranslationRequest, TranslationSettings, Translator, decide},
 };
 use anyhow::{Context, Result, bail};
 use domain::{Locale, Slug, TranslationProvenance};
 use std::{fs, path::Path};
-
-#[derive(Default, Debug)]
-pub struct TranslationReport {
-    pub generated: usize,
-    pub reused: usize,
-    pub protected: Vec<String>,
-}
 
 struct ArticlePlan<'a> {
     original: Document,
@@ -29,7 +23,7 @@ pub fn translate_public(
     output: &Path,
     translator: &dyn Translator,
     settings: &TranslationSettings,
-) -> Result<TranslationReport> {
+) -> Result<TranslationReport<ProtectedContent>> {
     let mut report = TranslationReport::default();
     sync::transaction(output, |stage| {
         report = translate_stage(stage, output, translator, settings)?;
@@ -43,7 +37,7 @@ pub(crate) fn translate_stage(
     cache_root: &Path,
     translator: &dyn Translator,
     settings: &TranslationSettings,
-) -> Result<TranslationReport> {
+) -> Result<TranslationReport<ProtectedContent>> {
     let mut report = TranslationReport::default();
     let originals = markdown::read_locale(stage, Locale::Ja)?;
     let english = markdown::read_locale(stage, Locale::En)?;
@@ -141,7 +135,9 @@ pub(crate) fn translate_stage(
                         p.stale = true;
                     }
                     fs::write(&path, preserved.encode()?)?;
-                    report.protected.push(original.meta.id.to_string());
+                    report
+                        .protected
+                        .push(ProtectedContent::Article(original.meta.id.clone()));
                     if candidate_decision == Some(Decision::Reuse) {
                         report.reused += 1;
                         continue;
@@ -176,7 +172,7 @@ pub(crate) fn translate_stage(
     report.reused += tags.reused;
     report
         .protected
-        .extend(tags.protected.into_iter().map(|key| format!("tag:{key}")));
+        .extend(tags.protected.into_iter().map(ProtectedContent::Tag));
     crate::translation::copy_cache(cache_root, stage)?;
     Ok(report)
 }

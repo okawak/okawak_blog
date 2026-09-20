@@ -1,7 +1,9 @@
+mod report;
+
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 use domain::Slug;
-use export::{TranslationReport, TranslationSettings};
+use export::TranslationSettings;
 use std::{fs, path::PathBuf};
 
 /// Export public Markdown and translate changed article, tag, and UI text.
@@ -97,9 +99,9 @@ impl Cli {
                 let translator = export::CodexTranslator::default();
                 let content =
                     export::export_translated(&args.source, &args.output, &translator, &settings)?;
-                report("Content", &content);
+                report::content(&content, &args.output, &args.settings.settings);
                 let ui = export::translate_catalog(&args.ui_catalog, &translator, &settings)?;
-                report("UI", &ui);
+                report::ui(&ui, &args.ui_catalog, &args.settings.settings);
             }
             Some(Command::Accept { target }) => match target {
                 AcceptTarget::Article {
@@ -133,17 +135,5 @@ impl Cli {
             },
         }
         Ok(())
-    }
-}
-
-fn report(scope: &str, report: &TranslationReport) {
-    println!(
-        "{scope}: generated {}, reused {}, protected {:?}",
-        report.generated, report.reused, report.protected
-    );
-    if !report.protected.is_empty() {
-        println!(
-            "Review the protected items' .export-candidates files, then use `export accept --help`."
-        );
     }
 }
