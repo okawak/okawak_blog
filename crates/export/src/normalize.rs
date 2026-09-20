@@ -1,6 +1,8 @@
 //! Resolve references using only the explicitly public source set.
-use crate::vault::{Source, digest};
-use anyhow::{Result, bail};
+use crate::{
+    ExportError, Result,
+    vault::{Source, digest},
+};
 use pulldown_cmark::{Event, LinkType, Options, Parser, Tag};
 use std::{
     collections::BTreeMap,
@@ -96,7 +98,9 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                         || target.starts_with('/')
                         || target.contains("://")
                     {
-                        bail!("private or unsupported reference");
+                        return Err(ExportError::invalid_input(
+                            "private or unsupported reference",
+                        ));
                     }
                     let extensionless = if Path::new(target)
                         .extension()
@@ -141,7 +145,9 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                             if let Some(anchor) = anchor
                                 && headings.get(anchor) != Some(&1)
                             {
-                                bail!("missing or ambiguous public heading reference");
+                                return Err(ExportError::invalid_input(
+                                    "missing or ambiguous public heading reference",
+                                ));
                             }
                             let anchor = anchor
                                 .map(|a| format!("#section-{}", &digest(a)[..12]))
@@ -162,17 +168,25 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                                 })
                                 .collect();
                             let [path] = matches.as_slice() else {
-                                bail!("missing or ambiguous public image");
+                                return Err(ExportError::invalid_input(
+                                    "missing or ambiguous public image",
+                                ));
                             };
                             let Some(extension) = image_extension(path) else {
-                                bail!("unsupported public image format");
+                                return Err(ExportError::invalid_input(
+                                    "unsupported public image format",
+                                ));
                             };
                             let data = fs::read(path)?;
                             let name = format!("{}.{}", digest(&data), extension);
                             assets.insert(name.clone(), data);
                             format!("/content-assets/{name}")
                         }
-                        _ => bail!("missing, non-public or ambiguous note reference"),
+                        _ => {
+                            return Err(ExportError::invalid_input(
+                                "missing, non-public or ambiguous note reference",
+                            ));
+                        }
                     };
                     let label = if wiki {
                         let inner = raw
@@ -221,9 +235,9 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                                 && !external(value))
                                 || ["srcset", "style"].contains(&name)
                             {
-                                bail!(
-                                    "raw HTML local references must use Markdown links/images before export"
-                                );
+                                return Err(ExportError::invalid_input(
+                                    "raw HTML local references must use Markdown links/images before export",
+                                ));
                             }
                         }
                     }
@@ -234,7 +248,9 @@ pub(crate) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
         edits.sort_by_key(|(range, _)| (range.start, range.end));
         for pair in edits.windows(2) {
             if pair[0].0.end > pair[1].0.start {
-                bail!("nested links/images require separate Markdown references");
+                return Err(ExportError::invalid_input(
+                    "nested links/images require separate Markdown references",
+                ));
             }
         }
         let mut normalized = body.clone();
@@ -320,7 +336,7 @@ fn markdown_label(raw: &str, image: bool) -> Result<&str> {
             _ => {}
         }
     }
-    bail!("unsupported link syntax")
+    Err(ExportError::invalid_input("unsupported link syntax"))
 }
 
 pub(crate) fn options() -> Options {
@@ -349,7 +365,11 @@ fn resolve_relative(source_key: &str, target: &str) -> Result<String> {
             Component::ParentDir if !parts.is_empty() => {
                 parts.pop();
             }
-            _ => bail!("reference escapes public source root"),
+            _ => {
+                return Err(ExportError::invalid_input(
+                    "reference escapes public source root",
+                ));
+            }
         }
     }
     Ok(parts.join("/"))

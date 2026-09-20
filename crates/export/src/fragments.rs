@@ -1,6 +1,5 @@
 //! Reassemble translated prose into the original Markdown; non-text bytes never go to AI.
-use crate::{markdown::Document, normalize::options, translation::Texts};
-use anyhow::{Result, bail};
+use crate::{ExportError, Result, markdown::Document, normalize::options, translation::Texts};
 use pulldown_cmark::{Event, LinkType, Parser, Tag, TagEnd};
 use std::ops::Range;
 
@@ -59,7 +58,7 @@ impl Fragments {
 
     pub(crate) fn apply(&self, source: &Document, result: &Texts) -> Result<Document> {
         if !self.texts.keys().eq(result.keys()) {
-            bail!("fragment keys changed");
+            return Err(ExportError::invalid_translation("fragment keys changed"));
         }
         let mut translated = source.clone();
         translated.meta.title = result["title"].clone();
@@ -67,7 +66,9 @@ impl Fragments {
         for fragment in self.ranges.iter().rev() {
             let value = &result[&fragment.key];
             if value.contains('\n') {
-                bail!("translated inline fragment contains a line break");
+                return Err(ExportError::invalid_translation(
+                    "translated inline fragment contains a line break",
+                ));
             }
             translated.body.replace_range(
                 fragment.range.clone(),

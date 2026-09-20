@@ -1,5 +1,5 @@
 //! Shared translation unit and manual-edit guard, independent of articles and UI.
-use anyhow::{Result, bail};
+use crate::{ExportError, Result};
 use domain::placeholders;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -76,26 +76,34 @@ impl TranslationRequest {
 
     pub(crate) fn validate(&self, result: &Texts) -> Result<()> {
         if !self.texts.keys().eq(result.keys()) {
-            bail!("translator changed message keys");
+            return Err(ExportError::invalid_translation(
+                "translator changed message keys",
+            ));
         }
         for (key, source) in &self.texts {
             let value = &result[key];
             if !source.trim().is_empty() && value.trim().is_empty() {
-                bail!("translator returned empty text for {key}");
+                return Err(ExportError::invalid_translation(format!(
+                    "translator returned empty text for {key}"
+                )));
             }
             if value.contains(['\0', '\r'])
                 || value.len() > source.len().saturating_mul(20).max(4096)
             {
-                bail!("invalid translated text");
+                return Err(ExportError::invalid_translation("invalid translated text"));
             }
             if placeholders(source) != placeholders(value) {
-                bail!("translator changed interpolation variables for {key}");
+                return Err(ExportError::invalid_translation(format!(
+                    "translator changed interpolation variables for {key}"
+                )));
             }
             for (term, translation) in &self.glossary {
                 if source.contains(term)
                     && !value.to_lowercase().contains(&translation.to_lowercase())
                 {
-                    bail!("translation does not contain required glossary term: {translation}");
+                    return Err(ExportError::invalid_translation(format!(
+                        "translation does not contain required glossary term: {translation}"
+                    )));
                 }
             }
         }
@@ -145,6 +153,15 @@ pub(crate) fn copy_cache(root: &std::path::Path, stage: &std::path::Path) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn settings(glossary: Texts) -> TranslationSettings {
+        TranslationSettings {
+            model: "test".into(),
+            instruction: "translate".into(),
+            glossary,
+        }
+    }
+
     #[test]
     fn guard_preserves_manual_edits_even_when_input_is_unchanged() {
         let provenance = ("old-input", "machine");
@@ -162,5 +179,53 @@ mod tests {
         );
         assert_eq!(decide("new-input", Some("manual"), None), Decision::Protect);
         assert_eq!(decide("new-input", None, None), Decision::Generate);
+    }
+
+    #[test]
+    fn request_includes_only_glossary_terms_present_in_text_or_context() {
+        let request = TranslationRequest::new(
+            [("value".into(), "Rustの記事".into())].into(),
+            "navigation".into(),
+            &settings(
+                [
+                    ("Rust".into(), "Rust".into()),
+                    ("統計".into(), "Statistics".into()),
+                ]
+                .into(),
+            ),
+        );
+
+        assert_eq!(request.glossary, [("Rust".into(), "Rust".into())].into());
+    }
+
+    #[test]
+    fn response_validation_rejects_each_untrusted_output_invariant() {
+        let request = TranslationRequest::new(
+            [("value".into(), "Rust {count}".into())].into(),
+            String::new(),
+            &settings([("Rust".into(), "Rust language".into())].into()),
+        );
+        let invalid = [
+            Texts::from([("other".into(), "Rust language {count}".into())]),
+            Texts::from([("value".into(), String::new())]),
+            Texts::from([("value".into(), "Rust language".into())]),
+            Texts::from([("value".into(), "Other {count}".into())]),
+            Texts::from([("value".into(), "Rust language {count}\0".into())]),
+        ];
+
+        for response in invalid {
+            assert!(matches!(
+                request.validate(&response),
+                Err(ExportError::InvalidTranslation(_))
+            ));
+        }
+        assert!(
+            request
+                .validate(&Texts::from([(
+                    "value".into(),
+                    "Rust language {count}".into()
+                )]))
+                .is_ok()
+        );
     }
 }

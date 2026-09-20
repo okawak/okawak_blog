@@ -1113,6 +1113,7 @@ dependencies = [
  "serde_yaml",
  "sha2 0.11.0",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]

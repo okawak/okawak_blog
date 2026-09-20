@@ -86,7 +86,10 @@ fn failed_reference_validation_does_not_change_existing_output() {
         true,
         "[[draft]]",
     );
-    assert!(export::export_japanese(source.path(), output.path()).is_err());
+    assert!(matches!(
+        export::export_japanese(source.path(), output.path()),
+        Err(export::ExportError::InvalidInput(_))
+    ));
     assert_eq!(outputs(output.path()), before);
 }
 
@@ -223,7 +226,10 @@ fn failed_export_preserves_unrelated_files_and_rejects_output_inside_source() {
         true,
         "Public body",
     );
-    assert!(export::export_japanese(source.path(), &source.path().join("output")).is_err());
+    assert!(matches!(
+        export::export_japanese(source.path(), &source.path().join("output")),
+        Err(export::ExportError::InvalidInput(_))
+    ));
 }
 
 #[test]

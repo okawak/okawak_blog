@@ -1,11 +1,11 @@
 use crate::{
+    ExportError, Result,
     fragments::{Fragments, text_hash},
     markdown::{self, Document},
     report::{ProtectedContent, TranslationReport},
     sync,
     translation::{Decision, TranslationRequest, TranslationSettings, Translator, decide},
 };
-use anyhow::{Context, Result, bail};
 use domain::{Locale, Slug, TranslationProvenance};
 use std::{fs, path::Path};
 
@@ -61,7 +61,9 @@ pub(crate) fn translate_stage(
         let candidate_decision = if decision != Decision::Reuse && candidate_path.exists() {
             let candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
             if candidate.meta.id != original.meta.id || candidate.meta.locale != Locale::En {
-                bail!("candidate identity changed");
+                return Err(ExportError::translation_conflict(
+                    "candidate identity changed",
+                ));
             }
             Some(decide(
                 &input,
@@ -76,16 +78,16 @@ pub(crate) fn translate_stage(
             None
         };
         if candidate_decision == Some(Decision::Protect) {
-            bail!(
+            return Err(ExportError::translation_conflict(format!(
                 "manually edited candidate {}; move it aside before generating a replacement",
                 original.meta.id
-            );
+            )));
         }
         if decision == Decision::Generate && candidate_decision == Some(Decision::Reuse) {
-            bail!(
+            return Err(ExportError::translation_conflict(format!(
                 "candidate {} already matches this input; accept it or move it aside before generating a replacement",
                 original.meta.id
-            );
+            )));
         }
         plans.push(ArticlePlan {
             original,
@@ -204,7 +206,7 @@ pub fn accept_translation(output: &Path, id: &Slug, settings: &TranslationSettin
             .meta
             .translation
             .as_ref()
-            .context("candidate has no provenance")?;
+            .ok_or_else(|| ExportError::translation_conflict("candidate has no provenance"))?;
         if original.meta.id != *id
             || original.meta.locale != Locale::Ja
             || candidate.meta.id != *id
@@ -212,7 +214,9 @@ pub fn accept_translation(output: &Path, id: &Slug, settings: &TranslationSettin
             || provenance.stale
             || provenance.input_hash != content_input(&request, &original)?
         {
-            bail!("candidate no longer matches current source/settings");
+            return Err(ExportError::translation_conflict(
+                "candidate no longer matches current source/settings",
+            ));
         }
         // Candidate prose may have been reviewed manually while management
         // fields changed in Japanese. Those fields always come from the source.

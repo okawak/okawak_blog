@@ -1,5 +1,5 @@
 //! Aggregate only public tag IDs; labels are translated once per unique tag.
-use anyhow::Result;
+use crate::Result;
 use domain::{LabelCatalog, LabelEntry, Locale};
 use std::{collections::BTreeSet, fs, path::Path};
 

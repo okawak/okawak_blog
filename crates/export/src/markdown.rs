@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use crate::{ExportError, Result};
 use domain::PublicContentMeta;
 use std::{
     fs,
@@ -13,7 +13,8 @@ pub(crate) struct Document {
 
 impl Document {
     pub(crate) fn parse(text: &str) -> Result<Self> {
-        let (yaml, body) = split(text)?.context("public Markdown requires frontmatter")?;
+        let (yaml, body) = split(text)?
+            .ok_or_else(|| ExportError::invalid_input("public Markdown requires frontmatter"))?;
         let meta: PublicContentMeta = serde_yaml::from_str(yaml)?;
         meta.validate()?;
         Ok(Self {
@@ -38,7 +39,7 @@ pub(crate) fn split(text: &str) -> Result<Option<(&str, &str)>> {
     };
     let (yaml, body) = rest
         .split_once("\n---\n")
-        .context("unterminated frontmatter")?;
+        .ok_or_else(|| ExportError::invalid_input("unterminated frontmatter"))?;
     Ok(Some((yaml, body)))
 }
 
@@ -53,7 +54,7 @@ pub(crate) fn all_files(root: &Path) -> Result<Vec<PathBuf>> {
 
 fn walk(root: &Path, hidden: bool) -> Result<Vec<PathBuf>> {
     if fs::symlink_metadata(root)?.file_type().is_symlink() {
-        bail!("symlink root is not allowed");
+        return Err(ExportError::invalid_input("symlink root is not allowed"));
     }
     let mut paths = Vec::new();
     for entry in fs::read_dir(root)? {
@@ -63,7 +64,10 @@ fn walk(root: &Path, hidden: bool) -> Result<Vec<PathBuf>> {
         }
         let kind = entry.file_type()?;
         if kind.is_symlink() {
-            bail!("symlink input is not allowed: {}", entry.path().display());
+            return Err(ExportError::invalid_input(format!(
+                "symlink input is not allowed: {}",
+                entry.path().display()
+            )));
         }
         if kind.is_dir() {
             paths.extend(walk(&entry.path(), hidden)?);
@@ -88,7 +92,9 @@ pub(crate) fn read_locale(root: &Path, locale: domain::Locale) -> Result<Vec<Doc
             if doc.meta.locale != locale
                 || p.file_stem().and_then(|s| s.to_str()) != Some(doc.meta.id.as_str())
             {
-                bail!("public filename/locale must match its metadata");
+                return Err(ExportError::invalid_input(
+                    "public filename/locale must match its metadata",
+                ));
             }
             Ok(doc)
         })

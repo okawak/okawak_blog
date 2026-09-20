@@ -4,7 +4,7 @@ use std::{cell::Cell, fs};
 
 struct Fake(Cell<usize>);
 impl Translator for Fake {
-    fn translate(&self, request: &TranslationRequest) -> anyhow::Result<Texts> {
+    fn translate(&self, request: &TranslationRequest) -> export::Result<Texts> {
         self.0.set(self.0.get() + 1);
         Ok(request
             .texts
@@ -95,7 +95,7 @@ fn catalogs_reuse_each_entry_and_protect_manual_edits_until_candidate_acceptance
 fn invalid_placeholder_response_leaves_catalog_unchanged() {
     struct Broken;
     impl Translator for Broken {
-        fn translate(&self, _: &TranslationRequest) -> anyhow::Result<Texts> {
+        fn translate(&self, _: &TranslationRequest) -> export::Result<Texts> {
             Ok(Texts::from([("value".into(), "lost placeholder".into())]))
         }
     }
@@ -115,7 +115,10 @@ fn invalid_placeholder_response_leaves_catalog_unchanged() {
     };
     save(&path, &catalog);
     let before = fs::read(&path).unwrap();
-    assert!(export::translate_catalog(&path, &Broken, &settings()).is_err());
+    assert!(matches!(
+        export::translate_catalog(&path, &Broken, &settings()),
+        Err(export::ExportError::InvalidTranslation(_))
+    ));
     assert_eq!(fs::read(path).unwrap(), before);
 }
 

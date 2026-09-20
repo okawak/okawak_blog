@@ -1,9 +1,8 @@
 use crate::{
-    markdown, normalize,
+    ExportError, Result, markdown, normalize,
     report::{ProtectedContent, TranslationReport},
     sync, vault,
 };
-use anyhow::{Result, bail};
 use domain::Locale;
 use std::{collections::HashSet, fs, path::Path};
 
@@ -31,7 +30,7 @@ fn export_with(
     after_prepare: impl FnOnce(&Path) -> Result<()>,
 ) -> Result<()> {
     if fs::symlink_metadata(source)?.file_type().is_symlink() {
-        bail!("symlink source is not allowed");
+        return Err(ExportError::invalid_input("symlink source is not allowed"));
     }
     let source = source.canonicalize()?;
     let output_absolute = if output.exists() {
@@ -45,11 +44,13 @@ fn export_with(
         parent.canonicalize()?.join(
             output
                 .file_name()
-                .ok_or_else(|| anyhow::anyhow!("invalid output"))?,
+                .ok_or_else(|| ExportError::invalid_input("invalid output"))?,
         )
     };
     if output_absolute.starts_with(&source) || source.starts_with(&output_absolute) {
-        bail!("public output and private input must be separate trees");
+        return Err(ExportError::invalid_input(
+            "public output and private input must be separate trees",
+        ));
     }
     sync::transaction(output, |stage| {
         let previous = markdown::read_locale(stage, Locale::Ja)?;
