@@ -19,11 +19,11 @@ impl Fake {
     }
 }
 impl Translator for Fake {
-    fn translate(&self, request: &TranslationRequest) -> anyhow::Result<Texts> {
+    fn translate(&self, request: &TranslationRequest) -> export::Result<Texts> {
         let n = self.calls.get();
         self.calls.set(n + 1);
         if n >= self.fail_after {
-            anyhow::bail!("simulated quota limit");
+            return Err(export::ExportError::translator("simulated quota limit"));
         }
         assert!(
             !request.texts.values().any(|v| v.contains("CODE_SECRET")
@@ -355,7 +355,7 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
 fn translated_plain_text_cannot_introduce_markdown_structure() {
     struct Plain<'a>(&'a str);
     impl Translator for Plain<'_> {
-        fn translate(&self, request: &TranslationRequest) -> anyhow::Result<Texts> {
+        fn translate(&self, request: &TranslationRequest) -> export::Result<Texts> {
             Ok(request
                 .texts
                 .keys()
@@ -425,7 +425,7 @@ fn inline_html_text_is_preserved_while_surrounding_prose_is_translated() {
 fn autolinks_are_untouched_and_self_closing_html_does_not_hide_prose() {
     struct Check;
     impl Translator for Check {
-        fn translate(&self, request: &TranslationRequest) -> anyhow::Result<Texts> {
+        fn translate(&self, request: &TranslationRequest) -> export::Result<Texts> {
             assert!(
                 !request
                     .texts
@@ -458,7 +458,7 @@ fn autolinks_are_untouched_and_self_closing_html_does_not_hide_prose() {
 fn trimmed_translations_keep_the_original_fragment_boundary_whitespace() {
     struct Trim;
     impl Translator for Trim {
-        fn translate(&self, request: &TranslationRequest) -> anyhow::Result<Texts> {
+        fn translate(&self, request: &TranslationRequest) -> export::Result<Texts> {
             Ok(request
                 .texts
                 .iter()
@@ -493,7 +493,7 @@ fn trimmed_translations_keep_the_original_fragment_boundary_whitespace() {
 fn invalid_article_response_is_not_cached_and_retry_can_succeed() {
     struct Retry(Cell<usize>);
     impl Translator for Retry {
-        fn translate(&self, request: &TranslationRequest) -> anyhow::Result<Texts> {
+        fn translate(&self, request: &TranslationRequest) -> export::Result<Texts> {
             self.0.set(self.0.get() + 1);
             Ok(request
                 .texts
@@ -516,7 +516,10 @@ fn invalid_article_response_is_not_cached_and_retry_can_succeed() {
     write_note(source.path(), "本文");
     export::export_japanese(source.path(), output.path()).unwrap();
     let retry = Retry(Cell::new(0));
-    assert!(export::translate_public(output.path(), &retry, &settings()).is_err());
+    assert!(matches!(
+        export::translate_public(output.path(), &retry, &settings()),
+        Err(export::ExportError::InvalidTranslation(_))
+    ));
     export::translate_public(output.path(), &retry, &settings()).unwrap();
     assert_eq!(retry.0.get(), 2);
     assert!(
@@ -570,7 +573,10 @@ fn failure_rolls_back_outputs_and_retry_reuses_completed_units() {
         calls: Cell::new(0),
         fail_after: 1,
     };
-    assert!(export::translate_public(output.path(), &failing, &settings()).is_err());
+    assert!(matches!(
+        export::translate_public(output.path(), &failing, &settings()),
+        Err(export::ExportError::Translator(_))
+    ));
     assert!(!output.path().join("en").exists());
     let retry = Fake::new();
     export::translate_public(output.path(), &retry, &settings()).unwrap();
@@ -634,4 +640,34 @@ done
     ] {
         assert!(args.contains(required), "missing {required}");
     }
+}
+
+#[test]
+fn codex_failure_is_typed_without_exposing_diagnostics() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = TempDir::new().unwrap();
+    let program = temp.path().join("codex");
+    fs::write(
+        &program,
+        "#!/bin/sh\ncat >/dev/null\necho 'PRIVATE SOURCE DIAGNOSTIC' >&2\nexit 23\n",
+    )
+    .unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o700)).unwrap();
+    let translator = export::CodexTranslator {
+        executable: program,
+        timeout: std::time::Duration::from_secs(5),
+    };
+
+    let error = translator
+        .translate(&TranslationRequest {
+            texts: Texts::from([("title".into(), "非公開の原文".into())]),
+            context: "title".into(),
+            model: "fake".into(),
+            instruction: "translate".into(),
+            glossary: Texts::new(),
+        })
+        .unwrap_err();
+
+    assert!(matches!(&error, export::ExportError::Translator(_)));
+    assert!(!error.to_string().contains("PRIVATE SOURCE DIAGNOSTIC"));
 }

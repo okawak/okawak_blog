@@ -1,6 +1,7 @@
 #![warn(unreachable_pub)]
 
 mod codex;
+mod error;
 mod fragments;
 mod markdown;
 mod normalize;
@@ -12,6 +13,7 @@ mod translation;
 mod vault;
 
 pub use codex::CodexTranslator;
+pub use error::{ExportError, Result};
 pub use pipeline::{export_japanese, export_translated};
 pub use report::{ProtectedContent, TranslationReport};
 pub use translate_content::{accept_translation, translate_public};

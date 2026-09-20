@@ -1,5 +1,5 @@
 //! Stage an entire public tree before replacing it. A recoverable backup survives interruption.
-use anyhow::{Result, bail};
+use crate::{ExportError, Result};
 use std::{fs, path::Path};
 
 pub(crate) fn locked<T>(output: &Path, build: impl FnOnce() -> Result<T>) -> Result<T> {
@@ -10,7 +10,7 @@ pub(crate) fn locked<T>(output: &Path, build: impl FnOnce() -> Result<T>) -> Res
     fs::create_dir_all(parent)?;
     let name = output
         .file_name()
-        .ok_or_else(|| anyhow::anyhow!("output needs a directory name"))?
+        .ok_or_else(|| ExportError::invalid_input("output needs a directory name"))?
         .to_string_lossy();
     let backup = parent.join(format!(".{name}.export-backup"));
     let lock = parent.join(format!(".{name}.export-lock"));
@@ -27,10 +27,10 @@ pub(crate) fn locked<T>(output: &Path, build: impl FnOnce() -> Result<T>) -> Res
     }
     let _lock = Lock(&lock, lock_file);
     if backup.exists() {
-        bail!(
+        return Err(ExportError::invalid_input(format!(
             "export backup exists; recover it before retrying: {}",
             backup.display()
-        );
+        )));
     }
     build()
 }

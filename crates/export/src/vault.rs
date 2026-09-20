@@ -1,6 +1,8 @@
 //! Obsidian input adapter. Only explicitly completed notes cross this boundary.
-use crate::markdown::{self, Document};
-use anyhow::{Context, Result, bail};
+use crate::{
+    ExportError, Result,
+    markdown::{self, Document},
+};
 use domain::{ContentKind, Locale, PublicContentMeta, SectionPath, Slug};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -65,9 +67,11 @@ pub(crate) fn extract(root: &Path, previous: &[Document]) -> Result<Vec<Source>>
         {
             continue;
         }
-        let fm: Frontmatter = serde_yaml::from_str(yaml).context("invalid completed note")?;
+        let fm: Frontmatter = serde_yaml::from_str(yaml)?;
         let relative = path.strip_prefix(root)?;
-        let relative_str = relative.to_str().context("source path must be UTF-8")?;
+        let relative_str = relative
+            .to_str()
+            .ok_or_else(|| ExportError::invalid_input("source path must be UTF-8"))?;
         let source_hash = digest(relative_str);
         let exact = previous.iter().find(|d| d.meta.source_hash == source_hash);
         let renamed: Vec<_> = previous
@@ -85,20 +89,26 @@ pub(crate) fn extract(root: &Path, previous: &[Document]) -> Result<Vec<Source>>
         } else if renamed.len() == 1 {
             renamed[0].meta.id.clone()
         } else if renamed.len() > 1 {
-            bail!("ambiguous source identity; specify publish_id");
+            return Err(ExportError::invalid_input(
+                "ambiguous source identity; specify publish_id",
+            ));
         } else {
             Slug::new(
                 digest(format!("{}/{relative_str}/{}", fm.title, fm.created))[..12].to_owned(),
             )?
         };
         if !claimed.insert(id.clone()) {
-            bail!("duplicate source identity; specify distinct publish_id values");
+            return Err(ExportError::invalid_input(
+                "duplicate source identity; specify distinct publish_id values",
+            ));
         }
         let section_path = if fm.kind == ContentKind::Article {
-            let category = fm.category.context("article requires category")?;
+            let category = fm
+                .category
+                .ok_or_else(|| ExportError::invalid_input("article requires category"))?;
             let article_path = relative
                 .strip_prefix(category.as_str())
-                .context("article directory must match category")?;
+                .map_err(|_| ExportError::invalid_input("article directory must match category"))?;
             SectionPath::new(
                 article_path
                     .parent()
@@ -133,7 +143,7 @@ pub(crate) fn extract(root: &Path, previous: &[Document]) -> Result<Vec<Source>>
         };
         meta.validate()?;
         if !routes.insert(meta.path()) {
-            bail!("duplicate public route");
+            return Err(ExportError::invalid_input("duplicate public route"));
         }
         sources.push(Source {
             key: relative.with_extension("").to_string_lossy().into_owned(),

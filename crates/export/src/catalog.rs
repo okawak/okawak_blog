@@ -1,10 +1,10 @@
 //! File adapter for versioned text catalogs. UI keys and their meaning belong to server.
 use crate::{
+    ExportError, Result,
     report::TranslationReport,
     sync,
     translation::{Decision, TranslationRequest, TranslationSettings, Translator, decide},
 };
-use anyhow::{Context, Result, bail};
 use domain::{LabelCatalog, LabelProvenance, LabelTranslation};
 use std::{
     fs,
@@ -72,7 +72,9 @@ pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Resul
             let candidate: Candidate =
                 serde_json::from_slice(&fs::read(&existing_candidate_path)?)?;
             if candidate.key != *key {
-                bail!("catalog candidate identity changed");
+                return Err(ExportError::translation_conflict(
+                    "catalog candidate identity changed",
+                ));
             }
             Some(decide(
                 &input,
@@ -87,12 +89,14 @@ pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Resul
             None
         };
         if candidate_decision == Some(Decision::Protect) {
-            bail!("manually edited candidate {key}; move it aside before generating a replacement");
+            return Err(ExportError::translation_conflict(format!(
+                "manually edited candidate {key}; move it aside before generating a replacement"
+            )));
         }
         if decision == Decision::Generate && candidate_decision == Some(Decision::Reuse) {
-            bail!(
+            return Err(ExportError::translation_conflict(format!(
                 "candidate {key} already matches this input; accept it or move it aside before generating a replacement"
-            );
+            )));
         }
         entries.push(EntryPlan {
             key: key.clone(),
@@ -196,26 +200,30 @@ pub fn accept_catalog_translation(
         let entry = catalog
             .entries
             .get_mut(key)
-            .context("unknown catalog key")?;
+            .ok_or_else(|| ExportError::invalid_input("unknown catalog key"))?;
         let candidate_path = candidate_path(&path, key);
         let candidate: Candidate = serde_json::from_slice(&fs::read(&candidate_path)?)?;
         if candidate.key != key
             || candidate.source != entry.source
             || candidate.context != entry.context
         {
-            bail!("catalog candidate identity changed");
+            return Err(ExportError::translation_conflict(
+                "catalog candidate identity changed",
+            ));
         }
         let candidate = candidate.translation;
         let request = request(entry, settings);
         if candidate
             .provenance
             .as_ref()
-            .context("candidate provenance missing")?
+            .ok_or_else(|| ExportError::translation_conflict("candidate provenance missing"))?
             .input_hash
             != request.fingerprint()?
             || candidate.stale
         {
-            bail!("catalog candidate no longer matches current source/settings");
+            return Err(ExportError::translation_conflict(
+                "catalog candidate no longer matches current source/settings",
+            ));
         }
         request.validate(&[("value".into(), candidate.value.clone())].into())?;
         entry.translation = Some(candidate);
@@ -228,7 +236,7 @@ pub fn accept_catalog_translation(
 
 pub(crate) fn read(path: &Path) -> Result<LabelCatalog> {
     if !fs::symlink_metadata(path)?.file_type().is_file() {
-        bail!("catalog must be a regular file");
+        return Err(ExportError::invalid_input("catalog must be a regular file"));
     }
     let mut catalog: LabelCatalog = serde_json::from_slice(&fs::read(path)?)?;
     catalog.validate_structure()?;
@@ -270,7 +278,9 @@ fn candidate_path(path: &Path, key: &str) -> PathBuf {
         .join(format!("{}.json", crate::vault::digest(identity)))
 }
 fn canonical_parent_path(path: &Path) -> Result<PathBuf> {
-    let name = path.file_name().context("catalog needs a file name")?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| ExportError::invalid_input("catalog needs a file name"))?;
     // Resolve directory aliases for the shared tree lock, but retain the final
     // component so read() can continue rejecting symlink catalog files.
     Ok(parent(path).canonicalize()?.join(name))
