@@ -15,7 +15,7 @@ pub(super) fn content(
 ) {
     summary("Content", report);
     for command in content_acceptance_commands(report, output, settings) {
-        println!("Review the candidate, then run `{command}`.");
+        tracing::warn!(%command, "translation candidate needs review");
     }
 }
 
@@ -23,16 +23,17 @@ pub(super) fn ui(report: &TranslationReport<String>, catalog: &Path, settings: &
     summary("UI", report);
     for key in &report.protected {
         let command = acceptance_command(AcceptanceTarget::Ui(key), catalog, settings);
-        println!("Review the candidate, then run `{command}`.");
+        tracing::warn!(%command, "translation candidate needs review");
     }
 }
 
-fn summary<T>(scope: &str, report: &TranslationReport<T>) {
-    println!(
-        "{scope}: generated {}, reused {}, protected {}",
-        report.generated,
-        report.reused,
-        report.protected.len()
+fn summary<T>(scope: &'static str, report: &TranslationReport<T>) {
+    tracing::info!(
+        scope,
+        generated = report.generated,
+        reused = report.reused,
+        protected = report.protected.len(),
+        "translation completed"
     );
 }
 
