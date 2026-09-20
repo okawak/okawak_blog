@@ -69,17 +69,9 @@ fi
 git submodule update --remote --checkout --recursive "$obsidian_path"
 '''
 
-[tasks.export-ja]
-description = "Export only completed Obsidian notes to public Japanese Markdown"
-run = "cargo run -p export --"
-
 [tasks.export]
-description = "Export public Markdown and translate changed prose using local Codex"
-run = "cargo run -p export -- --translate"
-
-[tasks.translate]
-description = "Translate checked-in public Markdown without accessing Obsidian"
-run = "cargo run -p export -- --translate-only"
+description = "Export public Markdown, translate changes, and prepare protected translation candidates"
+run = "cargo run -p export --"
 
 [tasks.format]
 description = "Format Rust and Topcoat source files"
@@ -277,10 +269,6 @@ echo "  mise run test-e2e-s3"
 echo "  mise run clippy"
 echo "  mise run check"
 '''
-
-[tasks.translate-ui]
-description = "Translate UI catalog only (no private Obsidian needed)"
-run = "cargo run -p export -- --ui-only"
 
 [tasks.test-public-artifacts]
 description = "Validate the language-aware prepublication artifact gate with public fixtures"

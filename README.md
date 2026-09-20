@@ -207,7 +207,7 @@ mise run versions-check
 
 site UIはTopcoat componentとTailwind CSSを主系にします。theme tokenとsite chromeは`crates/server/style/tailwind.css`、artifact由来の生成HTMLは同ファイルからimportする`style/content.css`で管理します。Sass / Stylanceは使用しません。
 
-`mise run export-ja`は公開対象だけを日本語Markdownへ抽出し、`mise run export`は必要な英訳も生成します。`mise run translate`はGitの公開Markdown・タグ・UI辞書を翻訳します。UIだけなら`mise run translate-ui`を使えます。手動編集・更新候補・用語集の運用は[export README](crates/export/README.md)を参照してください。`mise run dev-local`は公開Markdownからpublishとlocal配信を行います。原文同期は`mise run sync-obsidian`で明示的に実行し、未commit差分があるsubmoduleは同期しません。
+`mise run export`は公開対象の抽出から記事・タグ・UIの差分翻訳まで実行します。未変更の訳文は再利用し、手動訳を保護して更新候補を自動生成します。候補は`cargo run -p export -- accept article <id>`、`accept tag <id>`、`accept ui <key>`で採用します。手動編集・更新候補・用語集の運用は[export README](crates/export/README.md)を参照してください。`mise run dev-local`は公開Markdownからpublishとlocal配信を行います。原文同期は`mise run sync-obsidian`で明示的に実行し、未commit差分があるsubmoduleは同期しません。
 `mise run pull` は deploy 用に `main` の更新だけを行い、submodule も更新したい場合は `mise run pull-with-submodules` を使います。
 production CSSはTopcoatのstandalone Tailwind integrationで生成し、そのversionを`mise.toml`の`TOPCOAT_TAILWIND_VERSION`とTopcoat build scriptで一致させます。`mise run versions-check`がこれらとTopcoat CLI / framework、E2EのBun versionを照合し、GitHub Actionsは`jdx/mise-action`経由で同じlocked toolchainを導入します。
 
@@ -268,7 +268,7 @@ mise run restart-vps
 ## 多言語運用の移行と確認
 
 1. 依存するPRを順に統合し、通常CIを通す。公開Markdownのpush時点でGitHub上では文章が公開されるため、push前に対象・訳文・辞書の差分を確認する。
-2. `mise run export-ja`で原文から公開版を同期し、`mise run export`で必要な英訳を生成する。英訳は手で修正でき、原文更新時は手動訳を保護して更新候補を作る。操作は[export README](crates/export/README.md)を参照する。
+2. `mise run export`で原文から公開版を同期し、必要な英訳を生成する。英訳は手で修正でき、原文更新時は手動訳を保護して更新候補を自動生成する。操作は[export README](crates/export/README.md)を参照する。
 3. `mise run dev-local`で日英を確認し、Markdownと辞書だけをGitへ確定する。未作成・更新待ちの英訳は英語一覧から外れ、英語URLは404になる。日本語の公開は継続できる。
 4. 最初にserver binaryとassetを配備する。新serverは旧releaseも日本語として読める。次に`Publish Content to S3`をmainから実行する。旧serverは新releaseの日本語を読めるが、英語ルートと新しいUIはserver更新後に利用できる。
 

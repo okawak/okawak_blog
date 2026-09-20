@@ -8,6 +8,7 @@ description = "Export explicitly published Obsidian content into public Markdown
 
 [dependencies]
 anyhow.workspace = true
+clap.workspace = true
 domain = { path = "../domain" }
 pulldown-cmark.workspace = true
 percent-encoding.workspace = true
