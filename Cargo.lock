@@ -3395,6 +3395,7 @@ dependencies = [
  "topcoat-runtime-macro",
  "topcoat-session",
  "topcoat-tailwind",
+ "topcoat-ui-registry",
  "topcoat-view",
  "topcoat-view-macro",
 ]
@@ -3689,6 +3690,12 @@ dependencies = [
  "topcoat-core",
  "ureq",
 ]
+
+[[package]]
+name = "topcoat-ui-registry"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ccb261275a6d6bdadc37c999f702bd80c6c16af867bc96d5fb681fac11503d9"
 
 [[package]]
 name = "topcoat-view"

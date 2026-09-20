@@ -1,0 +1,13 @@
+# Topcoat UI install state. Managed by `topcoat ui`.
+version = 1
+components_dir = "src/components"
+
+[theme]
+name = "neutral"
+registry = "topcoat"
+hash = "sha256:22cb1d72ddbe6fe2e3375fc32228ae5d67c26c74fe26dd00af451dc918367a18"
+file = "styles.css"
+
+[registries.topcoat.components.toggle]
+hash = "sha256:fa90092907c3ce9b21d9af0d828bbe1e6d544b648f9949b7667e11d74a62ee7b"
+file = "src/components/toggle.rs"

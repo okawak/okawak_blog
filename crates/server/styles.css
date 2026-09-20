@@ -1,5 +1,9 @@
 @import "tailwindcss";
-@import "./content.css";
+@import "./style/content.css";
+
+@source "./src/**/*.rs";
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
   --radius: 0.5rem;
@@ -28,6 +32,10 @@
   --warning-foreground: #0d0a08;
   --success: #5f8b58;
   --success-foreground: #f3efe8;
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 25%);
+  --shadow-sm:
+    0 1px 2px rgb(0 0 0 / 24%),
+    0 2px 8px -2px rgb(0 0 0 / 30%);
 
   /* Site layout tokens. */
   --site-header-height: 5.625rem;
@@ -71,6 +79,10 @@
   --warning-foreground: #0d0a08;
   --success: #5f8b58;
   --success-foreground: #f3efe8;
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 25%);
+  --shadow-sm:
+    0 1px 2px rgb(0 0 0 / 24%),
+    0 2px 8px -2px rgb(0 0 0 / 30%);
 }
 
 @theme inline {
@@ -99,6 +111,8 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
   --radius-sm: calc(var(--radius) - 0.25rem);
   --radius-md: calc(var(--radius) - 0.125rem);
   --radius-lg: var(--radius);

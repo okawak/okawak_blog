@@ -7,6 +7,10 @@ mod article_filter;
 mod artifact_page_loader;
 mod category_articles;
 
+// Topcoat UI vendors public component APIs into an application-private module.
+#[allow(unreachable_pub)]
+mod components;
+
 pub mod app;
 
 pub mod assets;
