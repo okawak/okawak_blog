@@ -7,6 +7,8 @@ use topcoat::{
     view::{View, component, view},
 };
 
+use crate::components::badge::{BadgeVariant, badge};
+
 #[component]
 pub(crate) async fn article_card(
     article: &SiteArticleCard,
@@ -37,11 +39,10 @@ pub(crate) async fn article_card(
                     <div
                         class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground sm:text-sm"
                     >
-                        <span
-                            class="inline-flex w-fit items-center rounded-md border border-primary/40 bg-background/40 px-2.5 py-0.5 text-xs font-semibold text-primary transition-colors focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                        >
+                        badge(
+                            variant: BadgeVariant::Outline,
                             (crate::i18n::category_name(locale, article.category))
-                        </span>
+                        )
                         <span class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                             <span>
                                 (t(locale, Message::ArticlePublished))
@@ -73,11 +74,10 @@ pub(crate) async fn article_card(
                         >
                             for tag in &article.tags {
                                 <li>
-                                    <span
-                                        class="inline-flex w-fit items-center rounded-md border border-transparent bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/80 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                                    >
+                                    badge(
+                                        variant: BadgeVariant::Secondary,
                                         (format!("#{}", labels.get(tag).unwrap_or(tag)))
-                                    </span>
+                                    )
                                 </li>
                             }
                         </ul>
