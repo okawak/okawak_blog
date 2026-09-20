@@ -9,7 +9,7 @@ license.workspace = true
 [dependencies]
 domain = { path = "../domain" }
 async-trait.workspace = true
-aws-config = { workspace = true, default-features = false }
+aws-config = { workspace = true, default-features = false, features = ["credentials-process"] }
 aws-sdk-s3 = { workspace = true, default-features = false, features = ["default-https-client", "rt-tokio"] }
 serde.workspace = true
 serde_json.workspace = true
