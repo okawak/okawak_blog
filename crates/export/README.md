@@ -1,6 +1,7 @@
 # export
 
 private Obsidianの公開対象だけをGit管理できるMarkdownへ抽出し、記事・タグ・UIの差分翻訳と更新候補の生成まで行うローカルコマンド。
+既定の入力はリポジトリルートの`obsidian/Publish`。
 
 ```sh
 mise run export
