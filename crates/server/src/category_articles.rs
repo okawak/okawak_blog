@@ -17,6 +17,7 @@ use crate::{
     article_card::article_card,
     article_filter::{MAX_QUERY_CHARS, filter_sections},
     components::{
+        alert::{alert, alert_description},
         badge::{BadgeVariant, badge},
         input::input,
         label::label,
@@ -81,7 +82,7 @@ pub(crate) async fn category_articles(
                 )
             </div>
             if count == 0 {
-                <p>(t(locale, Message::EmptyMatches))</p>
+                alert(alert_description((t(locale, Message::EmptyMatches))))
             }
             for section in &document.sections {
                 <section

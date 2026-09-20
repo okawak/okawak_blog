@@ -143,7 +143,12 @@ test("GitHub icon stays accessible without an icon font", async ({ page }) => {
   await page.getByRole("navigation").getByRole("link", { name: "About", exact: true }).focus();
   await page.keyboard.press("Tab");
   await expect(github).toBeFocused();
-  expect(await github.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe("solid");
+  expect(await github.evaluate((element) => getComputedStyle(element).boxShadow)).not.toBe("none");
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toBeVisible();
+  const tooltipBox = await tooltip.boundingBox();
+  expect(tooltipBox).not.toBeNull();
+  expect(tooltipBox!.y).toBeGreaterThanOrEqual(0);
   expect(iconFontRequests).toEqual([]);
 });
 
