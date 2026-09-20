@@ -28,13 +28,16 @@ use topcoat::{
         response::{IntoResponse, Response},
     },
     runtime::{RouterBuilderRuntimeExt, RouterBuilderShardExt},
-    view::{Unescaped, View, ViewExt, class, component, view},
+    view::{Unescaped, View, ViewExt, attributes, class, component, view},
 };
 
 use crate::{
     article_card::article_card,
     artifact_page_loader::ArtifactPageLoader,
-    components::badge::{BadgeVariant, badge_variants},
+    components::{
+        alert::{alert, alert_description},
+        badge::{BadgeVariant, badge_variants},
+    },
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
     page_loader::{PageLoadResult, PageLoaderContext},
     shell::{ShellMetadata, internal_server_error_page, not_found_page, site_shell},
@@ -261,11 +264,10 @@ async fn home_document(
                     </div>
 
                     if is_empty {
-                        <div
-                            class="rounded-xl bg-secondary p-8 text-center text-muted-foreground"
-                        >
-                            (t(locale, Message::EmptyArticles))
-                        </div>
+                        alert(
+                            attrs: attributes! { class="p-8 text-center" },
+                            alert_description((t(locale, Message::EmptyArticles)))
+                        )
                     } else {
                         home_page_content(
                             document: document,

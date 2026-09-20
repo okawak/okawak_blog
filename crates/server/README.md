@@ -38,7 +38,7 @@ runtimeのpage再描画はPOSTをGETへ内部rewriteします。conditional GET�
 
 カテゴリの記事絞り込みはshard内の`signal(cx, String::new)`とtracked readで構成します。タイトル・説明・タグを大文字小文字を区別せず部分一致で検索し、入力はサーバー側でも先頭100文字に制限します。カテゴリ引数も再描画時に検証します。ページと初期shardは`#[memoize]`で同じpage documentを共有し、再描画では`PageLoader`から再取得します。記事・sectionの安定したIDを使うDOM morphにより、入力フォーカスとshard外の状態を維持します。JavaScript無効時も初期HTMLの全記事とリンクを利用できます。
 
-productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。公開linkは独自client routerを介さず、ブラウザ標準のfull-page navigationを使います。言語切替はTopcoat UIの`toggle_group`を使い、選択肢はscript不要の通常linkとして扱います。検索fieldは`label` / `input`、category・tag・countは`badge`で構成します。mobile menuはTopcoat runtimeのsignalとevent expressionで構成します。
+productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。公開linkは独自client routerを介さず、ブラウザ標準のfull-page navigationを使います。言語切替はTopcoat UIの`toggle_group`を使い、選択肢はscript不要の通常linkとして扱います。検索fieldは`label` / `input`、category・tag・countは`badge`、記事一覧は`card`、状態表示は`alert`で構成します。headerの操作とnavigation linkは`button`のstyleを共有し、GitHub linkは`tooltip`で補足します。mobile menuの状態管理はTopcoat runtimeのsignalとevent expressionで構成します。
 
 GitHubアイコンはTopcoatのicon componentでinline SVGを描画し、icon fontや外部icon setの取得は行いません。リンクにaccessible nameを付け、装飾のSVGは支援技術から隠します。端末間の字体を揃えるNoto Sans JPはGoogle Fontsの可変ウェイト範囲`400..700`でCSSの重複を抑え、HTML headから直接参照します。`display=swap`でフォント取得中も本文を表示します。
 

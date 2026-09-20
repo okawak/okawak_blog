@@ -8,11 +8,16 @@ use topcoat::{
     context::Cx,
     icon::icon,
     router::{StatusCode, request},
-    runtime::signal,
-    view::{Child, Unescaped, View, component, view},
+    runtime::{Event, signal},
+    view::{Child, Unescaped, View, attributes, class, component, view},
 };
 
 use crate::assets::{FAVICON, STYLESHEET};
+use crate::components::{
+    alert::{AlertVariant, alert, alert_description, alert_title},
+    button::{ButtonSize, ButtonVariant, button, button_variants},
+    tooltip::{TooltipSide, tooltip, tooltip_content},
+};
 use crate::icons::GITHUB;
 
 pub(crate) struct ShellMetadata {
@@ -73,7 +78,11 @@ pub(crate) async fn not_found_page(canonical_path: String) -> Result<impl View> 
                 t(locale, Message::ErrorNotFoundDescription).to_string(),
                 canonical_path,
             ),
-            <div>(t(locale, Message::ErrorNotFoundBody))</div>
+            status_notice(
+                variant: AlertVariant::Neutral,
+                title: Some(t(locale, Message::ErrorNotFoundTitle)),
+                message: t(locale, Message::ErrorNotFoundBody)
+            )
         )
     })
 }
@@ -89,11 +98,11 @@ pub(crate) async fn article_internal_server_error_page(
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
             metadata: ShellMetadata::article(locale, title, description, canonical_path),
-            <div
-                class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground"
-            >
-                (t(locale, Message::ErrorArticle))
-            </div>
+            status_notice(
+                variant: AlertVariant::Destructive,
+                title: None,
+                message: t(locale, Message::ErrorArticle)
+            )
         )
     })
 }
@@ -110,11 +119,31 @@ pub(crate) async fn internal_server_error_page(
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
             metadata: ShellMetadata::website(locale, title, description, canonical_path),
-            <div
-                class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] rounded-xl bg-secondary p-8 text-center text-muted-foreground"
-            >
-                (t(locale, message))
-            </div>
+            status_notice(
+                variant: AlertVariant::Destructive,
+                title: None,
+                message: t(locale, message)
+            )
+        )
+    })
+}
+
+#[component]
+async fn status_notice(
+    variant: AlertVariant,
+    title: Option<&str>,
+    message: &str,
+) -> Result<impl View> {
+    Ok(view! {
+        alert(
+            variant: variant,
+            attrs: attributes! {
+                class="mx-auto my-8 w-[calc(100%-2rem)] max-w-[var(--site-content-width)] bg-secondary p-8 text-center"
+            },
+            if let Some(title) = title {
+                alert_title((title))
+            }
+            alert_description((message))
         )
     })
 }
@@ -330,22 +359,25 @@ window.okawakScheduleCodeHighlight = function(root) {
                                 locales: &switch_locales
                             )
 
-                            <button
-                                type="button"
-                                class="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 md:hidden"
-                                aria-controls="site-header-nav"
-                                :aria-expanded=$(if menu_open.get() {
-                                    "true"
-                                } else {
-                                    "false"
-                                })
-                                :aria-label=$(if menu_open.get() {
-                                    menu_close_label.clone()
-                                } else {
-                                    menu_open_label.clone()
-                                })
-                                @click=$(|_e| menu_open.toggle())
-                            >
+                            button(
+                                variant: ButtonVariant::Ghost,
+                                size: ButtonSize::Icon,
+                                attrs: attributes! {
+                                    type="button"
+                                    class="md:hidden"
+                                    aria-controls="site-header-nav"
+                                    :aria-expanded=$(if menu_open.get() {
+                                        "true"
+                                    } else {
+                                        "false"
+                                    })
+                                    :aria-label=$(if menu_open.get() {
+                                        menu_close_label.clone()
+                                    } else {
+                                        menu_open_label.clone()
+                                    })
+                                    @click=$(|_event: Event| menu_open.toggle())
+                                },
                                 <div
                                     class="flex size-5 flex-col items-center justify-center gap-1.5"
                                     aria-hidden="true"
@@ -372,7 +404,7 @@ window.okawakScheduleCodeHighlight = function(root) {
                                         })
                                     ></span>
                                 </div>
-                            </button>
+                            )
 
                             <nav
                                 id="site-header-nav"
@@ -390,11 +422,15 @@ window.okawakScheduleCodeHighlight = function(root) {
                                         <a
                                             href=(home_href)
                                             aria-current=(home_is_current.then_some("page"))
-                                            class=(if home_is_current {
-                                                "block rounded-md border-b-2 border-primary px-3 py-2 text-sm font-medium text-foreground no-underline"
-                                            } else {
-                                                "block rounded-md border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-primary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                            })
+                                            class=(class!(
+                                                button_variants(ButtonVariant::Ghost, ButtonSize::Sm),
+                                                "w-full justify-start no-underline md:w-auto",
+                                                if home_is_current {
+                                                    "bg-foreground/5 text-primary"
+                                                } else {
+                                                    "text-muted-foreground hover:text-foreground"
+                                                },
+                                            ))
                                             @click=$(|_e| menu_open.set(false))
                                         >
                                             (t(locale, Message::NavHome))
@@ -405,11 +441,15 @@ window.okawakScheduleCodeHighlight = function(root) {
                                             <a
                                                 href=(about_href)
                                                 aria-current=(about_is_current.then_some("page"))
-                                                class=(if about_is_current {
-                                                    "block rounded-md border-b-2 border-primary px-3 py-2 text-sm font-medium text-foreground no-underline"
-                                                } else {
-                                                    "block rounded-md border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-primary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                                })
+                                                class=(class!(
+                                                    button_variants(ButtonVariant::Ghost, ButtonSize::Sm),
+                                                    "w-full justify-start no-underline md:w-auto",
+                                                    if about_is_current {
+                                                        "bg-foreground/5 text-primary"
+                                                    } else {
+                                                        "text-muted-foreground hover:text-foreground"
+                                                    },
+                                                ))
                                                 @click=$(|_e| menu_open.set(false))
                                             >
                                                 (t(locale, Message::NavAbout))
@@ -421,15 +461,24 @@ window.okawakScheduleCodeHighlight = function(root) {
                                 <div
                                     class="border-t border-border pt-3 md:border-t-0 md:pt-0"
                                 >
-                                    <a
-                                        href="https://github.com/okawak"
-                                        class="inline-flex size-10 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                        aria-label=(t(locale, Message::NavGithub))
-                                        rel="noopener noreferrer"
-                                        target="_blank"
-                                    >
-                                        icon(data: GITHUB, size: 20)
-                                    </a>
+                                    tooltip(
+                                        <a
+                                            href="https://github.com/okawak"
+                                            class=(button_variants(
+                                                ButtonVariant::Ghost,
+                                                ButtonSize::Icon,
+                                            ))
+                                            aria-label=(t(locale, Message::NavGithub))
+                                            rel="noopener noreferrer"
+                                            target="_blank"
+                                        >
+                                            icon(data: GITHUB, size: 20)
+                                        </a>
+                                        tooltip_content(
+                                            side: TooltipSide::Bottom,
+                                            (t(locale, Message::NavGithub))
+                                        )
+                                    )
                                 </div>
                             </nav>
                         </div>
