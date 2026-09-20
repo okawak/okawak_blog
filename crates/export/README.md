@@ -30,7 +30,7 @@ cargo run -p export -- --translate-only --candidates
 cargo run -p export -- --accept <id>
 ```
 
-`translation/settings.json` のモデル・指示・用語集を使用する。必要なら `--settings PATH` で指定する。Codex CLI 0.154以降のChatGPTログインを使い、APIキー方式には切り替えない。実AIは通常テストでは呼ばない。
+リポジトリルートの`translation.json`に記事・タグ・UI共通のモデル・翻訳指示・用語集を置く。コマンドはリポジトリルートから実行する。別の設定は`--settings PATH`で指定する。Codex CLI 0.154以降のChatGPTログインを使い、APIキー方式には切り替えない。実AIは通常テストでは呼ばない。
 
 AI入力はpublic Markdownのtitle・summaryと、parserで抽出した文章fragmentだけ。コード・数式・HTML・リンク先は元のMarkdownに残し、翻訳された文章をescapeして元の位置に戻す。fragment分割をまたぐ大幅な語順変更は苦手なので、採用後の英語Markdownを必要に応じて手動編集する。raw HTML内の文言はこの処理では翻訳しない。用語集は該当する文章にだけ適用し、指定訳語と補間変数の保持を検証する。
 

@@ -64,6 +64,7 @@ okawak_blog/
 - `crates/export`
   - ローカルの公開対象抽出、public Markdownの参照正規化、stable IDと翻訳履歴の管理
   - `translation`による記事・辞書で共有できる翻訳requestと更新判定、`fragments`によるMarkdown文章の抽出・再構築
+  - 記事・タグ・UI共通のモデル・翻訳指示・用語集は、リポジトリルートの`translation.json`で管理する
   - `codex`によるChatGPT認証のローカル実行境界。AIへvaultを渡さず、public文章だけの作業領域と読取権限へ限定する
   - `sync`による出力全体のstaging・入替・中断時の復旧境界。uploadは行わない
 
