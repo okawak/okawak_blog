@@ -2,12 +2,22 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:best-practices"],
   "enabledManagers": ["cargo", "bun", "mise", "github-actions", "rust-toolchain"],
-  "ignoreDeps": ["topcoat", "cargo:topcoat-cli"],
   "ignorePaths": ["terraform/**", "obsidian/**"],
   "timezone": "Asia/Tokyo",
   "schedule": ["* * * * 1"],
   "automerge": false,
   "platformCommit": "enabled",
+  "packageRules": [
+    {
+      "description": "Keep the Topcoat framework and CLI on the same version",
+      "matchManagers": ["cargo", "mise"],
+      "matchDatasources": ["crate"],
+      "matchPackageNames": ["topcoat", "topcoat-cli"],
+      "groupName": "Topcoat framework and CLI",
+      "groupSlug": "topcoat",
+      "minimumGroupSize": 2
+    }
+  ],
   "vulnerabilityAlerts": {
     "enabled": true
   }
