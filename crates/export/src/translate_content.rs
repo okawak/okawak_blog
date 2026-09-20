@@ -101,16 +101,45 @@ pub(crate) fn translate_stage(
     }
     // Inspect every candidate before any AI call, cache write or output update.
     fs::create_dir_all(stage.join("en"))?;
-    for ArticlePlan {
-        original,
-        current,
-        fragments,
-        request,
-        input,
-        decision,
-        candidate_decision,
-    } in plans
+    let total = plans.len();
+    let ai_requests = plans.iter().try_fold(0, |count, plan| {
+        Ok::<_, ExportError>(
+            count
+                + usize::from(crate::translation::will_call_translator(
+                    &plan.decision,
+                    plan.candidate_decision.as_ref(),
+                    &plan.request,
+                    cache_root,
+                )?),
+        )
+    })?;
+    tracing::info!(
+        scope = "Articles",
+        total,
+        ai_requests,
+        "translation phase started"
+    );
+    for (
+        index,
+        ArticlePlan {
+            original,
+            current,
+            fragments,
+            request,
+            input,
+            decision,
+            candidate_decision,
+        },
+    ) in plans.into_iter().enumerate()
     {
+        tracing::info!(
+            scope = "Article",
+            current = index + 1,
+            total,
+            article_id = %original.meta.id,
+            action = decision.action(candidate_decision.as_ref()),
+            "translation item started"
+        );
         let path = stage.join(format!("en/{}.md", original.meta.id));
         match decision {
             Decision::Reuse => {
@@ -169,6 +198,7 @@ pub(crate) fn translate_stage(
             }
         }
     }
+    tracing::info!(scope = "Articles", total, "translation phase completed");
     let tags = tags.apply(cache_root, translator)?;
     report.generated += tags.generated;
     report.reused += tags.reused;

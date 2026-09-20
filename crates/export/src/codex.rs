@@ -126,16 +126,33 @@ impl Translator for CodexTranslator {
             )));
         }
         let start = Instant::now();
+        let heartbeat = Duration::from_secs(10);
+        let mut next_heartbeat = heartbeat;
+        tracing::info!(
+            model = %request.model,
+            text_count = request.texts.len(),
+            timeout_seconds = self.timeout.as_secs(),
+            "waiting for AI translation"
+        );
         let status = loop {
             if let Some(status) = child.try_wait()? {
                 break status;
             }
-            if start.elapsed() >= self.timeout {
+            let elapsed = start.elapsed();
+            if elapsed >= self.timeout {
                 child.kill()?;
                 child.wait()?;
                 return Err(ExportError::translator(
                     "Codex translation timed out; saved translations were not overwritten",
                 ));
+            }
+            if elapsed >= next_heartbeat {
+                tracing::info!(
+                    elapsed_seconds = elapsed.as_secs(),
+                    timeout_seconds = self.timeout.as_secs(),
+                    "still waiting for AI translation"
+                );
+                next_heartbeat += heartbeat;
             }
             std::thread::sleep(Duration::from_millis(100));
         };
@@ -145,6 +162,10 @@ impl Translator for CodexTranslator {
                 "Codex translation failed ({status}); check CLI version, ChatGPT login and usage limits. No API fallback was attempted"
             )));
         }
+        tracing::info!(
+            elapsed_milliseconds = start.elapsed().as_millis(),
+            "AI translation completed"
+        );
         let result = serde_json::from_slice(&fs::read(result_path).map_err(|error| {
             ExportError::translator(format!("Codex did not produce structured output: {error}"))
         })?)

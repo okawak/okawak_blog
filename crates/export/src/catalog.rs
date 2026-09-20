@@ -125,14 +125,43 @@ impl CatalogPlan {
             entries,
         } = self;
         let mut report = TranslationReport::default();
-        for EntryPlan {
-            key,
-            request,
-            input,
-            decision,
-            candidate_decision,
-        } in entries
+        let scope = if path.file_name().and_then(|name| name.to_str()) == Some("tags.json") {
+            "Tags"
+        } else {
+            "UI"
+        };
+        let total = entries.len();
+        let ai_requests = entries.iter().try_fold(0, |count, entry| {
+            Ok::<_, ExportError>(
+                count
+                    + usize::from(crate::translation::will_call_translator(
+                        &entry.decision,
+                        entry.candidate_decision.as_ref(),
+                        &entry.request,
+                        cache_root,
+                    )?),
+            )
+        })?;
+        tracing::info!(scope, total, ai_requests, "translation phase started");
+        for (
+            index,
+            EntryPlan {
+                key,
+                request,
+                input,
+                decision,
+                candidate_decision,
+            },
+        ) in entries.into_iter().enumerate()
         {
+            tracing::info!(
+                scope,
+                current = index + 1,
+                total,
+                item = %key,
+                action = decision.action(candidate_decision.as_ref()),
+                "translation item started"
+            );
             let entry = catalog
                 .entries
                 .get_mut(&key)
@@ -185,6 +214,7 @@ impl CatalogPlan {
         }
         catalog.validate()?;
         write(&path, &catalog)?;
+        tracing::info!(scope, total, "translation phase completed");
         Ok(report)
     }
 }

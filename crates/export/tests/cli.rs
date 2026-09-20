@@ -162,7 +162,26 @@ fn fake_codex_process() {
 #[test]
 fn default_export_translates_every_scope_and_reuses_unchanged_results() {
     let project = Project::new();
-    project.run(&[]);
+    let first_run = project.run(&[]);
+    let logs = String::from_utf8(first_run.stderr).unwrap();
+    for message in [
+        "content export started",
+        "translation item started",
+        "ai_requests",
+        "current",
+        "action",
+        "waiting for AI translation",
+        "AI translation completed",
+        "UI translation started",
+        "export completed",
+    ] {
+        assert!(logs.contains(message), "missing progress log: {message}");
+    }
+    assert!(!logs.contains("本文"), "source prose must not be logged");
+    assert!(
+        !logs.contains("こんにちは"),
+        "UI source text must not be logged"
+    );
     let english = project.path(&format!("content/en/{ARTICLE}.md"));
     assert!(
         fs::read_to_string(&english)

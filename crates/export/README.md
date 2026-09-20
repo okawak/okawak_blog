@@ -11,6 +11,8 @@ cargo run -p export -- --source /path/to/vault/Publish --output content
 
 通常実行にモード指定は不要。未翻訳を生成し、未変更の訳文を再利用する。原文更新時は未編集訳だけを更新し、手動訳は保持して更新候補を作る。private入力が読めなければ停止し、公開Markdownだけの処理へ自動で切り替えない。
 
+通常実行は、記事・タグ・UIの処理段階、現在件数と総件数、生成・再利用・候補生成の別をINFOログへ表示する。AI呼び出し中は待機開始を表示し、10秒以上かかる場合は10秒ごとに経過時間を表示する。1回のAI呼び出しは最大300秒で、原文や翻訳結果はログへ出さない。
+
 CLIは`clap`で引数を検証する。通常実行のpath指定は`--source`、`--output`、`--ui-catalog`、`--settings`。候補の採用は`accept article <id>`、`accept tag <id>`、`accept ui <key>`で行い、path指定は各対象の後ろに置く（例: `accept article <id> --output /path/to/content --settings /path/to/translation.json`）。`--help`で対象ごとの使い方を確認できる。
 
 `is_completed: true` のノートだけを処理する。未知のfrontmatterはコピーせず、公開Markdown契約に必要なフィールドだけを書き出す。非公開ノートや公開ディレクトリ外のノートは参照先として取り込まない。symlink入力は拒否する。
