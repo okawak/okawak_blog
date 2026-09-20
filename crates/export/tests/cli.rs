@@ -226,9 +226,9 @@ fn manual_edits_are_preserved_and_matching_candidates_are_reused() {
     assert!(candidate.exists());
     let stdout = String::from_utf8(result.stdout).unwrap();
     for command in [
-        format!("export accept article '{ARTICLE}' --output 'content' --settings 'translation.json'"),
-        "export accept tag 'Rust' --output 'content' --settings 'translation.json'".into(),
-        "export accept ui 'greeting' --ui-catalog 'crates/server/locales/ui.json' --settings 'translation.json'".into(),
+        format!("cargo run -p export -- accept article '{ARTICLE}' --output 'content' --settings 'translation.json'"),
+        "cargo run -p export -- accept tag 'Rust' --output 'content' --settings 'translation.json'".into(),
+        "cargo run -p export -- accept ui 'greeting' --ui-catalog 'crates/server/locales/ui.json' --settings 'translation.json'".into(),
     ] {
         assert!(stdout.contains(&command), "missing command: {command}");
     }

@@ -61,7 +61,7 @@ fn acceptance_command(target: AcceptanceTarget<'_>, path: &Path, settings: &Path
         AcceptanceTarget::Ui(id) => ("ui", id, "ui-catalog"),
     };
     format!(
-        "export accept {target} {} --{path_option} {} --settings {}",
+        "cargo run -p export -- accept {target} {} --{path_option} {} --settings {}",
         shell_argument(id),
         shell_argument(&path.to_string_lossy()),
         shell_argument(&settings.to_string_lossy())
@@ -97,8 +97,8 @@ mod tests {
                 Path::new("translation.json")
             ),
             [
-                "export accept article 'article-1' --output 'public content' --settings 'translation.json'",
-                "export accept tag 'author'\"'\"'s note' --output 'public content' --settings 'translation.json'",
+                "cargo run -p export -- accept article 'article-1' --output 'public content' --settings 'translation.json'",
+                "cargo run -p export -- accept tag 'author'\"'\"'s note' --output 'public content' --settings 'translation.json'",
             ]
         );
         assert_eq!(
@@ -107,7 +107,7 @@ mod tests {
                 Path::new("locales/ui.json"),
                 Path::new("translation.json")
             ),
-            "export accept ui 'greeting' --ui-catalog 'locales/ui.json' --settings 'translation.json'"
+            "cargo run -p export -- accept ui 'greeting' --ui-catalog 'locales/ui.json' --settings 'translation.json'"
         );
     }
 }
