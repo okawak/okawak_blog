@@ -2,7 +2,10 @@
 use crate::{ExportError, Result};
 use domain::placeholders;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 pub type Texts = BTreeMap<String, String>;
 
@@ -33,6 +36,30 @@ pub(crate) enum Decision {
     Reuse,
     Generate,
     Protect,
+}
+
+impl Decision {
+    pub(crate) fn action(&self, candidate: Option<&Self>) -> &'static str {
+        match self {
+            Self::Reuse => "reuse",
+            Self::Generate => "generate",
+            Self::Protect if candidate == Some(&Self::Reuse) => "reuse candidate",
+            Self::Protect => "generate candidate",
+        }
+    }
+
+    fn requires_response(&self, candidate: Option<&Self>) -> bool {
+        !matches!(self, Self::Reuse) && candidate != Some(&Self::Reuse)
+    }
+}
+
+pub(crate) fn will_call_translator(
+    decision: &Decision,
+    candidate: Option<&Decision>,
+    request: &TranslationRequest,
+    root: &Path,
+) -> Result<bool> {
+    Ok(decision.requires_response(candidate) && !response_cache_path(request, root)?.exists())
 }
 
 pub(crate) fn decide(
@@ -114,13 +141,15 @@ impl TranslationRequest {
 pub(crate) fn cached_response(
     request: &TranslationRequest,
     translator: &dyn Translator,
-    root: &std::path::Path,
+    root: &Path,
 ) -> Result<Texts> {
     use std::{fs, io::Write};
-    let cache = root
-        .join(".export-candidates/cache")
-        .join(format!("{}.json", request.fingerprint()?));
+    let cache = response_cache_path(request, root)?;
     let result = if cache.exists() {
+        tracing::info!(
+            text_count = request.texts.len(),
+            "cached AI translation reused"
+        );
         serde_json::from_slice(&fs::read(&cache)?)?
     } else {
         let result = translator.translate(request)?;
@@ -133,6 +162,12 @@ pub(crate) fn cached_response(
     };
     request.validate(&result)?;
     Ok(result)
+}
+
+fn response_cache_path(request: &TranslationRequest, root: &Path) -> Result<PathBuf> {
+    Ok(root
+        .join(".export-candidates/cache")
+        .join(format!("{}.json", request.fingerprint()?)))
 }
 
 pub(crate) fn copy_cache(root: &std::path::Path, stage: &std::path::Path) -> Result<()> {
@@ -179,6 +214,34 @@ mod tests {
         );
         assert_eq!(decide("new-input", Some("manual"), None), Decision::Protect);
         assert_eq!(decide("new-input", None, None), Decision::Generate);
+    }
+
+    #[test]
+    fn progress_action_describes_each_decision() {
+        assert_eq!(Decision::Reuse.action(None), "reuse");
+        assert_eq!(Decision::Generate.action(None), "generate");
+        assert_eq!(Decision::Protect.action(None), "generate candidate");
+        assert_eq!(
+            Decision::Protect.action(Some(&Decision::Reuse)),
+            "reuse candidate"
+        );
+    }
+
+    #[test]
+    fn progress_ai_count_excludes_reuse_and_cached_responses() {
+        let root = tempfile::TempDir::new().unwrap();
+        let request = TranslationRequest::new(
+            Texts::from([("text".into(), "文章".into())]),
+            "test".into(),
+            &settings(Texts::new()),
+        );
+        assert!(!will_call_translator(&Decision::Reuse, None, &request, root.path()).unwrap());
+        assert!(will_call_translator(&Decision::Generate, None, &request, root.path()).unwrap());
+
+        let cache = response_cache_path(&request, root.path()).unwrap();
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(cache, "{}").unwrap();
+        assert!(!will_call_translator(&Decision::Generate, None, &request, root.path()).unwrap());
     }
 
     #[test]

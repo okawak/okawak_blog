@@ -97,11 +97,14 @@ impl Cli {
                 let args = self.export;
                 let settings = args.settings.load()?;
                 let translator = export::CodexTranslator::default();
+                tracing::info!("content export started");
                 let content =
                     export::export_translated(&args.source, &args.output, &translator, &settings)?;
                 report::content(&content, &args.output, &args.settings.settings);
+                tracing::info!("UI translation started");
                 let ui = export::translate_catalog(&args.ui_catalog, &translator, &settings)?;
                 report::ui(&ui, &args.ui_catalog, &args.settings.settings);
+                tracing::info!("export completed");
             }
             Some(Command::Accept { target }) => match target {
                 AcceptTarget::Article {
