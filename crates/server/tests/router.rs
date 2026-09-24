@@ -1210,7 +1210,8 @@ async fn category_shard_validates_browser_arguments_and_keeps_errors_out_of_the_
         .split_once("::topcoat::shard::start(")
         .expect("shard marker");
     let mut arguments = marker.split('"');
-    let shard = arguments.nth(1).expect("shard id");
+    let shard_url = arguments.nth(1).expect("shard URL");
+    assert_eq!(shard_url, "/_topcoat/shards/category-articles");
     let identity = arguments.nth(1).expect("invocation identity");
     for (category, expected) in [
         ("tech", StatusCode::OK),
@@ -1222,7 +1223,7 @@ async fn category_shard_validates_browser_arguments_and_keeps_errors_out_of_the_
             &router,
             Request::builder()
                 .method(Method::POST)
-                .uri(format!("/_topcoat/runtime/shards/{shard}"))
+                .uri(shard_url)
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(topcoat::router::request::IDENTITY_HEADER, identity)
                 .body(Body::from(
@@ -1250,7 +1251,8 @@ async fn page_rerun_does_not_reuse_the_unfiltered_get_validator_after_rewrite() 
         &router,
         Request::builder()
             .method(Method::POST)
-            .uri("/_topcoat/runtime/pages/tech")
+            .uri("/tech")
+            .header(&topcoat::runtime::RUNTIME_HEADER, "true")
             .header(header::CONTENT_TYPE, "application/json")
             .header(header::IF_NONE_MATCH, &page.headers[header::ETAG])
             .body(Body::from(r#"{"signals":{}}"#))
@@ -1969,14 +1971,14 @@ async fn english_shard_keeps_labels_and_rejects_unsupported_locale() {
     .await;
     let (_, marker) = page.body.split_once("::topcoat::shard::start(").unwrap();
     let mut arguments = marker.split('"');
-    let shard = arguments.nth(1).unwrap();
+    let shard_url = arguments.nth(1).unwrap();
     let identity = arguments.nth(1).unwrap();
     for (locale, expected) in [("en", StatusCode::OK), ("fr", StatusCode::BAD_REQUEST)] {
         let result = response(
             &router,
             Request::builder()
                 .method(Method::POST)
-                .uri(format!("/_topcoat/runtime/shards/{shard}"))
+                .uri(shard_url)
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(topcoat::router::request::IDENTITY_HEADER, identity)
                 .body(Body::from(
@@ -2069,4 +2071,25 @@ async fn missing_content_assets_do_not_render_the_site_error_page() {
             .unwrap_or_default()
             .starts_with("text/html")
     );
+}
+
+#[tokio::test]
+async fn ordinary_post_is_not_a_page_rerun() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    for runtime_header in [None, Some("false")] {
+        let mut request = Request::builder()
+            .method(Method::POST)
+            .uri("/tech")
+            .header(header::CONTENT_TYPE, "application/json");
+        if let Some(value) = runtime_header {
+            request = request.header(&topcoat::runtime::RUNTIME_HEADER, value);
+        }
+        let result = response(
+            &router,
+            request.body(Body::from(r#"{"signals":{}}"#)).unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::METHOD_NOT_ALLOWED);
+        assert!(!result.headers.contains_key(header::ETAG));
+    }
 }

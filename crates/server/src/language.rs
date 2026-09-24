@@ -197,6 +197,7 @@ pub(crate) async fn language_switcher(
                 aria-label=(t(locale, Message::NavLanguage))
                 class="shrink-0 border-primary/30 bg-background/45 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)]"
             },
+            #[key(other.as_str())]
             for other in Locale::ALL {
                 if let Some(target) = destination(locales, path, other) {
                     toggle_link(

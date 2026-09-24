@@ -489,6 +489,7 @@ test("category filtering morphs only the list and preserves browser state", asyn
   const menu = page.locator('button[aria-controls="site-header-nav"]');
   await menu.click();
   const input = page.getByRole("searchbox", { name: "記事を絞り込む" });
+  await expect(input).toHaveAccessibleDescription("タイトル・説明・タグ");
   const results = page.getByRole("region", { name: "カテゴリの記事", exact: true });
   const status = results.getByRole("status");
   let documentRequests = 0;
@@ -501,7 +502,7 @@ test("category filtering morphs only the list and preserves browser state", asyn
 
   for (const query of [" e2e ARTICLE ", "fixture description", "RUST"]) {
     const rerender = page.waitForResponse((response) =>
-      response.request().method() === "POST" && response.url().includes("/_topcoat/runtime/shards/"),
+      response.request().method() === "POST" && response.url().includes("/_topcoat/shards/category-articles"),
     );
     await input.fill(query);
     const response = await rerender;

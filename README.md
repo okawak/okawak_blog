@@ -60,6 +60,8 @@ mise run export
 mise run dev-local
 ```
 
+`dev-local`はartifact生成後にTopcoatのホットリロードを起動します。Rust・styleの変更を自動反映し、対応する検索入力やメニューの状態を保ちます。公開Markdownの変更後はtaskを再起動してください。固定fixtureでUIだけを確認する場合は`mise run dev-fixture`（`http://127.0.0.1:8009/tech`）を使えます。
+
 `sync-obsidian`は現在または移動前のsubmoduleに未処理の作業がある可能性を検出すると停止します。翻訳候補の確認・手動修正・採用方法は[export README](./crates/export/README.md)を参照してください。
 
 通常の確認は次のtaskを使います。
