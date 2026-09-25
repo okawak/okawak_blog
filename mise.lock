@@ -25,5 +25,5 @@ checksum = "sha256:90987a3a16d7db556d886ac3d551e7b6d3edf0a1cf43acaed622e8676be1d
 url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-darwin-aarch64.zip"
 
 [[tools."cargo:topcoat-cli"]]
-version = "0.8.1"
+version = "0.9.0"
 backend = "cargo:topcoat-cli"

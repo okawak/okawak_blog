@@ -32,16 +32,22 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 
 routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`path_param!()`で宣言し、route moduleに`mod.rs`は使いません。
 
-Topcoat frameworkとCLIはworkspaceで同じversionに揃え、routerには`.runtime()`と`.discover_shards()`を登録します。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
+Topcoat frameworkとCLIはworkspaceで同じversionに揃え、shardは明示したendpointを`.route(category_articles)`で登録します。applicationのglobal layerを先に追加し、最後に`.runtime()`を登録して、application layerより前に再描画POSTをGETへrewriteします。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
 
-runtimeのpage再描画はPOSTをGETへ内部rewriteします。conditional GETでは`request::original_method(cx)`を参照し、再描画応答に通常pageのvalidatorを適用しません。
+runtimeのpage再描画はpage自身のURLに`X-Topcoat-Runtime: true`を付けてPOSTし、GETへ内部rewriteします。conditional GETでは`request::original_method(cx)`を参照し、再描画応答に通常pageのvalidatorを適用しません。
 
-カテゴリの記事絞り込みはshard内の`signal(cx, String::new)`とtracked readで構成します。タイトル・説明・タグを大文字小文字を区別せず部分一致で検索し、入力はサーバー側でも先頭100文字に制限します。カテゴリ引数も再描画時に検証します。ページと初期shardは`#[memoize]`で同じpage documentを共有し、再描画では`PageLoader`から再取得します。記事・sectionの安定したIDを使うDOM morphにより、入力フォーカスとshard外の状態を維持します。JavaScript無効時も初期HTMLの全記事とリンクを利用できます。
+カテゴリの記事絞り込みはshard内の`signal(cx, String::new)`とtracked readで構成します。タイトル・説明・タグを大文字小文字を区別せず部分一致で検索し、入力はサーバー側でも先頭100文字に制限します。`/_topcoat/shards/category-articles`へ渡すカテゴリ・言語引数も再描画時に検証します。固定の引数は通常の値で渡します。ページと初期shardは`#[memoize]`で同じpage documentを共有し、再描画では`PageLoader`から再取得します。記事・section・タグのloopには`#[key(...)]`で安定したidentityを与えます。DOMにも記事・sectionの安定したIDを付け、DOM morphにより、入力フォーカスとshard外の状態を維持します。JavaScript無効時も初期HTMLの全記事とリンクを利用できます。
 
-productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。公開linkは独自client routerを介さず、ブラウザ標準のfull-page navigationを使います。言語切替はTopcoat UIの`toggle_group`を使い、選択肢はscript不要の通常linkとして扱います。検索fieldは`label` / `input`、category・tag・countは`badge`、記事一覧は`card`、状態表示は`alert`で構成します。headerの操作とnavigation linkは`button`のstyleを共有し、GitHub linkは`tooltip`で補足します。mobile menuの状態管理はTopcoat runtimeのsignalとevent expressionで構成します。
+productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。公開linkは独自client routerを介さず、ブラウザ標準のfull-page navigationを使います。言語切替はTopcoat UIの`toggle_group`を使い、選択肢はscript不要の通常linkとして扱います。検索fieldは`field` / `field_label` / `field_description` / `input`を使い、入力と検索対象の説明を`aria-describedby`で関連付けます。category・tag・countは`badge`、記事一覧は`card`、状態表示は`alert`で構成します。headerの操作とnavigation linkは`button`のstyleを共有し、GitHub linkは`tooltip`で補足します。mobile menuの状態管理はTopcoat runtimeのsignalとevent expressionで構成します。
 
 GitHubアイコンはTopcoatのicon componentでinline SVGを描画し、icon fontや外部icon setの取得は行いません。リンクにaccessible nameを付け、装飾のSVGは支援技術から隠します。端末間の字体を揃えるNoto Sans JPはGoogle Fontsの可変ウェイト範囲`400..700`でCSSの重複を抑え、HTML headから直接参照します。`display=swap`でフォント取得中も本文を表示します。
 
 KaTeX、highlight.jsはversion固定のCDN資産として維持し、KaTeXにはSRIを付与します。数式・syntax highlight・fontは段階的な装飾であり、SSR本文とnavigationの基本機能は外部CDNの成功に依存しません。
 
 Sass、Stylance、CSS module、Node / BunによるCSS生成工程はありません。formatにはrepository rootの`mise run format`を使い、`cargo fmt`に加えて`topcoat fmt`で`view!` macroを整形します。buildには`mise run build-project`、確認には`mise run test-server`と`mise run test-e2e`を使います。
+
+## 開発時のホットリロード
+
+`mise run dev-local`、`mise run dev`、`mise run dev-fixture`は`topcoat dev`でRust・styleの変更を監視し、再buildとasset bundleの更新を行います。`dev-local`のpublishは起動前の1回だけです。公開Markdownを変更した場合はtaskを再起動してartifactを生成し直します。
+
+shellの`topcoat::dev::script()`は`topcoat dev`実行時だけ出力されます。再build後も、対応するform入力とidentityが一致するsignal（検索語・mobile menuの開閉）を保ちます。componentやsignalの呼出位置が変わると状態がリセットされることがあり、script・base URL・doctypeの変更はfull reloadになります。productionと通常E2Eは従来どおりbundle済みbinaryを直接起動します。

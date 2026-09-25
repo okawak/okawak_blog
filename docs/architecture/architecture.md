@@ -215,7 +215,7 @@ snapshot更新に失敗した場合、cache済みの直前のimmutable release�
 
 artifact-backedなGET / HEADはprocess instance、release identity、request URIからweak ETag、release生成時刻とprocess起動時刻からLast-Modifiedを作る。URIを含めて異なるrepresentationのvalidatorを分離し、process再起動でもvalidatorを変えてserver / UI更新後の古いrepresentationを再利用させない。If-None-MatchをIf-Modified-Sinceより優先し、resourceが存在する成功responseだけを304へ変換する。
 
-Topcoatの再描画はPOSTを内部でGETへ変換するため、cache対象のmethod判定にはoriginal methodを使う。local reader、legacy root、release prefixを直接読む公開前smoke、TTL=0、health / readiness、asset、404 / error responseにはartifact validatorを付けない。
+Topcoatのpage再描画はpage自身のURLにruntime header付きでPOSTし、runtime layerがapplication layerより前にGETへ変換するため、cache対象のmethod判定にはoriginal methodを使う。local reader、legacy root、release prefixを直接読む公開前smoke、TTL=0、health / readiness、asset、404 / error responseにはartifact validatorを付けない。
 
 /api/healthはprocess livenessだけ、/api/readyはconfigured readerからsnapshotとsite metadataを読めることを確認する。cache済みstale snapshotを配信できる場合はreadyとする。
 

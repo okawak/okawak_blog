@@ -333,6 +333,7 @@ window.okawakScheduleCodeHighlight = function(root) {
                 ></script>
                 <script>(code_highlight_script)</script>
                 topcoat::runtime::script()
+                topcoat::dev::script()
             </head>
             <body>
                 <div class="flex min-h-dvh flex-col text-foreground">

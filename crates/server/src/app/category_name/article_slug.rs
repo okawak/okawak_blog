@@ -158,6 +158,7 @@ async fn article_document(
                             class="m-0 flex list-none flex-wrap justify-center gap-2 p-0"
                             aria-label=(t(locale, Message::ArticleTags))
                         >
+                            #[key(tag)]
                             for tag in &tags {
                                 <li>
                                     badge(

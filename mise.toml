@@ -1,6 +1,6 @@
 [tools]
 bun = "1.4.2"
-"cargo:topcoat-cli" = "0.8.1"
+"cargo:topcoat-cli" = "0.9.0"
 
 [env]
 TOPCOAT_TAILWIND_VERSION = "4.3.3"
@@ -75,8 +75,7 @@ description = "Run the local Topcoat development server with S3 artifacts"
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "s3", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008", OKAWAK_BLOG_ADDR = "127.0.0.1:8008" }
 run = '''
 : "${OKAWAK_BLOG_ARTIFACT_BUCKET:?OKAWAK_BLOG_ARTIFACT_BUCKET is required}"
-topcoat asset bundle --package server --bin server
-./target/debug/server
+topcoat dev --package server --bin server
 '''
 
 [tasks.dev-local]
@@ -84,17 +83,14 @@ description = "Build checked-in public Markdown and preview the generated artifa
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008", OKAWAK_BLOG_ADDR = "127.0.0.1:8008" }
 run = '''
 cargo run -p publish
-topcoat asset bundle --package server --bin server
-./target/debug/server
+topcoat dev --package server --bin server
 '''
 
 [tasks.dev-fixture]
 description = "Run the Topcoat runtime with fixture artifacts"
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "e2e/fixtures/site", OKAWAK_BLOG_ADDR = "127.0.0.1:8009" }
 run = '''
-topcoat asset bundle --package server --bin server --release
-# Asset IDs are tied to the exact binary scanned by the bundler.
-./target/release/server
+topcoat dev --package server --bin server
 '''
 
 [tasks.clean-project]

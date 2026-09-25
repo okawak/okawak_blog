@@ -19,12 +19,12 @@ use crate::{
     components::{
         alert::{alert, alert_description},
         badge::{BadgeVariant, badge},
+        field::{field, field_description, field_label},
         input::input,
-        label::label,
     },
 };
 
-#[shard]
+#[shard("/_topcoat/shards/category-articles")]
 pub(crate) async fn category_articles(
     cx: &Cx,
     category: String,
@@ -61,19 +61,26 @@ pub(crate) async fn category_articles(
             aria-label=(t(locale, Message::CategoryArticles))
         >
             <div class="grid gap-3">
-                label(
-                    attrs: attributes! { for="category-article-query" },
-                    (t(locale, Message::FilterLabel))
-                )
-                input(
-                    attrs: attributes! {
-                        id="category-article-query"
-                        type="search"
-                        maxlength=(MAX_QUERY_CHARS)
-                        placeholder=(t(locale, Message::FilterPlaceholder))
-                        :value=$(query.get())
-                        @input=$(|event: Event| query.set(event.target.value))
-                    }
+                field(
+                    field_label(
+                        attrs: attributes! { for="category-article-query" },
+                        (t(locale, Message::FilterLabel))
+                    )
+                    input(
+                        attrs: attributes! {
+                            id="category-article-query"
+                            aria-describedby="category-filter-help"
+                            type="search"
+                            maxlength=(MAX_QUERY_CHARS)
+                            placeholder=(t(locale, Message::FilterPlaceholder))
+                            :value=$(query.get())
+                            @input=$(|event: Event| query.set(event.target.value))
+                        }
+                    )
+                    field_description(
+                        attrs: attributes! { id="category-filter-help" },
+                        (t(locale, Message::FilterPlaceholder))
+                    )
                 )
                 badge(
                     variant: BadgeVariant::Secondary,
@@ -84,6 +91,7 @@ pub(crate) async fn category_articles(
             if count == 0 {
                 alert(alert_description((t(locale, Message::EmptyMatches))))
             }
+            #[key(section.section_path.segments().join("/"))]
             for section in &document.sections {
                 <section
                     id=(format!(
@@ -100,6 +108,7 @@ pub(crate) async fn category_articles(
                         })
                     </h2>
                     <div class="grid gap-4">
+                        #[key(article.slug.as_str())]
                         for article in &section.articles {
                             article_card(
                                 article: article,

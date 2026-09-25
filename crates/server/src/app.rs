@@ -27,7 +27,7 @@ use topcoat::{
         page, request,
         response::{IntoResponse, Response},
     },
-    runtime::{RouterBuilderRuntimeExt, RouterBuilderShardExt},
+    runtime::RouterBuilderRuntimeExt,
     view::{Unescaped, View, ViewExt, attributes, class, component, view},
 };
 
@@ -106,8 +106,7 @@ fn render_unmatched_path<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFut
     Box::pin(async move {
         match next.run(cx, body).await {
             Err(error)
-                if error.downcast_ref::<NotFoundError>().is_some()
-                    && is_site_page_path(request::uri(cx).path()) =>
+                if error.is::<NotFoundError>() && is_site_page_path(request::uri(cx).path()) =>
             {
                 let canonical_path = request::uri(cx).path().to_string();
                 let page = view! { cx => not_found_page(canonical_path: canonical_path) }
@@ -190,13 +189,14 @@ pub fn create_router(
     assets: AssetConfig,
 ) -> Router {
     topcoat::router::module_router!()
-        .runtime()
-        .discover_shards()
+        .route(crate::category_articles::category_articles)
         .trailing_slash(TrailingSlash::Redirect)
         // The framework-neutral decision filters APIs, static assets, and unsuccessful responses.
         // One global layer also avoids nested prefix layers acquiring more than one snapshot.
         .layer(LayerFn::new(None::<&Path>, artifact_conditional_get))
         .layer(LayerFn::new(None::<&Path>, render_unmatched_path))
+        // Runtime reruns must become GETs before the application layers run.
+        .runtime()
         .app_context(ArtifactHttpCacheState::new(
             artifact_reader.clone(),
             validators_enabled,
@@ -308,6 +308,7 @@ async fn home_page_content(
                 }
                 <p class="m-0 text-lg leading-8">(page_description)</p>
                 <ul class="m-0 flex list-none flex-wrap gap-3 p-0">
+                    #[key(category.category.to_string())]
                     for category in &document.categories {
                         <li>
                             <a
@@ -331,6 +332,7 @@ async fn home_page_content(
                 class="grid content-start gap-4"
                 aria-label=(t(locale, Message::HomeRecent))
             >
+                #[key((article.category.to_string(), article.slug.as_str()))]
                 for article in &document.articles {
                     article_card(article: article, locale: locale, labels: &labels)
                 }

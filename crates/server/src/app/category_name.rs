@@ -112,7 +112,7 @@ async fn category_document(
                     (landing_html)
                 </section>
 
-                category_articles(category: $(category), locale: $(locale_arg))
+                category_articles(category: category, locale: locale_arg)
             </div>
         )
     })

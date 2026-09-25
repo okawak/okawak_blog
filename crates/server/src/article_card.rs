@@ -88,6 +88,7 @@ pub(crate) async fn article_card(
                                 class="m-0 flex list-none flex-wrap gap-2 p-0"
                                 aria-label=(t(locale, Message::ArticleTags))
                             >
+                                #[key(tag)]
                                 for tag in &article.tags {
                                     <li>
                                         badge(
