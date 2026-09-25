@@ -106,8 +106,7 @@ fn render_unmatched_path<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFut
     Box::pin(async move {
         match next.run(cx, body).await {
             Err(error)
-                if error.downcast_ref::<NotFoundError>().is_some()
-                    && is_site_page_path(request::uri(cx).path()) =>
+                if error.is::<NotFoundError>() && is_site_page_path(request::uri(cx).path()) =>
             {
                 let canonical_path = request::uri(cx).path().to_string();
                 let page = view! { cx => not_found_page(canonical_path: canonical_path) }
