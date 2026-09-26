@@ -3,13 +3,13 @@
 mod content;
 mod error;
 mod filesystem;
+mod operation;
 mod output;
-mod pipeline;
-mod source;
 mod translation;
+mod vault;
 
 pub use error::{ExportError, Result};
-pub use pipeline::{
+pub use operation::{
     accept_article_candidate, accept_catalog_candidate, export_content, translate_catalog,
 };
 pub use translation::{
