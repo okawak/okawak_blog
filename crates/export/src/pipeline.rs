@@ -5,26 +5,12 @@ use crate::{
 use domain::Locale;
 use std::{fs, path::Path};
 
-pub fn export_japanese(source: &Path, output: &Path) -> Result<()> {
-    export_with(source, output, |_| Ok(()))
-}
-
 pub fn export_translated(
     source: &Path,
     output: &Path,
     translator: &dyn crate::Translator,
     settings: &crate::TranslationSettings,
 ) -> Result<TranslationReport<ProtectedContent>> {
-    export_with(source, output, |stage| {
-        crate::translation::translate_stage(stage, output, translator, settings)
-    })
-}
-
-fn export_with<T>(
-    source: &Path,
-    output: &Path,
-    after_prepare: impl FnOnce(&Path) -> Result<T>,
-) -> Result<T> {
     if fs::symlink_metadata(source)?.file_type().is_symlink() {
         return Err(ExportError::invalid_input("symlink source is not allowed"));
     }
@@ -53,6 +39,6 @@ fn export_with<T>(
         let prepared = source::prepare(&source, &previous)?;
         output::reconcile(stage, &previous, &prepared.documents, &prepared.assets)?;
         output::sync_tags(stage)?;
-        after_prepare(stage)
+        crate::translation::translate_stage(stage, output, translator, settings)
     })
 }

@@ -191,9 +191,8 @@ fn tags_are_translated_once_per_id_and_removed_with_unpublished_sources() {
     for (name, date) in [("a", "2025-01-01"), ("b", "2025-01-02")] {
         fs::write(source.path().join(format!("tech/{name}.md")), format!("---\ntitle: {name}\ncategory: tech\nis_completed: true\ntags: [統計]\ncreated: '{date}T00:00:00+09:00'\nupdated: '{date}T00:00:00+09:00'\n---\n本文\n")).unwrap();
     }
-    export::export_japanese(source.path(), output.path()).unwrap();
     let fake = Fake(Cell::new(0));
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     assert_eq!(fake.0.get(), 3, "two articles and one shared tag");
     let path = output.path().join("tags.json");
     let mut catalog: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
@@ -206,7 +205,7 @@ fn tags_are_translated_once_per_id_and_removed_with_unpublished_sources() {
     assert_eq!(report.protected, [ProtectedContent::Tag("統計".into())]);
     assert_eq!(fake.0.get(), 4);
     fs::remove_dir_all(source.path().join("tech")).unwrap();
-    export::export_japanese(source.path(), output.path()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let catalog: LabelCatalog = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
     assert!(catalog.entries.is_empty());
     assert!(
@@ -226,10 +225,9 @@ fn blocked_tag_candidates_stop_before_translating_any_article() {
     let output = tempfile::tempdir().unwrap();
     fs::create_dir_all(source.path().join("tech")).unwrap();
     fs::write(source.path().join("tech/a.md"), "---\ntitle: Article\ncategory: tech\nis_completed: true\ntags: [統計]\ncreated: '2025-01-01T00:00:00+09:00'\nupdated: '2025-01-01T00:00:00+09:00'\n---\n本文\n").unwrap();
-    export::export_japanese(source.path(), output.path()).unwrap();
     let path = output.path().join("tags.json");
     let fake = Fake(Cell::new(0));
-    export::translate_catalog(&path, &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let mut catalog: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     let entry = catalog.entries.get_mut("統計").unwrap();
     entry.translation.as_mut().unwrap().value = "Manual statistics".into();
@@ -250,9 +248,25 @@ fn blocked_tag_candidates_stop_before_translating_any_article() {
     save(&path, &catalog);
     let before = fs::read(&path).unwrap();
     let candidate_before = fs::read(&candidate).unwrap();
-    assert!(export::translate_public(output.path(), &fake, &settings()).is_err());
-    assert_eq!(fake.0.get(), 2);
-    assert!(!output.path().join("en").exists());
+    let english = fs::read_dir(output.path().join("en"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let english_before = fs::read(&english).unwrap();
+    let calls = fake.0.get();
+    let note = source.path().join("tech/a.md");
+    fs::write(
+        &note,
+        fs::read_to_string(&note)
+            .unwrap()
+            .replace("本文", "更新した本文"),
+    )
+    .unwrap();
+    assert!(export::export_translated(source.path(), output.path(), &fake, &settings()).is_err());
+    assert_eq!(fake.0.get(), calls);
+    assert_eq!(fs::read(english).unwrap(), english_before);
     assert_eq!(fs::read(&path).unwrap(), before);
     assert_eq!(fs::read(&candidate).unwrap(), candidate_before);
 }

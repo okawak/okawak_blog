@@ -338,6 +338,33 @@ fn invalid_arguments_fail_before_any_export_or_translation() {
 }
 
 #[test]
+fn codex_failure_rolls_back_japanese_and_english_and_stops_before_ui_translation() {
+    let project = Project::new();
+    project.run(&[]);
+    let paths = [
+        format!("content/ja/{ARTICLE}.md"),
+        format!("content/en/{ARTICLE}.md"),
+        "content/tags.json".into(),
+        "crates/server/locales/ui.json".into(),
+    ];
+    let before: Vec<_> = paths
+        .iter()
+        .map(|path| fs::read(project.path(path)).unwrap())
+        .collect();
+    project.write_note("更新した本文");
+    fs::write(project.path("bin/codex"), "#!/bin/sh\nexit 23\n").unwrap();
+
+    let result = project.invoke(&[]);
+    assert!(!result.status.success());
+    for (path, expected) in paths.iter().zip(before) {
+        assert_eq!(fs::read(project.path(path)).unwrap(), expected, "{path}");
+    }
+    let logs = String::from_utf8(result.stderr).unwrap();
+    assert!(logs.contains("translation provider failed"));
+    assert!(!logs.contains("UI translation started"));
+}
+
+#[test]
 fn missing_private_input_does_not_fall_back_to_public_only_translation() {
     let project = Project::new();
     fs::rename(project.path("obsidian"), project.path("unavailable-vault")).unwrap();

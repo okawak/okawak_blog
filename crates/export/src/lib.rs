@@ -9,7 +9,7 @@ mod source;
 mod translation;
 
 pub use error::{ExportError, Result};
-pub use pipeline::{export_japanese, export_translated};
+pub use pipeline::export_translated;
 pub use translation::{
     CodexTranslator, ProtectedContent, Texts, TranslationReport, TranslationRequest,
     TranslationSettings, Translator, accept_catalog_translation, accept_translation,
