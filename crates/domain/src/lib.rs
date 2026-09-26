@@ -15,7 +15,7 @@ pub use artifact::{
 };
 pub use asset::ContentAssetName;
 pub use content::{ContentKind, Locale, PublicContentMeta, TranslationProvenance};
-pub use entities::{Category, PageKey, SectionPath, Slug, Timestamp, Title};
+pub use entities::{Category, PageKey, SectionPath, Sha256Digest, Slug, TagId, Timestamp, Title};
 pub use error::{DomainError, Result};
 pub use page::{
     ArticlePageDocument, CategoryPageDocument, CategorySectionGroup, HomeFragmentDocument,

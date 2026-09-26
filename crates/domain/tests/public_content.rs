@@ -38,8 +38,6 @@ fn public_contract_checks_schema_kind_and_provenance() {
     assert!(meta.validate().is_err());
     meta.kind = ContentKind::Home;
     meta.validate().unwrap();
-    meta.source_hash = "private/path.md".into();
-    assert!(meta.validate().is_err());
 }
 
 #[test]
@@ -47,6 +45,57 @@ fn unknown_frontmatter_is_not_part_of_the_public_contract() {
     let mut value = serde_json::to_value(metadata()).unwrap();
     value["private_notes"] = "secret".into();
     assert!(serde_json::from_value::<PublicContentMeta>(value).is_err());
+}
+
+#[test]
+fn invalid_field_values_are_rejected_during_deserialization() {
+    for (field, invalid) in [
+        ("title", serde_json::json!("   ")),
+        ("title", serde_json::json!("あ".repeat(201))),
+        ("created", serde_json::json!("2025-01-01")),
+        ("updated", serde_json::json!("2025-02-30T00:00:00+09:00")),
+        ("tags", serde_json::json!(["   "])),
+        ("tags", serde_json::json!(["tag\nname"])),
+        ("source_hash", serde_json::json!("private/path.md")),
+        ("section_path", serde_json::json!([".."])),
+        ("section_path", serde_json::json!(["rust/async"])),
+    ] {
+        let mut value = serde_json::to_value(metadata()).unwrap();
+        value[field] = invalid;
+        assert!(
+            serde_json::from_value::<PublicContentMeta>(value).is_err(),
+            "invalid {field} was accepted"
+        );
+    }
+}
+
+#[test]
+fn validated_fields_preserve_the_public_representation() {
+    let mut value = serde_json::to_value(metadata()).unwrap();
+    value["title"] = "  記事  ".into();
+    value["created"] = " 2025-01-01T00:00:00+09:00 ".into();
+    value["updated"] = "2025-01-02T03:04:05.123Z".into();
+    value["tags"] = serde_json::json!(["Rust", "日本語", " tag "]);
+    value["section_path"] = serde_json::json!(["rust", "非同期"]);
+    value["source_hash"] = "A".repeat(64).into();
+    let parsed: PublicContentMeta = serde_json::from_value(value.clone()).unwrap();
+    parsed.validate().unwrap();
+    assert_eq!(serde_json::to_value(parsed).unwrap(), value);
+}
+
+#[test]
+fn invalid_translation_hashes_are_rejected_during_deserialization() {
+    for field in ["input_hash", "generated_hash"] {
+        let mut value = serde_json::to_value(metadata()).unwrap();
+        value["locale"] = "en".into();
+        value["translation"] = serde_json::json!({
+            "input_hash": "b".repeat(64),
+            "generated_hash": "c".repeat(64),
+            "stale": false,
+        });
+        value["translation"][field] = "g".repeat(64).into();
+        assert!(serde_json::from_value::<PublicContentMeta>(value).is_err());
+    }
 }
 
 #[test]
@@ -60,8 +109,10 @@ fn translation_provenance_requires_an_explicit_stale_state() {
     assert!(serde_json::from_value::<PublicContentMeta>(value.clone()).is_err());
     for stale in [true, false] {
         value["translation"]["stale"] = stale.into();
-        let parsed = serde_json::from_value::<PublicContentMeta>(value.clone()).unwrap();
+        let mut parsed = serde_json::from_value::<PublicContentMeta>(value.clone()).unwrap();
         parsed.validate().unwrap();
-        assert_eq!(parsed.translation.unwrap().stale, stale);
+        assert_eq!(parsed.translation.as_ref().unwrap().stale, stale);
+        parsed.locale = Locale::Ja;
+        assert!(parsed.validate().is_err());
     }
 }

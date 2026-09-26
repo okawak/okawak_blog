@@ -1,13 +1,13 @@
 //! Versioned text-unit data shared by content producers and consumers.
-use crate::{DomainError, Locale, Result};
+use crate::{DomainError, Locale, Result, Sha256Digest};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct LabelProvenance {
-    pub input_hash: String,
-    pub generated_hash: String,
+    pub input_hash: Sha256Digest,
+    pub generated_hash: Sha256Digest,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -83,13 +83,7 @@ impl LabelCatalog {
                 return Err(DomainError::validation("label entry"));
             }
             if let Some(t) = &entry.translation
-                && (t.value.trim().is_empty()
-                    || t.value.contains(['\0', '\r'])
-                    || t.provenance.as_ref().is_some_and(|p| {
-                        [&p.input_hash, &p.generated_hash]
-                            .iter()
-                            .any(|s| s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit()))
-                    }))
+                && (t.value.trim().is_empty() || t.value.contains(['\0', '\r']))
             {
                 return Err(DomainError::validation("label translation"));
             }
@@ -145,6 +139,18 @@ mod tests {
             value["translation"]["stale"] = stale.into();
             let entry = serde_json::from_value::<LabelEntry>(value.clone()).unwrap();
             assert_eq!(entry.translation.unwrap().stale, stale);
+        }
+    }
+
+    #[test]
+    fn label_provenance_rejects_invalid_hashes_on_read() {
+        for field in ["input_hash", "generated_hash"] {
+            let mut value = serde_json::json!({
+                "input_hash": "a".repeat(64),
+                "generated_hash": "b".repeat(64),
+            });
+            value[field] = "invalid".into();
+            assert!(serde_json::from_value::<LabelProvenance>(value).is_err());
         }
     }
     #[test]

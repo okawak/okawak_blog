@@ -123,7 +123,11 @@ pub(crate) fn sync_tags(stage: &Path) -> Result<()> {
         .into_iter()
         .flat_map(|d| d.meta.tags)
         .collect::<BTreeSet<_>>();
-    if catalog.entries.keys().any(|key| !tags.contains(key)) {
+    if catalog
+        .entries
+        .keys()
+        .any(|key| !tags.contains(key.as_str()))
+    {
         let bytes = fs::read(&path)?;
         let archive = stage
             .join(".export-archive")
@@ -131,8 +135,9 @@ pub(crate) fn sync_tags(stage: &Path) -> Result<()> {
         fs::create_dir_all(archive.parent().unwrap())?;
         fs::write(archive, bytes)?;
     }
-    catalog.entries.retain(|key, _| tags.contains(key));
+    catalog.entries.retain(|key, _| tags.contains(key.as_str()));
     for tag in tags {
+        let tag = tag.to_string();
         catalog.entries.entry(tag.clone()).or_insert(LabelEntry {
             source: tag,
             context:

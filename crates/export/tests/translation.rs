@@ -79,8 +79,12 @@ fn translates_only_prose_and_reuses_unchanged_manual_edits() {
     assert_eq!(fs::read_to_string(path).unwrap(), manual);
 }
 
-#[test]
-fn changed_source_protects_manual_edits_and_candidate_requires_current_source() {
+#[rstest::rstest]
+#[case("Manual title")]
+#[case("  English 記事  ")]
+fn changed_source_protects_manual_edits_and_candidate_requires_current_source(
+    #[case] manual_title: &str,
+) {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
     let fake = Fake::new();
@@ -91,7 +95,7 @@ fn changed_source_protects_manual_edits_and_candidate_requires_current_source() 
         &path,
         fs::read_to_string(&path)
             .unwrap()
-            .replace("English 記事", "Manual title"),
+            .replace("title: English 記事", &format!("title: '{manual_title}'")),
     )
     .unwrap();
     write_note(source.path(), "更新した本文");
@@ -100,7 +104,7 @@ fn changed_source_protects_manual_edits_and_candidate_requires_current_source() 
     assert_eq!(report.protected, [ProtectedContent::Article(id.clone())]);
     assert_eq!(report.generated, 1);
     assert_eq!(fake.calls.get(), 2);
-    assert!(fs::read_to_string(&path).unwrap().contains("Manual title"));
+    assert!(fs::read_to_string(&path).unwrap().contains(manual_title));
     assert!(fs::read_to_string(&path).unwrap().contains("stale: true"));
     let calls = fake.calls.get();
     export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
@@ -130,6 +134,40 @@ fn code_only_update_reassembles_from_cached_translation_without_ai() {
             .unwrap()
             .contains("`new-code`")
     );
+}
+
+#[test]
+fn invalid_vault_metadata_stops_before_translation_and_preserves_both_locales() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let fake = Fake::new();
+    write_note(source.path(), "本文");
+    export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
+    let en = english(output.path());
+    let ja = output.path().join("ja").join(en.file_name().unwrap());
+    let before = (fs::read(&ja).unwrap(), fs::read(&en).unwrap());
+    let source_path = source.path().join("tech/a.md");
+    let original = fs::read_to_string(&source_path).unwrap();
+    for (from, to) in [
+        ("title: 記事", "title: '   '"),
+        (
+            "created: '2025-01-01T00:00:00+09:00'",
+            "created: '2025-01-01'",
+        ),
+        (
+            "updated: '2025-01-01T00:00:00+09:00'",
+            "updated: 'not-a-date'",
+        ),
+        ("category: tech", "category: tech\ntags: ['   ']"),
+    ] {
+        fs::write(&source_path, original.replace(from, to)).unwrap();
+        assert!(matches!(
+            export::export_content(source.path(), output.path(), &fake, &settings()),
+            Err(export::ExportError::Yaml(_))
+        ));
+        assert_eq!(fake.calls.get(), 1);
+        assert_eq!((fs::read(&ja).unwrap(), fs::read(&en).unwrap()), before);
+    }
 }
 
 #[test]
@@ -321,7 +359,7 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
     let actual = meta(&path);
     let mut expected = meta(&output.path().join("ja").join(path.file_name().unwrap()));
     expected.locale = domain::Locale::En;
-    expected.title = "Reviewed candidate title".into();
+    expected.title = "Reviewed candidate title".parse().unwrap();
     expected.translation = actual.translation.clone();
     assert_eq!(actual, expected);
     assert_eq!(actual.path(), format!("/en/daily/{id}"));
@@ -334,7 +372,7 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
     let report = export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
     // Both the accepted article and the tag translated during export are reused.
     assert_eq!(report.reused, 2);
-    assert_eq!(meta(&path).title, "Reviewed candidate title");
+    assert_eq!(meta(&path).title.as_str(), "Reviewed candidate title");
 }
 
 #[test]

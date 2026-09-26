@@ -3,7 +3,7 @@ mod identifiers;
 
 use crate::error::DomainError;
 pub use attributes::{Category, SectionPath, Timestamp, Title};
-pub use identifiers::{PageKey, Slug};
+pub use identifiers::{PageKey, Sha256Digest, Slug, TagId};
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use std::str::FromStr;
 

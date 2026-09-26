@@ -8,7 +8,9 @@
 - 記事だけが `tags` と `section_path` を持つ。`summary` と `priority` は任意。
 - `id` はURLに使える安定識別子。consumerは公開Markdownのpathや翻訳タイトルから再計算しない。
 - 翻訳追跡情報 `translation` は英語版だけに置き、`input_hash`、`generated_hash`、`stale` を持つ。digestはSHA-256の16進文字列。
-- 未知のキーはdeserializationで拒否する。既知フィールドの組合せ、schema、日時、タイトル、digestは `validate()` で検証する。
+- 未知のキーはdeserializationで拒否する。タイトルは`Title`、日時は`Timestamp`（RFC 3339）、タグIDは`TagId`、digestは`Sha256Digest`、セクションは`SectionPath`が生成時・deserialization時に検証する。schema versionとフィールド間の組合せは`validate()`で検証する。
+
+値型の導入でYAML / JSONの形は変わらない。タイトル・日時・タグID・digestは文字列、`section_path`は文字列配列として保存する。検証は元の表記を保持し、タイトル・日時の前後空白、タグIDやdigestの大文字小文字を自動で書き換えない。既存ID、辞書参照、翻訳fingerprintを維持するためである。
 
 `Locale::path()` は既存の日本語pathを保持し、英語には `/en` を付ける。artifact keyも日本語を保持し、英語に `en/` を付ける。未対応localeのparseは失敗する。UI側のfallbackはserverの責務である。
 

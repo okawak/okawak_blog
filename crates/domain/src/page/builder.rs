@@ -22,7 +22,11 @@ impl TryFrom<&ArticleSummaryDocument> for SiteArticleCard {
             category,
             section_path: summary.section_path,
             description: summary.description,
-            tags: summary.tags,
+            tags: summary
+                .tags
+                .into_iter()
+                .map(|tag| tag.to_string())
+                .collect(),
             priority: summary.priority,
             created_at: summary.created_at.to_string(),
             updated_at: summary.updated_at.to_string(),
@@ -169,7 +173,7 @@ mod tests {
             slug: "intro00000001".to_string(),
             title: "Intro".to_string(),
             category: "tech".to_string(),
-            section_path: SectionPath::new(vec!["block".to_string()]),
+            section_path: SectionPath::new(vec!["block".to_string()]).unwrap(),
             description: Some("summary".to_string()),
             tags: vec!["rust".to_string()],
             priority: Some(10),
@@ -347,13 +351,14 @@ mod tests {
             ArticleSummaryDocument {
                 slug: "alpha0000001".to_string(),
                 title: "Alpha".to_string(),
-                section_path: SectionPath::new(vec!["rust".to_string()]),
+                section_path: SectionPath::new(vec!["rust".to_string()]).unwrap(),
                 ..sample_summary()
             },
             ArticleSummaryDocument {
                 slug: "beta00000001".to_string(),
                 title: "Beta".to_string(),
-                section_path: SectionPath::new(vec!["rust".to_string(), "async".to_string()]),
+                section_path: SectionPath::new(vec!["rust".to_string(), "async".to_string()])
+                    .unwrap(),
                 ..sample_summary()
             },
             ArticleSummaryDocument {

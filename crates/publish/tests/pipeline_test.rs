@@ -54,10 +54,32 @@ async fn test_publish_requires_about_page() {
     assert!(!fixture.output_dir().exists());
 }
 
+#[rstest]
+#[case(false)]
+#[case(true)]
 #[tokio::test]
-async fn test_publish_writes_article_index_and_metadata() {
+async fn test_publish_writes_article_index_and_metadata(#[case] padded_metadata: bool) {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
+    if padded_metadata {
+        for (file, title) in [
+            ("tech-required-article.md", "Required Article"),
+            ("tech-category.md", "Tech"),
+        ] {
+            let path = fixture.content_dir().join("ja").join(file);
+            let text = fs::read_to_string(&path)
+                .unwrap()
+                .replace(
+                    &format!("title: \"{title}\""),
+                    &format!("title: \"  {title}  \""),
+                )
+                .replace(
+                    "\"2025-01-01T00:00:00+09:00\"",
+                    "\" 2025-01-01T00:00:00+09:00 \"",
+                );
+            fs::write(path, text).unwrap();
+        }
+    }
 
     publish(fixture.content_dir(), fixture.output_dir())
         .await
@@ -73,6 +95,18 @@ async fn test_publish_writes_article_index_and_metadata() {
     let article_index: ArticleIndexDocument = read_json(site_root.join("articles/index.json"));
     assert_eq!(article_index.articles.len(), 1);
     assert_eq!(article_index.articles[0].category, "tech");
+    assert_eq!(article_index.articles[0].title, "Required Article");
+    assert_eq!(
+        article_index.articles[0].created_at,
+        "2025-01-01T00:00:00+09:00"
+    );
+    assert_eq!(
+        article_index.articles[0].updated_at,
+        "2025-01-01T00:00:00+09:00"
+    );
+    let category: CategoryArtifactDocument = read_json(site_root.join("categories/tech.json"));
+    assert_eq!(category.title, "Tech");
+    assert_eq!(category.updated_at, "2025-01-01T00:00:00+09:00");
 
     let site_metadata: SiteMetadataDocument = read_json(site_root.join("metadata/site.json"));
     assert_eq!(site_metadata.total_articles, 1);

@@ -107,7 +107,7 @@ mod tests {
             category: Category::Tech,
             section_path: SectionPath::default(),
             description: Some("Artifact summary".to_string()),
-            tags: vec!["rust".to_string()],
+            tags: vec!["rust".parse().unwrap()],
             priority: Some(1),
             created_at: Timestamp::new("2025-01-01T00:00:00+09:00".to_string()).unwrap(),
             updated_at: Timestamp::new("2025-01-01T00:00:00+09:00".to_string()).unwrap(),

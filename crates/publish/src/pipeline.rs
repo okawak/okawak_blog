@@ -82,10 +82,10 @@ pub async fn publish_with_bookmark_enricher(
             .map(|id| {
                 let value = tag_catalog
                     .entries
-                    .get(id)
+                    .get(id.as_str())
                     .map(|entry| entry.value(locale))
-                    .unwrap_or(id);
-                (id.clone(), value.to_owned())
+                    .unwrap_or(id.as_str());
+                (id.to_string(), value.to_owned())
             })
             .collect();
         publish_locale(docs, &index, stage.path(), locale, Arc::clone(&enrich)).await?;

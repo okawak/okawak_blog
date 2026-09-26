@@ -81,7 +81,7 @@ mod tests {
             category,
             section_path: SectionPath::default(),
             description: Some(format!("{title} summary")),
-            tags: vec!["rust".to_string()],
+            tags: vec!["rust".parse().unwrap()],
             priority,
             created_at: Timestamp::new(created_at.to_string()).unwrap(),
             updated_at: Timestamp::new(created_at.to_string()).unwrap(),

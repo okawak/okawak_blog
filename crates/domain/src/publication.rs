@@ -1,4 +1,4 @@
-use crate::{Category, DomainError, Result, SectionPath, Slug, Timestamp, Title};
+use crate::{Category, DomainError, Result, SectionPath, Slug, TagId, Timestamp, Title};
 use std::cmp::Ordering;
 
 /// Metadata for a publishable article.
@@ -9,7 +9,7 @@ pub struct ArticleMeta {
     pub category: Category,
     pub section_path: SectionPath,
     pub description: Option<String>,
-    pub tags: Vec<String>,
+    pub tags: Vec<TagId>,
     pub priority: Option<i32>,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
@@ -54,7 +54,7 @@ pub struct PublishedArticleSummary {
     pub category: Category,
     pub section_path: SectionPath,
     pub description: Option<String>,
-    pub tags: Vec<String>,
+    pub tags: Vec<TagId>,
     pub priority: Option<i32>,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
@@ -240,7 +240,7 @@ mod tests {
             category,
             section_path: SectionPath::default(),
             description: Some(format!("{title} summary")),
-            tags: vec!["tag".to_string()],
+            tags: vec!["tag".parse().unwrap()],
             priority,
             created_at: Timestamp::new(created_at.to_string()).unwrap(),
             updated_at: Timestamp::new(created_at.to_string()).unwrap(),
