@@ -177,18 +177,80 @@ fn resolves_public_wikilinks_and_copies_only_referenced_images() {
     );
 }
 
-#[test]
-fn symlink_source_is_rejected() {
+#[rstest::rstest]
+#[case("tech/secret.md")]
+#[case("tech")]
+#[case("missing")]
+fn symlink_source_is_rejected(#[case] target: &str) {
     let source = TempDir::new().unwrap();
     let private = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
     note(private.path(), "tech/secret.md", "Secret", true, "SECRET");
-    std::os::unix::fs::symlink(
-        private.path().join("tech/secret.md"),
-        source.path().join("leak.md"),
-    )
-    .unwrap();
-    assert!(run_export(source.path(), output.path()).is_err());
+    std::os::unix::fs::symlink(private.path().join(target), source.path().join("leak.md")).unwrap();
+    assert!(matches!(
+        run_export(source.path(), output.path()),
+        Err(export::ExportError::InvalidInput(_))
+    ));
+}
+
+#[test]
+fn symlink_output_root_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let source = tmp.path().join("source");
+    let target = tmp.path().join("target");
+    let output = tmp.path().join("content");
+    note(&source, "tech/article.md", "Article", true, "Public body");
+    fs::create_dir(&target).unwrap();
+    fs::write(target.join("keep.txt"), "Keep this").unwrap();
+    std::os::unix::fs::symlink(&target, &output).unwrap();
+
+    assert!(matches!(
+        run_export(&source, &output),
+        Err(export::ExportError::InvalidInput(_))
+    ));
+    assert!(output.is_symlink());
+    assert_eq!(
+        fs::read_to_string(target.join("keep.txt")).unwrap(),
+        "Keep this"
+    );
+}
+
+#[test]
+fn hidden_source_entries_are_skipped_without_applying_ignore_files() {
+    let tmp = TempDir::new().unwrap();
+    let source = tmp.path().join(".source");
+    let output = tmp.path().join("content");
+    note(&source, "tech/article.md", "Article", true, "Public body");
+    note(&source, ".hidden.md", "Hidden", true, "Hidden body");
+    note(
+        &source,
+        ".hidden/note.md",
+        "Hidden note",
+        true,
+        "Hidden body",
+    );
+    fs::write(source.join(".ignore"), "tech/\n").unwrap();
+    fs::write(source.join(".gitignore"), "tech/\n").unwrap();
+    fs::create_dir(source.join(".git")).unwrap();
+
+    run_export(&source, &output).unwrap();
+    let actual = outputs(&output);
+    assert_eq!(actual.len(), 1);
+    assert!(actual[0].contains("Public body"));
+    assert!(!actual[0].contains("Hidden body"));
+}
+
+#[test]
+fn regular_file_source_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let source = tmp.path().join("source.md");
+    fs::write(&source, "not a directory").unwrap();
+
+    assert!(matches!(
+        run_export(&source, &tmp.path().join("content")),
+        Err(export::ExportError::Io(error))
+            if error.kind() == std::io::ErrorKind::NotADirectory
+    ));
 }
 
 #[test]
