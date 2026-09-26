@@ -1,11 +1,20 @@
-//! Shared translation unit and manual-edit guard, independent of articles and UI.
+//! Translation requests and validation shared by articles and catalogs.
+mod articles;
+mod cache;
+mod catalog;
+mod codex;
+mod fragments;
+mod plan;
+
+pub(crate) use articles::translate_stage;
+pub use articles::{accept_translation, translate_public};
+pub use catalog::{accept_catalog_translation, translate_catalog};
+pub use codex::CodexTranslator;
+
 use crate::{ExportError, Result};
-use domain::placeholders;
+use domain::{Slug, placeholders};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
+use std::collections::BTreeMap;
 
 pub type Texts = BTreeMap<String, String>;
 
@@ -31,50 +40,6 @@ pub trait Translator {
     fn translate(&self, request: &TranslationRequest) -> Result<Texts>;
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Decision {
-    Reuse,
-    Generate,
-    Protect,
-}
-
-impl Decision {
-    pub(crate) fn action(&self, candidate: Option<&Self>) -> &'static str {
-        match self {
-            Self::Reuse => "reuse",
-            Self::Generate => "generate",
-            Self::Protect if candidate == Some(&Self::Reuse) => "reuse candidate",
-            Self::Protect => "generate candidate",
-        }
-    }
-
-    fn requires_response(&self, candidate: Option<&Self>) -> bool {
-        !matches!(self, Self::Reuse) && candidate != Some(&Self::Reuse)
-    }
-}
-
-pub(crate) fn will_call_translator(
-    decision: &Decision,
-    candidate: Option<&Decision>,
-    request: &TranslationRequest,
-    root: &Path,
-) -> Result<bool> {
-    Ok(decision.requires_response(candidate) && !response_cache_path(request, root)?.exists())
-}
-
-pub(crate) fn decide(
-    input: &str,
-    current: Option<&str>,
-    provenance: Option<(&str, &str)>,
-) -> Decision {
-    match (current, provenance) {
-        (None, _) => Decision::Generate,
-        (Some(_), Some((previous_input, _))) if previous_input == input => Decision::Reuse,
-        (Some(hash), Some((_, generated_hash))) if generated_hash == hash => Decision::Generate,
-        _ => Decision::Protect,
-    }
-}
-
 impl TranslationRequest {
     pub(crate) fn new(texts: Texts, context: String, settings: &TranslationSettings) -> Self {
         let glossary = settings
@@ -95,7 +60,7 @@ impl TranslationRequest {
     }
 
     pub(crate) fn fingerprint(&self) -> Result<String> {
-        Ok(crate::vault::digest(serde_json::to_vec(&(
+        Ok(crate::content::digest(serde_json::to_vec(&(
             "text-fragments-v3",
             self,
         ))?))
@@ -138,51 +103,27 @@ impl TranslationRequest {
     }
 }
 
-pub(crate) fn cached_response(
-    request: &TranslationRequest,
-    translator: &dyn Translator,
-    root: &Path,
-) -> Result<Texts> {
-    use std::{fs, io::Write};
-    let cache = response_cache_path(request, root)?;
-    let result = if cache.exists() {
-        tracing::info!(
-            text_count = request.texts.len(),
-            "cached AI translation reused"
-        );
-        serde_json::from_slice(&fs::read(&cache)?)?
-    } else {
-        let result = translator.translate(request)?;
-        request.validate(&result)?;
-        fs::create_dir_all(cache.parent().unwrap())?;
-        let mut temporary = tempfile::NamedTempFile::new_in(cache.parent().unwrap())?;
-        temporary.write_all(&serde_json::to_vec_pretty(&result)?)?;
-        temporary.persist(cache)?;
-        result
-    };
-    request.validate(&result)?;
-    Ok(result)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProtectedContent {
+    Article(Slug),
+    Tag(String),
 }
 
-fn response_cache_path(request: &TranslationRequest, root: &Path) -> Result<PathBuf> {
-    Ok(root
-        .join(".export-candidates/cache")
-        .join(format!("{}.json", request.fingerprint()?)))
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TranslationReport<T> {
+    pub generated: usize,
+    pub reused: usize,
+    pub protected: Vec<T>,
 }
 
-pub(crate) fn copy_cache(root: &std::path::Path, stage: &std::path::Path) -> Result<()> {
-    use std::fs;
-    let cache = root.join(".export-candidates/cache");
-    if cache.exists() {
-        for file in crate::markdown::all_files(&cache)? {
-            let dest = stage
-                .join(".export-candidates/cache")
-                .join(file.file_name().unwrap());
-            fs::create_dir_all(dest.parent().unwrap())?;
-            fs::copy(file, dest)?;
+impl<T> Default for TranslationReport<T> {
+    fn default() -> Self {
+        Self {
+            generated: 0,
+            reused: 0,
+            protected: Vec::new(),
         }
     }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -195,53 +136,6 @@ mod tests {
             instruction: "translate".into(),
             glossary,
         }
-    }
-
-    #[test]
-    fn guard_preserves_manual_edits_even_when_input_is_unchanged() {
-        let provenance = ("old-input", "machine");
-        assert_eq!(
-            decide("old-input", Some("manual"), Some(provenance)),
-            Decision::Reuse
-        );
-        assert_eq!(
-            decide("new-input", Some("manual"), Some(provenance)),
-            Decision::Protect
-        );
-        assert_eq!(
-            decide("new-input", Some("machine"), Some(provenance)),
-            Decision::Generate
-        );
-        assert_eq!(decide("new-input", Some("manual"), None), Decision::Protect);
-        assert_eq!(decide("new-input", None, None), Decision::Generate);
-    }
-
-    #[test]
-    fn progress_action_describes_each_decision() {
-        assert_eq!(Decision::Reuse.action(None), "reuse");
-        assert_eq!(Decision::Generate.action(None), "generate");
-        assert_eq!(Decision::Protect.action(None), "generate candidate");
-        assert_eq!(
-            Decision::Protect.action(Some(&Decision::Reuse)),
-            "reuse candidate"
-        );
-    }
-
-    #[test]
-    fn progress_ai_count_excludes_reuse_and_cached_responses() {
-        let root = tempfile::TempDir::new().unwrap();
-        let request = TranslationRequest::new(
-            Texts::from([("text".into(), "文章".into())]),
-            "test".into(),
-            &settings(Texts::new()),
-        );
-        assert!(!will_call_translator(&Decision::Reuse, None, &request, root.path()).unwrap());
-        assert!(will_call_translator(&Decision::Generate, None, &request, root.path()).unwrap());
-
-        let cache = response_cache_path(&request, root.path()).unwrap();
-        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-        std::fs::write(cache, "{}").unwrap();
-        assert!(!will_call_translator(&Decision::Generate, None, &request, root.path()).unwrap());
     }
 
     #[test]
