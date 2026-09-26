@@ -142,3 +142,82 @@ pub(crate) fn parent(path: &Path) -> &Path {
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn leftover_backup_stops_before_build_and_releases_lock() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("content");
+        let backup = tmp.path().join(".content.export-backup");
+        fs::create_dir(&backup).unwrap();
+        fs::write(backup.join("file.txt"), "recover this").unwrap();
+
+        let result = locked(&output, || -> Result<()> {
+            panic!("build must not run while a backup exists");
+        });
+
+        assert!(matches!(result, Err(ExportError::InvalidInput(_))));
+        assert_eq!(
+            fs::read_to_string(backup.join("file.txt")).unwrap(),
+            "recover this"
+        );
+        assert!(!output.exists());
+        assert!(!tmp.path().join(".content.export-lock").exists());
+    }
+
+    #[test]
+    fn failed_build_preserves_output_and_removes_stage_and_lock() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("content");
+        fs::create_dir(&output).unwrap();
+        fs::write(output.join("file.txt"), "original").unwrap();
+        let mut stage_path = None;
+
+        let result: Result<()> = transaction(&output, |stage| {
+            stage_path = Some(stage.to_path_buf());
+            assert!(tmp.path().join(".content.export-lock").exists());
+            fs::write(stage.join("file.txt"), "changed")?;
+            fs::write(stage.join("new.txt"), "uncommitted")?;
+            Err(ExportError::invalid_input("build failed"))
+        });
+
+        assert!(matches!(result, Err(ExportError::InvalidInput(_))));
+        assert_eq!(
+            fs::read_to_string(output.join("file.txt")).unwrap(),
+            "original"
+        );
+        assert!(!output.join("new.txt").exists());
+        assert!(!stage_path.unwrap().exists());
+        assert!(!tmp.path().join(".content.export-lock").exists());
+        assert!(!tmp.path().join(".content.export-backup").exists());
+    }
+
+    #[test]
+    fn unchanged_files_keep_original_mtime_and_remove_stage_and_lock() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("content");
+        fs::create_dir(&output).unwrap();
+        let file = output.join("file.txt");
+        fs::write(&file, "unchanged").unwrap();
+        let modified = fs::metadata(&file).unwrap().modified().unwrap();
+
+        let stage = transaction(&output, |stage| {
+            fs::File::options()
+                .write(true)
+                .open(stage.join("file.txt"))?
+                .set_modified(modified + Duration::from_secs(60))?;
+            Ok(stage.to_path_buf())
+        })
+        .unwrap();
+
+        assert_eq!(fs::read_to_string(&file).unwrap(), "unchanged");
+        assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), modified);
+        assert!(!stage.exists());
+        assert!(!tmp.path().join(".content.export-lock").exists());
+        assert!(!tmp.path().join(".content.export-backup").exists());
+    }
+}
