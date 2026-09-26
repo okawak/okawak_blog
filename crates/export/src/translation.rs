@@ -6,9 +6,8 @@ mod codex;
 mod fragments;
 mod plan;
 
-pub(crate) use articles::translate_stage;
-pub use articles::{accept_translation, translate_public};
-pub use catalog::{accept_catalog_translation, translate_catalog};
+pub(crate) use articles::{accept_article_candidate, translate_stage};
+pub(crate) use catalog::{accept_catalog_candidate, plan_catalog};
 pub use codex::CodexTranslator;
 
 use crate::{ExportError, Result};

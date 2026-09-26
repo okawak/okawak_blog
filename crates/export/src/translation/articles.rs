@@ -7,7 +7,7 @@ use super::{
 use crate::{
     ExportError, Result,
     content::{Document, digest, text_hash},
-    filesystem, output,
+    output,
 };
 use domain::{Locale, Slug, TranslationProvenance};
 use std::{fs, path::Path};
@@ -19,17 +19,6 @@ struct ArticlePlan<'a> {
     request: TranslationRequest,
     input: String,
     update: UpdatePlan,
-}
-
-pub fn translate_public(
-    output: &Path,
-    translator: &dyn Translator,
-    settings: &TranslationSettings,
-) -> Result<TranslationReport<ProtectedContent>> {
-    filesystem::transaction(output, |stage| {
-        output::sync_tags(stage)?;
-        translate_stage(stage, output, translator, settings)
-    })
 }
 
 pub(crate) fn translate_stage(
@@ -202,37 +191,39 @@ impl Translator for ArticleTranslator<'_> {
     }
 }
 
-pub fn accept_translation(output: &Path, id: &Slug, settings: &TranslationSettings) -> Result<()> {
-    filesystem::transaction(output, |stage| {
-        let original = Document::parse(&fs::read_to_string(stage.join(format!("ja/{id}.md")))?)?;
-        let candidate_path = stage.join(format!(".export-candidates/{id}.md"));
-        let mut candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
-        let fragments = Fragments::extract(&original);
-        let request = article_request(fragments.texts, settings);
-        let provenance = candidate
-            .meta
-            .translation
-            .as_ref()
-            .ok_or_else(|| ExportError::translation_conflict("candidate has no provenance"))?;
-        if original.meta.id != *id
-            || original.meta.locale != Locale::Ja
-            || candidate.meta.id != *id
-            || candidate.meta.locale != Locale::En
-            || provenance.stale
-            || provenance.input_hash != content_input(&request, &original)?
-        {
-            return Err(ExportError::translation_conflict(
-                "candidate no longer matches current source/settings",
-            ));
-        }
-        // Candidate prose may have been reviewed manually while management
-        // fields changed in Japanese. Those fields always come from the source.
-        candidate.refresh_translation_metadata(&original);
-        fs::create_dir_all(stage.join("en"))?;
-        fs::write(stage.join(format!("en/{id}.md")), candidate.encode()?)?;
-        fs::remove_file(candidate_path)?;
-        Ok(())
-    })
+pub(crate) fn accept_article_candidate(
+    stage: &Path,
+    id: &Slug,
+    settings: &TranslationSettings,
+) -> Result<()> {
+    let original = Document::parse(&fs::read_to_string(stage.join(format!("ja/{id}.md")))?)?;
+    let candidate_path = stage.join(format!(".export-candidates/{id}.md"));
+    let mut candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
+    let fragments = Fragments::extract(&original);
+    let request = article_request(fragments.texts, settings);
+    let provenance = candidate
+        .meta
+        .translation
+        .as_ref()
+        .ok_or_else(|| ExportError::translation_conflict("candidate has no provenance"))?;
+    if original.meta.id != *id
+        || original.meta.locale != Locale::Ja
+        || candidate.meta.id != *id
+        || candidate.meta.locale != Locale::En
+        || provenance.stale
+        || provenance.input_hash != content_input(&request, &original)?
+    {
+        return Err(ExportError::translation_conflict(
+            "candidate no longer matches current source/settings",
+        ));
+    }
+    // Candidate prose may have been reviewed manually while management
+    // fields changed in Japanese. Those fields always come from the source.
+    candidate.refresh_translation_metadata(&original);
+    fs::create_dir_all(stage.join("en"))?;
+    fs::write(stage.join(format!("en/{id}.md")), candidate.encode()?)?;
+    fs::remove_file(candidate_path)?;
+    Ok(())
 }
 
 fn content_input(request: &TranslationRequest, original: &Document) -> Result<String> {

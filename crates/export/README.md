@@ -176,10 +176,10 @@ UI・タグの候補自体にも同じ手動編集保護を適用する。同じ
 
 | Module | 責務 |
 | --- | --- |
-| `pipeline` | 抽出・出力同期・翻訳の処理順と、記事・タグのtransaction境界 |
+| `pipeline` | export・辞書翻訳・候補採用の各操作の入口、処理順、lock・transaction境界 |
 | `source` / `source::normalize` | 公開対象と安定IDの決定、公開ノート参照・画像・本文の正規化 |
-| `translation` | 共通の翻訳要求・検証・結果型と、翻訳・候補採用の入口 |
-| `translation::articles` / `catalog` | 記事／辞書固有の計画作成、翻訳結果の反映と候補採用 |
+| `translation` | 共通の翻訳要求・検証・結果型と、翻訳・候補処理の内部API |
+| `translation::articles` / `catalog` | 記事／辞書固有の計画作成、翻訳の生成・反映、候補の検証・反映 |
 | `translation::plan` | 現在の訳と候補から、再利用・生成・候補生成・候補再利用を決める純粋な判定 |
 | `translation::fragments` / `cache` / `codex` | 文章抽出・再構築、検証済み応答の保存、Codexプロセス実行 |
 | `output` | 公開Markdown・辞書のI/O、削除記事の退避、metadata・asset・タグの同期 |
