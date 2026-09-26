@@ -7,18 +7,13 @@ use crate::{
 use pulldown_cmark::{Event, LinkType, Parser, Tag};
 use std::{
     collections::BTreeMap,
-    fs,
     path::{Component, Path},
 };
 
-pub(super) fn normalize(
-    sources: &mut [VaultNote],
-    root: &Path,
-) -> Result<BTreeMap<String, Vec<u8>>> {
-    let index = NoteIndex::new(sources);
-    let mut assets = Assets::new(root)?;
-    for source in sources {
-        let body = &source.document.body;
+pub(super) fn normalize(notes: &mut [VaultNote]) -> Result<()> {
+    let index = NoteIndex::new(notes);
+    for note in notes {
+        let body = &note.document.body;
         let mut edits = Vec::new();
         let mut heading_counts = BTreeMap::<String, usize>::new();
         for (event, range) in Parser::new_ext(body, options()).into_offset_iter() {
@@ -40,9 +35,8 @@ pub(super) fn normalize(
                         link_type,
                         &dest_url,
                         &title,
-                        &source.key,
+                        &note.key,
                         &index,
-                        &mut assets,
                     )? {
                         edits.push((range, link));
                     }
@@ -70,16 +64,9 @@ pub(super) fn normalize(
                 _ => {}
             }
         }
-        source.document.body = apply_edits(body, edits)?;
+        note.document.body = apply_edits(body, edits)?;
     }
-    Ok(assets.contents)
-}
-
-fn image_extension(path: &Path) -> Option<String> {
-    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
-    ["png", "jpg", "jpeg", "gif", "webp", "avif"]
-        .contains(&extension.as_str())
-        .then_some(extension)
+    Ok(())
 }
 
 fn escape_unescaped_brackets(label: &str) -> String {
@@ -183,24 +170,24 @@ struct NoteIndex {
 }
 
 impl NoteIndex {
-    fn new(sources: &[VaultNote]) -> Self {
-        let notes = sources
+    fn new(notes: &[VaultNote]) -> Self {
+        let notes = notes
             .iter()
-            .map(|s| {
+            .map(|note| {
                 let mut headings = BTreeMap::<String, usize>::new();
                 for (event, range) in
-                    Parser::new_ext(&s.document.body, options()).into_offset_iter()
+                    Parser::new_ext(&note.document.body, options()).into_offset_iter()
                 {
                     if matches!(event, Event::Start(Tag::Heading { .. })) {
                         *headings
-                            .entry(heading_text(&s.document.body[range]))
+                            .entry(heading_text(&note.document.body[range]))
                             .or_default() += 1;
                     }
                 }
                 Note {
-                    key: s.key.clone(),
-                    id: s.document.meta.id.to_string(),
-                    title: s.document.meta.title.to_string(),
+                    key: note.key.clone(),
+                    id: note.document.meta.id.to_string(),
+                    title: note.document.meta.title.to_string(),
                     headings,
                 }
             })
@@ -249,60 +236,6 @@ impl NoteIndex {
     }
 }
 
-struct Assets<'a> {
-    root: &'a Path,
-    files: Vec<std::path::PathBuf>,
-    contents: BTreeMap<String, Vec<u8>>,
-}
-
-impl<'a> Assets<'a> {
-    fn new(root: &'a Path) -> Result<Self> {
-        Ok(Self {
-            root,
-            files: crate::filesystem::files(root)?,
-            contents: BTreeMap::new(),
-        })
-    }
-
-    // An explicit Markdown image names a file, even when image.png.md also exists.
-    fn has_image(&self, source_key: &str, target: &str) -> Result<bool> {
-        Ok(image_extension(Path::new(target)).is_some()
-            && self
-                .root
-                .join(resolve_relative(source_key, target)?)
-                .is_file())
-    }
-
-    fn resolve(&mut self, source_key: &str, target: &str, wiki: bool) -> Result<String> {
-        let relative = resolve_relative(source_key, target)?;
-        let matches: Vec<_> = self
-            .files
-            .iter()
-            .filter(|p| {
-                let key = p.strip_prefix(self.root).unwrap().to_string_lossy();
-                key == relative
-                    || (wiki
-                        && (key == target
-                            || p.file_name().and_then(|p| p.to_str()) == Some(target)))
-            })
-            .collect();
-        let [path] = matches.as_slice() else {
-            return Err(ExportError::invalid_input(
-                "missing or ambiguous public image",
-            ));
-        };
-        let Some(extension) = image_extension(path) else {
-            return Err(ExportError::invalid_input(
-                "unsupported public image format",
-            ));
-        };
-        let data = fs::read(path)?;
-        let name = format!("{}.{}", digest(&data), extension);
-        self.contents.insert(name.clone(), data);
-        Ok(format!("/content-assets/{name}"))
-    }
-}
-
 fn rewrite_link(
     raw: &str,
     link_type: LinkType,
@@ -310,12 +243,16 @@ fn rewrite_link(
     title: &str,
     source_key: &str,
     index: &NoteIndex,
-    assets: &mut Assets<'_>,
 ) -> Result<Option<String>> {
     let image = raw.starts_with('!');
     let wiki = matches!(link_type, LinkType::WikiLink { .. });
     let target = destination.trim().trim_end_matches('\\');
-    if !wiki && (external(target) || matches!(link_type, LinkType::Email)) {
+    let is_external = if image {
+        target.starts_with("https://") || target.starts_with("http://")
+    } else {
+        external(target) || matches!(link_type, LinkType::Email)
+    };
+    if !wiki && is_external {
         if matches!(
             link_type,
             LinkType::Reference | LinkType::Collapsed | LinkType::Shortcut
@@ -338,54 +275,48 @@ fn rewrite_link(
     let (target, anchor) = parse_target(target, wiki)?;
     let target = target.as_str();
     let anchor = anchor.as_deref();
-    let note = if image && !wiki && assets.has_image(source_key, target)? {
-        None
-    } else {
-        index.resolve(source_key, target, wiki)?
-    };
-    let mut default_label = String::new();
-    let href = match note {
-        Some(note) => {
-            default_label = note.title.clone();
-            if let Some(anchor) = anchor
-                && note.headings.get(anchor) != Some(&1)
-            {
-                return Err(ExportError::invalid_input(
-                    "missing or ambiguous public heading reference",
-                ));
-            }
-            let anchor = anchor
-                .map(|a| format!("#section-{}", &digest(a).as_str()[..12]))
-                .unwrap_or_default();
-            format!("content:{}{anchor}", note.id)
-        }
-        None if image && anchor.is_none() => assets.resolve(source_key, target, wiki)?,
-        None => {
-            return Err(ExportError::invalid_input(
-                "missing, non-public or ambiguous note reference",
-            ));
-        }
-    };
+    // Markdown note embeds must name a .md file; image.png must not resolve to image.png.md.
+    if image
+        && !wiki
+        && !Path::new(target)
+            .extension()
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s.eq_ignore_ascii_case("md"))
+    {
+        return Err(ExportError::invalid_input(
+            "local images are not supported; use an HTTP(S) URL uploaded with S3 Image Uploader",
+        ));
+    }
+    let note = index.resolve(source_key, target, wiki)?.ok_or_else(|| {
+        ExportError::invalid_input(if image {
+            "unresolved public note embed; for images, use an HTTP(S) URL uploaded with S3 Image Uploader"
+        } else {
+            "missing, non-public or ambiguous note reference"
+        })
+    })?;
+    if let Some(anchor) = anchor
+        && note.headings.get(anchor) != Some(&1)
+    {
+        return Err(ExportError::invalid_input(
+            "missing or ambiguous public heading reference",
+        ));
+    }
+    let anchor = anchor
+        .map(|a| format!("#section-{}", &digest(a).as_str()[..12]))
+        .unwrap_or_default();
+    let href = format!("content:{}{anchor}", note.id);
     let label = if wiki {
         let inner = raw
             .trim_start_matches('!')
             .trim_start_matches("[[")
             .strip_suffix("]]")
             .unwrap_or_default();
-        let alias = inner
-            .split_once('|')
-            .map(|(_, l)| l)
-            .unwrap_or(&default_label);
+        let alias = inner.split_once('|').map(|(_, l)| l).unwrap_or(&note.title);
         escape_unescaped_brackets(alias)
     } else {
         markdown_label(raw, image)?.to_owned()
     };
-    let marker = if image && href.starts_with("/content-assets/") {
-        "!"
-    } else {
-        ""
-    };
-    Ok(Some(format!("{marker}[{label}]({href})")))
+    Ok(Some(format!("[{label}]({href})")))
 }
 
 fn parse_target(target: &str, wiki: bool) -> Result<(String, Option<String>)> {
@@ -421,7 +352,7 @@ fn validate_html(html: &str) -> Result<()> {
                 || ["srcset", "style"].contains(&name)
             {
                 return Err(ExportError::invalid_input(
-                    "raw HTML local references must use Markdown links/images before export",
+                    "raw HTML local references are not supported; use public Markdown note links or HTTP(S) image URLs",
                 ));
             }
         }

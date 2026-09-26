@@ -2,7 +2,7 @@
 use crate::{ExportError, Result, content::Document, filesystem};
 use domain::{LabelCatalog, LabelEntry, Locale, Slug};
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeSet, HashSet},
     fs,
     io::Write,
     path::Path,
@@ -30,17 +30,11 @@ pub(crate) fn read_locale(root: &Path, locale: domain::Locale) -> Result<Vec<Doc
         .collect()
 }
 
-pub(crate) fn reconcile(
-    stage: &Path,
-    previous: &[Document],
-    documents: &[Document],
-    assets: &BTreeMap<String, Vec<u8>>,
-) -> Result<()> {
+pub(crate) fn reconcile(stage: &Path, previous: &[Document], documents: &[Document]) -> Result<()> {
     let ids = documents.iter().map(|d| d.meta.id.clone()).collect();
     fs::create_dir_all(stage.join("ja"))?;
     archive_removed(stage, &ids)?;
-    sync_documents(stage, previous, documents)?;
-    sync_assets(stage, assets)
+    sync_documents(stage, previous, documents)
 }
 
 fn archive_removed(stage: &Path, ids: &HashSet<Slug>) -> Result<()> {
@@ -85,29 +79,6 @@ fn sync_documents(stage: &Path, previous: &[Document], documents: &[Document]) -
             stage.join(format!("ja/{}.md", document.meta.id)),
             document.encode()?,
         )?;
-    }
-    Ok(())
-}
-
-fn sync_assets(stage: &Path, assets: &BTreeMap<String, Vec<u8>>) -> Result<()> {
-    fs::create_dir_all(stage.join("assets"))?;
-    let managed_names: HashSet<_> = assets.keys().cloned().collect();
-    let existing_english = read_locale(stage, Locale::En)?;
-    for path in filesystem::files(&stage.join("assets"))? {
-        let name = path.file_name().unwrap().to_string_lossy();
-        let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-        if stem.len() == 64
-            && stem.bytes().all(|b| b.is_ascii_hexdigit())
-            && !managed_names.contains(name.as_ref())
-            && !existing_english
-                .iter()
-                .any(|d| d.body.contains(name.as_ref()))
-        {
-            fs::remove_file(path)?;
-        }
-    }
-    for (name, bytes) in assets {
-        fs::write(stage.join("assets").join(name), bytes)?;
     }
     Ok(())
 }

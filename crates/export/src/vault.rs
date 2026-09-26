@@ -6,13 +6,12 @@ use crate::{
     content::{self, Document},
     filesystem,
 };
-use domain::{ContentKind, Locale, PublicContentMeta, SectionPath, Slug, TagId, Timestamp, Title};
-use serde::Deserialize;
-use std::{
-    collections::{BTreeMap, HashSet},
-    fs,
-    path::Path,
+use domain::{
+    Category, ContentKind, Locale, PageKey, PublicContentMeta, SectionPath, Slug, TagId, Timestamp,
+    Title,
 };
+use serde::Deserialize;
+use std::{collections::HashSet, fs, path::Path};
 
 #[derive(Deserialize)]
 struct Frontmatter {
@@ -20,8 +19,8 @@ struct Frontmatter {
     #[serde(default)]
     kind: ContentKind,
     summary: Option<String>,
-    category: Option<domain::Category>,
-    page: Option<domain::PageKey>,
+    category: Option<Category>,
+    page: Option<PageKey>,
     #[serde(default)]
     tags: Vec<TagId>,
     priority: Option<i32>,
@@ -35,22 +34,14 @@ struct VaultNote {
     document: Document,
 }
 
-pub(crate) struct Prepared {
-    pub(crate) documents: Vec<Document>,
-    pub(crate) assets: BTreeMap<String, Vec<u8>>,
-}
-
-pub(crate) fn prepare(root: &Path, previous: &[Document]) -> Result<Prepared> {
-    let mut sources = extract(root, previous)?;
-    let assets = normalize::normalize(&mut sources, root)?;
-    Ok(Prepared {
-        documents: sources.into_iter().map(|s| s.document).collect(),
-        assets,
-    })
+pub(crate) fn prepare(root: &Path, previous: &[Document]) -> Result<Vec<Document>> {
+    let mut notes = extract(root, previous)?;
+    normalize::normalize(&mut notes)?;
+    Ok(notes.into_iter().map(|note| note.document).collect())
 }
 
 fn extract(root: &Path, previous: &[Document]) -> Result<Vec<VaultNote>> {
-    let mut sources = Vec::new();
+    let mut notes = Vec::new();
     let mut claimed = HashSet::new();
     let mut routes = HashSet::new();
     let paths = filesystem::files(root)?;
@@ -159,7 +150,7 @@ fn extract(root: &Path, previous: &[Document]) -> Result<Vec<VaultNote>> {
         if !routes.insert(meta.path()) {
             return Err(ExportError::invalid_input("duplicate public route"));
         }
-        sources.push(VaultNote {
+        notes.push(VaultNote {
             key: relative.with_extension("").to_string_lossy().into_owned(),
             document: Document {
                 meta,
@@ -167,5 +158,5 @@ fn extract(root: &Path, previous: &[Document]) -> Result<Vec<VaultNote>> {
             },
         });
     }
-    Ok(sources)
+    Ok(notes)
 }
