@@ -1,14 +1,12 @@
 //! File adapter for versioned text catalogs. UI keys and their meaning belong to server.
-use crate::{
-    ExportError, Result,
-    report::TranslationReport,
-    sync,
-    translation::{Decision, TranslationRequest, TranslationSettings, Translator, decide},
+use super::{
+    TranslationReport, TranslationRequest, TranslationSettings, Translator, cache,
+    plan::{Decision, UpdatePlan, decide, plan_update},
 };
+use crate::{ExportError, Result, content::digest, filesystem, output};
 use domain::{LabelCatalog, LabelProvenance, LabelTranslation};
 use std::{
     fs,
-    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -21,7 +19,7 @@ struct Candidate {
     translation: LabelTranslation,
 }
 
-pub(crate) struct CatalogPlan {
+pub(super) struct CatalogPlan {
     path: PathBuf,
     catalog: LabelCatalog,
     entries: Vec<EntryPlan>,
@@ -31,8 +29,7 @@ struct EntryPlan {
     key: String,
     request: TranslationRequest,
     input: String,
-    decision: Decision,
-    candidate_decision: Option<Decision>,
+    update: UpdatePlan,
 }
 
 pub fn translate_catalog(
@@ -41,22 +38,19 @@ pub fn translate_catalog(
     settings: &TranslationSettings,
 ) -> Result<TranslationReport<String>> {
     let path = canonical_parent_path(path)?;
-    let root = parent(&path);
-    sync::locked(root, || {
+    let root = filesystem::parent(&path);
+    filesystem::locked(root, || {
         plan_catalog(&path, settings)?.apply(root, translator)
     })
 }
 
-pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Result<CatalogPlan> {
-    let catalog = read(path)?;
+pub(super) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Result<CatalogPlan> {
+    let catalog = output::read_catalog(path)?;
     let mut entries = Vec::new();
     for (key, entry) in &catalog.entries {
         let request = request(entry, settings);
         let input = request.fingerprint()?;
-        let current = entry
-            .translation
-            .as_ref()
-            .map(|t| crate::vault::digest(&t.value));
+        let current = entry.translation.as_ref().map(|t| digest(&t.value));
         let decision = decide(
             &input,
             current.as_deref(),
@@ -78,7 +72,7 @@ pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Resul
             }
             Some(decide(
                 &input,
-                Some(&crate::vault::digest(&candidate.translation.value)),
+                Some(&digest(&candidate.translation.value)),
                 candidate
                     .translation
                     .provenance
@@ -88,22 +82,12 @@ pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Resul
         } else {
             None
         };
-        if candidate_decision == Some(Decision::Protect) {
-            return Err(ExportError::translation_conflict(format!(
-                "manually edited candidate {key}; move it aside before generating a replacement"
-            )));
-        }
-        if decision == Decision::Generate && candidate_decision == Some(Decision::Reuse) {
-            return Err(ExportError::translation_conflict(format!(
-                "candidate {key} already matches this input; accept it or move it aside before generating a replacement"
-            )));
-        }
+        let update = plan_update(decision, candidate_decision, key)?;
         entries.push(EntryPlan {
             key: key.clone(),
             request,
             input,
-            decision,
-            candidate_decision,
+            update,
         });
     }
     Ok(CatalogPlan {
@@ -114,7 +98,7 @@ pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Resul
 }
 
 impl CatalogPlan {
-    pub(crate) fn apply(
+    pub(super) fn apply(
         self,
         cache_root: &Path,
         translator: &dyn Translator,
@@ -134,9 +118,8 @@ impl CatalogPlan {
         let ai_requests = entries.iter().try_fold(0, |count, entry| {
             Ok::<_, ExportError>(
                 count
-                    + usize::from(crate::translation::will_call_translator(
-                        &entry.decision,
-                        entry.candidate_decision.as_ref(),
+                    + usize::from(cache::will_call_translator(
+                        entry.update,
                         &entry.request,
                         cache_root,
                     )?),
@@ -149,8 +132,7 @@ impl CatalogPlan {
                 key,
                 request,
                 input,
-                decision,
-                candidate_decision,
+                update,
             },
         ) in entries.into_iter().enumerate()
         {
@@ -159,44 +141,45 @@ impl CatalogPlan {
                 current = index + 1,
                 total,
                 item = %key,
-                action = decision.action(candidate_decision.as_ref()),
+                action = update.action(),
                 "translation item started"
             );
             let entry = catalog
                 .entries
                 .get_mut(&key)
                 .expect("planned catalog entry");
-            match decision {
-                Decision::Reuse => {
+            match update {
+                UpdatePlan::Reuse => {
                     entry.translation.as_mut().unwrap().stale = false;
                     report.reused += 1;
                 }
-                Decision::Protect | Decision::Generate => {
-                    if decision == Decision::Protect {
+                UpdatePlan::Generate
+                | UpdatePlan::GenerateCandidate
+                | UpdatePlan::ReuseCandidate => {
+                    if update.protects_current() {
                         if entry.translation.as_ref().unwrap().provenance.is_some() {
                             entry.translation.as_mut().unwrap().stale = true;
                         }
                         report.protected.push(key.clone());
-                        if candidate_decision == Some(Decision::Reuse) {
+                        if update == UpdatePlan::ReuseCandidate {
                             report.reused += 1;
                             continue;
                         }
                     }
-                    let response =
-                        crate::translation::cached_response(&request, translator, cache_root)?;
+                    let response = cache::cached_response(&request, translator, cache_root)?;
                     let value = response["value"].clone();
                     let translation = LabelTranslation {
                         provenance: Some(LabelProvenance {
                             input_hash: input,
-                            generated_hash: crate::vault::digest(&value),
+                            generated_hash: digest(&value),
                         }),
                         value,
                         stale: false,
                     };
-                    if decision == Decision::Protect {
+                    if update.protects_current() {
                         let candidate = candidate_path(&path, &key);
                         fs::create_dir_all(candidate.parent().unwrap())?;
-                        write(
+                        output::write_json(
                             &candidate,
                             &Candidate {
                                 key: key.clone(),
@@ -213,7 +196,7 @@ impl CatalogPlan {
             }
         }
         catalog.validate()?;
-        write(&path, &catalog)?;
+        output::write_json(&path, &catalog)?;
         tracing::info!(scope, total, "translation phase completed");
         Ok(report)
     }
@@ -225,8 +208,8 @@ pub fn accept_catalog_translation(
     settings: &TranslationSettings,
 ) -> Result<()> {
     let path = canonical_parent_path(path)?;
-    sync::locked(parent(&path), || {
-        let mut catalog = read(&path)?;
+    filesystem::locked(filesystem::parent(&path), || {
+        let mut catalog = output::read_catalog(&path)?;
         let entry = catalog
             .entries
             .get_mut(key)
@@ -258,40 +241,10 @@ pub fn accept_catalog_translation(
         request.validate(&[("value".into(), candidate.value.clone())].into())?;
         entry.translation = Some(candidate);
         catalog.validate()?;
-        write(&path, &catalog)?;
+        output::write_json(&path, &catalog)?;
         fs::remove_file(candidate_path)?;
         Ok(())
     })
-}
-
-pub(crate) fn read(path: &Path) -> Result<LabelCatalog> {
-    if !fs::symlink_metadata(path)?.file_type().is_file() {
-        return Err(ExportError::invalid_input("catalog must be a regular file"));
-    }
-    let mut catalog: LabelCatalog = serde_json::from_slice(&fs::read(path)?)?;
-    catalog.validate_structure()?;
-    // A source edit may change interpolation variables. Preserve the old text for
-    // the normal update decision, but never expose an incompatible active value.
-    for entry in catalog.entries.values_mut() {
-        if let Some(translation) = &mut entry.translation
-            && domain::placeholders(&entry.source) != domain::placeholders(&translation.value)
-        {
-            translation.stale = true;
-        }
-    }
-    Ok(catalog)
-}
-
-pub(crate) fn write(path: &Path, value: &impl serde::Serialize) -> Result<()> {
-    let mut bytes = serde_json::to_vec_pretty(value)?;
-    bytes.push(b'\n');
-    if fs::read(path).is_ok_and(|existing| existing == bytes) {
-        return Ok(());
-    }
-    let mut temporary = tempfile::NamedTempFile::new_in(parent(path))?;
-    temporary.write_all(&bytes)?;
-    temporary.persist(path)?;
-    Ok(())
 }
 
 fn request(entry: &domain::LabelEntry, settings: &TranslationSettings) -> TranslationRequest {
@@ -303,20 +256,15 @@ fn request(entry: &domain::LabelEntry, settings: &TranslationSettings) -> Transl
 }
 fn candidate_path(path: &Path, key: &str) -> PathBuf {
     let identity = format!("{}:{key}", path.file_name().unwrap().to_string_lossy());
-    parent(path)
+    filesystem::parent(path)
         .join(".export-candidates/catalog")
-        .join(format!("{}.json", crate::vault::digest(identity)))
+        .join(format!("{}.json", digest(identity)))
 }
 fn canonical_parent_path(path: &Path) -> Result<PathBuf> {
     let name = path
         .file_name()
         .ok_or_else(|| ExportError::invalid_input("catalog needs a file name"))?;
     // Resolve directory aliases for the shared tree lock, but retain the final
-    // component so read() can continue rejecting symlink catalog files.
-    Ok(parent(path).canonicalize()?.join(name))
-}
-fn parent(path: &Path) -> &Path {
-    path.parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."))
+    // component so read_catalog() can continue rejecting symlink catalog files.
+    Ok(filesystem::parent(path).canonicalize()?.join(name))
 }

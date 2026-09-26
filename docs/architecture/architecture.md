@@ -67,8 +67,12 @@ exportとpublishはruntime依存ではない。serverはinfraをapplication comp
 
 - private Obsidianの公開対象抽出、参照・embed・assetの正規化、安定IDの管理
 - 記事・タグ・UIに共通する差分翻訳、手動編集の保護、更新候補の生成と採用
-- public fragmentだけを渡すCodex実行境界と、出力全体を一括更新するfilesystem transaction
+- public fragmentだけを渡すCodex実行境界と、記事・タグを一括更新するfilesystem transaction。UI辞書は別transactionで更新する
 - private入力が読めない場合は停止し、公開Markdownだけの処理へ切り替えない
+
+内部は機能単位のmoduleで構成する。`pipeline`が処理順とtransaction境界を所有し、`source`が公開対象の抽出・正規化、`translation`が記事・辞書の更新計画と翻訳・候補採用、`output`が公開ファイルの同期・退避を担う。`source`は正規化済みの文書とassetを返し、private入力の情報を翻訳処理へ渡さない。
+
+`content`はI/Oを持たない文書codec・Markdown設定・fingerprint、`filesystem`はschemaに依存しない走査・lock・stagingを所有する。翻訳の更新判定は純粋な`translation::plan`、応答cacheは`translation::cache`、Codex実行は`translation::codex`に分ける。記事と辞書は同じ更新計画を使い、候補衝突の検証をAI呼び出しより前に完了する。下位のcontent / filesystem / outputからsource / translationへ依存させない。
 
 操作と翻訳状態の詳細は[export README](../../crates/export/README.md)を参照する。
 

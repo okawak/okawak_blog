@@ -1,10 +1,13 @@
+use super::{
+    ProtectedContent, Texts, TranslationReport, TranslationRequest, TranslationSettings,
+    Translator, cache,
+    fragments::Fragments,
+    plan::{Decision, UpdatePlan, decide, plan_update},
+};
 use crate::{
     ExportError, Result,
-    fragments::{Fragments, text_hash},
-    markdown::{self, Document},
-    report::{ProtectedContent, TranslationReport},
-    sync,
-    translation::{Decision, TranslationRequest, TranslationSettings, Translator, decide},
+    content::{Document, digest, text_hash},
+    filesystem, output,
 };
 use domain::{Locale, Slug, TranslationProvenance};
 use std::{fs, path::Path};
@@ -15,8 +18,7 @@ struct ArticlePlan<'a> {
     fragments: Fragments,
     request: TranslationRequest,
     input: String,
-    decision: Decision,
-    candidate_decision: Option<Decision>,
+    update: UpdatePlan,
 }
 
 pub fn translate_public(
@@ -24,12 +26,10 @@ pub fn translate_public(
     translator: &dyn Translator,
     settings: &TranslationSettings,
 ) -> Result<TranslationReport<ProtectedContent>> {
-    let mut report = TranslationReport::default();
-    sync::transaction(output, |stage| {
-        report = translate_stage(stage, output, translator, settings)?;
-        Ok(())
-    })?;
-    Ok(report)
+    filesystem::transaction(output, |stage| {
+        output::sync_tags(stage)?;
+        translate_stage(stage, output, translator, settings)
+    })
 }
 
 pub(crate) fn translate_stage(
@@ -39,14 +39,13 @@ pub(crate) fn translate_stage(
     settings: &TranslationSettings,
 ) -> Result<TranslationReport<ProtectedContent>> {
     let mut report = TranslationReport::default();
-    let originals = markdown::read_locale(stage, Locale::Ja)?;
-    let english = markdown::read_locale(stage, Locale::En)?;
-    crate::tags::sync(stage)?;
-    let tags = crate::catalog::plan_catalog(&stage.join("tags.json"), settings)?;
+    let originals = output::read_locale(stage, Locale::Ja)?;
+    let english = output::read_locale(stage, Locale::En)?;
+    let tags = super::catalog::plan_catalog(&stage.join("tags.json"), settings)?;
     let mut plans = Vec::new();
     for original in originals {
         let fragments = Fragments::extract(&original);
-        let request = TranslationRequest::new(fragments.texts.clone(), "Public blog article: ordered Markdown prose fragments. Return plain text only; preserve fragment boundaries.".into(), settings);
+        let request = article_request(fragments.texts.clone(), settings);
         let input = content_input(&request, &original)?;
         let current = english.iter().find(|d| d.meta.id == original.meta.id);
         let current_hash = current.map(text_hash).transpose()?;
@@ -77,26 +76,14 @@ pub(crate) fn translate_stage(
         } else {
             None
         };
-        if candidate_decision == Some(Decision::Protect) {
-            return Err(ExportError::translation_conflict(format!(
-                "manually edited candidate {}; move it aside before generating a replacement",
-                original.meta.id
-            )));
-        }
-        if decision == Decision::Generate && candidate_decision == Some(Decision::Reuse) {
-            return Err(ExportError::translation_conflict(format!(
-                "candidate {} already matches this input; accept it or move it aside before generating a replacement",
-                original.meta.id
-            )));
-        }
+        let update = plan_update(decision, candidate_decision, original.meta.id.as_str())?;
         plans.push(ArticlePlan {
             original,
             current,
             fragments,
             request,
             input,
-            decision,
-            candidate_decision,
+            update,
         });
     }
     // Inspect every candidate before any AI call, cache write or output update.
@@ -105,9 +92,8 @@ pub(crate) fn translate_stage(
     let ai_requests = plans.iter().try_fold(0, |count, plan| {
         Ok::<_, ExportError>(
             count
-                + usize::from(crate::translation::will_call_translator(
-                    &plan.decision,
-                    plan.candidate_decision.as_ref(),
+                + usize::from(cache::will_call_translator(
+                    plan.update,
                     &plan.request,
                     cache_root,
                 )?),
@@ -127,8 +113,7 @@ pub(crate) fn translate_stage(
             fragments,
             request,
             input,
-            decision,
-            candidate_decision,
+            update,
         },
     ) in plans.into_iter().enumerate()
     {
@@ -137,30 +122,22 @@ pub(crate) fn translate_stage(
             current = index + 1,
             total,
             article_id = %original.meta.id,
-            action = decision.action(candidate_decision.as_ref()),
+            action = update.action(),
             "translation item started"
         );
         let path = stage.join(format!("en/{}.md", original.meta.id));
-        match decision {
-            Decision::Reuse => {
+        match update {
+            UpdatePlan::Reuse => {
                 let mut preserved = current.unwrap().clone();
-                // Refresh non-translatable metadata without changing edited prose.
-                let provenance = preserved.meta.translation.take();
-                let title = preserved.meta.title.clone();
-                let summary = preserved.meta.summary.clone();
-                preserved.meta = original.meta.clone();
-                preserved.meta.locale = Locale::En;
-                preserved.meta.title = title;
-                preserved.meta.summary = summary;
-                preserved.meta.translation = provenance.map(|mut p| {
-                    p.stale = false;
-                    p
-                });
+                preserved.refresh_translation_metadata(&original);
+                if let Some(provenance) = &mut preserved.meta.translation {
+                    provenance.stale = false;
+                }
                 fs::write(path, preserved.encode()?)?;
                 report.reused += 1;
             }
-            Decision::Protect | Decision::Generate => {
-                if decision == Decision::Protect {
+            UpdatePlan::Generate | UpdatePlan::GenerateCandidate | UpdatePlan::ReuseCandidate => {
+                if update.protects_current() {
                     let mut preserved = current.unwrap().clone();
                     if let Some(p) = &mut preserved.meta.translation {
                         p.stale = true;
@@ -169,7 +146,7 @@ pub(crate) fn translate_stage(
                     report
                         .protected
                         .push(ProtectedContent::Article(original.meta.id.clone()));
-                    if candidate_decision == Some(Decision::Reuse) {
+                    if update == UpdatePlan::ReuseCandidate {
                         report.reused += 1;
                         continue;
                     }
@@ -179,7 +156,7 @@ pub(crate) fn translate_stage(
                     fragments: &fragments,
                     original: &original,
                 };
-                let result = crate::translation::cached_response(&request, &checked, cache_root)?;
+                let result = cache::cached_response(&request, &checked, cache_root)?;
                 let mut translated = fragments.apply(&original, &result)?;
                 translated.meta.locale = Locale::En;
                 translated.meta.translation = Some(TranslationProvenance {
@@ -187,7 +164,7 @@ pub(crate) fn translate_stage(
                     generated_hash: text_hash(&translated)?,
                     stale: false,
                 });
-                let destination = if decision == Decision::Protect {
+                let destination = if update.protects_current() {
                     stage.join(format!(".export-candidates/{}.md", original.meta.id))
                 } else {
                     path
@@ -205,7 +182,7 @@ pub(crate) fn translate_stage(
     report
         .protected
         .extend(tags.protected.into_iter().map(ProtectedContent::Tag));
-    crate::translation::copy_cache(cache_root, stage)?;
+    cache::copy_cache(cache_root, stage)?;
     Ok(report)
 }
 
@@ -217,7 +194,7 @@ struct ArticleTranslator<'a> {
 }
 
 impl Translator for ArticleTranslator<'_> {
-    fn translate(&self, request: &TranslationRequest) -> Result<crate::translation::Texts> {
+    fn translate(&self, request: &TranslationRequest) -> Result<Texts> {
         let result = self.translator.translate(request)?;
         request.validate(&result)?;
         self.fragments.apply(self.original, &result)?.encode()?;
@@ -226,12 +203,12 @@ impl Translator for ArticleTranslator<'_> {
 }
 
 pub fn accept_translation(output: &Path, id: &Slug, settings: &TranslationSettings) -> Result<()> {
-    sync::transaction(output, |stage| {
+    filesystem::transaction(output, |stage| {
         let original = Document::parse(&fs::read_to_string(stage.join(format!("ja/{id}.md")))?)?;
         let candidate_path = stage.join(format!(".export-candidates/{id}.md"));
         let mut candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
         let fragments = Fragments::extract(&original);
-        let request = TranslationRequest::new(fragments.texts, "Public blog article: ordered Markdown prose fragments. Return plain text only; preserve fragment boundaries.".into(), settings);
+        let request = article_request(fragments.texts, settings);
         let provenance = candidate
             .meta
             .translation
@@ -250,14 +227,7 @@ pub fn accept_translation(output: &Path, id: &Slug, settings: &TranslationSettin
         }
         // Candidate prose may have been reviewed manually while management
         // fields changed in Japanese. Those fields always come from the source.
-        let title = candidate.meta.title;
-        let summary = candidate.meta.summary;
-        let provenance = candidate.meta.translation;
-        candidate.meta = original.meta;
-        candidate.meta.locale = Locale::En;
-        candidate.meta.title = title;
-        candidate.meta.summary = summary;
-        candidate.meta.translation = provenance;
+        candidate.refresh_translation_metadata(&original);
         fs::create_dir_all(stage.join("en"))?;
         fs::write(stage.join(format!("en/{id}.md")), candidate.encode()?)?;
         fs::remove_file(candidate_path)?;
@@ -266,11 +236,15 @@ pub fn accept_translation(output: &Path, id: &Slug, settings: &TranslationSettin
 }
 
 fn content_input(request: &TranslationRequest, original: &Document) -> Result<String> {
-    Ok(crate::vault::digest(serde_json::to_vec(&(
+    Ok(digest(serde_json::to_vec(&(
         // Rebuild generated Markdown when escaping changes, retaining the
         // separate plain-text response cache and protecting manual edits.
         "markdown-reassembly-v1",
         request.fingerprint()?,
         &original.body,
     ))?))
+}
+
+fn article_request(texts: Texts, settings: &TranslationSettings) -> TranslationRequest {
+    TranslationRequest::new(texts, "Public blog article: ordered Markdown prose fragments. Return plain text only; preserve fragment boundaries.".into(), settings)
 }

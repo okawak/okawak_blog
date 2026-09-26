@@ -72,3 +72,20 @@ UI・タグの候補自体にも同じ手動編集保護を適用する。同じ
 記事・タグは一つのtransaction、UI辞書は別のtransactionで反映する。UIで失敗しても完了した公開コンテンツは保持される。再実行では成功済みの項目を再利用する。どちらも部分的に壊れたファイルを保存せず、最終的に両方の差分を確認してGitへ確定する。
 
 `--ui-catalog ui.json`のような相対pathも利用できる。辞書単独の操作は親directoryを走査・入れ替えず、対象JSONを一時ファイルから置換する。親directoryのsymlinkを解決してから、同じ公開treeのexportとlockを共有する。辞書ファイル自体のsymlinkは拒否する。失敗時も完成した候補・cacheはGit対象外の作業領域に残り、辞書本体は全項目の検証成功後に確定する。
+
+## 実装の構成
+
+| Module | 責務 |
+| --- | --- |
+| `pipeline` | 抽出・出力同期・翻訳の処理順と、記事・タグのtransaction境界 |
+| `source` / `source::normalize` | 公開対象と安定IDの決定、公開ノート参照・画像・本文の正規化 |
+| `translation` | 共通の翻訳要求・検証・結果型と、翻訳・候補採用の入口 |
+| `translation::articles` / `catalog` | 記事／辞書固有の計画作成、翻訳結果の反映と候補採用 |
+| `translation::plan` | 現在の訳と候補から、再利用・生成・候補生成・候補再利用を決める純粋な判定 |
+| `translation::fragments` / `cache` / `codex` | 文章抽出・再構築、検証済み応答の保存、Codexプロセス実行 |
+| `output` | 公開Markdown・辞書のI/O、削除記事の退避、metadata・asset・タグの同期 |
+| `content` / `filesystem` | I/Oを持たない文書処理／schemaに依存しない走査・lock・staging |
+
+正規化内の参照index、asset読込、本文編集は同じmodule内の型と関数で分担する。翻訳処理はpublic文書だけを扱い、原文adapterへ依存しない。CLIとcrate外API、公開schema、翻訳履歴・候補・cacheの形式はmodule構成から独立している。
+
+通常の検証は`cargo test -p export --offline`で実行できる（依存crateの取得済み環境）。統合テストは一時directoryとfake translator / fake Codexを使い、private Obsidianや実AIを必要としない。

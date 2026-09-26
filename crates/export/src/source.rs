@@ -1,12 +1,18 @@
 //! Obsidian input adapter. Only explicitly completed notes cross this boundary.
+mod normalize;
+use crate::content::digest;
 use crate::{
     ExportError, Result,
-    markdown::{self, Document},
+    content::{self, Document},
+    filesystem,
 };
 use domain::{ContentKind, Locale, PublicContentMeta, SectionPath, Slug};
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
-use std::{collections::HashSet, fs, path::Path};
+use std::{
+    collections::{BTreeMap, HashSet},
+    fs,
+    path::Path,
+};
 
 #[derive(Deserialize)]
 struct Frontmatter {
@@ -24,23 +30,30 @@ struct Frontmatter {
     publish_id: Option<Slug>,
 }
 
-pub(crate) struct Source {
-    pub(crate) key: String,
-    pub(crate) document: Document,
+struct Source {
+    key: String,
+    document: Document,
 }
 
-pub(crate) fn digest(bytes: impl AsRef<[u8]>) -> String {
-    Sha256::digest(bytes.as_ref())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+pub(crate) struct Prepared {
+    pub(crate) documents: Vec<Document>,
+    pub(crate) assets: BTreeMap<String, Vec<u8>>,
 }
 
-pub(crate) fn extract(root: &Path, previous: &[Document]) -> Result<Vec<Source>> {
+pub(crate) fn prepare(root: &Path, previous: &[Document]) -> Result<Prepared> {
+    let mut sources = extract(root, previous)?;
+    let assets = normalize::normalize(&mut sources, root)?;
+    Ok(Prepared {
+        documents: sources.into_iter().map(|s| s.document).collect(),
+        assets,
+    })
+}
+
+fn extract(root: &Path, previous: &[Document]) -> Result<Vec<Source>> {
     let mut sources = Vec::new();
     let mut claimed = HashSet::new();
     let mut routes = HashSet::new();
-    let paths = markdown::files(root)?;
+    let paths = filesystem::files(root)?;
     let current_hashes: HashSet<_> = paths
         .iter()
         .map(|p| digest(p.strip_prefix(root).unwrap().to_string_lossy().as_bytes()))
@@ -54,7 +67,7 @@ pub(crate) fn extract(root: &Path, previous: &[Document]) -> Result<Vec<Source>>
             continue;
         }
         let text = fs::read_to_string(&path)?.replace("\r\n", "\n");
-        let Some((yaml, body)) = markdown::split(&text)? else {
+        let Some((yaml, body)) = content::split(&text)? else {
             continue;
         };
         // Inspect only the publication flag before requiring the public fields.

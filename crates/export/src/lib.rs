@@ -1,25 +1,17 @@
 #![warn(unreachable_pub)]
 
-mod codex;
+mod content;
 mod error;
-mod fragments;
-mod markdown;
-mod normalize;
+mod filesystem;
+mod output;
 mod pipeline;
-mod report;
-mod sync;
-mod translate_content;
+mod source;
 mod translation;
-mod vault;
 
-pub use codex::CodexTranslator;
 pub use error::{ExportError, Result};
 pub use pipeline::{export_japanese, export_translated};
-pub use report::{ProtectedContent, TranslationReport};
-pub use translate_content::{accept_translation, translate_public};
-pub use translation::{Texts, TranslationRequest, TranslationSettings, Translator};
-
-mod catalog;
-pub use catalog::{accept_catalog_translation, translate_catalog};
-
-mod tags;
+pub use translation::{
+    CodexTranslator, ProtectedContent, Texts, TranslationReport, TranslationRequest,
+    TranslationSettings, Translator, accept_catalog_translation, accept_translation,
+    translate_catalog, translate_public,
+};

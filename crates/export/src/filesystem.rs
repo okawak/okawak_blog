@@ -1,12 +1,12 @@
-//! Stage an entire public tree before replacing it. A recoverable backup survives interruption.
+//! Filesystem traversal, locking and staged replacement, independent of content schemas.
 use crate::{ExportError, Result};
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub(crate) fn locked<T>(output: &Path, build: impl FnOnce() -> Result<T>) -> Result<T> {
-    let parent = output
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
+    let parent = parent(output);
     fs::create_dir_all(parent)?;
     let name = output
         .file_name()
@@ -35,12 +35,9 @@ pub(crate) fn locked<T>(output: &Path, build: impl FnOnce() -> Result<T>) -> Res
     build()
 }
 
-pub(crate) fn transaction(output: &Path, build: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
+pub(crate) fn transaction<T>(output: &Path, build: impl FnOnce(&Path) -> Result<T>) -> Result<T> {
     locked(output, || {
-        let parent = output
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(Path::new("."));
+        let parent = parent(output);
         let name = output
             .file_name()
             .expect("validated by lock")
@@ -52,9 +49,9 @@ pub(crate) fn transaction(output: &Path, build: impl FnOnce(&Path) -> Result<()>
         if output.exists() {
             copy_tree(output, stage.path())?;
         }
-        build(stage.path())?;
+        let result = build(stage.path())?;
         if output.exists() && same_tree(output, stage.path())? {
-            return Ok(());
+            return Ok(result);
         }
         let existed = output.exists();
         if existed {
@@ -69,12 +66,12 @@ pub(crate) fn transaction(output: &Path, build: impl FnOnce(&Path) -> Result<()>
         if existed {
             fs::remove_dir_all(backup)?;
         }
-        Ok(())
+        Ok(result)
     })
 }
 
 fn copy_tree(from: &Path, to: &Path) -> Result<()> {
-    for path in crate::markdown::all_files(from)? {
+    for path in all_files(from)? {
         let dest = to.join(path.strip_prefix(from)?);
         fs::create_dir_all(dest.parent().unwrap())?;
         fs::copy(path, dest)?;
@@ -89,8 +86,8 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
 }
 
 fn same_tree(a: &Path, b: &Path) -> Result<bool> {
-    let aa = crate::markdown::all_files(a)?;
-    let bb = crate::markdown::all_files(b)?;
+    let aa = all_files(a)?;
+    let bb = all_files(b)?;
     if aa.len() != bb.len() {
         return Ok(false);
     }
@@ -100,4 +97,46 @@ fn same_tree(a: &Path, b: &Path) -> Result<bool> {
         }
     }
     Ok(true)
+}
+
+/// Reject symlinks instead of silently including content outside the selected root.
+pub(crate) fn files(root: &Path) -> Result<Vec<PathBuf>> {
+    walk(root, false)
+}
+
+pub(crate) fn all_files(root: &Path) -> Result<Vec<PathBuf>> {
+    walk(root, true)
+}
+
+fn walk(root: &Path, hidden: bool) -> Result<Vec<PathBuf>> {
+    if fs::symlink_metadata(root)?.file_type().is_symlink() {
+        return Err(ExportError::invalid_input("symlink root is not allowed"));
+    }
+    let mut paths = Vec::new();
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        if !hidden && entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
+        let kind = entry.file_type()?;
+        if kind.is_symlink() {
+            return Err(ExportError::invalid_input(format!(
+                "symlink input is not allowed: {}",
+                entry.path().display()
+            )));
+        }
+        if kind.is_dir() {
+            paths.extend(walk(&entry.path(), hidden)?);
+        } else if kind.is_file() {
+            paths.push(entry.path());
+        }
+    }
+    paths.sort();
+    Ok(paths)
+}
+
+pub(crate) fn parent(path: &Path) -> &Path {
+    path.parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."))
 }

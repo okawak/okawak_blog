@@ -1,10 +1,14 @@
 //! Reassemble translated prose into the original Markdown; non-text bytes never go to AI.
-use crate::{ExportError, Result, markdown::Document, normalize::options, translation::Texts};
+use super::Texts;
+use crate::{
+    ExportError, Result,
+    content::{Document, options},
+};
 use pulldown_cmark::{Event, LinkType, Parser, Tag, TagEnd};
 use std::ops::Range;
 
-pub(crate) struct Fragments {
-    pub(crate) texts: Texts,
+pub(super) struct Fragments {
+    pub(super) texts: Texts,
     ranges: Vec<Fragment>,
 }
 
@@ -16,7 +20,7 @@ struct Fragment {
 }
 
 impl Fragments {
-    pub(crate) fn extract(document: &Document) -> Self {
+    pub(super) fn extract(document: &Document) -> Self {
         let mut texts = Texts::from([("title".into(), document.meta.title.clone())]);
         if let Some(summary) = &document.meta.summary {
             texts.insert("summary".into(), summary.clone());
@@ -56,7 +60,7 @@ impl Fragments {
         Self { texts, ranges }
     }
 
-    pub(crate) fn apply(&self, source: &Document, result: &Texts) -> Result<Document> {
+    pub(super) fn apply(&self, source: &Document, result: &Texts) -> Result<Document> {
         if !self.texts.keys().eq(result.keys()) {
             return Err(ExportError::invalid_translation("fragment keys changed"));
         }
@@ -125,14 +129,6 @@ fn track_inline_html(token: &str, elements: &mut Vec<String>) {
     {
         elements.push(name);
     }
-}
-
-pub(crate) fn text_hash(document: &Document) -> Result<String> {
-    Ok(crate::vault::digest(serde_json::to_vec(&(
-        &document.meta.title,
-        &document.meta.summary,
-        &document.body,
-    ))?))
 }
 
 fn escape(text: &str) -> String {
