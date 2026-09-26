@@ -1,9 +1,7 @@
-mod report;
-
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use domain::Slug;
-use export::TranslationSettings;
+use export::{ProtectedContent, TranslationReport, TranslationSettings};
 use std::{fs, path::Path};
 
 /// Export public Markdown and translate changed article, tag, and UI text.
@@ -47,10 +45,10 @@ impl Cli {
                 let translator = export::CodexTranslator::default();
                 tracing::info!("content export started");
                 let content = export::export_translated(source, output, &translator, &settings)?;
-                report::content(&content);
+                report_content(&content);
                 tracing::info!("UI translation started");
                 let ui = export::translate_catalog(ui_catalog, &translator, &settings)?;
-                report::ui(&ui);
+                report_ui(&ui);
                 tracing::info!("export completed");
             }
             Some(Command::Article { article_id }) => {
@@ -74,4 +72,59 @@ fn load_settings(path: &Path) -> Result<TranslationSettings> {
     let bytes =
         fs::read(path).with_context(|| format!("cannot read settings {}", path.display()))?;
     serde_json::from_slice(&bytes).with_context(|| format!("invalid settings {}", path.display()))
+}
+
+fn report_content(report: &TranslationReport<ProtectedContent>) {
+    report_summary("Content", report);
+    for item in &report.protected {
+        let command = match item {
+            ProtectedContent::Article(id) => acceptance_command("accept-article", id.as_str()),
+            ProtectedContent::Tag(tag) => acceptance_command("accept-tag", tag),
+        };
+        tracing::warn!(%command, "translation candidate needs review");
+    }
+}
+
+fn report_ui(report: &TranslationReport<String>) {
+    report_summary("UI", report);
+    for key in &report.protected {
+        let command = acceptance_command("accept-ui", key);
+        tracing::warn!(%command, "translation candidate needs review");
+    }
+}
+
+fn report_summary<T>(scope: &'static str, report: &TranslationReport<T>) {
+    tracing::info!(
+        scope,
+        generated = report.generated,
+        reused = report.reused,
+        protected = report.protected.len(),
+        "translation completed"
+    );
+}
+
+fn acceptance_command(subcommand: &str, id: &str) -> String {
+    let id = id.replace('\'', "'\"'\"'");
+    format!("cargo run -p export -- {subcommand} '{id}'")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::acceptance_command;
+
+    #[test]
+    fn acceptance_commands_quote_shell_arguments() {
+        assert_eq!(
+            acceptance_command("accept-article", "article-1"),
+            "cargo run -p export -- accept-article 'article-1'"
+        );
+        assert_eq!(
+            acceptance_command("accept-tag", "author's note"),
+            "cargo run -p export -- accept-tag 'author'\"'\"'s note'"
+        );
+        assert_eq!(
+            acceptance_command("accept-ui", "greeting"),
+            "cargo run -p export -- accept-ui 'greeting'"
+        );
+    }
 }
