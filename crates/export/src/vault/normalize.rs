@@ -1,8 +1,8 @@
 //! Resolve references using only the explicitly public source set.
+use super::Source;
 use crate::{
     ExportError, Result,
     content::{digest, options},
-    source::Source,
 };
 use pulldown_cmark::{Event, LinkType, Parser, Tag};
 use std::{

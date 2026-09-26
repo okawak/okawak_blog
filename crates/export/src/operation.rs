@@ -1,6 +1,8 @@
+//! Export, catalog translation and candidate acceptance operations.
 use crate::{
-    ExportError, Result, filesystem, output, source,
+    ExportError, Result, filesystem, output,
     translation::{self, ProtectedContent, TranslationReport, TranslationSettings, Translator},
+    vault,
 };
 use domain::{Locale, Slug};
 use std::{
@@ -21,10 +23,7 @@ pub fn export_content(
     let output_absolute = if output.exists() {
         output.canonicalize()?
     } else {
-        let parent = output
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(Path::new("."));
+        let parent = filesystem::parent(output);
         fs::create_dir_all(parent)?;
         parent.canonicalize()?.join(
             output
@@ -39,7 +38,7 @@ pub fn export_content(
     }
     filesystem::transaction(output, |stage| {
         let previous = output::read_locale(stage, Locale::Ja)?;
-        let prepared = source::prepare(&source, &previous)?;
+        let prepared = vault::prepare(&source, &previous)?;
         output::reconcile(stage, &previous, &prepared.documents, &prepared.assets)?;
         output::sync_tags(stage)?;
         translation::translate_stage(stage, output, translator, settings)

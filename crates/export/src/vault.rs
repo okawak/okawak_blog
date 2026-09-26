@@ -1,4 +1,4 @@
-//! Obsidian input adapter. Only explicitly completed notes cross this boundary.
+//! Vault input adapter. Only explicitly completed notes cross this boundary.
 mod normalize;
 use crate::content::digest;
 use crate::{
