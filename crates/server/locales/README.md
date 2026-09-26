@@ -8,10 +8,12 @@ schema versionは1。`entries.<key>`は`source`（日本語）、`context`（用
 
 ```sh
 mise run export
-cargo run -p export -- accept ui filter.label
+cargo run -p export -- accept-ui filter.label
 ```
 
 候補はこのdirectoryの`.export-candidates/catalog/`にJSONで保存する。キー・原文・用途・訳文を確認し、必要なら候補の`translation.value`を修正して採用する。採用操作はprivate入力やAIを使わない。原文や設定が変わった古い候補は採用できない。候補・cacheはGit対象外。
+
+通常実行との違い、手修正の判定、候補の確認・編集・採用の流れは[exportの翻訳運用](../../export/README.md#翻訳)を参照する。
 
 `src/i18n.rs`の型付き`Message`がruntimeのキーを定義し、原文欠落・英訳欠落をCIで検出する。新しい文言を追加するときは辞書と型付きキーの両方を更新する。runtimeでは英訳の欠落・更新待ちは日本語へfallbackし、キーがない場合はキー文字列を表示してログへ記録する。
 

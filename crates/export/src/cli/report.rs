@@ -1,6 +1,5 @@
 use domain::Slug;
 use export::{ProtectedContent, TranslationReport};
-use std::path::Path;
 
 enum AcceptanceTarget<'a> {
     Article(&'a Slug),
@@ -8,21 +7,17 @@ enum AcceptanceTarget<'a> {
     Ui(&'a str),
 }
 
-pub(super) fn content(
-    report: &TranslationReport<ProtectedContent>,
-    output: &Path,
-    settings: &Path,
-) {
+pub(super) fn content(report: &TranslationReport<ProtectedContent>) {
     summary("Content", report);
-    for command in content_acceptance_commands(report, output, settings) {
+    for command in content_acceptance_commands(report) {
         tracing::warn!(%command, "translation candidate needs review");
     }
 }
 
-pub(super) fn ui(report: &TranslationReport<String>, catalog: &Path, settings: &Path) {
+pub(super) fn ui(report: &TranslationReport<String>) {
     summary("UI", report);
     for key in &report.protected {
-        let command = acceptance_command(AcceptanceTarget::Ui(key), catalog, settings);
+        let command = acceptance_command(AcceptanceTarget::Ui(key));
         tracing::warn!(%command, "translation candidate needs review");
     }
 }
@@ -37,11 +32,7 @@ fn summary<T>(scope: &'static str, report: &TranslationReport<T>) {
     );
 }
 
-fn content_acceptance_commands(
-    report: &TranslationReport<ProtectedContent>,
-    output: &Path,
-    settings: &Path,
-) -> Vec<String> {
+fn content_acceptance_commands(report: &TranslationReport<ProtectedContent>) -> Vec<String> {
     report
         .protected
         .iter()
@@ -50,22 +41,20 @@ fn content_acceptance_commands(
                 ProtectedContent::Article(id) => AcceptanceTarget::Article(id),
                 ProtectedContent::Tag(id) => AcceptanceTarget::Tag(id),
             };
-            acceptance_command(target, output, settings)
+            acceptance_command(target)
         })
         .collect()
 }
 
-fn acceptance_command(target: AcceptanceTarget<'_>, path: &Path, settings: &Path) -> String {
-    let (target, id, path_option) = match target {
-        AcceptanceTarget::Article(id) => ("article", id.as_str(), "output"),
-        AcceptanceTarget::Tag(id) => ("tag", id, "output"),
-        AcceptanceTarget::Ui(id) => ("ui", id, "ui-catalog"),
+fn acceptance_command(target: AcceptanceTarget<'_>) -> String {
+    let (target, id) = match target {
+        AcceptanceTarget::Article(id) => ("article", id.as_str()),
+        AcceptanceTarget::Tag(id) => ("tag", id),
+        AcceptanceTarget::Ui(id) => ("ui", id),
     };
     format!(
-        "cargo run -p export -- accept {target} {} --{path_option} {} --settings {}",
+        "cargo run -p export -- accept-{target} {}",
         shell_argument(id),
-        shell_argument(&path.to_string_lossy()),
-        shell_argument(&settings.to_string_lossy())
     )
 }
 
@@ -78,10 +67,9 @@ mod tests {
     use super::{AcceptanceTarget, acceptance_command, content_acceptance_commands};
     use domain::Slug;
     use export::{ProtectedContent, TranslationReport};
-    use std::path::Path;
 
     #[test]
-    fn acceptance_commands_preserve_typed_targets_paths_and_shell_arguments() {
+    fn acceptance_commands_preserve_typed_targets_and_shell_arguments() {
         let report = TranslationReport {
             generated: 2,
             reused: 0,
@@ -92,23 +80,15 @@ mod tests {
         };
 
         assert_eq!(
-            content_acceptance_commands(
-                &report,
-                Path::new("public content"),
-                Path::new("translation.json")
-            ),
+            content_acceptance_commands(&report),
             [
-                "cargo run -p export -- accept article 'article-1' --output 'public content' --settings 'translation.json'",
-                "cargo run -p export -- accept tag 'author'\"'\"'s note' --output 'public content' --settings 'translation.json'",
+                "cargo run -p export -- accept-article 'article-1'",
+                "cargo run -p export -- accept-tag 'author'\"'\"'s note'",
             ]
         );
         assert_eq!(
-            acceptance_command(
-                AcceptanceTarget::Ui("greeting"),
-                Path::new("locales/ui.json"),
-                Path::new("translation.json")
-            ),
-            "cargo run -p export -- accept ui 'greeting' --ui-catalog 'locales/ui.json' --settings 'translation.json'"
+            acceptance_command(AcceptanceTarget::Ui("greeting")),
+            "cargo run -p export -- accept-ui 'greeting'"
         );
     }
 }

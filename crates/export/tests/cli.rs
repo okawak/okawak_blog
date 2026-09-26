@@ -246,9 +246,9 @@ fn manual_edits_are_preserved_and_matching_candidates_are_reused() {
     assert!(candidate.exists());
     let logs = String::from_utf8(result.stderr).unwrap();
     for command in [
-        format!("cargo run -p export -- accept article '{ARTICLE}' --output 'content' --settings 'translation.json'"),
-        "cargo run -p export -- accept tag 'Rust' --output 'content' --settings 'translation.json'".into(),
-        "cargo run -p export -- accept ui 'greeting' --ui-catalog 'crates/server/locales/ui.json' --settings 'translation.json'".into(),
+        format!("cargo run -p export -- accept-article '{ARTICLE}'"),
+        "cargo run -p export -- accept-tag 'Rust'".into(),
+        "cargo run -p export -- accept-ui 'greeting'".into(),
     ] {
         assert!(
             logs.contains(&command),
@@ -271,19 +271,19 @@ fn accepting_candidates_needs_neither_private_input_nor_ai() {
     let source = project.path("obsidian");
     let away = project.path("unavailable-vault");
     fs::rename(&source, &away).unwrap();
-    project.run(&["accept", "article", ARTICLE]);
+    project.run(&["accept-article", ARTICLE]);
     assert!(!candidate.exists());
     assert!(
         fs::read_to_string(&english)
             .unwrap()
             .contains("English 更新した本文")
     );
-    project.run(&["accept", "tag", "Rust"]);
+    project.run(&["accept-tag", "Rust"]);
     assert_eq!(
         project.read_json("content/tags.json")["entries"]["Rust"]["translation"]["value"],
         "English Rust"
     );
-    project.run(&["accept", "ui", "greeting"]);
+    project.run(&["accept-ui", "greeting"]);
     assert_eq!(
         project.read_json("crates/server/locales/ui.json")["entries"]["greeting"]["translation"]["value"],
         "English 新しい挨拶"
@@ -299,18 +299,23 @@ fn accepting_candidates_needs_neither_private_input_nor_ai() {
 }
 
 #[test]
-fn invalid_or_ambiguous_arguments_fail_before_any_export_or_translation() {
+fn invalid_arguments_fail_before_any_export_or_translation() {
     let project = Project::new();
     for args in [
         vec!["accept"],
-        vec!["accept", "article"],
-        vec!["accept", "article", "../invalid"],
-        vec!["--settings"],
+        vec!["accept-article"],
+        vec!["accept-tag"],
+        vec!["accept-ui"],
+        vec!["accept-article", "../invalid"],
+        vec!["--source", "somewhere"],
+        vec!["--output", "elsewhere"],
+        vec!["--ui-catalog", "ui.json"],
+        vec!["--settings", "custom.json"],
+        vec!["accept-article", ARTICLE, "--output", "elsewhere"],
+        vec!["accept-tag", "Rust", "--settings", "custom.json"],
+        vec!["accept-ui", "greeting", "--ui-catalog", "ui.json"],
         vec!["--translate", "--ui-only"],
         vec!["--candidates"],
-        vec!["--source", "somewhere", "accept", "article", ARTICLE],
-        vec!["accept", "article", ARTICLE, "--ui-catalog", "ui.json"],
-        vec!["accept", "ui", "greeting", "--output", "elsewhere"],
     ] {
         let result = project.invoke(&args);
         assert_eq!(
@@ -325,7 +330,9 @@ fn invalid_or_ambiguous_arguments_fail_before_any_export_or_translation() {
     }
     project.run(&["--help"]);
     project.run(&["--version"]);
-    project.run(&["accept", "--help"]);
+    for command in ["accept-article", "accept-tag", "accept-ui"] {
+        project.run(&[command, "--help"]);
+    }
     assert!(!project.path("content").exists());
     assert_eq!(project.calls(), 0);
 }
@@ -338,66 +345,4 @@ fn missing_private_input_does_not_fall_back_to_public_only_translation() {
     assert!(!result.status.success());
     assert!(!project.path("content").exists());
     assert_eq!(project.calls(), 0);
-}
-
-#[test]
-fn explicit_paths_are_used_for_export_and_candidate_acceptance() {
-    let project = Project::new();
-    fs::rename(
-        project.path("obsidian/Publish"),
-        project.path("custom vault"),
-    )
-    .unwrap();
-    fs::rename(
-        project.path("translation.json"),
-        project.path("custom settings.json"),
-    )
-    .unwrap();
-    fs::rename(
-        project.path("crates/server/locales/ui.json"),
-        project.path("custom ui.json"),
-    )
-    .unwrap();
-    let args = [
-        "--source",
-        "custom vault",
-        "--output",
-        "custom content",
-        "--ui-catalog",
-        "custom ui.json",
-        "--settings",
-        "custom settings.json",
-    ];
-    project.run(&args);
-    assert!(
-        project
-            .path(&format!("custom content/en/{ARTICLE}.md"))
-            .exists()
-    );
-    assert!(!project.path("content").exists());
-
-    let mut ui = project.read_json("custom ui.json");
-    ui["entries"]["greeting"]["translation"]["value"] = json!("Hand edited greeting");
-    ui["entries"]["greeting"]["source"] = json!("新しい挨拶");
-    project.write_json("custom ui.json", ui);
-    project.run(&args);
-    assert_eq!(
-        project.read_json("custom ui.json")["entries"]["greeting"]["translation"]["value"],
-        "Hand edited greeting"
-    );
-    let calls = project.calls();
-    project.run(&[
-        "accept",
-        "ui",
-        "greeting",
-        "--ui-catalog",
-        "custom ui.json",
-        "--settings",
-        "custom settings.json",
-    ]);
-    assert_eq!(
-        project.read_json("custom ui.json")["entries"]["greeting"]["translation"]["value"],
-        "English 新しい挨拶"
-    );
-    assert_eq!(project.calls(), calls);
 }
