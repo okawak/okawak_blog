@@ -9,9 +9,10 @@ mod source;
 mod translation;
 
 pub use error::{ExportError, Result};
-pub use pipeline::export_translated;
+pub use pipeline::{
+    accept_article_candidate, accept_catalog_candidate, export_content, translate_catalog,
+};
 pub use translation::{
     CodexTranslator, ProtectedContent, Texts, TranslationReport, TranslationRequest,
-    TranslationSettings, Translator, accept_catalog_translation, accept_translation,
-    translate_catalog, translate_public,
+    TranslationSettings, Translator,
 };

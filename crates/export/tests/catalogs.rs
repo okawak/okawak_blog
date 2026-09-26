@@ -86,7 +86,7 @@ fn catalogs_reuse_each_entry_and_protect_manual_edits_until_candidate_acceptance
             .unwrap()
             .stale
     );
-    export::accept_catalog_translation(&path, "count", &settings()).unwrap();
+    export::accept_catalog_candidate(&path, "count", &settings()).unwrap();
     export::translate_catalog(&path, &fake, &settings()).unwrap();
     assert_eq!(fake.0.get(), 3);
 }
@@ -171,7 +171,7 @@ fn changed_source_placeholders_regenerate_or_protect_existing_translations() {
                 assert!(translation.stale);
                 assert_eq!(catalog.entries["count"].value(domain::Locale::En), source);
                 export::translate_catalog(&path, &fake, &settings()).unwrap();
-                export::accept_catalog_translation(&path, "count", &settings()).unwrap();
+                export::accept_catalog_candidate(&path, "count", &settings()).unwrap();
             }
             export::translate_catalog(&path, &fake, &settings()).unwrap();
             assert_eq!(
@@ -192,7 +192,7 @@ fn tags_are_translated_once_per_id_and_removed_with_unpublished_sources() {
         fs::write(source.path().join(format!("tech/{name}.md")), format!("---\ntitle: {name}\ncategory: tech\nis_completed: true\ntags: [統計]\ncreated: '{date}T00:00:00+09:00'\nupdated: '{date}T00:00:00+09:00'\n---\n本文\n")).unwrap();
     }
     let fake = Fake(Cell::new(0));
-    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
+    export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
     assert_eq!(fake.0.get(), 3, "two articles and one shared tag");
     let path = output.path().join("tags.json");
     let mut catalog: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
@@ -201,11 +201,11 @@ fn tags_are_translated_once_per_id_and_removed_with_unpublished_sources() {
     tag.translation.as_mut().unwrap().value = "Manual label".into();
     tag.context = "Updated tag context".into();
     save(&path, &catalog);
-    let report = export::translate_public(output.path(), &fake, &settings()).unwrap();
+    let report = export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
     assert_eq!(report.protected, [ProtectedContent::Tag("統計".into())]);
     assert_eq!(fake.0.get(), 4);
     fs::remove_dir_all(source.path().join("tech")).unwrap();
-    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
+    export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
     let catalog: LabelCatalog = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
     assert!(catalog.entries.is_empty());
     assert!(
@@ -227,7 +227,7 @@ fn blocked_tag_candidates_stop_before_translating_any_article() {
     fs::write(source.path().join("tech/a.md"), "---\ntitle: Article\ncategory: tech\nis_completed: true\ntags: [統計]\ncreated: '2025-01-01T00:00:00+09:00'\nupdated: '2025-01-01T00:00:00+09:00'\n---\n本文\n").unwrap();
     let path = output.path().join("tags.json");
     let fake = Fake(Cell::new(0));
-    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
+    export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
     let mut catalog: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     let entry = catalog.entries.get_mut("統計").unwrap();
     entry.translation.as_mut().unwrap().value = "Manual statistics".into();
@@ -264,7 +264,7 @@ fn blocked_tag_candidates_stop_before_translating_any_article() {
             .replace("本文", "更新した本文"),
     )
     .unwrap();
-    assert!(export::export_translated(source.path(), output.path(), &fake, &settings()).is_err());
+    assert!(export::export_content(source.path(), output.path(), &fake, &settings()).is_err());
     assert_eq!(fake.0.get(), calls);
     assert_eq!(fs::read(english).unwrap(), english_before);
     assert_eq!(fs::read(&path).unwrap(), before);
@@ -345,7 +345,7 @@ fn filename_only_catalog_updates_and_accepts_without_replacing_working_directory
     entry.context = "updated button context".into();
     save(path, &catalog);
     export::translate_catalog(path, &fake, &settings()).unwrap();
-    export::accept_catalog_translation(path, "button", &settings()).unwrap();
+    export::accept_catalog_candidate(path, "button", &settings()).unwrap();
     export::translate_catalog(path, &fake, &settings()).unwrap();
     assert_eq!(fake.0.get(), 2);
     assert_eq!(fs::metadata(".").unwrap().ino(), directory_id);
@@ -493,12 +493,12 @@ fn catalog_directory_alias_uses_the_real_public_tree_lock_for_update_and_accepta
     fs::write(&lock, "another export").unwrap();
     let before = fs::read(&path).unwrap();
     assert!(export::translate_catalog(&linked_path, &fake, &settings()).is_err());
-    assert!(export::accept_catalog_translation(&linked_path, "tag", &settings()).is_err());
+    assert!(export::accept_catalog_candidate(&linked_path, "tag", &settings()).is_err());
     assert_eq!(fs::read(&path).unwrap(), before);
     assert_eq!(fs::read_to_string(&lock).unwrap(), "another export");
     assert!(!tmp.path().join(".content-link.export-lock").exists());
     fs::remove_file(lock).unwrap();
-    export::accept_catalog_translation(&linked_path, "tag", &settings()).unwrap();
+    export::accept_catalog_candidate(&linked_path, "tag", &settings()).unwrap();
     let accepted: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     assert_eq!(
         accepted.entries["tag"].translation.as_ref().unwrap().value,

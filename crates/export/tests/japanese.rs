@@ -13,7 +13,7 @@ fn run_export(source: &Path, output: &Path) -> export::Result<()> {
         instruction: "test".into(),
         glossary: export::Texts::new(),
     };
-    export::export_translated(source, output, &Fake, &settings).map(|_| ())
+    export::export_content(source, output, &Fake, &settings).map(|_| ())
 }
 
 fn note(root: &Path, path: &str, title: &str, completed: bool, body: &str) {

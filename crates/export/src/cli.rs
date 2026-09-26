@@ -44,7 +44,7 @@ impl Cli {
             None => {
                 let translator = export::CodexTranslator::default();
                 tracing::info!("content export started");
-                let content = export::export_translated(source, output, &translator, &settings)?;
+                let content = export::export_content(source, output, &translator, &settings)?;
                 report_content(&content);
                 tracing::info!("UI translation started");
                 let ui = export::translate_catalog(ui_catalog, &translator, &settings)?;
@@ -52,15 +52,15 @@ impl Cli {
                 tracing::info!("export completed");
             }
             Some(Command::Article { article_id }) => {
-                export::accept_translation(output, &article_id, &settings)?;
+                export::accept_article_candidate(output, &article_id, &settings)?;
                 tracing::info!(%article_id, "translation candidate accepted");
             }
             Some(Command::Tag { tag }) => {
-                export::accept_catalog_translation(&output.join("tags.json"), &tag, &settings)?;
+                export::accept_catalog_candidate(&output.join("tags.json"), &tag, &settings)?;
                 tracing::info!(tag_id = %tag, "translation candidate accepted");
             }
             Some(Command::Ui { key }) => {
-                export::accept_catalog_translation(ui_catalog, &key, &settings)?;
+                export::accept_catalog_candidate(ui_catalog, &key, &settings)?;
                 tracing::info!(message_key = %key, "translation candidate accepted");
             }
         }
