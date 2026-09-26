@@ -158,7 +158,7 @@ fn rename_and_title_update_keep_id_and_unpublish_removes_managed_output() {
 }
 
 #[test]
-fn resolves_public_wikilinks_and_copies_only_referenced_images() {
+fn resolves_public_wikilinks_without_exporting_local_images() {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
     note(
@@ -166,20 +166,17 @@ fn resolves_public_wikilinks_and_copies_only_referenced_images() {
         "tech/article.md",
         "Article",
         true,
-        "[[target|See target]]\n![[image.png]]\n`[[private]]`",
+        "[[target|See target]]\n![Photo](https://images.example.invalid/photo.png)\n`[[private]]`",
     );
     note(source.path(), "tech/target.md", "Target", true, "# Target");
-    fs::write(source.path().join("image.png"), b"public image").unwrap();
     fs::write(source.path().join("private.png"), b"private image").unwrap();
     run_export(source.path(), output.path()).unwrap();
     let actual = outputs(output.path()).join("\n");
     assert!(actual.contains("[See target](content:"));
-    assert!(actual.contains("/content-assets/"));
+    assert!(actual.contains("![Photo](https://images.example.invalid/photo.png)"));
     assert!(actual.contains("`[[private]]`"));
-    assert_eq!(
-        fs::read_dir(output.path().join("assets")).unwrap().count(),
-        1
-    );
+    assert!(!output.path().join("assets").exists());
+    assert!(!output.path().join("private.png").exists());
 }
 
 #[rstest::rstest]
@@ -433,8 +430,15 @@ fn markdown_links_resolve_the_sibling_before_a_root_note_with_the_same_name() {
     assert_eq!(outputs(output.path()), exported);
 }
 
-#[test]
-fn markdown_images_use_the_relative_file_despite_duplicate_basenames() {
+#[rstest::rstest]
+#[case("![Photo](image.png)")]
+#[case("![Photo](my%20image.png)")]
+#[case("![[image.png]]")]
+#[case("![Photo](/private/image.png)")]
+#[case("![Photo](file:///private/image.png)")]
+#[case("![Photo](data:image/png;base64,aGVsbG8=)")]
+#[case("![Photo](mailto:me@example.com)")]
+fn local_images_are_rejected_without_changing_public_documents(#[case] body: &str) {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
     note(
@@ -442,28 +446,25 @@ fn markdown_images_use_the_relative_file_despite_duplicate_basenames() {
         "tech/sub/article.md",
         "Article",
         true,
-        "![x](image.png)",
+        "Public body",
     );
     fs::write(source.path().join("tech/sub/image.png"), b"sibling image").unwrap();
-    fs::write(source.path().join("image.png"), b"other image").unwrap();
+    fs::write(source.path().join("tech/sub/my image.png"), b"other image").unwrap();
     run_export(source.path(), output.path()).unwrap();
-    let assets: Vec<_> = fs::read_dir(output.path().join("assets"))
+    let before = outputs(output.path());
+    let english = fs::read_dir(output.path().join("en"))
         .unwrap()
-        .collect();
-    assert_eq!(assets.len(), 1);
-    assert_eq!(
-        fs::read(assets[0].as_ref().unwrap().path()).unwrap(),
-        b"sibling image"
-    );
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let before_english = fs::read(&english).unwrap();
 
-    note(
-        source.path(),
-        "tech/sub/article.md",
-        "Article",
-        true,
-        "![[image.png]]",
-    );
+    note(source.path(), "tech/sub/article.md", "Article", true, body);
     assert!(run_export(source.path(), output.path()).is_err());
+    assert_eq!(outputs(output.path()), before);
+    assert_eq!(fs::read(english).unwrap(), before_english);
+    assert!(!output.path().join("assets").exists());
 }
 
 #[test]
@@ -475,10 +476,9 @@ fn markdown_url_paths_and_heading_fragments_are_decoded_before_resolution() {
         "tech/article.md",
         "Article",
         true,
-        "[Target](My%20Note.md#%E8%A6%8B%E5%87%BA%E3%81%97)\n![Photo](my%20image.png)",
+        "[Target](My%20Note.md#%E8%A6%8B%E5%87%BA%E3%81%97)",
     );
     note(source.path(), "tech/My Note.md", "Target", true, "# 見出し");
-    fs::write(source.path().join("tech/my image.png"), b"public photo").unwrap();
     run_export(source.path(), output.path()).unwrap();
     let before = outputs(output.path());
     let article = before
@@ -486,7 +486,6 @@ fn markdown_url_paths_and_heading_fragments_are_decoded_before_resolution() {
         .find(|s| s.contains("title: Article\n"))
         .unwrap();
     assert!(article.contains("#section-"));
-    assert!(article.contains("![Photo](/content-assets/"));
     assert!(!article.contains("%20"));
     for path in [
         "%2Fprivate%2Fsecret.md",
@@ -518,10 +517,9 @@ fn reference_definitions_do_not_leave_vault_paths_or_unused_private_titles() {
         "tech/article.md",
         "Article",
         true,
-        "[Target][ref]\n![Photo][photo]\n[External][web]\n\n[ref]: target.md \"PRIVATE TITLE\"\n[ref]: unused.md \"PRIVATE DUPLICATE\"\n[photo]: image.png \"PRIVATE IMAGE\"\n[web]: https://example.com \"Public tooltip\"\n\n```md\n[example]: literal.md\n```",
+        "[Target][ref]\n![Photo][photo]\n[External][web]\n\n[ref]: target.md \"PRIVATE TITLE\"\n[ref]: unused.md \"PRIVATE DUPLICATE\"\n[photo]: https://images.example.invalid/photo.png \"Public photo\"\n[unused]: private.png \"PRIVATE IMAGE\"\n[web]: https://example.com \"Public tooltip\"\n\n```md\n[example]: literal.md\n```",
     );
     note(source.path(), "tech/target.md", "Target", true, "Body");
-    fs::write(source.path().join("tech/image.png"), b"public photo").unwrap();
     run_export(source.path(), output.path()).unwrap();
     let exported = outputs(output.path());
     let article = exported
@@ -529,12 +527,14 @@ fn reference_definitions_do_not_leave_vault_paths_or_unused_private_titles() {
         .find(|s| s.contains("title: Article\n"))
         .unwrap();
     assert!(article.contains("[Target](content:"));
-    assert!(article.contains("![Photo](/content-assets/"));
+    assert!(
+        article.contains("![Photo](<https://images.example.invalid/photo.png> \"Public photo\")")
+    );
     assert!(article.contains("https://example.com"));
     assert!(article.contains("Public tooltip"));
     assert!(!article.contains("PRIVATE"));
     assert!(!article.contains("target.md"));
-    assert!(!article.contains("image.png"));
+    assert!(!article.contains("private.png"));
     assert!(article.contains("```md\n[example]: literal.md\n```"));
 }
 
@@ -636,7 +636,7 @@ fn wikilink_aliases_keep_existing_escapes_and_literal_brackets() {
 }
 
 #[test]
-fn markdown_image_prefers_the_asset_over_a_note_with_the_same_stem() {
+fn note_embeds_remain_links_but_do_not_resolve_markdown_images_with_the_same_stem() {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
     note(
@@ -644,7 +644,7 @@ fn markdown_image_prefers_the_asset_over_a_note_with_the_same_stem() {
         "tech/article.md",
         "Article",
         true,
-        "![photo](image.png)\n![[image.png.md|Note embed]]\n![Markdown note](image.png.md)",
+        "![[image.png.md|Note embed]]\n![Markdown note](image.png.md)",
     );
     note(
         source.path(),
@@ -655,17 +655,21 @@ fn markdown_image_prefers_the_asset_over_a_note_with_the_same_stem() {
     );
     fs::write(source.path().join("tech/image.png"), b"public image").unwrap();
     run_export(source.path(), output.path()).unwrap();
-    let article = outputs(output.path())
-        .into_iter()
+    let before = outputs(output.path());
+    let article = before
+        .iter()
         .find(|s| s.contains("title: Article\n"))
         .unwrap();
-    assert!(article.contains("![photo](/content-assets/"), "{article}");
     assert!(article.contains("[Note embed](content:"), "{article}");
     assert!(article.contains("[Markdown note](content:"), "{article}");
-    let assets: Vec<_> = fs::read_dir(output.path().join("assets"))
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .collect();
-    assert_eq!(assets.len(), 1);
-    assert_eq!(fs::read(&assets[0]).unwrap(), b"public image");
+    assert!(!output.path().join("assets").exists());
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "![photo](image.png)",
+    );
+    assert!(run_export(source.path(), output.path()).is_err());
+    assert_eq!(outputs(output.path()), before);
 }

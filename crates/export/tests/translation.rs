@@ -59,6 +59,29 @@ fn english(output: &Path) -> PathBuf {
 }
 
 #[test]
+fn external_image_urls_are_preserved_in_both_locales_without_exporting_assets() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let fake = Fake::new();
+    let url = "https://images.example.invalid/screen%20shot.png?version=1&size=large";
+    write_note(
+        source.path(),
+        &format!("本文\n\n![スクリーンショット]({url})"),
+    );
+    export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
+    let en = english(output.path());
+    let ja = output.path().join("ja").join(en.file_name().unwrap());
+    for path in [ja, en] {
+        assert!(
+            fs::read_to_string(path)
+                .unwrap()
+                .contains(&format!("]({url})"))
+        );
+    }
+    assert!(!output.path().join("assets").exists());
+}
+
+#[test]
 fn translates_only_prose_and_reuses_unchanged_manual_edits() {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
