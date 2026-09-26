@@ -67,15 +67,14 @@ fn translates_only_prose_and_reuses_unchanged_manual_edits() {
         source.path(),
         "# 見出し\n\n本文 **強調** `CODE_SECRET` $x^2$\n\n```rust\nCODE_SECRET\n```",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let path = english(output.path());
     let text = fs::read_to_string(&path).unwrap();
     assert!(text.contains("`CODE_SECRET` $x^2$"));
     assert!(text.contains("```rust\nCODE_SECRET\n```"));
     let manual = text.replace("English 記事", "Manually edited title");
     fs::write(&path, &manual).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     assert_eq!(fake.calls.get(), 1);
     assert_eq!(fs::read_to_string(path).unwrap(), manual);
 }
@@ -86,8 +85,7 @@ fn changed_source_protects_manual_edits_and_candidate_requires_current_source() 
     let output = TempDir::new().unwrap();
     let fake = Fake::new();
     write_note(source.path(), "本文");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let path = english(output.path());
     fs::write(
         &path,
@@ -97,8 +95,8 @@ fn changed_source_protects_manual_edits_and_candidate_requires_current_source() 
     )
     .unwrap();
     write_note(source.path(), "更新した本文");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    let report = export::translate_public(output.path(), &fake, &settings()).unwrap();
+    let report =
+        export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let id: domain::Slug = path.file_stem().unwrap().to_str().unwrap().parse().unwrap();
     assert_eq!(report.protected, [ProtectedContent::Article(id.clone())]);
     assert_eq!(report.generated, 1);
@@ -106,7 +104,7 @@ fn changed_source_protects_manual_edits_and_candidate_requires_current_source() 
     assert!(fs::read_to_string(&path).unwrap().contains("Manual title"));
     assert!(fs::read_to_string(&path).unwrap().contains("stale: true"));
     let calls = fake.calls.get();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     assert_eq!(fake.calls.get(), calls, "the candidate must be reused");
     export::accept_translation(output.path(), &id, &settings()).unwrap();
     assert!(
@@ -114,7 +112,7 @@ fn changed_source_protects_manual_edits_and_candidate_requires_current_source() 
             .unwrap()
             .contains("English 更新した本文")
     );
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     assert_eq!(fake.calls.get(), calls);
 }
 
@@ -124,11 +122,9 @@ fn code_only_update_reassembles_from_cached_translation_without_ai() {
     let output = TempDir::new().unwrap();
     let fake = Fake::new();
     write_note(source.path(), "本文 `old-code`");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     write_note(source.path(), "本文 `new-code`");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     assert_eq!(fake.calls.get(), 1);
     assert!(
         fs::read_to_string(english(output.path()))
@@ -143,8 +139,7 @@ fn reviewed_candidates_survive_retries_and_block_overwrites_after_source_changes
     let output = TempDir::new().unwrap();
     let fake = Fake::new();
     write_note(source.path(), "本文");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let path = english(output.path());
     fs::write(
         &path,
@@ -154,8 +149,7 @@ fn reviewed_candidates_survive_retries_and_block_overwrites_after_source_changes
     )
     .unwrap();
     write_note(source.path(), "新しい本文");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let candidate = output
         .path()
         .join(".export-candidates")
@@ -164,14 +158,15 @@ fn reviewed_candidates_survive_retries_and_block_overwrites_after_source_changes
         .unwrap()
         .replace("English 記事", "Reviewed title");
     fs::write(&candidate, &reviewed).unwrap();
-    let retry = export::translate_public(output.path(), &fake, &settings()).unwrap();
+    let retry =
+        export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     assert_eq!(fs::read_to_string(&candidate).unwrap(), reviewed);
     assert_eq!(retry.generated, 0);
     assert_eq!(fake.calls.get(), 2);
     write_note(source.path(), "さらに新しい本文");
-    export::export_japanese(source.path(), output.path()).unwrap();
     let before = fs::read(&path).unwrap();
-    let error = export::translate_public(output.path(), &fake, &settings()).unwrap_err();
+    let error =
+        export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap_err();
     assert!(
         error.to_string().contains("manually edited candidate"),
         "{error}"
@@ -180,7 +175,7 @@ fn reviewed_candidates_survive_retries_and_block_overwrites_after_source_changes
     assert_eq!(fs::read(&path).unwrap(), before);
     assert_eq!(fake.calls.get(), 2);
     fs::remove_file(&candidate).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     assert!(
         fs::read_to_string(&candidate)
             .unwrap()
@@ -195,14 +190,12 @@ fn reviewed_candidates_block_generation_after_the_published_translation_is_remov
         let output = TempDir::new().unwrap();
         let fake = Fake::new();
         write_note(source.path(), "本文");
-        export::export_japanese(source.path(), output.path()).unwrap();
-        export::translate_public(output.path(), &fake, &settings()).unwrap();
+        export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
         let path = english(output.path());
         let machine = fs::read_to_string(&path).unwrap();
         fs::write(&path, machine.replace("English 記事", "Manual title")).unwrap();
         write_note(source.path(), "新しい本文");
-        export::export_japanese(source.path(), output.path()).unwrap();
-        export::translate_public(output.path(), &fake, &settings()).unwrap();
+        export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
         let candidate = output
             .path()
             .join(".export-candidates")
@@ -217,9 +210,9 @@ fn reviewed_candidates_block_generation_after_the_published_translation_is_remov
             fs::write(&path, &machine).unwrap();
         }
         write_note(source.path(), "さらに新しい本文");
-        export::export_japanese(source.path(), output.path()).unwrap();
         let before = fs::read(&path).ok();
-        let error = export::translate_public(output.path(), &fake, &settings()).unwrap_err();
+        let error = export::export_translated(source.path(), output.path(), &fake, &settings())
+            .unwrap_err();
         assert!(
             error.to_string().contains("manually edited candidate"),
             "{error}"
@@ -236,8 +229,7 @@ fn all_article_candidates_are_checked_before_any_ai_call() {
     let output = TempDir::new().unwrap();
     let fake = Fake::new();
     write_note(source.path(), "本文");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let path = english(output.path());
     fs::write(
         &path,
@@ -247,8 +239,7 @@ fn all_article_candidates_are_checked_before_any_ai_call() {
     )
     .unwrap();
     write_note(source.path(), "新しい本文");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let candidate = output
         .path()
         .join(".export-candidates")
@@ -263,11 +254,10 @@ fn all_article_candidates_are_checked_before_any_ai_call() {
         .replace("title: 記事", "title: First\npublish_id: 000-first")
         .replace("さらに新しい本文", "別の記事");
     fs::write(source.path().join("tech/first.md"), first_note).unwrap();
-    export::export_japanese(source.path(), output.path()).unwrap();
     let before = fs::read(&path).unwrap();
     let cache = output.path().join(".export-candidates/cache");
     let cache_count = fs::read_dir(&cache).unwrap().count();
-    assert!(export::translate_public(output.path(), &fake, &settings()).is_err());
+    assert!(export::export_translated(source.path(), output.path(), &fake, &settings()).is_err());
     assert_eq!(fake.calls.get(), 2);
     assert_eq!(fs::read_dir(&cache).unwrap().count(), cache_count);
     assert_eq!(fs::read(&path).unwrap(), before);
@@ -281,8 +271,7 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
     let output = TempDir::new().unwrap();
     let fake = Fake::new();
     write_note(source.path(), "本文");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let path = english(output.path());
     fs::write(
         &path,
@@ -292,8 +281,7 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
     )
     .unwrap();
     write_note(source.path(), "更新した本文");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let candidate_path = output
         .path()
         .join(".export-candidates")
@@ -318,7 +306,7 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
     fs::remove_file(source.path().join("tech/a.md")).unwrap();
     fs::create_dir_all(source.path().join("daily/new")).unwrap();
     fs::write(source.path().join("daily/new/a.md"), moved).unwrap();
-    export::export_japanese(source.path(), output.path()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let id = path.file_stem().unwrap().to_str().unwrap().parse().unwrap();
     export::accept_translation(output.path(), &id, &settings()).unwrap();
     fn meta(path: &Path) -> domain::PublicContentMeta {
@@ -345,9 +333,10 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
             .contains("English 更新した本文")
     );
     assert!(!candidate_path.exists());
-    let report = export::translate_public(output.path(), &fake, &settings()).unwrap();
-    // The article is reused; translating the newly added tag is independent.
-    assert_eq!(report.reused, 1);
+    let report =
+        export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
+    // Both the accepted article and the tag translated during export are reused.
+    assert_eq!(report.reused, 2);
     assert_eq!(meta(&path).title, "Reviewed candidate title");
 }
 
@@ -380,8 +369,8 @@ fn translated_plain_text_cannot_introduce_markdown_structure() {
         let source = TempDir::new().unwrap();
         let output = TempDir::new().unwrap();
         write_note(source.path(), "本文");
-        export::export_japanese(source.path(), output.path()).unwrap();
-        export::translate_public(output.path(), &Plain(prose), &settings()).unwrap();
+        export::export_translated(source.path(), output.path(), &Plain(prose), &settings())
+            .unwrap();
         let text = fs::read_to_string(english(output.path())).unwrap();
         let body = text
             .strip_prefix("---\n")
@@ -407,8 +396,7 @@ fn inline_html_text_is_preserved_while_surrounding_prose_is_translated() {
         source.path(),
         "前文 <span data-label=\"raw > value\">HTML_SECRET <b>HTML_SECRET</b></span> 後文<br> 続き <!-- <span> --> 最後\n\n<kbd>HTML_SECRET</kbd>",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &fake, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     let translated = fs::read_to_string(english(output.path())).unwrap();
     assert!(
         translated
@@ -445,8 +433,7 @@ fn autolinks_are_untouched_and_self_closing_html_does_not_hide_prose() {
         source.path(),
         "<https://example.com/a> <me@example.com> 文 <span /> 続き <x/> 最後",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &Check, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &Check, &settings()).unwrap();
     let text = fs::read_to_string(english(output.path())).unwrap();
     assert!(text.contains("<https://example.com/a> <me@example.com>"));
     assert!(text.contains("EN 文"));
@@ -480,8 +467,7 @@ fn trimmed_translations_keep_the_original_fragment_boundary_whitespace() {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
     write_note(source.path(), "前 **強調** 後");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    export::translate_public(output.path(), &Trim, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &Trim, &settings()).unwrap();
     assert!(
         fs::read_to_string(english(output.path()))
             .unwrap()
@@ -514,13 +500,12 @@ fn invalid_article_response_is_not_cached_and_retry_can_succeed() {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
     write_note(source.path(), "本文");
-    export::export_japanese(source.path(), output.path()).unwrap();
     let retry = Retry(Cell::new(0));
     assert!(matches!(
-        export::translate_public(output.path(), &retry, &settings()),
+        export::export_translated(source.path(), output.path(), &retry, &settings()),
         Err(export::ExportError::InvalidTranslation(_))
     ));
-    export::translate_public(output.path(), &retry, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &retry, &settings()).unwrap();
     assert_eq!(retry.0.get(), 2);
     assert!(
         fs::read_to_string(english(output.path()))
@@ -535,25 +520,29 @@ fn missing_provenance_is_protected() {
     let output = TempDir::new().unwrap();
     let fake = Fake::new();
     write_note(source.path(), "本文");
-    export::export_japanese(source.path(), output.path()).unwrap();
-    let path = fs::read_dir(output.path().join("ja"))
-        .unwrap()
-        .next()
-        .unwrap()
-        .unwrap()
-        .path();
-    fs::create_dir_all(output.path().join("en")).unwrap();
+    let note = source.path().join("tech/a.md");
     fs::write(
-        output.path().join("en").join(path.file_name().unwrap()),
-        fs::read_to_string(path)
+        &note,
+        fs::read_to_string(&note)
             .unwrap()
-            .replace("locale: ja", "locale: en"),
+            .replacen("---\n", "---\npublish_id: authored\n", 1),
     )
     .unwrap();
-    let report = export::translate_public(output.path(), &fake, &settings()).unwrap();
+    fs::create_dir_all(output.path().join("en")).unwrap();
+    let path = output.path().join("en/authored.md");
+    let authored = format!(
+        "---\nschema_version: 1\nid: authored\nlocale: en\nkind: article\ntitle: Authored title\ncategory: tech\ncreated: '2025-01-01T00:00:00+09:00'\nupdated: '2025-01-01T00:00:00+09:00'\nsource_hash: '{}'\n---\nAuthored prose\n",
+        "0".repeat(64)
+    );
+    fs::write(&path, authored).unwrap();
+    let report =
+        export::export_translated(source.path(), output.path(), &fake, &settings()).unwrap();
     assert_eq!(report.protected.len(), 1);
     assert_eq!(report.generated, 1);
     assert_eq!(fake.calls.get(), 1);
+    let preserved = fs::read_to_string(path).unwrap();
+    assert!(preserved.contains("Authored title"));
+    assert!(preserved.contains("Authored prose"));
 }
 
 #[test]
@@ -568,18 +557,18 @@ fn failure_rolls_back_outputs_and_retry_reuses_completed_units() {
             .replace("title: 記事", "title: 別の記事"),
     )
     .unwrap();
-    export::export_japanese(source.path(), output.path()).unwrap();
     let failing = Fake {
         calls: Cell::new(0),
         fail_after: 1,
     };
     assert!(matches!(
-        export::translate_public(output.path(), &failing, &settings()),
+        export::export_translated(source.path(), output.path(), &failing, &settings()),
         Err(export::ExportError::Translator(_))
     ));
     assert!(!output.path().join("en").exists());
+    assert!(!output.path().join("ja").exists());
     let retry = Fake::new();
-    export::translate_public(output.path(), &retry, &settings()).unwrap();
+    export::export_translated(source.path(), output.path(), &retry, &settings()).unwrap();
     assert_eq!(retry.calls.get(), 1);
     assert_eq!(fs::read_dir(output.path().join("en")).unwrap().count(), 2);
 }

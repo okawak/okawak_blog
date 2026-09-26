@@ -1,6 +1,21 @@
 use std::{fs, path::Path};
 use tempfile::TempDir;
 
+fn run_export(source: &Path, output: &Path) -> export::Result<()> {
+    struct Fake;
+    impl export::Translator for Fake {
+        fn translate(&self, request: &export::TranslationRequest) -> export::Result<export::Texts> {
+            Ok(request.texts.clone())
+        }
+    }
+    let settings = export::TranslationSettings {
+        model: "fake".into(),
+        instruction: "test".into(),
+        glossary: export::Texts::new(),
+    };
+    export::export_translated(source, output, &Fake, &settings).map(|_| ())
+}
+
 fn note(root: &Path, path: &str, title: &str, completed: bool, body: &str) {
     let path = root.join(path);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -37,7 +52,7 @@ fn exports_only_completed_notes_allowlists_metadata_and_preserves_legacy_slug() 
         false,
         "PRIVATE BODY",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let actual = outputs(output.path());
     assert_eq!(actual.len(), 1);
     assert!(actual[0].contains("Public body"));
@@ -55,7 +70,7 @@ fn exports_only_completed_notes_allowlists_metadata_and_preserves_legacy_slug() 
             .join(format!("ja/{}.md", &digest[..12]))
             .exists()
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     assert_eq!(outputs(output.path()), actual);
 }
 
@@ -70,7 +85,7 @@ fn failed_reference_validation_does_not_change_existing_output() {
         true,
         "Public body",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let before = outputs(output.path());
     note(
         source.path(),
@@ -87,7 +102,7 @@ fn failed_reference_validation_does_not_change_existing_output() {
         "[[draft]]",
     );
     assert!(matches!(
-        export::export_japanese(source.path(), output.path()),
+        run_export(source.path(), output.path()),
         Err(export::ExportError::InvalidInput(_))
     ));
     assert_eq!(outputs(output.path()), before);
@@ -104,7 +119,7 @@ fn rename_and_title_update_keep_id_and_unpublish_removes_managed_output() {
         true,
         "Public body",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let old_name = fs::read_dir(output.path().join("ja"))
         .unwrap()
         .next()
@@ -119,7 +134,7 @@ fn rename_and_title_update_keep_id_and_unpublish_removes_managed_output() {
         true,
         "Public body",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     assert!(output.path().join("ja").join(old_name).exists());
     fs::write(output.path().join("README.md"), "Keep this").unwrap();
     note(
@@ -129,7 +144,7 @@ fn rename_and_title_update_keep_id_and_unpublish_removes_managed_output() {
         false,
         "Public body",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     assert!(outputs(output.path()).is_empty());
     assert_eq!(
         fs::read_to_string(output.path().join("README.md")).unwrap(),
@@ -151,7 +166,7 @@ fn resolves_public_wikilinks_and_copies_only_referenced_images() {
     note(source.path(), "tech/target.md", "Target", true, "# Target");
     fs::write(source.path().join("image.png"), b"public image").unwrap();
     fs::write(source.path().join("private.png"), b"private image").unwrap();
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let actual = outputs(output.path()).join("\n");
     assert!(actual.contains("[See target](content:"));
     assert!(actual.contains("/content-assets/"));
@@ -173,7 +188,7 @@ fn symlink_source_is_rejected() {
         source.path().join("leak.md"),
     )
     .unwrap();
-    assert!(export::export_japanese(source.path(), output.path()).is_err());
+    assert!(run_export(source.path(), output.path()).is_err());
 }
 
 #[test]
@@ -187,7 +202,7 @@ fn preserves_hidden_user_files_and_deleted_translations_in_archive() {
         true,
         "Public body",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     fs::write(output.path().join(".keep"), "user data").unwrap();
     note(
         source.path(),
@@ -196,7 +211,7 @@ fn preserves_hidden_user_files_and_deleted_translations_in_archive() {
         false,
         "Public body",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     assert_eq!(
         fs::read_to_string(output.path().join(".keep")).unwrap(),
         "user data"
@@ -205,14 +220,14 @@ fn preserves_hidden_user_files_and_deleted_translations_in_archive() {
         fs::read_dir(output.path().join(".export-archive"))
             .unwrap()
             .count(),
-        1
+        2
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     assert_eq!(
         fs::read_dir(output.path().join(".export-archive"))
             .unwrap()
             .count(),
-        1
+        2
     );
 }
 
@@ -227,7 +242,7 @@ fn failed_export_preserves_unrelated_files_and_rejects_output_inside_source() {
         "Public body",
     );
     assert!(matches!(
-        export::export_japanese(source.path(), &source.path().join("output")),
+        run_export(source.path(), &source.path().join("output")),
         Err(export::ExportError::InvalidInput(_))
     ));
 }
@@ -238,12 +253,12 @@ fn ambiguous_rename_requires_explicit_id() {
     let output = TempDir::new().unwrap();
     note(source.path(), "tech/a.md", "A", true, "A");
     note(source.path(), "tech/b.md", "B", true, "B");
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     fs::remove_file(source.path().join("tech/a.md")).unwrap();
     fs::remove_file(source.path().join("tech/b.md")).unwrap();
     note(source.path(), "tech/c.md", "C", true, "C");
     assert!(
-        export::export_japanese(source.path(), output.path())
+        run_export(source.path(), output.path())
             .unwrap_err()
             .to_string()
             .contains("ambiguous")
@@ -262,7 +277,7 @@ fn heading_references_are_stable_and_missing_anchors_stop_export() {
         true,
         "# 見出し\n\n[[#見出し|見出しへ]]",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let result = outputs(output.path()).join("\n");
     assert!(result.contains("<a id=\"section-"));
     assert!(result.contains("#section-"));
@@ -273,7 +288,7 @@ fn heading_references_are_stable_and_missing_anchors_stop_export() {
         true,
         "# 見出し\n\n[[#存在しない|リンク]]",
     );
-    assert!(export::export_japanese(source.path(), output.path()).is_err());
+    assert!(run_export(source.path(), output.path()).is_err());
     assert_eq!(outputs(output.path()).join("\n"), result);
 }
 
@@ -288,7 +303,7 @@ fn public_bookmark_html_is_allowed_but_local_html_images_are_rejected() {
         true,
         "<div class=\"bookmark\"><a href=\"https://example.com\">Public</a></div>",
     );
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     note(
         source.path(),
         "tech/a.md",
@@ -296,7 +311,7 @@ fn public_bookmark_html_is_allowed_but_local_html_images_are_rejected() {
         true,
         "<IMG SRC = 'file:///private/secret.png'>",
     );
-    assert!(export::export_japanese(source.path(), output.path()).is_err());
+    assert!(run_export(source.path(), output.path()).is_err());
 }
 
 #[test]
@@ -323,7 +338,7 @@ fn markdown_links_resolve_the_sibling_before_a_root_note_with_the_same_name() {
         .unwrap()
         .replace("category: tech", "kind: home");
     fs::write(root_note, raw).unwrap();
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let exported = outputs(output.path());
     let sibling = exported
         .iter()
@@ -347,7 +362,7 @@ fn markdown_links_resolve_the_sibling_before_a_root_note_with_the_same_name() {
         false,
         "PRIVATE",
     );
-    assert!(export::export_japanese(source.path(), output.path()).is_err());
+    assert!(run_export(source.path(), output.path()).is_err());
     assert_eq!(outputs(output.path()), exported);
 }
 
@@ -364,7 +379,7 @@ fn markdown_images_use_the_relative_file_despite_duplicate_basenames() {
     );
     fs::write(source.path().join("tech/sub/image.png"), b"sibling image").unwrap();
     fs::write(source.path().join("image.png"), b"other image").unwrap();
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let assets: Vec<_> = fs::read_dir(output.path().join("assets"))
         .unwrap()
         .collect();
@@ -381,7 +396,7 @@ fn markdown_images_use_the_relative_file_despite_duplicate_basenames() {
         true,
         "![[image.png]]",
     );
-    assert!(export::export_japanese(source.path(), output.path()).is_err());
+    assert!(run_export(source.path(), output.path()).is_err());
 }
 
 #[test]
@@ -397,7 +412,7 @@ fn markdown_url_paths_and_heading_fragments_are_decoded_before_resolution() {
     );
     note(source.path(), "tech/My Note.md", "Target", true, "# 見出し");
     fs::write(source.path().join("tech/my image.png"), b"public photo").unwrap();
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let before = outputs(output.path());
     let article = before
         .iter()
@@ -420,7 +435,7 @@ fn markdown_url_paths_and_heading_fragments_are_decoded_before_resolution() {
             &format!("[Bad]({path})"),
         );
         assert!(
-            export::export_japanese(source.path(), output.path()).is_err(),
+            run_export(source.path(), output.path()).is_err(),
             "accepted {path}"
         );
         assert_eq!(outputs(output.path()), before);
@@ -440,7 +455,7 @@ fn reference_definitions_do_not_leave_vault_paths_or_unused_private_titles() {
     );
     note(source.path(), "tech/target.md", "Target", true, "Body");
     fs::write(source.path().join("tech/image.png"), b"public photo").unwrap();
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let exported = outputs(output.path());
     let article = exported
         .iter()
@@ -462,7 +477,7 @@ fn email_and_web_autolinks_remain_external_references() {
     let output = TempDir::new().unwrap();
     let body = "<me@example.com> <https://example.com/a>";
     note(source.path(), "tech/article.md", "Article", true, body);
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     assert!(outputs(output.path())[0].contains(body));
 }
 
@@ -478,7 +493,7 @@ fn references_resolve_markdown_extensions_case_insensitively() {
         "[Target](target.MD) [[target.MD|Wiki]]",
     );
     note(source.path(), "tech/target.MD", "Target", true, "Body");
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let article = outputs(output.path())
         .into_iter()
         .find(|s| s.contains("title: Article\n"))
@@ -504,7 +519,7 @@ fn markdown_link_labels_preserve_escaped_nested_and_opaque_brackets() {
         .join("\n");
     note(source.path(), "tech/article.md", "Article", true, &body);
     note(source.path(), "tech/target.md", "Target", true, "Body");
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let article = outputs(output.path())
         .into_iter()
         .find(|s| s.contains("title: Article\n"))
@@ -530,7 +545,7 @@ fn wikilink_aliases_keep_existing_escapes_and_literal_brackets() {
     );
     note(source.path(), "tech/target.md", "Target", true, "Body");
     note(source.path(), "tech/tail.md", r"trailing\", true, "Body");
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let article = outputs(output.path())
         .into_iter()
         .find(|s| s.contains("title: Article\n"))
@@ -572,7 +587,7 @@ fn markdown_image_prefers_the_asset_over_a_note_with_the_same_stem() {
         "Body",
     );
     fs::write(source.path().join("tech/image.png"), b"public image").unwrap();
-    export::export_japanese(source.path(), output.path()).unwrap();
+    run_export(source.path(), output.path()).unwrap();
     let article = outputs(output.path())
         .into_iter()
         .find(|s| s.contains("title: Article\n"))
