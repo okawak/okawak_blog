@@ -28,7 +28,7 @@ impl From<&PublishedArticleSummary> for ArticleSummaryDocument {
             category: summary.category.as_str().to_string(),
             section_path: summary.section_path.clone(),
             description: summary.description.clone(),
-            tags: summary.tags.clone(),
+            tags: summary.tags.iter().map(ToString::to_string).collect(),
             priority: summary.priority,
             created_at: summary.created_at.to_string(),
             updated_at: summary.updated_at.to_string(),
@@ -42,14 +42,18 @@ impl TryFrom<&ArticleSummaryDocument> for PublishedArticleSummary {
     fn try_from(document: &ArticleSummaryDocument) -> crate::Result<Self> {
         Ok(Self {
             slug: Slug::new(document.slug.clone())?,
-            title: Title::new(document.title.clone())?,
+            title: Title::new(document.title.clone())?.trimmed(),
             category: document.category.parse::<Category>()?,
             section_path: document.section_path.clone(),
             description: document.description.clone(),
-            tags: document.tags.clone(),
+            tags: document
+                .tags
+                .iter()
+                .map(|tag| tag.parse())
+                .collect::<crate::Result<_>>()?,
             priority: document.priority,
-            created_at: Timestamp::new(document.created_at.clone())?,
-            updated_at: Timestamp::new(document.updated_at.clone())?,
+            created_at: Timestamp::new(document.created_at.clone())?.trimmed(),
+            updated_at: Timestamp::new(document.updated_at.clone())?.trimmed(),
         })
     }
 }
@@ -220,9 +224,9 @@ mod tests {
             slug: Slug::new("abc123def456".to_string()).unwrap(),
             title: Title::new("Test Output".to_string()).unwrap(),
             category: Category::Tech,
-            section_path: SectionPath::new(vec!["block".to_string()]),
+            section_path: SectionPath::new(vec!["block".to_string()]).unwrap(),
             description: Some("Test description".to_string()),
-            tags: vec!["test".to_string()],
+            tags: vec!["test".parse().unwrap()],
             priority: Some(1),
             created_at: Timestamp::new("2025-01-01T00:00:00+09:00".to_string()).unwrap(),
             updated_at: Timestamp::new("2025-01-02T00:00:00+09:00".to_string()).unwrap(),

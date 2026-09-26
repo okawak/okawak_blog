@@ -58,7 +58,7 @@ impl TranslationRequest {
         }
     }
 
-    pub(crate) fn fingerprint(&self) -> Result<String> {
+    pub(crate) fn fingerprint(&self) -> Result<domain::Sha256Digest> {
         Ok(crate::content::digest(serde_json::to_vec(&(
             "text-fragments-v3",
             self,

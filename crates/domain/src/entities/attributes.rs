@@ -3,13 +3,22 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::{fmt, str::FromStr};
 
 /// Ordered category-relative directory segments used for article grouping.
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct SectionPath(Vec<String>);
 
 impl SectionPath {
-    pub fn new(segments: Vec<String>) -> Self {
-        Self(segments)
+    pub fn new(segments: Vec<String>) -> Result<Self> {
+        if segments.iter().any(|s| {
+            s.is_empty()
+                || s == "."
+                || s == ".."
+                || s.contains(['/', '\\'])
+                || s.chars().any(char::is_control)
+        }) {
+            return Err(DomainError::validation("invalid public section"));
+        }
+        Ok(Self(segments))
     }
 
     pub fn segments(&self) -> &[String] {
@@ -18,6 +27,15 @@ impl SectionPath {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+impl<'de> Deserialize<'de> for SectionPath {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Self::new(Vec::deserialize(deserializer)?).map_err(serde::de::Error::custom)
     }
 }
 
@@ -41,11 +59,17 @@ impl Title {
             });
         }
 
-        Ok(Self(trimmed.to_string()))
+        // Preserve source text: normalization would change translation fingerprints.
+        Ok(Self(value))
     }
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Normalize surrounding whitespace explicitly at the presentation boundary.
+    pub fn trimmed(self) -> Self {
+        Self(self.0.trim().to_owned())
     }
 }
 
@@ -78,16 +102,22 @@ pub struct Timestamp(String);
 
 impl Timestamp {
     pub fn new(value: String) -> Result<Self> {
-        let value = value.trim();
-        chrono::DateTime::parse_from_rfc3339(value).map_err(|_| DomainError::InvalidTimestamp {
-            value: value.to_string(),
+        chrono::DateTime::parse_from_rfc3339(value.trim()).map_err(|_| {
+            DomainError::InvalidTimestamp {
+                value: value.to_string(),
+            }
         })?;
 
-        Ok(Self(value.to_string()))
+        Ok(Self(value))
     }
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Normalize surrounding whitespace explicitly at the presentation boundary.
+    pub fn trimmed(self) -> Self {
+        Self(self.0.trim().to_owned())
     }
 }
 
@@ -171,7 +201,7 @@ mod tests {
 
     #[test]
     fn test_section_path_exposes_ordered_segments() {
-        let path = SectionPath::new(vec!["rust".to_string(), "async".to_string()]);
+        let path = SectionPath::new(vec!["rust".to_string(), "async".to_string()]).unwrap();
 
         assert_eq!(path.segments(), ["rust", "async"]);
         assert!(!path.is_empty());
@@ -180,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_section_path_serialization_remains_an_array() {
-        let path = SectionPath::new(vec!["rust".to_string(), "async".to_string()]);
+        let path = SectionPath::new(vec!["rust".to_string(), "async".to_string()]).unwrap();
 
         let json = serde_json::to_string(&path).unwrap();
         let deserialized: SectionPath = serde_json::from_str(&json).unwrap();
@@ -190,9 +220,27 @@ mod tests {
     }
 
     #[test]
-    fn test_title_deserializes_with_trimmed_value() {
+    fn test_section_path_rejects_invalid_segments_when_created_or_deserialized() {
+        for segment in [
+            "",
+            ".",
+            "..",
+            "rust/async",
+            "rust\\async",
+            "line\nbreak",
+            "\0",
+        ] {
+            assert!(SectionPath::new(vec![segment.into()]).is_err());
+            let json = serde_json::json!([segment]);
+            assert!(serde_json::from_value::<SectionPath>(json).is_err());
+        }
+        assert!(SectionPath::new(Vec::new()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_title_deserializes_without_rewriting_valid_text() {
         let title: Title = serde_json::from_str(r#""  Intro  ""#).unwrap();
-        assert_eq!(title.as_str(), "Intro");
+        assert_eq!(title.as_str(), "  Intro  ");
     }
 
     #[test]
@@ -202,10 +250,10 @@ mod tests {
     }
 
     #[test]
-    fn test_timestamp_accepts_rfc3339_and_trims_whitespace() {
+    fn test_timestamp_accepts_rfc3339_without_rewriting_valid_text() {
         let timestamp = Timestamp::new("  2025-01-01T00:00:00+09:00  ".to_string()).unwrap();
 
-        assert_eq!(timestamp.as_str(), "2025-01-01T00:00:00+09:00");
+        assert_eq!(timestamp.as_str(), "  2025-01-01T00:00:00+09:00  ");
     }
 
     #[test]

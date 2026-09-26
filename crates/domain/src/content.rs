@@ -1,6 +1,9 @@
 //! Versioned, public Markdown frontmatter shared by export and publish.
 //! Serialization formats and filesystem access belong to the callers.
-use crate::{Category, DomainError, PageKey, Result, SectionPath, Slug, Timestamp, Title};
+use crate::{
+    Category, DomainError, PageKey, Result, SectionPath, Sha256Digest, Slug, TagId, Timestamp,
+    Title,
+};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
@@ -68,8 +71,8 @@ pub enum ContentKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TranslationProvenance {
-    pub input_hash: String,
-    pub generated_hash: String,
+    pub input_hash: Sha256Digest,
+    pub generated_hash: Sha256Digest,
     pub stale: bool,
 }
 
@@ -80,7 +83,7 @@ pub struct PublicContentMeta {
     pub id: Slug,
     pub locale: Locale,
     pub kind: ContentKind,
-    pub title: String,
+    pub title: Title,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -90,13 +93,13 @@ pub struct PublicContentMeta {
     #[serde(default, skip_serializing_if = "SectionPath::is_empty")]
     pub section_path: SectionPath,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub tags: Vec<String>,
+    pub tags: Vec<TagId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<i32>,
-    pub created: String,
-    pub updated: String,
+    pub created: Timestamp,
+    pub updated: Timestamp,
     /// Opaque digest used for source matching, never a private source path.
-    pub source_hash: String,
+    pub source_hash: Sha256Digest,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub translation: Option<TranslationProvenance>,
 }
@@ -108,9 +111,6 @@ impl PublicContentMeta {
                 "unsupported public Markdown schema",
             ));
         }
-        Title::new(self.title.clone())?;
-        Timestamp::new(self.created.clone())?;
-        Timestamp::new(self.updated.clone())?;
         let valid_kind = match self.kind {
             ContentKind::Article | ContentKind::Category => {
                 self.category.is_some() && self.page.is_none()
@@ -132,30 +132,7 @@ impl PublicContentMeta {
                 "only articles may have tags or sections",
             ));
         }
-        if self.section_path.segments().iter().any(|s| {
-            s.is_empty()
-                || s == "."
-                || s == ".."
-                || s.contains(['/', '\\'])
-                || s.chars().any(char::is_control)
-        }) {
-            return Err(DomainError::validation("invalid public section"));
-        }
-        if self
-            .tags
-            .iter()
-            .any(|s| s.trim().is_empty() || s.chars().any(char::is_control))
-        {
-            return Err(DomainError::validation("invalid tag identifier"));
-        }
-        if !is_digest(&self.source_hash) {
-            return Err(DomainError::validation("invalid source fingerprint"));
-        }
-        if let Some(t) = &self.translation
-            && (self.locale == Locale::Ja
-                || !is_digest(&t.input_hash)
-                || !is_digest(&t.generated_hash))
-        {
+        if self.translation.is_some() && self.locale == Locale::Ja {
             return Err(DomainError::validation("invalid translation provenance"));
         }
         Ok(())
@@ -180,8 +157,4 @@ impl PublicContentMeta {
         };
         self.locale.path(&path)
     }
-}
-
-fn is_digest(value: &str) -> bool {
-    value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())
 }

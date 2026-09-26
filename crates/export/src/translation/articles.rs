@@ -9,7 +9,7 @@ use crate::{
     content::{Document, digest, text_hash},
     output,
 };
-use domain::{Locale, Slug, TranslationProvenance};
+use domain::{Locale, Sha256Digest, Slug, TranslationProvenance};
 use std::{fs, path::Path};
 
 struct ArticlePlan<'a> {
@@ -17,7 +17,7 @@ struct ArticlePlan<'a> {
     current: Option<&'a Document>,
     fragments: Fragments,
     request: TranslationRequest,
-    input: String,
+    input: Sha256Digest,
     update: UpdatePlan,
 }
 
@@ -39,8 +39,8 @@ pub(crate) fn translate_stage(
         let current = english.iter().find(|d| d.meta.id == original.meta.id);
         let current_hash = current.map(text_hash).transpose()?;
         let decision = decide(
-            &input,
-            current_hash.as_deref(),
+            input.as_str(),
+            current_hash.as_ref().map(Sha256Digest::as_str),
             current
                 .and_then(|d| d.meta.translation.as_ref())
                 .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
@@ -54,8 +54,8 @@ pub(crate) fn translate_stage(
                 ));
             }
             Some(decide(
-                &input,
-                Some(&text_hash(&candidate)?),
+                input.as_str(),
+                Some(text_hash(&candidate)?.as_str()),
                 candidate
                     .meta
                     .translation
@@ -226,7 +226,7 @@ pub(crate) fn accept_article_candidate(
     Ok(())
 }
 
-fn content_input(request: &TranslationRequest, original: &Document) -> Result<String> {
+fn content_input(request: &TranslationRequest, original: &Document) -> Result<Sha256Digest> {
     Ok(digest(serde_json::to_vec(&(
         // Rebuild generated Markdown when escaping changes, retaining the
         // separate plain-text response cache and protecting manual edits.

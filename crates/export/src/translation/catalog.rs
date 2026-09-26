@@ -4,7 +4,7 @@ use super::{
     plan::{Decision, UpdatePlan, decide, plan_update},
 };
 use crate::{ExportError, Result, content::digest, filesystem, output};
-use domain::{LabelCatalog, LabelProvenance, LabelTranslation};
+use domain::{LabelCatalog, LabelProvenance, LabelTranslation, Sha256Digest};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -28,7 +28,7 @@ pub(crate) struct CatalogPlan {
 struct EntryPlan {
     key: String,
     request: TranslationRequest,
-    input: String,
+    input: Sha256Digest,
     update: UpdatePlan,
 }
 
@@ -40,8 +40,8 @@ pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Resul
         let input = request.fingerprint()?;
         let current = entry.translation.as_ref().map(|t| digest(&t.value));
         let decision = decide(
-            &input,
-            current.as_deref(),
+            input.as_str(),
+            current.as_ref().map(Sha256Digest::as_str),
             entry
                 .translation
                 .as_ref()
@@ -59,8 +59,8 @@ pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Resul
                 ));
             }
             Some(decide(
-                &input,
-                Some(&digest(&candidate.translation.value)),
+                input.as_str(),
+                Some(digest(&candidate.translation.value).as_str()),
                 candidate
                     .translation
                     .provenance

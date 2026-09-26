@@ -83,6 +83,8 @@ exportとpublishはruntime依存ではない。serverはinfraをapplication comp
 - artifactから表示用documentを組み立てる純粋ロジック
 - I/O、async、AWS SDK、HTTP frameworkを持たない
 
+公開Markdownのタイトル・日時・タグID・digest・section pathはdomainの値型が生成時・deserialization時に検証する。`PublicContentMeta::validate()`はschema versionとフィールド間の整合性を検証する。exportのvault入力も同じ値型を使い、publishへ検証済みの値を渡す。
+
 ### crates/publish
 
 - 公開Markdownの読込、種別分類、安定IDによるlink解決、HTML変換、安全化、artifact生成

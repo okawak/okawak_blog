@@ -6,7 +6,7 @@ use crate::{
     content::{self, Document},
     filesystem,
 };
-use domain::{ContentKind, Locale, PublicContentMeta, SectionPath, Slug};
+use domain::{ContentKind, Locale, PublicContentMeta, SectionPath, Slug, TagId, Timestamp, Title};
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, HashSet},
@@ -16,21 +16,21 @@ use std::{
 
 #[derive(Deserialize)]
 struct Frontmatter {
-    title: String,
+    title: Title,
     #[serde(default)]
     kind: ContentKind,
     summary: Option<String>,
     category: Option<domain::Category>,
     page: Option<domain::PageKey>,
     #[serde(default)]
-    tags: Vec<String>,
+    tags: Vec<TagId>,
     priority: Option<i32>,
-    created: String,
-    updated: String,
+    created: Timestamp,
+    updated: Timestamp,
     publish_id: Option<Slug>,
 }
 
-struct Source {
+struct VaultNote {
     key: String,
     document: Document,
 }
@@ -49,7 +49,7 @@ pub(crate) fn prepare(root: &Path, previous: &[Document]) -> Result<Prepared> {
     })
 }
 
-fn extract(root: &Path, previous: &[Document]) -> Result<Vec<Source>> {
+fn extract(root: &Path, previous: &[Document]) -> Result<Vec<VaultNote>> {
     let mut sources = Vec::new();
     let mut claimed = HashSet::new();
     let mut routes = HashSet::new();
@@ -107,7 +107,8 @@ fn extract(root: &Path, previous: &[Document]) -> Result<Vec<Source>> {
             ));
         } else {
             Slug::new(
-                digest(format!("{}/{relative_str}/{}", fm.title, fm.created))[..12].to_owned(),
+                digest(format!("{}/{relative_str}/{}", fm.title, fm.created)).as_str()[..12]
+                    .to_owned(),
             )?
         };
         if !claimed.insert(id.clone()) {
@@ -129,7 +130,7 @@ fn extract(root: &Path, previous: &[Document]) -> Result<Vec<Source>> {
                     .flat_map(|p| p.iter())
                     .map(|p| p.to_string_lossy().into_owned())
                     .collect(),
-            )
+            )?
         } else {
             SectionPath::default()
         };
@@ -158,7 +159,7 @@ fn extract(root: &Path, previous: &[Document]) -> Result<Vec<Source>> {
         if !routes.insert(meta.path()) {
             return Err(ExportError::invalid_input("duplicate public route"));
         }
-        sources.push(Source {
+        sources.push(VaultNote {
             key: relative.with_extension("").to_string_lossy().into_owned(),
             document: Document {
                 meta,

@@ -34,14 +34,19 @@ fn outputs(root: &Path) -> Vec<String> {
         .collect()
 }
 
-#[test]
-fn exports_only_completed_notes_allowlists_metadata_and_preserves_legacy_slug() {
+#[rstest::rstest]
+#[case("Article", "Article")]
+#[case("'  Article  '", "  Article  ")]
+fn exports_only_completed_notes_allowlists_metadata_and_preserves_legacy_slug(
+    #[case] yaml_title: &str,
+    #[case] title: &str,
+) {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
     note(
         source.path(),
         "tech/article.md",
-        "Article",
+        yaml_title,
         true,
         "Public body",
     );
@@ -60,7 +65,7 @@ fn exports_only_completed_notes_allowlists_metadata_and_preserves_legacy_slug() 
     assert!(!actual[0].contains("PRIVATE"));
     assert!(!actual[0].contains("tech/article.md"));
     use sha2::{Digest, Sha256};
-    let digest = Sha256::digest(b"Article/tech/article.md/2025-01-01T00:00:00+09:00")
+    let digest = Sha256::digest(format!("{title}/tech/article.md/2025-01-01T00:00:00+09:00"))
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect::<String>();

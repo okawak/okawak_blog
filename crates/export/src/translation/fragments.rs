@@ -21,7 +21,7 @@ struct Fragment {
 
 impl Fragments {
     pub(super) fn extract(document: &Document) -> Self {
-        let mut texts = Texts::from([("title".into(), document.meta.title.clone())]);
+        let mut texts = Texts::from([("title".into(), document.meta.title.to_string())]);
         if let Some(summary) = &document.meta.summary {
             texts.insert("summary".into(), summary.clone());
         }
@@ -65,7 +65,7 @@ impl Fragments {
             return Err(ExportError::invalid_translation("fragment keys changed"));
         }
         let mut translated = source.clone();
-        translated.meta.title = result["title"].clone();
+        translated.meta.title = result["title"].parse()?;
         translated.meta.summary = result.get("summary").cloned();
         for fragment in self.ranges.iter().rev() {
             let value = &result[&fragment.key];

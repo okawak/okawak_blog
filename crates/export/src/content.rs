@@ -1,6 +1,6 @@
 //! Public document codec and pure Markdown/fingerprint primitives.
 use crate::{ExportError, Result};
-use domain::PublicContentMeta;
+use domain::{PublicContentMeta, Sha256Digest};
 use pulldown_cmark::Options;
 use sha2::{Digest, Sha256};
 
@@ -53,11 +53,8 @@ pub(crate) fn split(text: &str) -> Result<Option<(&str, &str)>> {
     Ok(Some((yaml, body)))
 }
 
-pub(crate) fn digest(bytes: impl AsRef<[u8]>) -> String {
-    Sha256::digest(bytes.as_ref())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+pub(crate) fn digest(bytes: impl AsRef<[u8]>) -> Sha256Digest {
+    Sha256Digest::from_bytes(Sha256::digest(bytes.as_ref()).into())
 }
 
 pub(crate) fn options() -> Options {
@@ -69,7 +66,7 @@ pub(crate) fn options() -> Options {
         | Options::ENABLE_WIKILINKS
 }
 
-pub(crate) fn text_hash(document: &Document) -> Result<String> {
+pub(crate) fn text_hash(document: &Document) -> Result<Sha256Digest> {
     Ok(digest(serde_json::to_vec(&(
         &document.meta.title,
         &document.meta.summary,

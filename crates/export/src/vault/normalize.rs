@@ -1,5 +1,5 @@
 //! Resolve references using only the explicitly public source set.
-use super::Source;
+use super::VaultNote;
 use crate::{
     ExportError, Result,
     content::{digest, options},
@@ -11,7 +11,10 @@ use std::{
     path::{Component, Path},
 };
 
-pub(super) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
+pub(super) fn normalize(
+    sources: &mut [VaultNote],
+    root: &Path,
+) -> Result<BTreeMap<String, Vec<u8>>> {
     let index = NoteIndex::new(sources);
     let mut assets = Assets::new(root)?;
     for source in sources {
@@ -57,7 +60,7 @@ pub(super) fn normalize(sources: &mut [Source], root: &Path) -> Result<BTreeMap<
                         range.start..range.start,
                         format!(
                             "<a id=\"section-{}{suffix}\"></a>\n\n",
-                            &digest(heading)[..12]
+                            &digest(heading).as_str()[..12]
                         ),
                     ));
                 }
@@ -180,7 +183,7 @@ struct NoteIndex {
 }
 
 impl NoteIndex {
-    fn new(sources: &[Source]) -> Self {
+    fn new(sources: &[VaultNote]) -> Self {
         let notes = sources
             .iter()
             .map(|s| {
@@ -197,7 +200,7 @@ impl NoteIndex {
                 Note {
                     key: s.key.clone(),
                     id: s.document.meta.id.to_string(),
-                    title: s.document.meta.title.clone(),
+                    title: s.document.meta.title.to_string(),
                     headings,
                 }
             })
@@ -352,7 +355,7 @@ fn rewrite_link(
                 ));
             }
             let anchor = anchor
-                .map(|a| format!("#section-{}", &digest(a)[..12]))
+                .map(|a| format!("#section-{}", &digest(a).as_str()[..12]))
                 .unwrap_or_default();
             format!("content:{}{anchor}", note.id)
         }

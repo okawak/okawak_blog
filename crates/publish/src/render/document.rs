@@ -7,7 +7,7 @@ use crate::{
 use domain::{
     ArticleBody, ArticleMeta, CategoryLandingBody, CategoryLandingMeta,
     HomeFragmentArtifactDocument, PageArtifactDocument, PublishableArticle,
-    PublishableCategoryLanding, Timestamp, Title,
+    PublishableCategoryLanding,
 };
 
 pub(crate) async fn render_article(
@@ -18,14 +18,14 @@ pub(crate) async fn render_article(
     let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await;
     let meta = ArticleMeta {
         slug: parsed_file.slug,
-        title: Title::new(parsed_file.front_matter.title)?,
+        title: parsed_file.front_matter.title.trimmed(),
         category: parsed_file.category,
         section_path: parsed_file.section_path,
         description: parsed_file.front_matter.summary,
         tags: parsed_file.front_matter.tags,
         priority: parsed_file.front_matter.priority,
-        created_at: Timestamp::new(parsed_file.front_matter.created)?,
-        updated_at: Timestamp::new(parsed_file.front_matter.updated)?,
+        created_at: parsed_file.front_matter.created.trimmed(),
+        updated_at: parsed_file.front_matter.updated.trimmed(),
     };
     let body = ArticleBody::new(html)?;
     Ok(PublishableArticle::new(meta, body))
@@ -39,9 +39,9 @@ pub(crate) async fn render_category(
     let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await;
     let meta = CategoryLandingMeta {
         category: parsed_file.category,
-        title: Title::new(parsed_file.front_matter.title)?,
+        title: parsed_file.front_matter.title.trimmed(),
         description: parsed_file.front_matter.summary,
-        updated_at: Timestamp::new(parsed_file.front_matter.updated)?,
+        updated_at: parsed_file.front_matter.updated.trimmed(),
     };
     let body = CategoryLandingBody::new(html)?;
     Ok(PublishableCategoryLanding::new(meta, body))
@@ -54,10 +54,10 @@ pub(crate) async fn render_home(
 ) -> HomeFragmentArtifactDocument {
     let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await;
     HomeFragmentArtifactDocument {
-        title: parsed_file.front_matter.title,
+        title: parsed_file.front_matter.title.to_string(),
         description: parsed_file.front_matter.summary,
         html,
-        updated_at: parsed_file.front_matter.updated,
+        updated_at: parsed_file.front_matter.updated.to_string(),
     }
 }
 
@@ -69,9 +69,9 @@ pub(crate) async fn render_page(
     let html = body::render(&parsed_file.markdown_body, link_index, &enrich).await;
     PageArtifactDocument {
         page: parsed_file.page,
-        title: parsed_file.front_matter.title,
+        title: parsed_file.front_matter.title.to_string(),
         description: parsed_file.front_matter.summary,
         html,
-        updated_at: parsed_file.front_matter.updated,
+        updated_at: parsed_file.front_matter.updated.to_string(),
     }
 }
