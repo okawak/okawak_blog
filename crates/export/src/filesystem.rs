@@ -1,9 +1,10 @@
 //! Filesystem traversal, locking and staged replacement, independent of content schemas.
 use crate::{ExportError, Result};
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
+use walkdir::WalkDir;
 
 pub(crate) fn locked<T>(output: &Path, build: impl FnOnce() -> Result<T>) -> Result<T> {
     let parent = parent(output);
@@ -14,18 +15,17 @@ pub(crate) fn locked<T>(output: &Path, build: impl FnOnce() -> Result<T>) -> Res
         .to_string_lossy();
     let backup = parent.join(format!(".{name}.export-backup"));
     let lock = parent.join(format!(".{name}.export-lock"));
-    let lock_file = fs::OpenOptions::new()
+    fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&lock)?;
-    struct Lock<'a>(&'a Path, fs::File);
+    struct Lock<'a>(&'a Path);
     impl Drop for Lock<'_> {
         fn drop(&mut self) {
-            let _ = &self.1;
             let _ = fs::remove_file(self.0);
         }
     }
-    let _lock = Lock(&lock, lock_file);
+    let _lock = Lock(&lock);
     if backup.exists() {
         return Err(ExportError::invalid_input(format!(
             "export backup exists; recover it before retrying: {}",
@@ -50,10 +50,10 @@ pub(crate) fn transaction<T>(output: &Path, build: impl FnOnce(&Path) -> Result<
             copy_tree(output, stage.path())?;
         }
         let result = build(stage.path())?;
-        if output.exists() && same_tree(output, stage.path())? {
+        let existed = output.exists();
+        if existed && same_tree(output, stage.path())? {
             return Ok(result);
         }
-        let existed = output.exists();
         if existed {
             fs::rename(output, &backup)?;
         }
@@ -109,29 +109,31 @@ pub(crate) fn all_files(root: &Path) -> Result<Vec<PathBuf>> {
 }
 
 fn walk(root: &Path, hidden: bool) -> Result<Vec<PathBuf>> {
-    if fs::symlink_metadata(root)?.file_type().is_symlink() {
-        return Err(ExportError::invalid_input("symlink root is not allowed"));
-    }
+    let entries = WalkDir::new(root)
+        .follow_links(false)
+        .follow_root_links(false)
+        .into_iter()
+        .filter_entry(|entry| {
+            entry.depth() == 0 || hidden || !entry.file_name().to_string_lossy().starts_with('.')
+        });
     let mut paths = Vec::new();
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        if !hidden && entry.file_name().to_string_lossy().starts_with('.') {
-            continue;
-        }
-        let kind = entry.file_type()?;
+    for entry in entries {
+        let entry = entry.map_err(io::Error::from)?;
+        let kind = entry.file_type();
         if kind.is_symlink() {
             return Err(ExportError::invalid_input(format!(
                 "symlink input is not allowed: {}",
                 entry.path().display()
             )));
         }
-        if kind.is_dir() {
-            paths.extend(walk(&entry.path(), hidden)?);
-        } else if kind.is_file() {
-            paths.push(entry.path());
+        if entry.depth() == 0 && !kind.is_dir() {
+            return Err(io::Error::from(io::ErrorKind::NotADirectory).into());
+        }
+        if kind.is_file() {
+            paths.push(entry.into_path());
         }
     }
-    paths.sort();
+    paths.sort_unstable();
     Ok(paths)
 }
 
