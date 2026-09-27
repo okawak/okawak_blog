@@ -23,6 +23,8 @@ WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する
 
 出力は同じfilesystemの一時ディレクトリで組み立て、検証成功後に入れ替える。同時exportはlockで拒否する。差分がなければ既存ファイルのmtimeも変えない。削除・非公開化された日英Markdownは `content/.export-archive/`（Git対象外）へ退避する。任意のREADME・隠しファイルは保持する。`ja/`、`en/` のMarkdownはexport管理領域である。
 
+コピーと差分確認は`walkdir`でディレクトリ内を名前順に走査し、全体のパス一覧を作らずに進める。空ディレクトリも保持し、内容比較は固定長バッファで行う。翻訳後は新しく生成された応答cacheだけを追加する。既存出力全体のコピーと内容比較は行うため、処理時間はファイル数と合計容量に応じて増える。ソート用のメモリは走査中のディレクトリのエントリ数に依存するが、ファイル内容は丸ごとメモリへ読み込まない。
+
 中断で `.content.export-lock` が残った場合は、exportプロセスが終了したことを確認して削除する。`.content.export-backup` が残った場合、contentがなければbackupをcontentへ戻す。contentがある場合は新旧を比較して採用版を確定してからbackupを除去する。一時ディレクトリや退避版をGitへ追加しない。
 
 公開Markdownはpush時点で公開されるため、commit前に差分を確認する。日本語の正本はObsidianであり、通常は公開版を直接編集しない。`publish`と`dev-local`は公開Markdownだけを入力にする。
