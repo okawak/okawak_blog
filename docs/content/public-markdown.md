@@ -2,7 +2,7 @@
 
 `domain::PublicContentMeta` はexportとpublish間で使用するschema version 1のfrontmatter契約である。Markdown本文の解析・ファイルI/Oは各consumerが所有する。`publish`はこの契約だけを入力にし、private vaultへアクセスしない。
 
-schema versionは`domain::PUBLIC_CONTENT_SCHEMA_VERSION`で定義し、exportの生成とdomainの検証で共有する。初回の自動生成IDはSHA-256の先頭`domain::GENERATED_CONTENT_ID_LENGTH`文字（現在12文字）を使う。これは自動生成時の規則であり、明示指定する`publish_id`を含む`Slug`全般の長さは制限しない。
+schema versionは`domain::PUBLIC_CONTENT_SCHEMA_VERSION`で定義し、exportの生成とdomainの検証で共有する。初回の自動生成IDと見出しアンカーのハッシュ部分は、SHA-256の16進表現の先頭`domain::GENERATED_ID_HASH_LENGTH`文字（現在12文字）を使う。見出しアンカーには`section-`を前置し、同じ見出しの2回目以降には`-2`などの連番を付ける。この長さはハッシュ部分の生成規則であり、明示指定する`publish_id`を含む`Slug`全般の長さは制限しない。
 
 - `schema_version: 1`、`id`、`locale: ja | en`、`kind: article | category | page | home` を必須とする。
 - `title`、`created`、`updated`、元pathのSHA-256である `source_hash` を持つ。元path自体は公開しない。

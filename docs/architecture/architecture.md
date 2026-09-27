@@ -72,7 +72,7 @@ exportとpublishはruntime依存ではない。serverはinfraをapplication comp
 
 内部は機能単位のmoduleで構成する。`operation`がexport・辞書翻訳・候補採用の各操作の入口、処理順、lock・transaction境界を所有し、`vault`が公開対象の抽出・正規化、`translation`が記事・辞書の更新計画、翻訳の生成、候補の検証・反映、`output`が公開ファイルの同期・退避を担う。CLIは引数の解釈・操作の選択・結果表示を担当し、`lib.rs`から公開された`operation`の関数を呼ぶ。`vault`は正規化済みの文書を返し、private入力の情報を翻訳処理へ渡さない。
 
-記事画像の圧縮・アップロードはObsidianのS3 Image Uploaderが担当し、配信用artifactとは別のS3 bucketから配信する。exportは本文のHTTP(S)画像URLを保持し、ローカル画像の収集・コピー・同期を行わない。画像ファイルはGit管理せず、ローカル画像参照はexport時に拒否する。
+記事画像の圧縮・アップロードはObsidianのS3 Image Uploaderが担当し、配信用artifactとは別のS3 bucketに保存してCloudFrontから配信する。Markdownの画像記法`![説明](...)`はHTTP(S)画像専用とする。exportは本文の画像URLを保持し、ローカル画像の収集・コピー・同期を行わない。画像ファイルはGit管理せず、ローカル画像参照はexport時に拒否する。ノート参照には通常のMarkdownリンクかWikiLink・Wiki embedを使う。参照形式のリンク・画像は使わず、未使用も含め参照定義を検出した時点でexportをエラーにする。
 
 `content`はI/Oを持たない文書codec・Markdown設定・fingerprint、`filesystem`はschemaに依存しない走査・lock・stagingを所有する。翻訳の更新判定は純粋な`translation::plan`、応答cacheは`translation::cache`、Codex実行は`translation::codex`に分ける。記事と辞書は同じ更新計画を使い、候補衝突の検証をAI呼び出しより前に完了する。下位のcontent / filesystem / outputからvault / translationへ依存させない。
 

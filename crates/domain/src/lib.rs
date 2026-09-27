@@ -15,7 +15,7 @@ pub use artifact::{
 };
 pub use asset::ContentAssetName;
 pub use content::{
-    ContentKind, GENERATED_CONTENT_ID_LENGTH, Locale, PUBLIC_CONTENT_SCHEMA_VERSION,
+    ContentKind, GENERATED_ID_HASH_LENGTH, Locale, PUBLIC_CONTENT_SCHEMA_VERSION,
     PublicContentMeta, TranslationProvenance,
 };
 pub use entities::{Category, PageKey, SectionPath, Sha256Digest, Slug, TagId, Timestamp, Title};
