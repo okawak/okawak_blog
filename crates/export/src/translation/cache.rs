@@ -47,12 +47,17 @@ pub(super) fn copy_cache(root: &Path, stage: &Path) -> Result<()> {
     use std::fs;
     let cache = root.join(".export-candidates/cache");
     if cache.exists() {
-        for file in crate::filesystem::all_files(&cache)? {
-            let dest = stage
-                .join(".export-candidates/cache")
-                .join(file.file_name().unwrap());
-            fs::create_dir_all(dest.parent().unwrap())?;
-            fs::copy(file, dest)?;
+        let destination = stage.join(".export-candidates/cache");
+        fs::create_dir_all(&destination)?;
+        for entry in crate::filesystem::walk(&cache, true) {
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                let dest = destination.join(entry.file_name());
+                // Fingerprinted responses are immutable; staging already copied older ones.
+                if !dest.exists() {
+                    fs::copy(entry.path(), dest)?;
+                }
+            }
         }
     }
     Ok(())
@@ -62,6 +67,41 @@ pub(super) fn copy_cache(root: &Path, stage: &Path) -> Result<()> {
 mod tests {
     use super::super::TranslationSettings;
     use super::*;
+
+    #[test]
+    fn copies_only_new_responses_into_stage() {
+        use std::{
+            fs,
+            time::{Duration, UNIX_EPOCH},
+        };
+
+        let root = tempfile::tempdir().unwrap();
+        let stage = tempfile::tempdir().unwrap();
+        let cache = root.path().join(".export-candidates/cache");
+        let staged_cache = stage.path().join(".export-candidates/cache");
+        fs::create_dir_all(&cache).unwrap();
+        fs::create_dir_all(&staged_cache).unwrap();
+        fs::write(cache.join("old.json"), "{}").unwrap();
+        fs::write(cache.join("new.json"), r#"{"text":"new"}"#).unwrap();
+        let old = staged_cache.join("old.json");
+        fs::write(&old, "{}").unwrap();
+        let modified = UNIX_EPOCH + Duration::from_secs(1_000_000);
+        fs::File::options()
+            .write(true)
+            .open(&old)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+
+        copy_cache(root.path(), stage.path()).unwrap();
+
+        assert_eq!(fs::metadata(old).unwrap().modified().unwrap(), modified);
+        assert_eq!(
+            fs::read(staged_cache.join("new.json")).unwrap(),
+            br#"{"text":"new"}"#
+        );
+    }
+
     #[test]
     fn progress_ai_count_excludes_reuse_and_cached_responses() {
         let root = tempfile::TempDir::new().unwrap();
