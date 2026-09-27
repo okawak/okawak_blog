@@ -89,7 +89,10 @@ fn exports_only_completed_notes_allowlists_metadata_and_preserves_legacy_slug(
     assert!(
         output
             .path()
-            .join(format!("ja/{}.md", &digest[..12]))
+            .join(format!(
+                "ja/{}.md",
+                &digest[..domain::GENERATED_ID_HASH_LENGTH]
+            ))
             .exists()
     );
     run_export(source.path(), output.path()).unwrap();
@@ -555,34 +558,45 @@ fn markdown_url_paths_and_heading_fragments_are_decoded_before_resolution() {
     }
 }
 
-#[test]
-fn reference_definitions_do_not_leave_vault_paths_or_unused_private_titles() {
+#[rstest::rstest]
+#[case::full("[External][ref]")]
+#[case::collapsed("[ref][]")]
+#[case::shortcut("[ref]")]
+#[case::image("![Photo][ref]")]
+#[case::unused("Body without a reference")]
+fn reference_definitions_are_rejected_without_changing_public_documents(#[case] reference: &str) {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
+    let body = indoc! {"
+        Body[^note]
+
+        [^note]: Footnote text.
+
+        ```md
+        [example]: literal.md
+        ```
+    "};
+    note(source.path(), "tech/article.md", "Article", true, body);
+    run_export(source.path(), output.path()).unwrap();
+    let before = outputs(output.path());
+    assert!(before[0].contains(body));
+
     note(
         source.path(),
         "tech/article.md",
         "Article",
         true,
-        "[Target][ref]\n![Photo][photo]\n[External][web]\n\n[ref]: target.md \"PRIVATE TITLE\"\n[ref]: unused.md \"PRIVATE DUPLICATE\"\n[photo]: https://images.example.invalid/photo.png \"Public photo\"\n[unused]: private.png \"PRIVATE IMAGE\"\n[web]: https://example.com \"Public tooltip\"\n\n```md\n[example]: literal.md\n```",
+        &formatdoc! {"
+            {reference}
+
+            [ref]: https://images.example.invalid/photo.png \"Reference title\"
+        "},
     );
-    note(source.path(), "tech/target.md", "Target", true, "Body");
-    run_export(source.path(), output.path()).unwrap();
-    let exported = outputs(output.path());
-    let article = exported
-        .iter()
-        .find(|s| s.contains("title: Article\n"))
-        .unwrap();
-    assert!(article.contains("[Target](content:"));
-    assert!(
-        article.contains("![Photo](<https://images.example.invalid/photo.png> \"Public photo\")")
-    );
-    assert!(article.contains("https://example.com"));
-    assert!(article.contains("Public tooltip"));
-    assert!(!article.contains("PRIVATE"));
-    assert!(!article.contains("target.md"));
-    assert!(!article.contains("private.png"));
-    assert!(article.contains("```md\n[example]: literal.md\n```"));
+    assert!(matches!(
+        run_export(source.path(), output.path()),
+        Err(export::ExportError::InvalidInput(message)) if message.contains("reference-style"),
+    ));
+    assert_eq!(outputs(output.path()), before);
 }
 
 #[test]
@@ -682,8 +696,12 @@ fn wikilink_aliases_keep_existing_escapes_and_literal_brackets() {
     }
 }
 
-#[test]
-fn note_embeds_remain_links_but_do_not_resolve_markdown_images_with_the_same_stem() {
+#[rstest::rstest]
+#[case("![photo](image.png)")]
+#[case("![note](image.png.md)")]
+#[case("![note](image.png.MD)")]
+#[case("![note](image.png%2Emd)")]
+fn wiki_note_embeds_remain_links_and_markdown_images_require_http_urls(#[case] image: &str) {
     let source = TempDir::new().unwrap();
     let output = TempDir::new().unwrap();
     note(
@@ -691,7 +709,10 @@ fn note_embeds_remain_links_but_do_not_resolve_markdown_images_with_the_same_ste
         "tech/article.md",
         "Article",
         true,
-        "![[image.png.md|Note embed]]\n![Markdown note](image.png.md)",
+        indoc! {"
+            ![[image.png.md|Note embed]]
+            [Markdown note](image.png.md)
+        "},
     );
     note(
         source.path(),
@@ -710,13 +731,7 @@ fn note_embeds_remain_links_but_do_not_resolve_markdown_images_with_the_same_ste
     assert!(article.contains("[Note embed](content:"), "{article}");
     assert!(article.contains("[Markdown note](content:"), "{article}");
     assert!(!output.path().join("assets").exists());
-    note(
-        source.path(),
-        "tech/article.md",
-        "Article",
-        true,
-        "![photo](image.png)",
-    );
+    note(source.path(), "tech/article.md", "Article", true, image);
     assert!(run_export(source.path(), output.path()).is_err());
     assert_eq!(outputs(output.path()), before);
 }

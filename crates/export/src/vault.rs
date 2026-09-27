@@ -7,7 +7,7 @@ use crate::{
     filesystem,
 };
 use domain::{
-    Category, ContentKind, GENERATED_CONTENT_ID_LENGTH, Locale, PUBLIC_CONTENT_SCHEMA_VERSION,
+    Category, ContentKind, GENERATED_ID_HASH_LENGTH, Locale, PUBLIC_CONTENT_SCHEMA_VERSION,
     PageKey, PublicContentMeta, SectionPath, Sha256Digest, Slug, TagId, Timestamp, Title,
 };
 use serde::Deserialize;
@@ -164,7 +164,7 @@ fn resolve_id(
         (None, _) => {
             let hash = digest(format!("{}/{relative}/{}", fm.title, fm.created));
             Ok(Slug::new(
-                hash.as_str()[..GENERATED_CONTENT_ID_LENGTH].to_owned(),
+                hash.as_str()[..GENERATED_ID_HASH_LENGTH].to_owned(),
             )?)
         }
         (Some(_), Some(_)) => Err(ExportError::invalid_input(

@@ -4,6 +4,7 @@ use crate::{
     ExportError, Result,
     content::{digest, options},
 };
+use domain::GENERATED_ID_HASH_LENGTH;
 use pulldown_cmark::{Event, LinkType, Parser, Tag};
 use std::{
     collections::HashMap,
@@ -15,27 +16,30 @@ pub(super) fn normalize(notes: &mut [VaultNote]) -> Result<()> {
     let index = NoteIndex::new(notes);
     for note in notes {
         let body = &note.document.body;
+        let parser = Parser::new_ext(body, options());
+        if parser.reference_definitions().iter().next().is_some() {
+            return Err(ExportError::invalid_input(
+                "reference-style links and images are not supported; use [label](url) or ![label](url) and remove reference definitions",
+            ));
+        }
         let mut edits = Vec::new();
         let mut heading_counts = HashMap::<String, usize>::new();
-        for (event, range) in Parser::new_ext(body, options()).into_offset_iter() {
+        for (event, range) in parser.into_offset_iter() {
             match event {
                 Event::Start(Tag::Link {
                     link_type,
                     dest_url,
-                    title,
                     ..
                 })
                 | Event::Start(Tag::Image {
                     link_type,
                     dest_url,
-                    title,
                     ..
                 }) => {
                     if let Some(link) = rewrite_link(
                         &body[range.clone()],
                         link_type,
                         &dest_url,
-                        &title,
                         &note.key,
                         &index,
                     )? {
@@ -55,7 +59,7 @@ pub(super) fn normalize(notes: &mut [VaultNote]) -> Result<()> {
                         range.start..range.start,
                         format!(
                             "<a id=\"section-{}{suffix}\"></a>\n\n",
-                            &digest(heading).as_str()[..12]
+                            &digest(heading).as_str()[..GENERATED_ID_HASH_LENGTH]
                         ),
                     ));
                 }
@@ -65,7 +69,7 @@ pub(super) fn normalize(notes: &mut [VaultNote]) -> Result<()> {
                 _ => {}
             }
         }
-        note.document.body = remove_reference_definitions(apply_edits(body, edits)?)?;
+        note.document.body = apply_edits(body, edits)?;
     }
     Ok(())
 }
@@ -183,59 +187,23 @@ fn rewrite_link(
     raw: &str,
     link_type: LinkType,
     destination: &str,
-    title: &str,
     source_key: &str,
     index: &NoteIndex,
 ) -> Result<Option<String>> {
-    let image = raw.starts_with('!');
     let wiki = matches!(link_type, LinkType::WikiLink { .. });
     let target = destination.trim().trim_end_matches('\\');
-    let is_external = if image {
-        target.starts_with("https://") || target.starts_with("http://")
-    } else {
-        external(target) || matches!(link_type, LinkType::Email)
-    };
-    if !wiki && is_external {
-        if matches!(
-            link_type,
-            LinkType::Reference | LinkType::Collapsed | LinkType::Shortcut
-        ) {
-            let label = markdown_label(raw, image)?;
-            let title = if title.is_empty() {
-                String::new()
-            } else {
-                format!(" \"{}\"", title.replace('\\', "\\\\").replace('"', "\\\""))
-            };
-            return Ok(Some(format!(
-                "{}[{}](<{}>{title})",
-                if image { "!" } else { "" },
-                label,
-                target.replace('<', "%3C").replace('>', "%3E")
-            )));
-        }
+    if !wiki && raw.starts_with('!') {
+        validate_image(target)?;
+        return Ok(None);
+    }
+    if !wiki && (external(target) || matches!(link_type, LinkType::Email)) {
         return Ok(None);
     }
     let (target, anchor) = parse_target(target, wiki)?;
     let target = target.as_str();
     let anchor = anchor.as_deref();
-    // Markdown note embeds must name a .md file; image.png must not resolve to image.png.md.
-    if image
-        && !wiki
-        && !Path::new(target)
-            .extension()
-            .and_then(|s| s.to_str())
-            .is_some_and(|s| s.eq_ignore_ascii_case("md"))
-    {
-        return Err(ExportError::invalid_input(
-            "local images are not supported; use an HTTP(S) URL uploaded with S3 Image Uploader",
-        ));
-    }
     let note = index.resolve(source_key, target, wiki)?.ok_or_else(|| {
-        ExportError::invalid_input(if image {
-            "unresolved public note embed; for images, use an HTTP(S) URL uploaded with S3 Image Uploader"
-        } else {
-            "missing, non-public or ambiguous note reference"
-        })
+        ExportError::invalid_input("missing, non-public or ambiguous note reference")
     })?;
     if let Some(anchor) = anchor
         && note.headings.get(anchor) != Some(&1)
@@ -245,7 +213,12 @@ fn rewrite_link(
         ));
     }
     let anchor = anchor
-        .map(|a| format!("#section-{}", &digest(a).as_str()[..12]))
+        .map(|a| {
+            format!(
+                "#section-{}",
+                &digest(a).as_str()[..GENERATED_ID_HASH_LENGTH]
+            )
+        })
         .unwrap_or_default();
     let href = format!("content:{}{anchor}", note.id);
     let label = if wiki {
@@ -257,9 +230,18 @@ fn rewrite_link(
         let alias = inner.split_once('|').map(|(_, l)| l).unwrap_or(&note.title);
         escape_unescaped_brackets(alias)
     } else {
-        markdown_label(raw, image)?.to_owned()
+        markdown_label(raw)?.to_owned()
     };
     Ok(Some(format!("[{label}]({href})")))
+}
+
+fn validate_image(target: &str) -> Result<()> {
+    if !target.starts_with("https://") && !target.starts_with("http://") {
+        return Err(ExportError::invalid_input(
+            "images require an HTTP(S) URL uploaded with S3 Image Uploader; use [label](note.md) or ![[note]] for note references",
+        ));
+    }
+    Ok(())
 }
 
 fn external(target: &str) -> bool {
@@ -292,8 +274,7 @@ fn parse_target(target: &str, wiki: bool) -> Result<(String, Option<String>)> {
     Ok((target, anchor))
 }
 
-fn markdown_label(raw: &str, image: bool) -> Result<&str> {
-    let start = usize::from(image) + 1;
+fn markdown_label(raw: &str) -> Result<&str> {
     let mut opaque = Parser::new_ext(raw, options())
         .into_offset_iter()
         .filter_map(|(event, range)| {
@@ -306,7 +287,7 @@ fn markdown_label(raw: &str, image: bool) -> Result<&str> {
         .peekable();
     let mut depth = 1;
     let mut escaped = false;
-    for (index, ch) in raw.char_indices().filter(|(index, _)| *index >= start) {
+    for (index, ch) in raw.char_indices().skip(1) {
         while opaque.peek().is_some_and(|range| range.end <= index) {
             opaque.next();
         }
@@ -323,7 +304,7 @@ fn markdown_label(raw: &str, image: bool) -> Result<&str> {
             ']' => {
                 depth -= 1;
                 if depth == 0 {
-                    return Ok(&raw[start..index]);
+                    return Ok(&raw[1..index]);
                 }
             }
             _ => {}
@@ -389,23 +370,6 @@ fn apply_edits(body: &str, mut edits: Vec<(Range<usize>, String)>) -> Result<Str
     }
     result.push_str(&body[cursor..]);
     Ok(result)
-}
-
-fn remove_reference_definitions(mut body: String) -> Result<String> {
-    // All resolved references are inline now. Repeat to remove shadowed
-    // duplicate definitions too; parser ranges leave fenced examples intact.
-    loop {
-        let parser = Parser::new_ext(&body, options());
-        let definitions: Vec<_> = parser
-            .reference_definitions()
-            .iter()
-            .map(|(_, definition)| (definition.span.clone(), String::new()))
-            .collect();
-        if definitions.is_empty() {
-            return Ok(body);
-        }
-        body = apply_edits(&body, definitions)?;
-    }
 }
 
 #[cfg(test)]
@@ -477,7 +441,7 @@ mod tests {
         let mut notes = [note("source", body)];
         normalize(&mut notes).unwrap();
         let hash = digest("同じ 見出し");
-        let hash = &hash.as_str()[..12];
+        let hash = &hash.as_str()[..GENERATED_ID_HASH_LENGTH];
         assert_eq!(
             notes[0].document.body,
             formatdoc! {"
@@ -513,13 +477,9 @@ mod tests {
     }
 
     #[test]
-    fn nested_link_and_image_rewrites_are_rejected() {
-        let mut notes = [
-            note("source", "[![note](target.md)](target.md)"),
-            note("target", ""),
-        ];
+    fn overlapping_edits_are_rejected() {
         assert!(matches!(
-            normalize(&mut notes),
+            apply_edits("body", vec![(0..3, "first".into()), (1..4, "second".into())]),
             Err(ExportError::InvalidInput(message)) if message.contains("nested links/images"),
         ));
     }

@@ -9,8 +9,9 @@ use std::{fmt, str::FromStr};
 
 pub const PUBLIC_CONTENT_SCHEMA_VERSION: u32 = 1;
 
-/// Hexadecimal character count for generated public content IDs, not a restriction on Slug.
-pub const GENERATED_CONTENT_ID_LENGTH: usize = 12;
+/// SHA-256 hexadecimal prefix length shared by generated content IDs and heading anchors.
+/// This does not restrict explicit Slugs or include anchor prefixes and suffixes.
+pub const GENERATED_ID_HASH_LENGTH: usize = 12;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

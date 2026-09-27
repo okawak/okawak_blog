@@ -17,9 +17,11 @@ CLIは`clap`で引数を検証する。候補の採用は`accept-article <id>`�
 
 `content/ja/<id>.md` に日本語を出力する。初回IDは従来のtitle／元path／createdによるslugを保持する。再実行では元pathのdigestで既存IDを探し、path変更時は削除された元pathと同じkind・createdを持つ候補が1つのときだけ引き継ぐ。曖昧なら原文へ `publish_id: <既存ID>` を指定する。category移動時にはcategoryを含むURLが変わるため、差分を確認する。
 
-WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する。通常Markdownの内部リンクは参照元からの相対pathで解決し、同名の別ファイルへfallbackしない。WikiLink・Wiki embedだけは公開rootやbasenameからも候補を探す。note embedは公開先へのリンクとして扱う。Markdown記法でnoteを埋め込む場合は`![label](note.md)`のように`.md`を明示する。単独の見出し参照も含め、参照先は公開ノート集合内で解決する。未解決・曖昧なノート／見出しはエラーとする。見出しには原文から決定するanchorを付ける。外部URLのbookmark HTMLは使用できる。raw HTML内のローカルノート参照はMarkdownリンクへ書き直す。
+WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する。通常Markdownの内部リンクは参照元からの相対pathで解決し、同名の別ファイルへfallbackしない。WikiLink・Wiki embedだけは公開rootやbasenameからも候補を探す。`![[note]]`によるnote embedは公開先へのリンクとして扱う。通常Markdownでノートを参照する場合は`[label](note.md)`を使う。単独の見出し参照も含め、参照先は公開ノート集合内で解決する。未解決・曖昧なノート／見出しはエラーとする。見出しには原文から決定するanchorを付ける。外部URLのbookmark HTMLは使用できる。raw HTML内のローカルノート参照はMarkdownリンクへ書き直す。
 
-画像の圧縮・アップロードはObsidianのS3 Image Uploaderに任せ、記事の配信用artifactとは別のS3 bucketから配信する。本文には`![説明](https://...)`のようにアップロード済み画像のHTTP(S) URLを記載する。exportは日英とも画像URLを保持し、画像の取得・圧縮・コピー・同期は行わない。画像ファイルはGit管理しない。`![[image.png]]`や`![説明](image.png)`などのローカル画像参照はエラーになるため、アップロード済みURLへ置き換える。
+参照形式のリンク・画像（`[説明][ref]`、`[説明][]`、定義付きの`[説明]`、`![説明][ref]`）は使わず、`[説明](URL)`・`![説明](URL)`を使う。未使用のものも含め、`[ref]: URL`のような参照定義がある場合はexportをエラーにする。コードブロック内の記法例や、脚注の`[^note]: ...`はこの制限の対象外とする。
+
+画像の圧縮・アップロードはObsidianのS3 Image Uploaderに任せ、記事の配信用artifactとは別のS3 bucketに保存してCloudFrontから配信する。Markdownの画像記法`![説明](...)`はHTTP(S)画像専用とし、`![説明](https://...)`のように配信URLを記載する。exportは日英とも画像URLを保持し、画像の取得・圧縮・コピー・同期は行わない。画像ファイルはGit管理しない。`![[image.png]]`や`![説明](image.png)`などのローカル画像参照はエラーになるため、アップロード済みURLへ置き換える。`![説明](note.md)`によるノート参照も受け付けない。
 
 出力は同じfilesystemの一時ディレクトリで組み立て、検証成功後に入れ替える。同時exportはlockで拒否する。差分がなければ既存ファイルのmtimeも変えない。削除・非公開化された日英Markdownは `content/.export-archive/`（Git対象外）へ退避する。任意のREADME・隠しファイルは保持する。`ja/`、`en/` のMarkdownはexport管理領域である。
 
