@@ -6,7 +6,8 @@ use crate::{
 };
 use pulldown_cmark::{Event, LinkType, Parser, Tag};
 use std::{
-    collections::BTreeMap,
+    collections::HashMap,
+    ops::Range,
     path::{Component, Path},
 };
 
@@ -15,7 +16,7 @@ pub(super) fn normalize(notes: &mut [VaultNote]) -> Result<()> {
     for note in notes {
         let body = &note.document.body;
         let mut edits = Vec::new();
-        let mut heading_counts = BTreeMap::<String, usize>::new();
+        let mut heading_counts = HashMap::<String, usize>::new();
         for (event, range) in Parser::new_ext(body, options()).into_offset_iter() {
             match event {
                 Event::Start(Tag::Link {
@@ -64,68 +65,97 @@ pub(super) fn normalize(notes: &mut [VaultNote]) -> Result<()> {
                 _ => {}
             }
         }
-        note.document.body = apply_edits(body, edits)?;
+        note.document.body = remove_reference_definitions(apply_edits(body, edits)?)?;
     }
     Ok(())
 }
 
-fn escape_unescaped_brackets(label: &str) -> String {
-    let mut escaped = false;
-    let mut result = String::new();
-    for ch in label.chars() {
-        if !escaped && matches!(ch, '[' | ']') {
-            result.push('\\');
-        }
-        result.push(ch);
-        escaped = !escaped && ch == '\\';
-    }
-    if escaped {
-        result.push('\\'); // Do not let a trailing slash escape the new label terminator.
-    }
-    result
+struct Note {
+    id: String,
+    title: String,
+    headings: HashMap<String, usize>,
 }
 
-fn markdown_label(raw: &str, image: bool) -> Result<&str> {
-    let start = usize::from(image) + 1;
-    let opaque: Vec<_> = Parser::new_ext(raw, options())
-        .into_offset_iter()
-        .filter_map(|(event, range)| {
-            matches!(
-                event,
-                Event::Code(_) | Event::InlineHtml(_) | Event::Html(_)
-            )
-            .then_some(range)
-        })
-        .collect();
-    let mut depth = 1;
-    let mut escaped = false;
-    for (index, ch) in raw.char_indices().filter(|(index, _)| *index >= start) {
-        if opaque.iter().any(|range| range.contains(&index)) {
-            continue;
-        }
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match ch {
-            '\\' => escaped = true,
-            '[' => depth += 1,
-            ']' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Ok(&raw[start..index]);
+struct NoteIndex {
+    notes: Vec<Note>,
+    by_path: HashMap<String, Vec<usize>>,
+    by_name: HashMap<String, Vec<usize>>,
+}
+
+impl NoteIndex {
+    fn new(notes: &[VaultNote]) -> Self {
+        let mut index = Self {
+            notes: Vec::with_capacity(notes.len()),
+            by_path: HashMap::with_capacity(notes.len()),
+            by_name: HashMap::with_capacity(notes.len()),
+        };
+        for (position, note) in notes.iter().enumerate() {
+            // Different extension spellings can produce the same key; retain all candidates.
+            index
+                .by_path
+                .entry(note.key.clone())
+                .or_default()
+                .push(position);
+            let name = note.key.rsplit('/').next().unwrap_or(&note.key);
+            index
+                .by_name
+                .entry(name.to_owned())
+                .or_default()
+                .push(position);
+            let mut headings = HashMap::<String, usize>::new();
+            for (event, range) in Parser::new_ext(&note.document.body, options()).into_offset_iter()
+            {
+                if matches!(event, Event::Start(Tag::Heading { .. })) {
+                    *headings
+                        .entry(heading_text(&note.document.body[range]))
+                        .or_default() += 1;
                 }
             }
-            _ => {}
+            index.notes.push(Note {
+                id: note.document.meta.id.to_string(),
+                title: note.document.meta.title.to_string(),
+                headings,
+            });
+        }
+        index
+    }
+
+    fn resolve(&self, source_key: &str, target: &str, wiki: bool) -> Result<Option<&Note>> {
+        let extensionless = if Path::new(target)
+            .extension()
+            .and_then(|s| s.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
+        {
+            &target[..target.len() - 3]
+        } else {
+            target
+        };
+        let relative_path = if extensionless.is_empty() {
+            source_key.to_owned()
+        } else {
+            resolve_relative(source_key, extensionless)?
+        };
+        let relative = self.by_path.get(&relative_path);
+        // Do not count the same path twice, or treat a self-reference as a root lookup.
+        let root = if wiki && !extensionless.is_empty() && extensionless != relative_path {
+            self.by_path.get(extensionless)
+        } else {
+            None
+        };
+        let basename = if wiki && relative.is_none() && root.is_none() {
+            self.by_name.get(extensionless)
+        } else {
+            None
+        };
+        let mut matches = relative.into_iter().chain(root).chain(basename).flatten();
+        match (matches.next(), matches.next()) {
+            (None, _) => Ok(None),
+            (Some(&position), None) => Ok(Some(&self.notes[position])),
+            _ => Err(ExportError::invalid_input(
+                "missing, non-public or ambiguous note reference",
+            )),
         }
     }
-    Err(ExportError::invalid_input("unsupported link syntax"))
-}
-
-fn external(target: &str) -> bool {
-    ["https://", "http://", "mailto:"]
-        .iter()
-        .any(|prefix| target.starts_with(prefix))
 }
 
 fn resolve_relative(source_key: &str, target: &str) -> Result<String> {
@@ -147,93 +177,6 @@ fn resolve_relative(source_key: &str, target: &str) -> Result<String> {
         }
     }
     Ok(parts.join("/"))
-}
-
-fn heading_text(markdown: &str) -> String {
-    Parser::new_ext(markdown, options())
-        .filter_map(|event| match event {
-            Event::Text(text) | Event::Code(text) => Some(text.to_string()),
-            _ => None,
-        })
-        .collect::<String>()
-}
-
-struct Note {
-    key: String,
-    id: String,
-    title: String,
-    headings: BTreeMap<String, usize>,
-}
-
-struct NoteIndex {
-    notes: Vec<Note>,
-}
-
-impl NoteIndex {
-    fn new(notes: &[VaultNote]) -> Self {
-        let notes = notes
-            .iter()
-            .map(|note| {
-                let mut headings = BTreeMap::<String, usize>::new();
-                for (event, range) in
-                    Parser::new_ext(&note.document.body, options()).into_offset_iter()
-                {
-                    if matches!(event, Event::Start(Tag::Heading { .. })) {
-                        *headings
-                            .entry(heading_text(&note.document.body[range]))
-                            .or_default() += 1;
-                    }
-                }
-                Note {
-                    key: note.key.clone(),
-                    id: note.document.meta.id.to_string(),
-                    title: note.document.meta.title.to_string(),
-                    headings,
-                }
-            })
-            .collect();
-        Self { notes }
-    }
-
-    fn resolve(&self, source_key: &str, target: &str, wiki: bool) -> Result<Option<&Note>> {
-        let extensionless = if Path::new(target)
-            .extension()
-            .and_then(|s| s.to_str())
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
-        {
-            &target[..target.len() - 3]
-        } else {
-            target
-        };
-        let relative = resolve_relative(source_key, extensionless)?;
-        let exact: Vec<_> = self
-            .notes
-            .iter()
-            .filter(|note| {
-                let key = &note.key;
-                if extensionless.is_empty() {
-                    key == source_key
-                } else {
-                    key == &relative || (wiki && key == extensionless)
-                }
-            })
-            .collect();
-        let matches = if wiki && exact.is_empty() {
-            self.notes
-                .iter()
-                .filter(|note| note.key.rsplit('/').next() == Some(extensionless))
-                .collect()
-        } else {
-            exact
-        };
-        match matches.as_slice() {
-            [] => Ok(None),
-            [note] => Ok(Some(*note)),
-            _ => Err(ExportError::invalid_input(
-                "missing, non-public or ambiguous note reference",
-            )),
-        }
-    }
 }
 
 fn rewrite_link(
@@ -319,6 +262,12 @@ fn rewrite_link(
     Ok(Some(format!("[{label}]({href})")))
 }
 
+fn external(target: &str) -> bool {
+    ["https://", "http://", "mailto:"]
+        .iter()
+        .any(|prefix| target.starts_with(prefix))
+}
+
 fn parse_target(target: &str, wiki: bool) -> Result<(String, Option<String>)> {
     let (target, anchor) = target
         .split_once('#')
@@ -343,10 +292,74 @@ fn parse_target(target: &str, wiki: bool) -> Result<(String, Option<String>)> {
     Ok((target, anchor))
 }
 
+fn markdown_label(raw: &str, image: bool) -> Result<&str> {
+    let start = usize::from(image) + 1;
+    let mut opaque = Parser::new_ext(raw, options())
+        .into_offset_iter()
+        .filter_map(|(event, range)| {
+            matches!(
+                event,
+                Event::Code(_) | Event::InlineHtml(_) | Event::Html(_)
+            )
+            .then_some(range)
+        })
+        .peekable();
+    let mut depth = 1;
+    let mut escaped = false;
+    for (index, ch) in raw.char_indices().filter(|(index, _)| *index >= start) {
+        while opaque.peek().is_some_and(|range| range.end <= index) {
+            opaque.next();
+        }
+        if opaque.peek().is_some_and(|range| range.contains(&index)) {
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' => escaped = true,
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(&raw[start..index]);
+                }
+            }
+            _ => {}
+        }
+    }
+    Err(ExportError::invalid_input("unsupported link syntax"))
+}
+
+fn escape_unescaped_brackets(label: &str) -> String {
+    let mut escaped = false;
+    let mut result = String::new();
+    for ch in label.chars() {
+        if !escaped && matches!(ch, '[' | ']') {
+            result.push('\\');
+        }
+        result.push(ch);
+        escaped = !escaped && ch == '\\';
+    }
+    if escaped {
+        result.push('\\'); // Do not let a trailing slash escape the new label terminator.
+    }
+    result
+}
+
+fn heading_text(markdown: &str) -> String {
+    Parser::new_ext(markdown, options())
+        .filter_map(|event| match event {
+            Event::Text(text) | Event::Code(text) => Some(text.to_string()),
+            _ => None,
+        })
+        .collect::<String>()
+}
+
 fn validate_html(html: &str) -> Result<()> {
     let fragment = scraper::Html::parse_fragment(html);
-    let selector = scraper::Selector::parse("*").expect("static selector");
-    for element in fragment.select(&selector) {
+    for element in fragment.tree.nodes().filter_map(scraper::ElementRef::wrap) {
         for (name, value) in element.value().attrs() {
             if (["href", "src", "poster", "data"].contains(&name) && !external(value))
                 || ["srcset", "style"].contains(&name)
@@ -360,35 +373,154 @@ fn validate_html(html: &str) -> Result<()> {
     Ok(())
 }
 
-fn apply_edits(body: &str, mut edits: Vec<(std::ops::Range<usize>, String)>) -> Result<String> {
+fn apply_edits(body: &str, mut edits: Vec<(Range<usize>, String)>) -> Result<String> {
     edits.sort_by_key(|(range, _)| (range.start, range.end));
-    for pair in edits.windows(2) {
-        if pair[0].0.end > pair[1].0.start {
+    let mut result = String::with_capacity(body.len());
+    let mut cursor = 0;
+    for (range, value) in edits {
+        if range.start < cursor {
             return Err(ExportError::invalid_input(
                 "nested links/images require separate Markdown references",
             ));
         }
+        result.push_str(&body[cursor..range.start]);
+        result.push_str(&value);
+        cursor = range.end;
     }
-    let mut normalized = body.to_owned();
-    for (range, value) in edits.into_iter().rev() {
-        normalized.replace_range(range, &value);
-    }
+    result.push_str(&body[cursor..]);
+    Ok(result)
+}
+
+fn remove_reference_definitions(mut body: String) -> Result<String> {
     // All resolved references are inline now. Repeat to remove shadowed
     // duplicate definitions too; parser ranges leave fenced examples intact.
     loop {
-        let parser = Parser::new_ext(&normalized, options());
-        let mut definitions: Vec<_> = parser
+        let parser = Parser::new_ext(&body, options());
+        let definitions: Vec<_> = parser
             .reference_definitions()
             .iter()
-            .map(|(_, definition)| definition.span.clone())
+            .map(|(_, definition)| (definition.span.clone(), String::new()))
             .collect();
         if definitions.is_empty() {
-            break;
+            return Ok(body);
         }
-        definitions.sort_by_key(|range| range.start);
-        for range in definitions.into_iter().rev() {
-            normalized.replace_range(range, "");
+        body = apply_edits(&body, definitions)?;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::content::Document;
+    use indoc::{formatdoc, indoc};
+
+    fn note(key: &str, body: &str) -> VaultNote {
+        VaultNote {
+            key: key.into(),
+            document: Document::parse(&formatdoc! {"
+                ---
+                schema_version: 1
+                id: test
+                locale: ja
+                kind: article
+                title: {key}
+                category: tech
+                created: '2025-01-01T00:00:00+09:00'
+                updated: '2025-01-01T00:00:00+09:00'
+                source_hash: '{}'
+                ---
+                {body}", digest(key)})
+            .unwrap(),
         }
     }
-    Ok(normalized)
+
+    #[rstest::rstest]
+    #[case("tech/source", "target", true, &["tech/target", "other/target"], Some("tech/target"))]
+    #[case("tech/source", "other/target", true, &["other/target"], Some("other/target"))]
+    #[case("tech/source", "target", true, &["other/target"], Some("other/target"))]
+    #[case("source", "target", true, &["target", "a/target", "b/target"], Some("target"))]
+    #[case("tech/source", "", true, &["tech/source", "source"], Some("tech/source"))]
+    #[case("tech/source", "target", false, &["other/target"], None)]
+    fn note_resolution_uses_exact_paths_before_wiki_basename_fallback(
+        #[case] source: &str,
+        #[case] target: &str,
+        #[case] wiki: bool,
+        #[case] keys: &[&str],
+        #[case] expected: Option<&str>,
+    ) {
+        let notes: Vec<_> = keys.iter().map(|key| note(key, "")).collect();
+        let index = NoteIndex::new(&notes);
+        let resolved = index.resolve(source, target, wiki).unwrap();
+        assert_eq!(resolved.map(|note| note.title.as_str()), expected);
+    }
+
+    #[rstest::rstest]
+    #[case(&["tech/target", "target"])]
+    #[case(&["a/target", "b/target"])]
+    #[case(&["tech/target", "tech/target"])]
+    fn wiki_resolution_rejects_multiple_candidates(#[case] keys: &[&str]) {
+        let notes: Vec<_> = keys.iter().map(|key| note(key, "")).collect();
+        let index = NoteIndex::new(&notes);
+        assert!(matches!(
+            index.resolve("tech/source", "target", true),
+            Err(ExportError::InvalidInput(message)) if message.contains("ambiguous note"),
+        ));
+    }
+
+    #[test]
+    fn formatted_duplicate_headings_get_distinct_anchors_but_cannot_be_linked() {
+        let body = indoc! {"
+            # **同じ** `見出し`
+
+            ## 同じ 見出し
+        "};
+        let mut notes = [note("source", body)];
+        normalize(&mut notes).unwrap();
+        let hash = digest("同じ 見出し");
+        let hash = &hash.as_str()[..12];
+        assert_eq!(
+            notes[0].document.body,
+            formatdoc! {"
+                <a id=\"section-{hash}\"></a>
+
+                # **同じ** `見出し`
+
+                <a id=\"section-{hash}-2\"></a>
+
+                ## 同じ 見出し
+            "},
+        );
+
+        let mut notes = [note(
+            "source",
+            &formatdoc! {"
+            {body}
+            [[#同じ 見出し]]
+        "},
+        )];
+        assert!(matches!(
+            normalize(&mut notes),
+            Err(ExportError::InvalidInput(message)) if message.contains("ambiguous public heading"),
+        ));
+    }
+
+    #[test]
+    fn edits_preserve_unicode_and_allow_an_insertion_at_a_replacement_start() {
+        assert_eq!(
+            apply_edits("前旧後", vec![(3..6, "新".into()), (3..3, "挿入".into())],).unwrap(),
+            "前挿入新後",
+        );
+    }
+
+    #[test]
+    fn nested_link_and_image_rewrites_are_rejected() {
+        let mut notes = [
+            note("source", "[![note](target.md)](target.md)"),
+            note("target", ""),
+        ];
+        assert!(matches!(
+            normalize(&mut notes),
+            Err(ExportError::InvalidInput(message)) if message.contains("nested links/images"),
+        ));
+    }
 }
