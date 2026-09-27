@@ -38,8 +38,8 @@ pub fn export_content(
     }
     filesystem::transaction(output, |stage| {
         let previous = output::read_locale(stage, Locale::Ja)?;
-        let prepared = vault::prepare(&source, &previous)?;
-        output::reconcile(stage, &previous, &prepared.documents, &prepared.assets)?;
+        let documents = vault::prepare(&source, &previous)?;
+        output::reconcile(stage, &previous, &documents)?;
         output::sync_tags(stage)?;
         translation::translate_stage(stage, output, translator, settings)
     })

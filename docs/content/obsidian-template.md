@@ -82,6 +82,8 @@ Obsidian link や bookmark 埋め込みを含めてよい。
 
 Markdown table内の表示名付きWikiLinkは、cell区切りと区別するためpipeをescapeして`[[target\|label]]`と書く。embedも同様に`![[target\|alt]]`とする。table外では通常どおり`[[target|label]]`と書ける。`export`が公開対象の参照を`content:<id>`へ正規化し、`publish`が言語別の公開URLへ解決する。非公開・未解決・曖昧なノートや見出しへの参照はexport時にエラーになる。
 
+画像はS3 Image Uploaderで圧縮・アップロードし、`![説明](https://...)`のように配信用URLを本文へ貼り付ける。exportは画像URLを保持し、画像ファイルを公開リポジトリへコピーしない。`![[image.png]]`や`![説明](image.png)`など、vault内の画像を参照する記法はエラーになる。ノートのembedは引き続き公開先へのリンクになる。
+
 メモ:
 
 - `kind` を省略した場合は `article` として扱う

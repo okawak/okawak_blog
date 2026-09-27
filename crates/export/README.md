@@ -17,9 +17,11 @@ CLIは`clap`で引数を検証する。候補の採用は`accept-article <id>`�
 
 `content/ja/<id>.md` に日本語を出力する。初回IDは従来のtitle／元path／createdによるslugを保持する。再実行では元pathのdigestで既存IDを探し、path変更時は削除された元pathと同じkind・createdを持つ候補が1つのときだけ引き継ぐ。曖昧なら原文へ `publish_id: <既存ID>` を指定する。category移動時にはcategoryを含むURLが変わるため、差分を確認する。
 
-WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する。通常Markdownのリンク・画像は参照元からの相対pathで解決し、同名の別ファイルへfallbackしない。WikiLink・Wiki embedだけは公開rootやbasenameからも候補を探す。note embedは公開先へのリンクとして扱う。単独の見出し参照も含め、参照先は公開ノート集合内で解決する。未解決・曖昧なノート／見出しはエラーとする。見出しには原文から決定するanchorを付ける。PNG/JPEG/GIF/WebP/AVIFは参照されたファイルだけをcontent hash名で `content/assets/` へコピーする。ローカル参照を含むraw HTMLはMarkdownのリンク／画像へ書き直してから実行する。外部URLのbookmark HTMLは使用できる。
+WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する。通常Markdownの内部リンクは参照元からの相対pathで解決し、同名の別ファイルへfallbackしない。WikiLink・Wiki embedだけは公開rootやbasenameからも候補を探す。note embedは公開先へのリンクとして扱う。Markdown記法でnoteを埋め込む場合は`![label](note.md)`のように`.md`を明示する。単独の見出し参照も含め、参照先は公開ノート集合内で解決する。未解決・曖昧なノート／見出しはエラーとする。見出しには原文から決定するanchorを付ける。外部URLのbookmark HTMLは使用できる。raw HTML内のローカルノート参照はMarkdownリンクへ書き直す。
 
-出力は同じfilesystemの一時ディレクトリで組み立て、検証成功後に入れ替える。同時exportはlockで拒否する。差分がなければ既存ファイルのmtimeも変えない。削除・非公開化された日英Markdownは `content/.export-archive/`（Git対象外）へ退避する。任意のREADME・隠しファイルは保持する。`ja/`、`en/` のMarkdownとhash名のassetはexport管理領域である。
+画像の圧縮・アップロードはObsidianのS3 Image Uploaderに任せ、記事の配信用artifactとは別のS3 bucketから配信する。本文には`![説明](https://...)`のようにアップロード済み画像のHTTP(S) URLを記載する。exportは日英とも画像URLを保持し、画像の取得・圧縮・コピー・同期は行わない。画像ファイルはGit管理しない。`![[image.png]]`や`![説明](image.png)`などのローカル画像参照はエラーになるため、アップロード済みURLへ置き換える。
+
+出力は同じfilesystemの一時ディレクトリで組み立て、検証成功後に入れ替える。同時exportはlockで拒否する。差分がなければ既存ファイルのmtimeも変えない。削除・非公開化された日英Markdownは `content/.export-archive/`（Git対象外）へ退避する。任意のREADME・隠しファイルは保持する。`ja/`、`en/` のMarkdownはexport管理領域である。
 
 中断で `.content.export-lock` が残った場合は、exportプロセスが終了したことを確認して削除する。`.content.export-backup` が残った場合、contentがなければbackupをcontentへ戻す。contentがある場合は新旧を比較して採用版を確定してからbackupを除去する。一時ディレクトリや退避版をGitへ追加しない。
 
@@ -177,14 +179,14 @@ UI・タグの候補自体にも同じ手動編集保護を適用する。同じ
 | Module | 責務 |
 | --- | --- |
 | `operation` | export・辞書翻訳・候補採用の各操作の入口、処理順、lock・transaction境界 |
-| `vault` / `vault::normalize` | 公開対象と安定IDの決定、公開ノート参照・画像・本文の正規化 |
+| `vault` / `vault::normalize` | 公開対象と安定IDの決定、公開ノート参照・本文の正規化 |
 | `translation` | 共通の翻訳要求・検証・結果型と、翻訳・候補処理の内部API |
 | `translation::articles` / `catalog` | 記事／辞書固有の計画作成、翻訳の生成・反映、候補の検証・反映 |
 | `translation::plan` | 現在の訳と候補から、再利用・生成・候補生成・候補再利用を決める純粋な判定 |
 | `translation::fragments` / `cache` / `codex` | 文章抽出・再構築、検証済み応答の保存、Codexプロセス実行 |
-| `output` | 公開Markdown・辞書のI/O、削除記事の退避、metadata・asset・タグの同期 |
+| `output` | 公開Markdown・辞書のI/O、削除記事の退避、metadata・タグの同期 |
 | `content` / `filesystem` | I/Oを持たない文書処理／schemaに依存しない走査・lock・staging |
 
-正規化内の参照index、asset読込、本文編集は同じmodule内の型と関数で分担する。翻訳処理はpublic文書だけを扱い、原文adapterへ依存しない。CLIとcrate外API、公開schema、翻訳履歴・候補・cacheの形式はmodule構成から独立している。
+正規化内の参照indexと本文編集は同じmodule内の型と関数で分担する。翻訳処理はpublic文書だけを扱い、原文adapterへ依存しない。CLIとcrate外API、公開schema、翻訳履歴・候補・cacheの形式はmodule構成から独立している。
 
 通常の検証は`cargo test -p export --offline`で実行できる（依存crateの取得済み環境）。統合テストは一時directoryとfake translator / fake Codexを使い、private Obsidianや実AIを必要としない。

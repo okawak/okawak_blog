@@ -77,7 +77,7 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
         fs::copy(path, dest)?;
     }
     // Preserve empty managed directories as well.
-    for locale in ["ja", "en", "assets"] {
+    for locale in ["ja", "en"] {
         if from.join(locale).is_dir() {
             fs::create_dir_all(to.join(locale))?;
         }
