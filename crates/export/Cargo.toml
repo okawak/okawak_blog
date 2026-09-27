@@ -24,4 +24,5 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 walkdir.workspace = true
 
 [dev-dependencies]
+indoc.workspace = true
 rstest.workspace = true

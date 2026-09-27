@@ -1,3 +1,4 @@
+use indoc::{formatdoc, indoc};
 use std::{fs, path::Path};
 use tempfile::TempDir;
 
@@ -19,7 +20,21 @@ fn run_export(source: &Path, output: &Path) -> export::Result<()> {
 fn note(root: &Path, path: &str, title: &str, completed: bool, body: &str) {
     let path = root.join(path);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(path, format!("---\ntitle: {title}\ncategory: tech\nis_completed: {completed}\ncreated: '2025-01-01T00:00:00+09:00'\nupdated: '2025-01-01T00:00:00+09:00'\nprivate_notes: SECRET\n---\n{body}\n")).unwrap();
+    fs::write(
+        path,
+        formatdoc! {"
+            ---
+            title: {title}
+            category: tech
+            is_completed: {completed}
+            created: '2025-01-01T00:00:00+09:00'
+            updated: '2025-01-01T00:00:00+09:00'
+            private_notes: SECRET
+            ---
+            {body}
+        "},
+    )
+    .unwrap();
 }
 
 fn outputs(root: &Path) -> Vec<String> {
@@ -37,6 +52,8 @@ fn outputs(root: &Path) -> Vec<String> {
 #[rstest::rstest]
 #[case("Article", "Article")]
 #[case("'  Article  '", "  Article  ")]
+#[case("123", "123")]
+#[case("true", "true")]
 fn exports_only_completed_notes_allowlists_metadata_and_preserves_legacy_slug(
     #[case] yaml_title: &str,
     #[case] title: &str,
@@ -77,6 +94,36 @@ fn exports_only_completed_notes_allowlists_metadata_and_preserves_legacy_slug(
     );
     run_export(source.path(), output.path()).unwrap();
     assert_eq!(outputs(output.path()), actual);
+}
+
+#[test]
+fn incomplete_notes_do_not_require_valid_public_frontmatter() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "Public body",
+    );
+    fs::write(
+        source.path().join("tech/draft.md"),
+        indoc! {"
+            ---
+            is_completed: false
+            title: []
+            created: invalid
+            ---
+            PRIVATE BODY
+        "},
+    )
+    .unwrap();
+    run_export(source.path(), output.path()).unwrap();
+    let actual = outputs(output.path());
+    assert_eq!(actual.len(), 1);
+    assert!(actual[0].contains("Public body"));
+    assert!(!actual[0].contains("PRIVATE BODY"));
 }
 
 #[test]
