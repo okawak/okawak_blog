@@ -1104,6 +1104,7 @@ dependencies = [
  "anyhow",
  "clap",
  "domain",
+ "indoc",
  "percent-encoding",
  "pulldown-cmark",
  "rstest",

@@ -14,7 +14,10 @@ pub use artifact::{
     HomeFragmentArtifactDocument, PageArtifactDocument, SiteLocalesDocument, SiteMetadataDocument,
 };
 pub use asset::ContentAssetName;
-pub use content::{ContentKind, Locale, PublicContentMeta, TranslationProvenance};
+pub use content::{
+    ContentKind, GENERATED_CONTENT_ID_LENGTH, Locale, PUBLIC_CONTENT_SCHEMA_VERSION,
+    PublicContentMeta, TranslationProvenance,
+};
 pub use entities::{Category, PageKey, SectionPath, Sha256Digest, Slug, TagId, Timestamp, Title};
 pub use error::{DomainError, Result};
 pub use page::{

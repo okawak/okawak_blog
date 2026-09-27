@@ -7,6 +7,11 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
+pub const PUBLIC_CONTENT_SCHEMA_VERSION: u32 = 1;
+
+/// Hexadecimal character count for generated public content IDs, not a restriction on Slug.
+pub const GENERATED_CONTENT_ID_LENGTH: usize = 12;
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Locale {
@@ -106,7 +111,7 @@ pub struct PublicContentMeta {
 
 impl PublicContentMeta {
     pub fn validate(&self) -> Result<()> {
-        if self.schema_version != 1 {
+        if self.schema_version != PUBLIC_CONTENT_SCHEMA_VERSION {
             return Err(DomainError::validation(
                 "unsupported public Markdown schema",
             ));
