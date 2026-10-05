@@ -4,6 +4,8 @@ use crate::i18n::{Message, t};
 use domain::{Locale, SiteArticleCard, TagLabels, build_article_path};
 use topcoat::{
     Result,
+    context::Cx,
+    runtime::{link_attrs, prefetch_mode},
     view::{View, attributes, component, view},
 };
 
@@ -14,6 +16,7 @@ use crate::components::{
 
 #[component]
 pub(crate) async fn article_card(
+    cx: &Cx,
     article: &SiteArticleCard,
     locale: Locale,
     labels: &TagLabels,
@@ -32,7 +35,7 @@ pub(crate) async fn article_card(
             class="min-w-0"
         >
             <a
-                href=(article_href)
+                (link_attrs(cx, article_href, prefetch_mode(cx)))
                 class="group block text-inherit no-underline focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                 aria-label=(article.title.as_str())
             >

@@ -8,7 +8,7 @@ use topcoat::{
     context::Cx,
     icon::icon,
     router::{StatusCode, request},
-    runtime::{Event, signal},
+    runtime::{Event, PrefetchMode, link_attrs, prefetch_mode, signal},
     view::{Child, Unescaped, View, attributes, class, component, view},
 };
 
@@ -156,17 +156,6 @@ pub(crate) async fn site_shell(
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
     let locale = metadata.locale;
-    let home_path = locale.path("/");
-    let home_href = if locale == Locale::Ja {
-        crate::language::choice_href(&home_path, locale)
-    } else {
-        home_path.clone()
-    };
-    let about_href = locale.path("/about");
-    let requested_path = request::uri(cx).path();
-    let home_is_current = requested_path.trim_end_matches('/') == home_path.trim_end_matches('/');
-    let about_is_current = requested_path == about_href;
-    let show_about = locale == Locale::Ja || metadata.locales.path("/about", locale).is_some();
     let available = metadata
         .locales
         .routes
@@ -176,7 +165,6 @@ pub(crate) async fn site_shell(
         .flatten()
         .map(|other| (*other, other.path(japanese_path(&metadata.canonical_path))))
         .collect::<Vec<_>>();
-    let menu_open_label = t(locale, Message::NavOpen).to_string();
     let switch_locales = if status != StatusCode::OK {
         crate::app::page_loader(cx)
             .loader()
@@ -186,9 +174,7 @@ pub(crate) async fn site_shell(
     } else {
         metadata.locales.clone()
     };
-    let menu_close_label = t(locale, Message::NavClose).to_string();
     let year = chrono::Local::now().year();
-    let menu_open = signal(cx, || false);
     let math_render_script = Unescaped::new_unchecked(
         r#"
 window.okawakRenderMath = function(root) {
@@ -261,6 +247,29 @@ window.okawakScheduleCodeHighlight = function(root) {
   };
   attempt();
 };
+
+// Runtime navigation morphs the document without re-running its scripts.
+// Observe the stable document root, including body replacement and streamed content.
+(() => {
+  let pending = false;
+  const options = { childList: true, subtree: true, characterData: true };
+  const observer = new MutationObserver(() => {
+    if (pending) return;
+    pending = true;
+    window.requestAnimationFrame(() => {
+      pending = false;
+      observer.disconnect();
+      try {
+        window.okawakRenderMath();
+        window.okawakHighlightCode();
+      } finally {
+        // Ignore mutations made by the enhancements themselves.
+        observer.observe(document.documentElement, options);
+      }
+    });
+  });
+  observer.observe(document.documentElement, options);
+})();
 "#,
     );
     let ShellMetadata {
@@ -337,153 +346,11 @@ window.okawakScheduleCodeHighlight = function(root) {
             </head>
             <body>
                 <div class="flex min-h-dvh flex-col text-foreground">
-                    <header
-                        class="sticky top-0 z-50 h-[var(--site-header-height)] border-b border-border/60 bg-[image:var(--site-header-background)] shadow-[0_8px_24px_rgb(0_0_0/0.45)] backdrop-blur-sm"
-                    >
-                        <div
-                            class="relative mx-auto flex h-full max-w-[var(--site-content-width)] items-center justify-between gap-3 px-4 sm:px-6"
-                        >
-                            <a
-                                href=(home_href.clone())
-                                class="mr-auto min-w-0 text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-                            >
-                                <h1
-                                    class="m-0 truncate text-xl leading-tight font-bold sm:text-2xl"
-                                >
-                                    (t(locale, Message::SiteName))
-                                </h1>
-                            </a>
-
-                            crate::language::language_switcher(
-                                locale: locale,
-                                path: &canonical_path,
-                                locales: &switch_locales
-                            )
-
-                            button(
-                                variant: ButtonVariant::Ghost,
-                                size: ButtonSize::Icon,
-                                attrs: attributes! {
-                                    type="button"
-                                    class="md:hidden"
-                                    aria-controls="site-header-nav"
-                                    :aria-expanded=$(if menu_open.get() {
-                                        "true"
-                                    } else {
-                                        "false"
-                                    })
-                                    :aria-label=$(if menu_open.get() {
-                                        menu_close_label.clone()
-                                    } else {
-                                        menu_open_label.clone()
-                                    })
-                                    @click=$(|_event: Event| menu_open.toggle())
-                                },
-                                <div
-                                    class="flex size-5 flex-col items-center justify-center gap-1.5"
-                                    aria-hidden="true"
-                                >
-                                    <span
-                                        :class=$(if menu_open.get() {
-                                            "block h-0.5 w-5 translate-y-2 rotate-45 rounded-full bg-current transition-transform"
-                                        } else {
-                                            "block h-0.5 w-5 rounded-full bg-current transition-all"
-                                        })
-                                    ></span>
-                                    <span
-                                        :class=$(if menu_open.get() {
-                                            "block h-0.5 w-5 rounded-full bg-current opacity-0 transition-opacity"
-                                        } else {
-                                            "block h-0.5 w-5 rounded-full bg-current transition-all"
-                                        })
-                                    ></span>
-                                    <span
-                                        :class=$(if menu_open.get() {
-                                            "block h-0.5 w-5 -translate-y-2 -rotate-45 rounded-full bg-current transition-transform"
-                                        } else {
-                                            "block h-0.5 w-5 rounded-full bg-current transition-all"
-                                        })
-                                    ></span>
-                                </div>
-                            )
-
-                            <nav
-                                id="site-header-nav"
-                                aria-label=(t(locale, Message::NavMain))
-                                :class=$(if menu_open.get() {
-                                    "flex absolute inset-x-4 top-[calc(100%+0.5rem)] flex-col gap-3 rounded-lg border border-border bg-card/98 p-4 shadow-[0_18px_36px_rgb(0_0_0/0.55)] backdrop-blur-sm md:static md:flex md:flex-row md:items-center md:gap-6 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
-                                } else {
-                                    "hidden absolute inset-x-4 top-[calc(100%+0.5rem)] flex-col gap-3 rounded-lg border border-border bg-card/98 p-4 shadow-[0_18px_36px_rgb(0_0_0/0.55)] backdrop-blur-sm md:static md:flex md:flex-row md:items-center md:gap-6 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
-                                })
-                            >
-                                <ul
-                                    class="m-0 flex list-none flex-col gap-1 p-0 md:flex-row md:items-center md:gap-2"
-                                >
-                                    <li>
-                                        <a
-                                            href=(home_href)
-                                            aria-current=(home_is_current.then_some("page"))
-                                            class=(class!(
-                                                button_variants(ButtonVariant::Ghost, ButtonSize::Sm),
-                                                "w-full justify-start no-underline md:w-auto",
-                                                if home_is_current {
-                                                    "bg-foreground/5 text-primary"
-                                                } else {
-                                                    "text-muted-foreground hover:text-foreground"
-                                                },
-                                            ))
-                                            @click=$(|_e| menu_open.set(false))
-                                        >
-                                            (t(locale, Message::NavHome))
-                                        </a>
-                                    </li>
-                                    if show_about {
-                                        <li>
-                                            <a
-                                                href=(about_href)
-                                                aria-current=(about_is_current.then_some("page"))
-                                                class=(class!(
-                                                    button_variants(ButtonVariant::Ghost, ButtonSize::Sm),
-                                                    "w-full justify-start no-underline md:w-auto",
-                                                    if about_is_current {
-                                                        "bg-foreground/5 text-primary"
-                                                    } else {
-                                                        "text-muted-foreground hover:text-foreground"
-                                                    },
-                                                ))
-                                                @click=$(|_e| menu_open.set(false))
-                                            >
-                                                (t(locale, Message::NavAbout))
-                                            </a>
-                                        </li>
-                                    }
-                                </ul>
-
-                                <div
-                                    class="border-t border-border pt-3 md:border-t-0 md:pt-0"
-                                >
-                                    tooltip(
-                                        <a
-                                            href="https://github.com/okawak"
-                                            class=(button_variants(
-                                                ButtonVariant::Ghost,
-                                                ButtonSize::Icon,
-                                            ))
-                                            aria-label=(t(locale, Message::NavGithub))
-                                            rel="noopener noreferrer"
-                                            target="_blank"
-                                        >
-                                            icon(data: GITHUB, size: 20)
-                                        </a>
-                                        tooltip_content(
-                                            side: TooltipSide::Bottom,
-                                            (t(locale, Message::NavGithub))
-                                        )
-                                    )
-                                </div>
-                            </nav>
-                        </div>
-                    </header>
+                    site_header(
+                        locale: locale,
+                        canonical_path: &canonical_path,
+                        locales: &switch_locales
+                    )
                     <main class="content-container flex-1">(child)</main>
                     <footer
                         class="border-t border-border bg-gradient-to-r from-card to-background px-4 py-8 text-center text-sm text-muted-foreground"
@@ -513,5 +380,181 @@ window.okawakScheduleCodeHighlight = function(root) {
                 </div>
             </body>
         </html>
+    })
+}
+
+// Keep signal declarations inside <body>. Runtime navigation replaces <html>'s
+// children, so declarations hoisted before the document would be lost.
+#[component]
+async fn site_header(
+    cx: &Cx,
+    locale: Locale,
+    canonical_path: &str,
+    locales: &SiteLocalesDocument,
+) -> Result<impl View> {
+    let home_path = locale.path("/");
+    let home_href = if locale == Locale::Ja {
+        crate::language::choice_href(&home_path, locale)
+    } else {
+        home_path.clone()
+    };
+    // The Japanese home URL records an explicit choice; prefetch must not set its cookie.
+    let home_prefetch = if locale == Locale::Ja {
+        PrefetchMode::Never
+    } else {
+        prefetch_mode(cx)
+    };
+    let about_href = locale.path("/about");
+    let requested_path = request::uri(cx).path();
+    let home_is_current = requested_path.trim_end_matches('/') == home_path.trim_end_matches('/');
+    let about_is_current = requested_path == about_href;
+    let show_about = locale == Locale::Ja || locales.path("/about", locale).is_some();
+    let menu_open_label = t(locale, Message::NavOpen).to_string();
+    let menu_close_label = t(locale, Message::NavClose).to_string();
+    // A menu belongs to its page; runtime navigation must not carry it into another URL.
+    let menu_cx = cx.keyed(requested_path);
+    let menu_open = signal(&menu_cx, || false);
+    Ok(view! {
+        <header
+            class="sticky top-0 z-50 h-[var(--site-header-height)] border-b border-border/60 bg-[image:var(--site-header-background)] shadow-[0_8px_24px_rgb(0_0_0/0.45)] backdrop-blur-sm"
+        >
+            <div
+                class="relative mx-auto flex h-full max-w-[var(--site-content-width)] items-center justify-between gap-3 px-4 sm:px-6"
+            >
+                <a
+                    (link_attrs(cx, home_href.clone(), home_prefetch))
+                    class="mr-auto min-w-0 text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                >
+                    <h1
+                        class="m-0 truncate text-xl leading-tight font-bold sm:text-2xl"
+                    >
+                        (t(locale, Message::SiteName))
+                    </h1>
+                </a>
+
+                crate::language::language_switcher(
+                    locale: locale,
+                    path: canonical_path,
+                    locales: locales
+                )
+
+                button(
+                    variant: ButtonVariant::Ghost,
+                    size: ButtonSize::Icon,
+                    attrs: attributes! {
+                        type="button"
+                        class="md:hidden"
+                        aria-controls="site-header-nav"
+                        :aria-expanded=$(if menu_open.get() { "true" } else { "false" })
+                        :aria-label=$(if menu_open.get() {
+                            menu_close_label.clone()
+                        } else {
+                            menu_open_label.clone()
+                        })
+                        @click=$(|_event: Event| menu_open.toggle())
+                    },
+                    <div
+                        class="flex size-5 flex-col items-center justify-center gap-1.5"
+                        aria-hidden="true"
+                    >
+                        <span
+                            :class=$(if menu_open.get() {
+                                "block h-0.5 w-5 translate-y-2 rotate-45 rounded-full bg-current transition-transform"
+                            } else {
+                                "block h-0.5 w-5 rounded-full bg-current transition-all"
+                            })
+                        ></span>
+                        <span
+                            :class=$(if menu_open.get() {
+                                "block h-0.5 w-5 rounded-full bg-current opacity-0 transition-opacity"
+                            } else {
+                                "block h-0.5 w-5 rounded-full bg-current transition-all"
+                            })
+                        ></span>
+                        <span
+                            :class=$(if menu_open.get() {
+                                "block h-0.5 w-5 -translate-y-2 -rotate-45 rounded-full bg-current transition-transform"
+                            } else {
+                                "block h-0.5 w-5 rounded-full bg-current transition-all"
+                            })
+                        ></span>
+                    </div>
+                )
+
+                <nav
+                    id="site-header-nav"
+                    aria-label=(t(locale, Message::NavMain))
+                    :class=$(if menu_open.get() {
+                        "flex absolute inset-x-4 top-[calc(100%+0.5rem)] flex-col gap-3 rounded-lg border border-border bg-card/98 p-4 shadow-[0_18px_36px_rgb(0_0_0/0.55)] backdrop-blur-sm md:static md:flex md:flex-row md:items-center md:gap-6 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+                    } else {
+                        "hidden absolute inset-x-4 top-[calc(100%+0.5rem)] flex-col gap-3 rounded-lg border border-border bg-card/98 p-4 shadow-[0_18px_36px_rgb(0_0_0/0.55)] backdrop-blur-sm md:static md:flex md:flex-row md:items-center md:gap-6 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+                    })
+                >
+                    <ul
+                        class="m-0 flex list-none flex-col gap-1 p-0 md:flex-row md:items-center md:gap-2"
+                    >
+                        <li>
+                            <a
+                                (link_attrs(cx, home_href, home_prefetch))
+                                aria-current=(home_is_current.then_some("page"))
+                                class=(class!(
+                                    button_variants(ButtonVariant::Ghost, ButtonSize::Sm),
+                                    "w-full justify-start no-underline md:w-auto",
+                                    if home_is_current {
+                                        "bg-foreground/5 text-primary"
+                                    } else {
+                                        "text-muted-foreground hover:text-foreground"
+                                    },
+                                ))
+                                @click=$(|_e: Event| menu_open.set(false))
+                            >
+                                (t(locale, Message::NavHome))
+                            </a>
+                        </li>
+                        if show_about {
+                            <li>
+                                <a
+                                    (link_attrs(cx, about_href, prefetch_mode(cx)))
+                                    aria-current=(about_is_current.then_some("page"))
+                                    class=(class!(
+                                        button_variants(ButtonVariant::Ghost, ButtonSize::Sm),
+                                        "w-full justify-start no-underline md:w-auto",
+                                        if about_is_current {
+                                            "bg-foreground/5 text-primary"
+                                        } else {
+                                            "text-muted-foreground hover:text-foreground"
+                                        },
+                                    ))
+                                    @click=$(|_e: Event| menu_open.set(false))
+                                >
+                                    (t(locale, Message::NavAbout))
+                                </a>
+                            </li>
+                        }
+                    </ul>
+
+                    <div class="border-t border-border pt-3 md:border-t-0 md:pt-0">
+                        tooltip(
+                            <a
+                                href="https://github.com/okawak"
+                                class=(button_variants(
+                                    ButtonVariant::Ghost,
+                                    ButtonSize::Icon,
+                                ))
+                                aria-label=(t(locale, Message::NavGithub))
+                                rel="noopener noreferrer"
+                                target="_blank"
+                            >
+                                icon(data: GITHUB, size: 20)
+                            </a>
+                            tooltip_content(
+                                side: TooltipSide::Bottom,
+                                (t(locale, Message::NavGithub))
+                            )
+                        )
+                    </div>
+                </nav>
+            </div>
+        </header>
     })
 }

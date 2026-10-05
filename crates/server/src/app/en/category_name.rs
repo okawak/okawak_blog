@@ -2,10 +2,10 @@ mod article_slug;
 use topcoat::{
     Result,
     context::Cx,
-    router::{page, path_param},
+    router::{module_param, page, path_param},
     view::View,
 };
-path_param!(category_name);
+module_param!(category_name);
 
 #[page]
 async fn category(cx: &Cx) -> Result<impl View> {

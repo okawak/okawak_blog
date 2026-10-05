@@ -205,9 +205,9 @@ domainのpage documentは言語やstorageに依存しない表示データを表
 
 1 request内のpage documentとmetadataは同じartifact snapshotから組み立てる。home fragmentだけを任意とし、必要なartifactの欠落・読取失敗を空値へ変換しない。404とstorage errorはroute境界で異なるstatusとして扱う。/api/articlesは互換endpointとして維持し、page専用APIは増やさない。
 
-公開routeはTopcoatのmodule treeから導出する。app.rsをrootとし、static segmentとdynamic segmentをfile moduleでURL構造へ対応させ、mod.rsは使わない。日本語と英語は描画処理を共有する。release-aware HTTP cacheはroute固有処理ではなくglobal layerとして構成する。
+公開routeはTopcoatのmodule treeから導出する。app.rsをrootとし、static segmentと`module_param!()`で宣言するdynamic segmentをfile moduleでURL構造へ対応させ、mod.rsは使わない。日本語と英語は描画処理を共有する。release-aware HTTP cacheはroute固有処理ではなくglobal layerとして構成する。
 
-Topcoat runtimeはresponsive menuとcategory内の記事絞り込みに使う。初期HTMLには全記事と通常linkを含め、JavaScriptや外部CDNが失敗しても本文とnavigationを利用可能にする。UI component、asset、styleの詳細は[server README](../../crates/server/README.md)を正本とする。
+Topcoat runtimeはresponsive menu、category内の記事絞り込み、UIが生成する内部linkのnavigationと先読みに使う。navigationはserverで描画したdocumentとmetadataを更新し、履歴・scrollを管理する。hover・focus・touchで先読みし、cookieを変更する言語選択linkは先読みしない。言語選択はruntime navigationのrewrite後GETにも適用する。生成Markdownのanchorは通常のbrowser navigationを維持する。初期HTMLには全記事と通常linkを含め、JavaScriptや外部CDNが失敗しても本文とnavigationを利用可能にする。UI component、asset、styleの詳細は[server README](../../crates/server/README.md)を正本とする。
 
 ## Reader、cache、HTTP
 

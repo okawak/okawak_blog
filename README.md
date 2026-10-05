@@ -68,6 +68,7 @@ mise run dev-local
 
 ```bash
 mise run format
+mise run format-check
 mise run test
 mise run clippy
 mise run check

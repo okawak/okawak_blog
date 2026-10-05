@@ -1,6 +1,6 @@
 [tools]
 bun = "1.4.2"
-"cargo:topcoat-cli" = "0.9.0"
+"cargo:topcoat-cli" = "0.10.0"
 
 [env]
 TOPCOAT_TAILWIND_VERSION = "4.3.3"
@@ -12,9 +12,9 @@ set -e
 echo "Checking dependencies..."
 mise --version
 cargo --version
-topcoat fmt --version
+topcoat --version
 expected_topcoat_version="$(sed -nE 's/^"cargo:topcoat-cli" = "([^"]+)"$/\1/p' mise.toml)"
-actual_topcoat_version="$(topcoat fmt --version | awk '{print $2}')"
+actual_topcoat_version="$(topcoat --version | awk '{print $2}')"
 [ "$actual_topcoat_version" = "$expected_topcoat_version" ]
 '''
 
@@ -65,10 +65,11 @@ run = "cargo run -p export --"
 
 [tasks.format]
 description = "Format Rust and Topcoat source files"
-run = '''
-cargo fmt --all
-find crates/server -name '*.rs' -exec topcoat fmt {} +
-'''
+run = "topcoat fmt --rustfmt crates"
+
+[tasks.format-check]
+description = "Check Rust and Topcoat formatting without changing files"
+run = "topcoat fmt --check --rustfmt crates"
 
 [tasks.dev]
 description = "Run the local Topcoat development server with S3 artifacts"

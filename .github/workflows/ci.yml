@@ -34,7 +34,10 @@ jobs:
       - name: Prepare Rust toolchain
         run: |
           rustup show
-          rustup component add clippy
+          rustup component add clippy rustfmt
+
+      - name: Check Rust and Topcoat formatting
+        run: mise run format-check
 
       - name: Validate service scripts
         run: mise run test-service

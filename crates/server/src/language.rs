@@ -4,6 +4,7 @@ use domain::{Locale, SiteLocalesDocument};
 use topcoat::{
     context::Cx,
     router::{Body, HeaderMap, HeaderValue, StatusCode, Uri, header, request, response::Response},
+    runtime::{PrefetchMode, link_attrs},
     view::{View, attributes, component, view},
 };
 
@@ -186,6 +187,7 @@ pub(crate) async fn redirect(cx: &Cx) -> Option<Response> {
 
 #[component]
 pub(crate) async fn language_switcher(
+    cx: &Cx,
     locale: Locale,
     path: &str,
     locales: &SiteLocalesDocument,
@@ -204,7 +206,11 @@ pub(crate) async fn language_switcher(
                         active: other == locale,
                         size: ToggleSize::Sm,
                         attrs: attributes! {
-                            href=(choice_href(&target, other))
+                            (link_attrs(
+                                cx,
+                                choice_href(&target, other),
+                                PrefetchMode::Never,
+                            ))
                             lang=(other.as_str())
                             aria-current=(if other == locale {
                                 Some("true")

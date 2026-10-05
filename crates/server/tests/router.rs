@@ -724,11 +724,7 @@ async fn home_renders_the_published_summary_as_html() {
             .contains("<meta property=\"og:url\" content=\"https://www.okawak.net\">")
     );
     assert!(response.body.contains("<p>Fixture home content</p>"));
-    assert!(
-        response
-            .body
-            .contains("href=\"/?lang=ja\" aria-current=\"page\"")
-    );
+    assert!(has_current_link(&response.body, "/?lang=ja"));
     assert!(response.body.contains("href=\"/tech\""));
     assert!(response.body.contains("href=\"/tech/e2e-article\""));
     assert!(response.body.contains(">E2E Article</h3>"));
@@ -737,6 +733,14 @@ async fn home_renders_the_published_summary_as_html() {
     assert!(response.body.contains("2026年1月1日"));
     assert!(response.body.contains("2026年1月2日"));
     assert!(!response.body.contains("&lt;p&gt;Fixture home content"));
+}
+
+fn has_current_link(body: &str, href: &str) -> bool {
+    body.split("<a ")
+        .filter_map(|part| part.split_once("</a>").map(|(anchor, _)| anchor))
+        .any(|anchor| {
+            anchor.contains(&format!("href=\"{href}\"")) && anchor.contains("aria-current=\"page\"")
+        })
 }
 
 #[tokio::test]
@@ -765,9 +769,7 @@ async fn navigation_marks_only_the_current_destination_including_query_urls() {
                 destination
             };
             assert_eq!(
-                response
-                    .body
-                    .contains(&format!("href=\"{href}\" aria-current=\"page\"")),
+                has_current_link(&response.body, href),
                 expected == Some(destination),
                 "{path}: current destination {destination}",
             );
@@ -789,12 +791,39 @@ async fn error_pages_keep_navigation_tied_to_the_requested_url() {
         )
         .await;
         assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
-        assert!(
-            response
-                .body
-                .contains(&format!("href=\"{href}\" aria-current=\"page\""))
-        );
+        assert!(has_current_link(&response.body, href));
         assert_eq!(response.body.matches("aria-current=\"page\"").count(), 1);
+    }
+}
+
+#[tokio::test]
+async fn internal_links_enable_navigation_without_prefetching_language_choices() {
+    let router = create_router(fixture_reader(), false);
+    let page = response(
+        &router,
+        Request::builder()
+            .uri("/")
+            .header(header::ACCEPT_LANGUAGE, "ja")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    for href in ["/tech", "/tech/e2e-article", "/about"] {
+        let anchor = page
+            .body
+            .split("<a ")
+            .filter_map(|part| part.split_once("</a>").map(|(anchor, _)| anchor))
+            .find(|attrs| attrs.contains(&format!("href=\"{href}\"")))
+            .unwrap_or_else(|| panic!("missing link to {href}"));
+        assert!(anchor.contains("data-topcoat-link=\"intent\""), "{anchor}");
+    }
+    for anchor in page
+        .body
+        .split("<a ")
+        .filter_map(|part| part.split_once("</a>").map(|(anchor, _)| anchor))
+        .filter(|attrs| attrs.contains("?lang="))
+    {
+        assert!(anchor.contains("data-topcoat-link=\"never\""), "{anchor}");
     }
 }
 
@@ -813,9 +842,13 @@ async fn home_shell_exposes_topcoat_mobile_navigation_contract() {
 
     assert_eq!(response.status, StatusCode::OK);
     assert!(
+        response.body.starts_with("<!DOCTYPE html>"),
+        "signals must stay inside the document"
+    );
+    assert!(
         response
             .body
-            .contains("<script type=\"module\" src=\"/_topcoat/assets/topcoat-test.js\"></script>")
+            .contains(&format!("<script type=\"module\" src=\"/_topcoat/assets/topcoat-test.js\" data-topcoat-usize-bits=\"{}\"></script>", usize::BITS))
     );
     assert!(!response.body.contains("navigation-test.js"));
     assert!(!response.body.contains("okawak-shell-version"));
@@ -1237,6 +1270,33 @@ async fn category_shard_validates_browser_arguments_and_keeps_errors_out_of_the_
         assert!(!response.headers.contains_key(header::LAST_MODIFIED));
         assert!(!response.body.contains("<!DOCTYPE html>"));
     }
+}
+
+#[tokio::test]
+async fn runtime_language_choice_sets_cookie_and_redirects_without_get_validators() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    let choice = response(
+        &router,
+        Request::builder()
+            .method(Method::POST)
+            .uri("/tech/e2e-article?lang=ja")
+            .header(&topcoat::runtime::RUNTIME_HEADER, "true")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(r#"{"signals":{}}"#))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(choice.status, StatusCode::SEE_OTHER);
+    assert_eq!(choice.headers[header::LOCATION], "/tech/e2e-article");
+    assert!(
+        choice.headers[header::SET_COOKIE]
+            .to_str()
+            .unwrap()
+            .starts_with("okawak_locale=ja;")
+    );
+    assert_eq!(choice.headers[header::CACHE_CONTROL], "no-store");
+    assert!(!choice.headers.contains_key(header::ETAG));
+    assert!(!choice.headers.contains_key(header::LAST_MODIFIED));
 }
 
 #[tokio::test]

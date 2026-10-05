@@ -7,7 +7,7 @@ use domain::{ArticlePageDocument, Category, Slug, build_article_page_canonical_p
 use topcoat::{
     Result,
     context::Cx,
-    router::{StatusCode, page, path_param, request},
+    router::{StatusCode, module_param, page, path_param, request},
     view::{Unescaped, View, ViewExt, component, view},
 };
 
@@ -16,7 +16,7 @@ use super::CategoryName;
 use crate::components::badge::{BadgeVariant, badge};
 use crate::shell::{ShellMetadata, article_internal_server_error_page, not_found_page, site_shell};
 
-path_param!(article_slug);
+module_param!(article_slug);
 
 #[page]
 async fn article_page(cx: &Cx) -> Result<impl View> {
