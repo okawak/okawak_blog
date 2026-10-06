@@ -2,10 +2,10 @@ use super::CategoryName;
 use topcoat::{
     Result,
     context::Cx,
-    router::{page, path_param},
+    router::{module_param, page, path_param},
     view::View,
 };
-path_param!(article_slug);
+module_param!(article_slug);
 
 #[page]
 async fn article(cx: &Cx) -> Result<impl View> {

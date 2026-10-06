@@ -22,12 +22,12 @@ use topcoat::{
     asset::{AssetConfig, RouterBuilderAssetExt},
     context::{Cx, app_context, memoize, try_request_context},
     router::{
-        Body, LayerFn, LayerFuture, Next, Path, Router, StatusCode, TrailingSlash,
+        Body, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode, TrailingSlash,
         error::NotFoundError,
         page, request,
         response::{IntoResponse, Response},
     },
-    runtime::RouterBuilderRuntimeExt,
+    runtime::{PrefetchMode, RouterBuilderRuntimeExt, link_attrs, prefetch_mode},
     view::{Unescaped, View, ViewExt, attributes, class, component, view},
 };
 
@@ -129,7 +129,7 @@ fn not_modified_response(conditional_get: &ArtifactConditionalGetDecision) -> Re
 fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
     Box::pin(async move {
         let state = app_context::<ArtifactHttpCacheState>(cx);
-        let Some(conditional_get) = state
+        let conditional_get = state
             // Runtime page re-runs rewrite POST into GET, but their signal-dependent
             // HTML must not share validators with the ordinary published page.
             .conditional_get(
@@ -137,14 +137,15 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
                 request::uri(cx),
                 request::headers(cx),
             )
-            .await
-        else {
-            return next.run(cx, body).await;
-        };
+            .await;
 
-        let negotiate = is_site_page_path(request::uri(cx).path())
+        // Language selection also applies to runtime navigation's rewritten GET.
+        let negotiate = matches!(*request::method(cx), Method::GET | Method::HEAD)
+            && is_site_page_path(request::uri(cx).path())
             && crate::language::is_negotiated_request(request::uri(cx));
-        let mut snapshot = conditional_get.snapshot();
+        let mut snapshot = conditional_get
+            .as_ref()
+            .and_then(|decision| decision.snapshot());
         if negotiate && snapshot.is_none() {
             snapshot = app_context::<api::ArtifactReaderContext>(cx)
                 .0
@@ -163,6 +164,13 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
         if negotiate && let Some(response) = crate::language::redirect(cx).await {
             return Ok(response);
         }
+        let Some(conditional_get) = conditional_get else {
+            let mut response = next.run(cx, body).await?;
+            if negotiate && request::uri(cx).path() == "/" {
+                crate::language::vary_home(&mut response);
+            }
+            return Ok(response);
+        };
         let mut response = if conditional_get.should_short_circuit() {
             not_modified_response(&conditional_get)
         } else {
@@ -197,6 +205,7 @@ pub fn create_router(
         .layer(LayerFn::new(None::<&Path>, render_unmatched_path))
         // Runtime reruns must become GETs before the application layers run.
         .runtime()
+        .prefetch(PrefetchMode::Intent)
         .app_context(ArtifactHttpCacheState::new(
             artifact_reader.clone(),
             validators_enabled,
@@ -283,6 +292,7 @@ async fn home_document(
 
 #[component]
 async fn home_page_content(
+    cx: &Cx,
     document: HomePageDocument,
     locale: Locale,
     labels: domain::TagLabels,
@@ -312,7 +322,11 @@ async fn home_page_content(
                     for category in &document.categories {
                         <li>
                             <a
-                                href=(locale.path(&build_category_path(&category.category)))
+                                (link_attrs(
+                                    cx,
+                                    locale.path(&build_category_path(&category.category)),
+                                    prefetch_mode(cx),
+                                ))
                                 class=(class!(
                                     badge_variants(BadgeVariant::Outline),
                                     "gap-2 rounded-full px-3 py-1.5 text-sm no-underline transition-colors hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",

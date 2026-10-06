@@ -4,12 +4,12 @@ use topcoat::{
     router::{
         Body, HeaderValue,
         error::{internal_server_error, not_found},
-        header, path_param,
+        header, module_param, path_param,
         response::Response,
         route,
     },
 };
-path_param!(asset_name);
+module_param!(asset_name);
 
 #[route(GET)]
 async fn content_asset(cx: &Cx) -> Result<Response> {

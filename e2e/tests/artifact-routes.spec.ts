@@ -152,7 +152,7 @@ test("GitHub icon stays accessible without an icon font", async ({ page }) => {
   expect(iconFontRequests).toEqual([]);
 });
 
-test("home renders artifacts and uses full-page navigation", async ({ page }) => {
+test("home uses runtime navigation and restores metadata and scroll through history", async ({ page }) => {
   const browserErrors = captureBrowserErrors(page);
 
   const response = await page.goto("/");
@@ -175,21 +175,26 @@ test("home renders artifacts and uses full-page navigation", async ({ page }) =>
     "1カテゴリで1件の記事を公開しています。",
   );
 
-  await page
-    .locator("main")
-    .evaluate((element) => element.setAttribute("data-document", "home"));
-  const articleDocumentRequest = page.waitForRequest(
-    (request) =>
-      request.resourceType() === "document" &&
-      new URL(request.url()).pathname === "/tech/e2e-article",
+  await page.evaluate(() => { (window as any).__navigationDocument = true; });
+  await page.getByRole("link", { name: "E2E Article" }).scrollIntoViewIfNeeded();
+  const homeScroll = await page.evaluate(() => window.scrollY);
+  let documentRequests = 0;
+  page.on("request", request => {
+    if (request.resourceType() === "document") documentRequests += 1;
+  });
+  const articleRenderRequest = page.waitForRequest(request =>
+    request.method() === "POST" &&
+    request.headers()["x-topcoat-runtime"] === "true" &&
+    new URL(request.url()).pathname === "/tech/e2e-article",
   );
 
   await page.getByRole("link", { name: "E2E Article" }).click();
-  await articleDocumentRequest;
+  await articleRenderRequest;
 
   await expect(page).toHaveURL(/\/tech\/e2e-article$/);
   await expect(page.getByRole("heading", { name: "E2E Article" })).toBeVisible();
-  await expect(page.locator('main[data-document="home"]')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).__navigationDocument)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await expect(page.locator("main .content-prose")).toContainText("Article fixture body");
   await expectFormattedFixtureDates(page);
   const articleWidths = await page.locator("main article").evaluate((article) => {
@@ -219,6 +224,11 @@ test("home renders artifacts and uses full-page navigation", async ({ page }) =>
     "",
     "1カテゴリで1件の記事を公開しています。",
   );
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(homeScroll, 0);
+  await page.goForward();
+  await expect(page.getByRole("heading", { name: "E2E Article", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__navigationDocument)).toBe(true);
+  expect(documentRequests).toBe(0);
   expect(browserErrors).toEqual([]);
 });
 
@@ -245,7 +255,7 @@ test("cross-page fragments use document navigation", async ({ page }) => {
     .toBeLessThan(200);
 });
 
-test("text fragments use document navigation", async ({ page }) => {
+test("generated text-fragment links use document navigation", async ({ page }) => {
   await page.goto("/");
   const aboutDocumentRequest = page.waitForRequest(
     (request) =>
@@ -255,7 +265,7 @@ test("text fragments use document navigation", async ({ page }) => {
 
   const main = page.locator("main");
   await main.evaluate((element) => element.setAttribute("data-original", "true"));
-  const aboutLink = page.getByRole("link", { name: "About", exact: true });
+  const aboutLink = page.getByRole("link", { name: "Generated content section", exact: true });
   await aboutLink.evaluate((element) =>
     element.setAttribute("href", "/about#:~:text=About%20fixture%20body"),
   );

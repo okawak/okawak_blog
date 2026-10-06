@@ -9,7 +9,7 @@ use domain::{Category, CategoryPageDocument, build_category_page_canonical_path}
 use topcoat::{
     Result,
     context::Cx,
-    router::{StatusCode, page, path_param, request},
+    router::{StatusCode, module_param, page, path_param, request},
     view::{Unescaped, View, ViewExt, component, view},
 };
 
@@ -19,7 +19,7 @@ use crate::{
     shell::{ShellMetadata, internal_server_error_page, not_found_page, site_shell},
 };
 
-path_param!(category_name);
+module_param!(category_name);
 
 #[page]
 async fn category_page(cx: &Cx) -> Result<impl View> {

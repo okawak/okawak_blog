@@ -23,8 +23,8 @@ done
   || fail "Topcoat Tailwind $topcoat_tailwind_version does not match TOPCOAT_TAILWIND_VERSION $tailwind_version"
 [ "$(bun --version)" = "$mise_bun_version" ] \
   || fail "active Bun $(bun --version) does not match mise $mise_bun_version"
-[ "$(topcoat fmt --version | awk '{print $2}')" = "$topcoat_cli_version" ] \
-  || fail "active Topcoat CLI $(topcoat fmt --version | awk '{print $2}') does not match mise $topcoat_cli_version"
+[ "$(topcoat --version | awk '{print $2}')" = "$topcoat_cli_version" ] \
+  || fail "active Topcoat CLI $(topcoat --version | awk '{print $2}') does not match mise $topcoat_cli_version"
 
 if grep -R -n -E \
   'BUN_VERSION|TOPCOAT_CLI_VERSION|TOPCOAT_TAILWIND_VERSION|oven-sh/setup-bun|topcoat-cli-installer' \
