@@ -781,13 +781,13 @@ async fn rejects_divergent_english_management_metadata_without_replacing_release
         .unwrap()
         .split_once("\n---\n")
         .unwrap();
-    let mut metadata: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
-    metadata[field] = serde_yaml::from_str(value).unwrap();
+    let mut metadata: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
+    metadata[field] = yaml_serde::from_str(value).unwrap();
     fs::write(
         &article,
         format!(
             "---\n{}---\n{body}",
-            serde_yaml::to_string(&metadata).unwrap()
+            yaml_serde::to_string(&metadata).unwrap()
         ),
     )
     .unwrap();

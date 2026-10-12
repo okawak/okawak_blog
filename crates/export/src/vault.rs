@@ -75,17 +75,17 @@ fn extract(root: &Path, previous: &[Document]) -> Result<Vec<VaultNote>> {
         };
         // Inspect only the publication flag before requiring the public fields.
         // Drafts may omit title, category or timestamps entirely.
-        let fields: serde_yaml::Value = serde_yaml::from_str(yaml)?;
+        let fields: yaml_serde::Value = yaml_serde::from_str(yaml)?;
         if fields
             .get("is_completed")
-            .and_then(serde_yaml::Value::as_bool)
+            .and_then(yaml_serde::Value::as_bool)
             != Some(true)
         {
             continue;
         }
         // Value conversion rejects unquoted numeric/bool strings accepted by from_str.
         let fm: Frontmatter =
-            serde_yaml::from_value(fields).or_else(|_| serde_yaml::from_str(yaml))?;
+            yaml_serde::from_value(fields).or_else(|_| yaml_serde::from_str(yaml))?;
         let relative = path.strip_prefix(root)?;
         let relative_str = relative
             .to_str()
@@ -199,7 +199,7 @@ mod tests {
     use indoc::{formatdoc, indoc};
 
     fn frontmatter() -> Frontmatter {
-        serde_yaml::from_str(indoc! {"
+        yaml_serde::from_str(indoc! {"
             title: Article
             category: tech
             created: '2025-01-01T00:00:00+09:00'

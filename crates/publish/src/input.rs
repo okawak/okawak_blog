@@ -58,7 +58,7 @@ pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
                 return Err(invalid("public Markdown requires frontmatter"));
             };
             let meta: PublicContentMeta =
-                serde_yaml::from_str(yaml).map_err(|_| invalid("invalid public frontmatter"))?;
+                yaml_serde::from_str(yaml).map_err(|_| invalid("invalid public frontmatter"))?;
             meta.validate()
                 .map_err(|_| invalid("public frontmatter validation failed"))?;
             if meta.locale != locale

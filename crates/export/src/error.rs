@@ -13,7 +13,7 @@ pub enum ExportError {
     Json(#[from] serde_json::Error),
 
     #[error("failed to read or write YAML: {0}")]
-    Yaml(#[from] serde_yaml::Error),
+    Yaml(#[from] yaml_serde::Error),
 
     #[error("domain validation failed: {0}")]
     Domain(#[from] domain::DomainError),

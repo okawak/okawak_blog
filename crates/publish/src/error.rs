@@ -8,7 +8,7 @@ pub enum PublishError {
     Io(#[from] std::io::Error),
 
     #[error("failed to parse YAML frontmatter: {0}")]
-    Yaml(#[from] serde_yaml::Error),
+    Yaml(#[from] yaml_serde::Error),
 
     #[error("failed to serialize artifact JSON: {0}")]
     Json(#[from] serde_json::Error),
