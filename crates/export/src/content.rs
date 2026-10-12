@@ -14,7 +14,7 @@ impl Document {
     pub(crate) fn parse(text: &str) -> Result<Self> {
         let (yaml, body) = split(text)?
             .ok_or_else(|| ExportError::invalid_input("public Markdown requires frontmatter"))?;
-        let meta: PublicContentMeta = serde_yaml::from_str(yaml)?;
+        let meta: PublicContentMeta = yaml_serde::from_str(yaml)?;
         meta.validate()?;
         Ok(Self {
             meta,
@@ -37,7 +37,7 @@ impl Document {
         self.meta.validate()?;
         Ok(format!(
             "---\n{}---\n{}",
-            serde_yaml::to_string(&self.meta)?,
+            yaml_serde::to_string(&self.meta)?,
             self.body
         ))
     }
@@ -72,4 +72,46 @@ pub(crate) fn text_hash(document: &Document) -> Result<Sha256Digest> {
         &document.meta.summary,
         &document.body,
     ))?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use indoc::indoc;
+
+    #[test]
+    fn reviewed_frontmatter_round_trips_without_changing_yaml_or_markdown() {
+        let text = indoc! {"
+            ---
+            schema_version: 1
+            id: yaml-compatibility
+            locale: en
+            kind: article
+            title: '123'
+            summary: |-
+              日本語: 概要
+              true
+            category: Tech
+            tags:
+            - 'true'
+            - 日本語
+            priority: -1
+            created: 2025-01-01T00:00:00+09:00
+            updated: 2025-01-02T00:00:00+09:00
+            source_hash: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            translation:
+              input_hash: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+              generated_hash: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+              stale: false
+            ---
+            # Reviewed prose
+
+            本文 **bold** `code`
+        "};
+        let document = Document::parse(text).unwrap();
+        assert_eq!(document.meta.title.as_str(), "123");
+        assert_eq!(document.meta.summary.as_deref(), Some("日本語: 概要\ntrue"));
+        assert_eq!(document.meta.tags[0].as_str(), "true");
+        assert_eq!(document.encode().unwrap(), text);
+    }
 }

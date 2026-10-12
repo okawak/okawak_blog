@@ -370,7 +370,7 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
     export::accept_article_candidate(output.path(), &id, &settings()).unwrap();
     fn meta(path: &Path) -> domain::PublicContentMeta {
         let text = fs::read_to_string(path).unwrap();
-        serde_yaml::from_str(
+        yaml_serde::from_str(
             text.strip_prefix("---\n")
                 .unwrap()
                 .split_once("\n---\n")
