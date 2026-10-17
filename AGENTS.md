@@ -16,10 +16,10 @@ private Obsidianからローカルの`export`が日英の公開Markdownを作り
 - 正本はprivate Obsidian repository。`export`が抽出した公開用Markdownは通常ファイルとしてGit管理できる。非公開ノートやprivate入力を丸ごとcommitしない。入力のgit submoduleは必要時だけ初期化・更新する。
 - `crates/export`: ローカルで公開対象を抽出・正規化し、公開文章だけをCodexで翻訳する。手動編集を保護し、通常テストはfake translatorを使う。publishは公開Markdownだけを入力にする。詳細は`crates/export/README.md`を参照する。
 - Markdown / frontmatter / link / embedの解決とHTML生成はビルド時に完了させる。SSRはartifact読取・routing・metadata付与に集中し、本番は単一server binaryを優先する。
-- `crates/domain`: 公開コンテンツの純粋model・ルールとcrate間の共有契約。I/O、`async`、AWS SDK、HTTP frameworkを持ち込まない。
+- `crates/blogcore`: 公開コンテンツの純粋model・ルールとcrate間の共有契約。I/O、`async`、AWS SDK、HTTP frameworkを持ち込まない。
 - `crates/publish`: 入力・変換・artifact生成を担う単一crate。`lib.rs`はmodule宣言とre-exportのみ。外部APIはpublish entrypoint、bookmark enricher注入、`PublishError` / `Result`に限定し、内部の責務分割は設計文書に従う。
 - `crates/infra`: local / S3のartifact読取・設定・cache境界。vault読取・Markdown変換・uploadを置かない。
-- UI文言・カテゴリ表示名はserverの辞書で管理し、domainは識別子を保持する。タグ表示名は公開コンテンツ辞書として記事と同じreleaseで配信する。公開workflowでprivate submoduleやAI認証を使わない。
+- UI文言・カテゴリ表示名はserverの辞書で管理し、blogcoreは識別子を保持する。タグ表示名は公開コンテンツ辞書として記事と同じreleaseで配信する。公開workflowでprivate submoduleやAI認証を使わない。
 - `crates/server`: 単一Topcoat application。UI・metadata・asset・reader注入・API・health/readiness・conditional GETを所有する。`src/app.rs`を`module_router!()`のrootとし、`app/`のfile moduleをURL構造に対応させる（`mod.rs`禁止）。UIはstorage実装へ直接依存せず`PageLoader`を経由する。
 - `e2e/`: browser E2E。通常CIはprivate submodule・AWS不要のfixtureを使い、実S3 smokeはローカル手動確認とupload workflowの公開前gateで行う。
 - 明示されない限り、DB記事管理・認証認可・管理画面・UI編集・マルチユーザー・SaaS CMS・リアルタイム更新は作らない。

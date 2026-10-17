@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
+use blogcore::Slug;
 use clap::{Parser, Subcommand};
-use domain::Slug;
 use export::{ProtectedContent, TranslationReport, TranslationSettings};
 use std::{fs, path::Path};
 

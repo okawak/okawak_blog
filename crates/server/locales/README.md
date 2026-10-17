@@ -2,7 +2,7 @@
 
 `ui.json`のキーと用途はserverが所有する。exportはこのデータだけを読み、Rust / Topcoatのコードを変更しない。カテゴリID、URL、CSS、ログは翻訳しない。
 
-schema versionは1。`entries.<key>`は`source`（日本語）、`context`（用途）、任意の`translation`を持つ。英訳は`value`、`stale`、任意の`provenance`（`input_hash` / `generated_hash`）で管理する。補間は`{count}`等の名前と出現回数を保持する。件数のzero / one / manyはそれぞれ独立したキーにする。共有型はdomainの純粋なデータ契約であり、メッセージキーと翻訳文はdomainへ置かない。
+schema versionは1。`entries.<key>`は`source`（日本語）、`context`（用途）、任意の`translation`を持つ。英訳は`value`、`stale`、任意の`provenance`（`input_hash` / `generated_hash`）で管理する。補間は`{count}`等の名前と出現回数を保持する。件数のzero / one / manyはそれぞれ独立したキーにする。共有型はblogcoreの純粋なデータ契約であり、メッセージキーと翻訳文はblogcoreへ置かない。
 
 初期英訳は実装と同時に用意した校正可能な値で、Codex CLIの生成履歴を偽装しないよう`provenance`を付けていない。この状態は履歴不明として保護・報告され、通常実行では訳文を保持してAIの更新候補を作る。候補を採用すると以後の差分判定に必要な履歴が付く。
 

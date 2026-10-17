@@ -1,8 +1,8 @@
 //! Shared HTML shell, metadata, and error views.
 
 use crate::i18n::{Message, japanese_path, locale_from_path, t};
+use blogcore::{Locale, SiteLocalesDocument};
 use chrono::Datelike;
-use domain::{Locale, SiteLocalesDocument};
 use topcoat::{
     Result,
     context::Cx,

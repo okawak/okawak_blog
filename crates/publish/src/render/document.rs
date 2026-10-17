@@ -4,7 +4,7 @@ use crate::{
     error::Result,
     links,
 };
-use domain::{
+use blogcore::{
     ArticleBody, ArticleMeta, CategoryLandingBody, CategoryLandingMeta,
     HomeFragmentArtifactDocument, PageArtifactDocument, PublishableArticle,
     PublishableCategoryLanding,

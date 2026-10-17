@@ -1,9 +1,9 @@
-//! Storage-independent port for loading domain page documents.
+//! Storage-independent port for loading blogcore page documents.
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use domain::{
+use blogcore::{
     ArticlePageDocument, Category, CategoryPageDocument, ContentAssetName, HomePageDocument,
     Locale, PageKey, SiteLocalesDocument, Slug, StaticPageDocument, TagLabels,
 };

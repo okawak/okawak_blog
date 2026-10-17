@@ -11,7 +11,7 @@ module_param!(article_slug);
 async fn article(cx: &Cx) -> Result<impl View> {
     crate::app::category_name::article_slug::render_article(
         cx,
-        domain::Locale::En,
+        blogcore::Locale::En,
         path_param::<CategoryName>(cx),
         path_param::<ArticleSlug>(cx),
     )

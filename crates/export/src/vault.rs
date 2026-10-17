@@ -6,7 +6,7 @@ use crate::{
     content::{self, Document},
     filesystem,
 };
-use domain::{
+use blogcore::{
     Category, ContentKind, GENERATED_ID_HASH_LENGTH, Locale, PUBLIC_CONTENT_SCHEMA_VERSION,
     PageKey, PublicContentMeta, SectionPath, Sha256Digest, Slug, TagId, Timestamp, Title,
 };

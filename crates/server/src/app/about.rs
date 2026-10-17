@@ -1,7 +1,7 @@
 use crate::i18n::{Message, t};
 use crate::metadata::*;
-use domain::Locale;
-use domain::{PageKey, StaticPageDocument, build_static_page_canonical_path};
+use blogcore::Locale;
+use blogcore::{PageKey, StaticPageDocument, build_static_page_canonical_path};
 use topcoat::{
     Result,
     context::Cx,

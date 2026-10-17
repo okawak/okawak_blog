@@ -1,7 +1,7 @@
 //! Artifact-backed implementation of the storage-independent page loader contract.
 
 use async_trait::async_trait;
-use domain::{
+use blogcore::{
     ArticlePageDocument, Category, CategoryPageDocument, ContentAssetName, HomePageDocument,
     Locale, PageKey, Slug, StaticPageDocument, build_article_page_document,
     build_category_page_document, build_home_page_document, build_static_page_document,
@@ -59,7 +59,7 @@ impl ArtifactPageLoader {
 
 #[async_trait]
 impl PageLoader for ArtifactPageLoader {
-    async fn load_locales(&self) -> PageLoadResult<domain::SiteLocalesDocument> {
+    async fn load_locales(&self) -> PageLoadResult<blogcore::SiteLocalesDocument> {
         self.snapshot()
             .await?
             .read_locales()
@@ -191,7 +191,7 @@ mod tests {
         task::{Context, Waker},
     };
 
-    use domain::{
+    use blogcore::{
         ArticleIndexDocument, CategoryArtifactDocument, HomeFragmentArtifactDocument,
         PageArtifactDocument, SiteMetadataDocument,
     };

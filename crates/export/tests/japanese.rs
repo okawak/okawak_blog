@@ -91,7 +91,7 @@ fn exports_only_completed_notes_allowlists_metadata_and_preserves_legacy_slug(
             .path()
             .join(format!(
                 "ja/{}.md",
-                &digest[..domain::GENERATED_ID_HASH_LENGTH]
+                &digest[..blogcore::GENERATED_ID_HASH_LENGTH]
             ))
             .exists()
     );

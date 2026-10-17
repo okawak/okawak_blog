@@ -1,5 +1,5 @@
 use crate::{PublishError, Result, input::Document};
-use domain::{Category, ContentKind, PageKey, SectionPath, Slug};
+use blogcore::{Category, ContentKind, PageKey, SectionPath, Slug};
 use std::collections::HashSet;
 
 pub(crate) struct ParsedArticleFile {
@@ -8,24 +8,24 @@ pub(crate) struct ParsedArticleFile {
     /// Category-relative directories used to group articles in category navigation.
     pub(crate) section_path: SectionPath,
     pub(crate) markdown_body: String,
-    pub(crate) front_matter: domain::PublicContentMeta,
+    pub(crate) front_matter: blogcore::PublicContentMeta,
 }
 
 pub(crate) struct ParsedPageFile {
     pub(crate) page: PageKey,
     pub(crate) markdown_body: String,
-    pub(crate) front_matter: domain::PublicContentMeta,
+    pub(crate) front_matter: blogcore::PublicContentMeta,
 }
 
 pub(crate) struct ParsedHomeFile {
     pub(crate) markdown_body: String,
-    pub(crate) front_matter: domain::PublicContentMeta,
+    pub(crate) front_matter: blogcore::PublicContentMeta,
 }
 
 pub(crate) struct ParsedCategoryFile {
     pub(crate) category: Category,
     pub(crate) markdown_body: String,
-    pub(crate) front_matter: domain::PublicContentMeta,
+    pub(crate) front_matter: blogcore::PublicContentMeta,
 }
 
 #[derive(Default)]

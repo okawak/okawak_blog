@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use domain::{
+use blogcore::{
     ArticleIndexDocument, Category, CategoryArtifactDocument, HomeFragmentArtifactDocument,
     PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
 };
@@ -402,16 +402,19 @@ struct ValidatorSnapshot {
 
 #[async_trait]
 impl ArtifactSnapshot for ValidatorSnapshot {
-    async fn localized(&self, locale: domain::Locale) -> Result<Option<DynArtifactSnapshot>> {
+    async fn localized(&self, locale: blogcore::Locale) -> Result<Option<DynArtifactSnapshot>> {
         self.inner.localized(locale).await
     }
-    async fn read_locales(&self) -> Result<domain::SiteLocalesDocument> {
+    async fn read_locales(&self) -> Result<blogcore::SiteLocalesDocument> {
         self.inner.read_locales().await
     }
-    async fn read_tag_labels(&self) -> Result<domain::TagLabels> {
+    async fn read_tag_labels(&self) -> Result<blogcore::TagLabels> {
         self.inner.read_tag_labels().await
     }
-    async fn read_content_asset(&self, name: &domain::ContentAssetName) -> Result<Option<Vec<u8>>> {
+    async fn read_content_asset(
+        &self,
+        name: &blogcore::ContentAssetName,
+    ) -> Result<Option<Vec<u8>>> {
         self.inner.read_content_asset(name).await
     }
 

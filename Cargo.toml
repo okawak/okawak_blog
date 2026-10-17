@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "crates/domain",
+    "crates/blogcore",
     "crates/export",
     "crates/publish",
     "crates/infra",

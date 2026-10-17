@@ -186,9 +186,9 @@ bash scripts/tests/remote_deployment_test.sh
 bash scripts/tests/runtime_certificate_rotation_test.sh
 '''
 
-[tasks.test-domain]
-description = "Run domain layer tests"
-run = "cargo test -p domain"
+[tasks.test-blogcore]
+description = "Run blogcore tests"
+run = "cargo test -p blogcore"
 
 [tasks.test-server]
 description = "Run server tests"
@@ -223,9 +223,9 @@ run = "cargo clippy --workspace --all-targets -- -D warnings"
 description = "Run cargo check for the workspace"
 run = "cargo check --workspace"
 
-[tasks.check-domain]
-description = "Run cargo check for the domain crate"
-run = "cargo check -p domain"
+[tasks.check-blogcore]
+description = "Run cargo check for the blogcore crate"
+run = "cargo check -p blogcore"
 
 [tasks.check-server]
 description = "Run cargo check for the server crate"

@@ -4,7 +4,7 @@ use super::{
     plan::{Decision, UpdatePlan, decide, plan_update},
 };
 use crate::{ExportError, Result, content::digest, filesystem, output};
-use domain::{LabelCatalog, LabelProvenance, LabelTranslation, Sha256Digest};
+use blogcore::{LabelCatalog, LabelProvenance, LabelTranslation, Sha256Digest};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -232,7 +232,7 @@ pub(crate) fn accept_catalog_candidate(
     Ok(())
 }
 
-fn request(entry: &domain::LabelEntry, settings: &TranslationSettings) -> TranslationRequest {
+fn request(entry: &blogcore::LabelEntry, settings: &TranslationSettings) -> TranslationRequest {
     TranslationRequest::new(
         [("value".into(), entry.source.clone())].into(),
         entry.context.clone(),

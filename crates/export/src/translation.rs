@@ -11,7 +11,7 @@ pub(crate) use catalog::{accept_catalog_candidate, plan_catalog};
 pub use codex::CodexTranslator;
 
 use crate::{ExportError, Result};
-use domain::{Slug, placeholders};
+use blogcore::{Slug, placeholders};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -58,7 +58,7 @@ impl TranslationRequest {
         }
     }
 
-    pub(crate) fn fingerprint(&self) -> Result<domain::Sha256Digest> {
+    pub(crate) fn fingerprint(&self) -> Result<blogcore::Sha256Digest> {
         Ok(crate::content::digest(serde_json::to_vec(&(
             "text-fragments-v3",
             self,

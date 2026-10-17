@@ -1,5 +1,5 @@
+use blogcore::Locale;
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime};
-use domain::Locale;
 
 /// Formats an artifact date for human-readable presentation.
 pub(crate) fn format_display_date(value: &str, locale: Locale) -> String {
@@ -26,7 +26,7 @@ pub(crate) fn format_display_date(value: &str, locale: Locale) -> String {
 #[cfg(test)]
 mod tests {
     use super::format_display_date;
-    use domain::Locale;
+    use blogcore::Locale;
 
     #[test]
     fn formats_rfc3339_without_exposing_time_or_offset() {

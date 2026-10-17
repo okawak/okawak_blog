@@ -1,4 +1,4 @@
-use domain::{ContentKind, Locale, PublicContentMeta};
+use blogcore::{ContentKind, Locale, PublicContentMeta};
 
 fn metadata() -> PublicContentMeta {
     serde_json::from_value(serde_json::json!({

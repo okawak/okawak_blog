@@ -16,7 +16,7 @@ pub enum ExportError {
     Yaml(#[from] yaml_serde::Error),
 
     #[error("domain validation failed: {0}")]
-    Domain(#[from] domain::DomainError),
+    Domain(#[from] blogcore::DomainError),
 
     #[error("path is outside the selected root: {0}")]
     StripPrefix(#[from] StripPrefixError),

@@ -4,7 +4,7 @@ use crate::{
     translation::{self, ProtectedContent, TranslationReport, TranslationSettings, Translator},
     vault,
 };
-use domain::{Locale, Slug};
+use blogcore::{Locale, Slug};
 use std::{
     fs,
     path::{Path, PathBuf},

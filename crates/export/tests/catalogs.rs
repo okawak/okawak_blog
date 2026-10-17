@@ -1,4 +1,4 @@
-use domain::{LabelCatalog, LabelEntry};
+use blogcore::{LabelCatalog, LabelEntry};
 use export::{ProtectedContent, Texts, TranslationRequest, TranslationSettings, Translator};
 use std::{cell::Cell, fs};
 
@@ -159,7 +159,7 @@ fn changed_source_placeholders_regenerate_or_protect_existing_translations() {
                 assert_eq!(report.generated, 1);
                 assert_eq!(fake.0.get(), 2);
                 assert_eq!(
-                    catalog.entries["count"].value(domain::Locale::En),
+                    catalog.entries["count"].value(blogcore::Locale::En),
                     format!("EN {source}")
                 );
             } else {
@@ -169,7 +169,7 @@ fn changed_source_placeholders_regenerate_or_protect_existing_translations() {
                 let translation = catalog.entries["count"].translation.as_ref().unwrap();
                 assert_eq!(translation.value, previous);
                 assert!(translation.stale);
-                assert_eq!(catalog.entries["count"].value(domain::Locale::En), source);
+                assert_eq!(catalog.entries["count"].value(blogcore::Locale::En), source);
                 export::translate_catalog(&path, &fake, &settings()).unwrap();
                 export::accept_catalog_candidate(&path, "count", &settings()).unwrap();
             }
@@ -196,7 +196,10 @@ fn tags_are_translated_once_per_id_and_removed_with_unpublished_sources() {
     assert_eq!(fake.0.get(), 3, "two articles and one shared tag");
     let path = output.path().join("tags.json");
     let mut catalog: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    assert_eq!(catalog.entries["統計"].value(domain::Locale::En), "EN 統計");
+    assert_eq!(
+        catalog.entries["統計"].value(blogcore::Locale::En),
+        "EN 統計"
+    );
     let tag = catalog.entries.get_mut("統計").unwrap();
     tag.translation.as_mut().unwrap().value = "Manual label".into();
     tag.context = "Updated tag context".into();
@@ -281,7 +284,7 @@ fn authored_labels_without_generation_history_are_preserved_and_reported() {
             LabelEntry {
                 source: "実行".into(),
                 context: "button".into(),
-                translation: Some(domain::LabelTranslation {
+                translation: Some(blogcore::LabelTranslation {
                     value: "Run".into(),
                     provenance: None,
                     stale: false,

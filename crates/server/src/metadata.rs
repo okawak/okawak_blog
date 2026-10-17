@@ -1,5 +1,5 @@
 use crate::i18n::{Message, article_count, category_count, category_name, interpolate, t};
-use domain::{
+use blogcore::{
     ArticlePageDocument, CategoryPageDocument, HomePageDocument, Locale, StaticPageDocument,
 };
 
@@ -101,7 +101,7 @@ pub(crate) fn build_static_page_description(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{
+    use blogcore::{
         Category, PageKey, SectionPath, SiteArticleCard, SiteCategorySummary, Slug, Title,
     };
 

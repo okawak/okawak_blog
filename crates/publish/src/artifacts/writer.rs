@@ -1,7 +1,7 @@
 use super::builder::SiteDocuments;
 use crate::error::Result;
 
-use domain::{Category, Locale, Slug};
+use blogcore::{Category, Locale, Slug};
 use serde::Serialize;
 use std::{
     fs::{self, File},
@@ -94,7 +94,7 @@ fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
 mod tests {
     use super::super::builder::build_site_documents;
     use super::*;
-    use domain::{
+    use blogcore::{
         ArticleMeta, CategoryLandingMeta, HomeFragmentArtifactDocument, PageArtifactDocument,
         PageKey, SectionPath, Timestamp, Title,
     };
@@ -130,9 +130,9 @@ mod tests {
         let article = article_meta();
         let documents = build_site_documents(
             vec![article.clone()],
-            vec![domain::PublishableCategoryLanding::new(
+            vec![blogcore::PublishableCategoryLanding::new(
                 category_landing(),
-                domain::CategoryLandingBody::new("<h1>Tech</h1>".to_string()).unwrap(),
+                blogcore::CategoryLandingBody::new("<h1>Tech</h1>".to_string()).unwrap(),
             )],
             vec![PageArtifactDocument {
                 page: PageKey::new("about".to_string()).unwrap(),

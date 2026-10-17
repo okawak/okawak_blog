@@ -4,7 +4,7 @@ use crate::{
     ExportError, Result,
     content::{digest, options},
 };
-use domain::GENERATED_ID_HASH_LENGTH;
+use blogcore::GENERATED_ID_HASH_LENGTH;
 use pulldown_cmark::{Event, LinkType, Parser, Tag};
 use std::{
     collections::HashMap,

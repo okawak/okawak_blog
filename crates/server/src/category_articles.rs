@@ -3,7 +3,7 @@
 use std::str::FromStr;
 
 use crate::i18n::{Message, t};
-use domain::{Category, Locale};
+use blogcore::{Category, Locale};
 use topcoat::{
     Result,
     context::Cx,

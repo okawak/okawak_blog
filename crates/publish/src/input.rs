@@ -1,6 +1,6 @@
 //! Read the public Markdown contract. No vault paths or publication flags.
 use crate::{PublishError, Result};
-use domain::{ContentKind, LabelCatalog, Locale, PublicContentMeta};
+use blogcore::{ContentKind, LabelCatalog, Locale, PublicContentMeta};
 use std::{
     collections::{HashMap, HashSet},
     fs,

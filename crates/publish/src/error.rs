@@ -32,13 +32,13 @@ pub enum PublishError {
     Parse(String),
 
     #[error("domain validation failed: {0}")]
-    Domain(#[from] domain::DomainError),
+    Domain(#[from] blogcore::DomainError),
 
     #[error("publish rejected {count} invalid content file(s)")]
     ContentErrors { count: usize },
 
     #[error("missing category landing: {category}")]
-    MissingCategoryLanding { category: domain::Category },
+    MissingCategoryLanding { category: blogcore::Category },
 
     #[error("publish requires at least one article")]
     NoArticles,

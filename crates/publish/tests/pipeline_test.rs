@@ -1,4 +1,4 @@
-use domain::{
+use blogcore::{
     ArticleIndexDocument, CategoryArtifactDocument, HomeFragmentArtifactDocument,
     PageArtifactDocument, SiteMetadataDocument,
 };
@@ -264,7 +264,7 @@ async fn test_publish_rejects_missing_category_landing_before_writing() {
     assert!(matches!(
         result,
         Err(PublishError::MissingCategoryLanding {
-            category: domain::Category::Tech
+            category: blogcore::Category::Tech
         })
     ));
     assert!(!fixture.output_dir().exists());
@@ -699,13 +699,14 @@ async fn publishes_english_separately_and_removes_stale_output() {
         ["統計"],
         "article linkage retains stable tag IDs"
     );
-    let labels: domain::TagLabels = read_json(fixture.site_root().join("en/tags.json"));
+    let labels: blogcore::TagLabels = read_json(fixture.site_root().join("en/tags.json"));
     assert_eq!(labels["統計"], "Statistics");
-    let labels: domain::TagLabels = read_json(fixture.site_root().join("tags.json"));
+    let labels: blogcore::TagLabels = read_json(fixture.site_root().join("tags.json"));
     assert_eq!(labels["統計"], "統計");
-    let locales: domain::SiteLocalesDocument = read_json(fixture.site_root().join("locales.json"));
+    let locales: blogcore::SiteLocalesDocument =
+        read_json(fixture.site_root().join("locales.json"));
     assert_eq!(
-        locales.path("/tech/tech-required-article", domain::Locale::En),
+        locales.path("/tech/tech-required-article", blogcore::Locale::En),
         Some("/en/tech/tech-required-article".into())
     );
     let article = fixture.content_dir().join("en/tech-required-article.md");
@@ -838,7 +839,7 @@ async fn rejects_linked_tag_catalog_without_replacing_existing_release() {
     let target = external.path().join("tags.json");
     fs::write(
         &target,
-        serde_json::to_vec(&domain::LabelCatalog::default()).unwrap(),
+        serde_json::to_vec(&blogcore::LabelCatalog::default()).unwrap(),
     )
     .unwrap();
     let link = fixture.content_dir().join("tags.json");

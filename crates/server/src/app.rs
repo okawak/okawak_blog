@@ -2,7 +2,7 @@
 
 use crate::i18n::{Message, t};
 use crate::metadata::*;
-use domain::Locale;
+use blogcore::Locale;
 
 mod about;
 mod api;
@@ -12,7 +12,7 @@ mod en;
 
 use std::sync::Arc;
 
-use domain::{
+use blogcore::{
     Category, CategoryPageDocument, HomePageDocument, build_category_path,
     build_home_page_canonical_path,
 };
@@ -295,7 +295,7 @@ async fn home_page_content(
     cx: &Cx,
     document: HomePageDocument,
     locale: Locale,
-    labels: domain::TagLabels,
+    labels: blogcore::TagLabels,
 ) -> Result<impl View> {
     let page_description = build_home_page_description(&document, locale);
 

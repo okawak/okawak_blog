@@ -1,6 +1,6 @@
-//! CLI validation of completed artifacts using the same domain builders as SSR.
+//! CLI validation of completed artifacts using the same blogcore builders as SSR.
 use anyhow::{Context, Result, ensure};
-use domain::{
+use blogcore::{
     ArticleIndexDocument, CategoryArtifactDocument, HomeFragmentArtifactDocument,
     PageArtifactDocument, SiteLocalesDocument, SiteMetadataDocument, build_article_page_document,
     build_category_page_document, build_home_page_document, build_static_page_document,

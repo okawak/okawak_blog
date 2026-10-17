@@ -39,7 +39,7 @@ okawak_blog/
 ├── translation.json   # 記事・タグ・UI共通の翻訳設定
 ├── crates/
 │   ├── export/
-│   ├── domain/
+│   ├── blogcore/
 │   ├── publish/
 │   ├── infra/
 │   └── server/
@@ -54,10 +54,10 @@ obsidian/は外部入力であり、crateの内部資産にしない。公開入
 
 ~~~mermaid
 flowchart TB
-    Export[crates/export] --> Domain[crates/domain]
-    Publish[crates/publish] --> Domain
-    Infra[crates/infra] --> Domain
-    Server[crates/server] --> Domain
+    Export[crates/export] --> Blogcore[crates/blogcore]
+    Publish[crates/publish] --> Blogcore
+    Infra[crates/infra] --> Blogcore
+    Server[crates/server] --> Blogcore
     Server --> Infra
 ~~~
 
@@ -78,14 +78,14 @@ exportとpublishはruntime依存ではない。serverはinfraをapplication comp
 
 操作と翻訳状態の詳細は[export README](../../crates/export/README.md)を参照する。
 
-### crates/domain
+### crates/blogcore
 
 - 公開コンテンツ、artifact、release pointer、page documentの純粋な共有契約
 - category、slug、locale、pathなどの値と検証規則
 - artifactから表示用documentを組み立てる純粋ロジック
 - I/O、async、AWS SDK、HTTP frameworkを持たない
 
-公開Markdownのタイトル・日時・タグID・digest・section pathはdomainの値型が生成時・deserialization時に検証する。`PublicContentMeta::validate()`はschema versionとフィールド間の整合性を検証する。exportのvault入力も同じ値型を使い、publishへ検証済みの値を渡す。
+公開Markdownのタイトル・日時・タグID・digest・section pathはblogcoreの値型が生成時・deserialization時に検証する。`PublicContentMeta::validate()`はschema versionとフィールド間の整合性を検証する。exportのvault入力も同じ値型を使い、publishへ検証済みの値を渡す。
 
 ### crates/publish
 
@@ -127,7 +127,7 @@ content kindはarticle、category、page、homeの4種類である。articleはc
 
 記事と内部linkは翻訳後も変わらないcontent IDで対応づける。タイトル、元file path、翻訳結果から公開identityを再計算しない。publishは対象言語のcontentが配信可能なら同じ言語、なければ日本語のURLへ解決する。未解決参照、曖昧な参照、公開対象外への参照はexportまたはpublishで失敗させる。
 
-タグIDは記事frontmatterに保持し、表示名はcontent/tags.jsonから同じcontent releaseへ含める。UI文言とカテゴリ表示名はserver辞書で管理し、server binaryと一緒に配備する。domainは表示文言を持たず、識別子と共有schemaだけを所有する。
+タグIDは記事frontmatterに保持し、表示名はcontent/tags.jsonから同じcontent releaseへ含める。UI文言とカテゴリ表示名はserver辞書で管理し、server binaryと一緒に配備する。blogcoreは表示文言を持たず、識別子と共有schemaだけを所有する。
 
 ## Artifactとrelease
 
@@ -201,7 +201,7 @@ releaseは上書きせず、公開runをrepository単位で直列化する。失
 
 ## Pageとruntime境界
 
-domainのpage documentは言語やstorageに依存しない表示データを表す。serverのpage componentはPageLoaderから、page document、タグ表示名、言語別pathをまとめたpresentationを受け取る。ArtifactPageLoaderだけがinfraのsnapshotを読み、local / S3 readerをUIへ持ち込まない。
+blogcoreのpage documentは言語やstorageに依存しない表示データを表す。serverのpage componentはPageLoaderから、page document、タグ表示名、言語別pathをまとめたpresentationを受け取る。ArtifactPageLoaderだけがinfraのsnapshotを読み、local / S3 readerをUIへ持ち込まない。
 
 1 request内のpage documentとmetadataは同じartifact snapshotから組み立てる。home fragmentだけを任意とし、必要なartifactの欠落・読取失敗を空値へ変換しない。404とstorage errorはroute境界で異なるstatusとして扱う。/api/articlesは互換endpointとして維持し、page専用APIは増やさない。
 
