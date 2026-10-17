@@ -6,7 +6,7 @@ pub enum InfraError {
     #[error(transparent)]
     Shared(std::sync::Arc<InfraError>),
     #[error("invalid artifact contract: {0}")]
-    Domain(#[from] domain::DomainError),
+    Domain(#[from] blogcore::DomainError),
     #[error("failed to read artifact file: {0}")]
     Io(#[from] std::io::Error),
     #[error("failed to decode artifact json: {0}")]

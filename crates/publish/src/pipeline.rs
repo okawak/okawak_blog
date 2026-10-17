@@ -8,7 +8,7 @@ use crate::render::{
     rich_bookmark_enricher,
 };
 use crate::{classify, input, links};
-use domain::{Locale, SiteLocalesDocument};
+use blogcore::{Locale, SiteLocalesDocument};
 use futures::{StreamExt, stream};
 use std::{path::Path, sync::Arc};
 use tracing::info;
@@ -76,7 +76,7 @@ pub async fn publish_with_bookmark_enricher(
                 available.push(locale);
             }
         }
-        let labels: domain::TagLabels = docs
+        let labels: blogcore::TagLabels = docs
             .iter()
             .flat_map(|d| &d.meta.tags)
             .map(|id| {
@@ -214,7 +214,7 @@ async fn process_article(
     link_index: &links::Index,
     enrich: BookmarkEnricher,
     site_output: SiteOutput,
-) -> Result<domain::ArticleMeta> {
+) -> Result<blogcore::ArticleMeta> {
     let article = render_article(parsed_file, link_index, enrich).await?;
     tokio::task::spawn_blocking(move || {
         write_article_page(

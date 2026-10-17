@@ -1,11 +1,11 @@
 use crate::i18n::{Message, t};
 use crate::metadata::*;
-use domain::Locale;
+use blogcore::Locale;
 pub(crate) mod article_slug;
 
 use std::str::FromStr;
 
-use domain::{Category, CategoryPageDocument, build_category_page_canonical_path};
+use blogcore::{Category, CategoryPageDocument, build_category_page_canonical_path};
 use topcoat::{
     Result,
     context::Cx,

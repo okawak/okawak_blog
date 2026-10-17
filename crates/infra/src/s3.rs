@@ -2,7 +2,7 @@ use std::{sync::Arc, time::SystemTime};
 
 use async_trait::async_trait;
 use aws_sdk_s3::Client;
-use domain::{
+use blogcore::{
     ArticleIndexDocument, ArtifactReleasePointerDocument, Category, CategoryArtifactDocument,
     ContentAssetName, HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey,
     SiteLocalesDocument, SiteMetadataDocument, Slug,
@@ -207,7 +207,7 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
         }
     }
 
-    async fn read_tag_labels(&self) -> Result<domain::TagLabels> {
+    async fn read_tag_labels(&self) -> Result<blogcore::TagLabels> {
         match self.read_text("tags.json").await {
             Ok(text) => Ok(serde_json::from_str(&text)?),
             Err(error) if error.is_not_found() => Ok(Default::default()),
@@ -267,7 +267,7 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
 
 #[cfg(test)]
 mod tests {
-    use domain::{ARTIFACT_RELEASE_SCHEMA_VERSION, ArtifactReleasePointerDocument};
+    use blogcore::{ARTIFACT_RELEASE_SCHEMA_VERSION, ArtifactReleasePointerDocument};
 
     use super::*;
 

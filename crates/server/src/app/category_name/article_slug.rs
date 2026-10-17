@@ -1,9 +1,9 @@
 use crate::i18n::{Message, t};
 use crate::metadata::*;
-use domain::Locale;
+use blogcore::Locale;
 use std::str::FromStr;
 
-use domain::{ArticlePageDocument, Category, Slug, build_article_page_canonical_path};
+use blogcore::{ArticlePageDocument, Category, Slug, build_article_page_canonical_path};
 use topcoat::{
     Result,
     context::Cx,

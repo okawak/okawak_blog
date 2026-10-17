@@ -1,4 +1,4 @@
-use domain::{Locale, SiteLocalesDocument};
+use blogcore::{Locale, SiteLocalesDocument};
 use infra::{ArtifactReader, LocalArtifactReader};
 use std::fs;
 
@@ -54,7 +54,7 @@ async fn cache_reuses_each_locale_without_mixing_indexes_or_assets() {
         r#"{"schema_version":1,"routes":{"/":["ja","en"]}}"#,
     )
     .unwrap();
-    let name = domain::ContentAssetName::new(format!("{}.png", "f".repeat(64))).unwrap();
+    let name = blogcore::ContentAssetName::new(format!("{}.png", "f".repeat(64))).unwrap();
     fs::create_dir_all(temp.path().join("content-assets")).unwrap();
     fs::write(
         temp.path().join("content-assets").join(name.as_str()),

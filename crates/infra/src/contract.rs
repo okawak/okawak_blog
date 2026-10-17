@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::SystemTime};
 
 use async_trait::async_trait;
-use domain::{
+use blogcore::{
     ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
     HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, SiteLocalesDocument,
     SiteMetadataDocument, Slug,
@@ -30,7 +30,7 @@ pub trait ArtifactSnapshot: Send + Sync {
     }
 
     /// Labels are part of the content release; legacy releases use original IDs.
-    async fn read_tag_labels(&self) -> Result<domain::TagLabels> {
+    async fn read_tag_labels(&self) -> Result<blogcore::TagLabels> {
         Ok(Default::default())
     }
 

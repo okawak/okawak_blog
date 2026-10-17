@@ -1,5 +1,5 @@
 //! Server-owned message keys, interpolation, and fallback policy.
-use domain::{Category, LabelCatalog, Locale};
+use blogcore::{Category, LabelCatalog, Locale};
 use std::sync::LazyLock;
 
 static CATALOG: LazyLock<LabelCatalog> = LazyLock::new(|| {

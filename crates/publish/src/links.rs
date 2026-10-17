@@ -9,7 +9,7 @@ pub(crate) fn assets(documents: &[Document]) -> Result<BTreeSet<String>> {
             if let Event::Start(Tag::Image { dest_url, .. } | Tag::Link { dest_url, .. }) = event
                 && let Some(name) = dest_url.strip_prefix("/content-assets/")
             {
-                domain::ContentAssetName::new(name)?;
+                blogcore::ContentAssetName::new(name)?;
                 names.insert(name.to_owned());
             }
         }

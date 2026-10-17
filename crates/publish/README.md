@@ -17,7 +17,7 @@ mise run dev-local
 
 全言語を一時ディレクトリで生成・検証してからsiteを入れ替える。失敗時は既存siteを保持し、成功時は削除された記事のHTMLも消える。中断で `dist/.site-backup` が残った場合は、新旧siteを比較して復旧してから再実行する。
 
-`--validate-artifacts`は生成済みsiteを読み、SSRと同じdomainのpage builderで全言語のhome・記事・カテゴリ・固定ページを検証する。生成処理・AI・uploadは実行しない。公開前の`scripts/validate_public_artifacts.sh`はこの検証とartifact間の集合・件数照合を行う。workflowでは生成に使用したrelease版publish binaryを再利用する。
+`--validate-artifacts`は生成済みsiteを読み、SSRと同じblogcoreのpage builderで全言語のhome・記事・カテゴリ・固定ページを検証する。生成処理・AI・uploadは実行しない。公開前の`scripts/validate_public_artifacts.sh`はこの検証とartifact間の集合・件数照合を行う。workflowでは生成に使用したrelease版publish binaryを再利用する。
 
 本文はpulldown-cmarkのevent pipelineでHTMLに変換し、URLとraw HTMLを安全化する。数式とコードは既存の描画を維持する。exportが作る空の見出しanchorと、従来のsimple bookmark構文だけをraw HTMLとして許可する。bookmarkは既存のOGP取得処理で拡張する。
 

@@ -30,7 +30,7 @@ okawak_blog/
 ├── translation.json   # 記事・タグ・UI共通の翻訳設定と用語集
 ├── crates/
 │   ├── export/        # private入力の抽出・正規化・翻訳
-│   ├── domain/        # 公開コンテンツ・artifact・pageの共有契約
+│   ├── blogcore/      # 公開コンテンツ・artifact・pageの共有契約
 │   ├── publish/       # 公開Markdownからartifactを生成
 │   ├── infra/         # local / S3 artifact reader
 │   └── server/        # Topcoat application、UI、HTTP runtime

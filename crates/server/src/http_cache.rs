@@ -249,7 +249,7 @@ fn is_framework_path(path: &str) -> bool {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use domain::{
+    use blogcore::{
         ArticleIndexDocument, Category, CategoryArtifactDocument, HomeFragmentArtifactDocument,
         PageArtifactDocument, PageKey, SiteMetadataDocument, Slug,
     };

@@ -1,6 +1,6 @@
 //! Public document codec and pure Markdown/fingerprint primitives.
 use crate::{ExportError, Result};
-use domain::{PublicContentMeta, Sha256Digest};
+use blogcore::{PublicContentMeta, Sha256Digest};
 use pulldown_cmark::Options;
 use sha2::{Digest, Sha256};
 
@@ -25,7 +25,7 @@ impl Document {
     /// Keep reviewed English prose and provenance while taking management fields from Japanese.
     pub(crate) fn refresh_translation_metadata(&mut self, source: &Self) {
         self.meta = PublicContentMeta {
-            locale: domain::Locale::En,
+            locale: blogcore::Locale::En,
             title: self.meta.title.clone(),
             summary: self.meta.summary.clone(),
             translation: self.meta.translation.clone(),

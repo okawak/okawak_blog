@@ -9,7 +9,7 @@ use crate::{
     content::{Document, digest, text_hash},
     output,
 };
-use domain::{Locale, Sha256Digest, Slug, TranslationProvenance};
+use blogcore::{Locale, Sha256Digest, Slug, TranslationProvenance};
 use std::{fs, path::Path};
 
 struct ArticlePlan<'a> {

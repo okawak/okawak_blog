@@ -8,7 +8,7 @@ use topcoat::{
 use super::ArtifactReaderContext;
 
 #[route(GET)]
-async fn articles(cx: &Cx) -> Result<Json<domain::ArticleIndexDocument>> {
+async fn articles(cx: &Cx) -> Result<Json<blogcore::ArticleIndexDocument>> {
     let artifact_reader = &app_context::<ArtifactReaderContext>(cx).0;
     let document = match try_request_context::<DynArtifactSnapshot>(cx) {
         Some(snapshot) => snapshot.read_article_index().await,

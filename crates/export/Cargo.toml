@@ -9,7 +9,7 @@ description = "Export explicitly published Obsidian content into public Markdown
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
-domain = { path = "../domain" }
+blogcore = { path = "../blogcore" }
 pulldown-cmark.workspace = true
 percent-encoding.workspace = true
 scraper.workspace = true

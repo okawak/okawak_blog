@@ -4,7 +4,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use domain::{
+use blogcore::{
     ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
     HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, SiteLocalesDocument,
     SiteMetadataDocument, Slug,
@@ -74,7 +74,7 @@ impl ArtifactSnapshot for LocalArtifactReader {
         }
     }
 
-    async fn read_tag_labels(&self) -> Result<domain::TagLabels> {
+    async fn read_tag_labels(&self) -> Result<blogcore::TagLabels> {
         match self.read_json("tags.json").await {
             Ok(labels) => Ok(labels),
             Err(error) if error.is_not_found() => Ok(Default::default()),
@@ -129,7 +129,7 @@ impl ArtifactSnapshot for LocalArtifactReader {
 mod tests {
     use std::fs;
 
-    use domain::{ArticleSummaryDocument, CategoryMetadataDocument, SectionPath};
+    use blogcore::{ArticleSummaryDocument, CategoryMetadataDocument, SectionPath};
     use tempfile::TempDir;
 
     use super::*;

@@ -1,6 +1,6 @@
 //! Browser language preference at the site's entry point; page URLs keep their locale.
 
-use domain::{Locale, SiteLocalesDocument};
+use blogcore::{Locale, SiteLocalesDocument};
 use topcoat::{
     context::Cx,
     router::{Body, HeaderMap, HeaderValue, StatusCode, Uri, header, request, response::Response},

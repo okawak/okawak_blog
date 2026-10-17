@@ -123,7 +123,7 @@ fn changed_source_protects_manual_edits_and_candidate_requires_current_source(
     .unwrap();
     write_note(source.path(), "更新した本文");
     let report = export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
-    let id: domain::Slug = path.file_stem().unwrap().to_str().unwrap().parse().unwrap();
+    let id: blogcore::Slug = path.file_stem().unwrap().to_str().unwrap().parse().unwrap();
     assert_eq!(report.protected, [ProtectedContent::Article(id.clone())]);
     assert_eq!(report.generated, 1);
     assert_eq!(fake.calls.get(), 2);
@@ -368,7 +368,7 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
     export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
     let id = path.file_stem().unwrap().to_str().unwrap().parse().unwrap();
     export::accept_article_candidate(output.path(), &id, &settings()).unwrap();
-    fn meta(path: &Path) -> domain::PublicContentMeta {
+    fn meta(path: &Path) -> blogcore::PublicContentMeta {
         let text = fs::read_to_string(path).unwrap();
         yaml_serde::from_str(
             text.strip_prefix("---\n")
@@ -381,7 +381,7 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
     }
     let actual = meta(&path);
     let mut expected = meta(&output.path().join("ja").join(path.file_name().unwrap()));
-    expected.locale = domain::Locale::En;
+    expected.locale = blogcore::Locale::En;
     expected.title = "Reviewed candidate title".parse().unwrap();
     expected.translation = actual.translation.clone();
     assert_eq!(actual, expected);

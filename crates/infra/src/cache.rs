@@ -1,6 +1,6 @@
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactReader, DynArtifactSnapshot, Result};
 use async_trait::async_trait;
-use domain::{
+use blogcore::{
     ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
     HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, SiteLocalesDocument,
     SiteMetadataDocument, Slug,
@@ -110,7 +110,7 @@ impl ArtifactReader for CachingArtifactReader {
 struct CachingArtifactSnapshot {
     localized: KeyedCache<Option<DynArtifactSnapshot>>,
     locales: OnceCell<SiteLocalesDocument>,
-    tags: OnceCell<domain::TagLabels>,
+    tags: OnceCell<blogcore::TagLabels>,
     content_assets: ContentAssetCache,
     inner: DynArtifactSnapshot,
     article_index: OnceCell<ArticleIndexDocument>,
@@ -166,7 +166,7 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
             .cloned()
     }
 
-    async fn read_tag_labels(&self) -> Result<domain::TagLabels> {
+    async fn read_tag_labels(&self) -> Result<blogcore::TagLabels> {
         self.tags
             .get_or_try_init(|| self.inner.read_tag_labels())
             .await
@@ -325,7 +325,7 @@ where
 mod tests {
     use super::*;
     use crate::InfraError;
-    use domain::CategoryMetadataDocument;
+    use blogcore::CategoryMetadataDocument;
     use std::collections::VecDeque;
     use std::sync::Mutex as StdMutex;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

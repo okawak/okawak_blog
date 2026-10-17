@@ -1,5 +1,5 @@
 use crate::error::Result;
-use domain::{
+use blogcore::{
     ArticleIndexDocument, ArticleMeta, CategoryArtifactDocument, HomeFragmentArtifactDocument,
     PageArtifactDocument, PublishableCategoryLanding, SiteMetadataDocument, build_article_index,
     build_category_indexes, build_site_metadata,
@@ -47,10 +47,10 @@ pub(crate) fn build_site_documents(
             let landing = category_landings
                 .iter()
                 .find(|landing| landing.meta.category == index.category)
-                .ok_or_else(|| domain::DomainError::validation("category_landing"))?;
+                .ok_or_else(|| blogcore::DomainError::validation("category_landing"))?;
             CategoryArtifactDocument::try_from((index, landing.body.as_str()))
         })
-        .collect::<domain::Result<Vec<_>>>()?;
+        .collect::<blogcore::Result<Vec<_>>>()?;
 
     Ok(SiteDocuments {
         article_index: ArticleIndexDocument::from(article_index.as_slice()),
@@ -64,7 +64,7 @@ pub(crate) fn build_site_documents(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{
+    use blogcore::{
         Category, CategoryLandingBody, CategoryLandingMeta, SectionPath, Slug, Timestamp, Title,
     };
 
@@ -178,7 +178,7 @@ mod tests {
             vec![],
             vec![],
             vec![PageArtifactDocument {
-                page: domain::PageKey::new("about".to_string()).unwrap(),
+                page: blogcore::PageKey::new("about".to_string()).unwrap(),
                 title: "About".to_string(),
                 description: None,
                 html: String::new(),

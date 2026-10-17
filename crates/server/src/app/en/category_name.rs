@@ -11,7 +11,7 @@ module_param!(category_name);
 async fn category(cx: &Cx) -> Result<impl View> {
     crate::app::category_name::render_category(
         cx,
-        domain::Locale::En,
+        blogcore::Locale::En,
         path_param::<CategoryName>(cx),
     )
     .await

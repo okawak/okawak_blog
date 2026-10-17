@@ -8,7 +8,7 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-domain = { path = "../domain" }
+blogcore = { path = "../blogcore" }
 futures.workspace = true
 html-escape.workspace = true
 indoc.workspace = true

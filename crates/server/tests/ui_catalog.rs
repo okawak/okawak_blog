@@ -1,6 +1,6 @@
 #[test]
 fn shipped_ui_catalog_has_both_languages_and_valid_interpolation() {
-    let catalog: domain::LabelCatalog =
+    let catalog: blogcore::LabelCatalog =
         serde_json::from_str(include_str!("../locales/ui.json")).unwrap();
     catalog.validate().unwrap();
     for (key, entry) in &catalog.entries {

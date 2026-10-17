@@ -1,6 +1,6 @@
 //! Public Markdown file adapter and reconciliation of export-managed output.
 use crate::{ExportError, Result, content::Document, filesystem};
-use domain::{LabelCatalog, LabelEntry, Locale, Slug};
+use blogcore::{LabelCatalog, LabelEntry, Locale, Slug};
 use std::{
     collections::{BTreeSet, HashSet},
     fs,
@@ -8,7 +8,7 @@ use std::{
     path::Path,
 };
 
-pub(crate) fn read_locale(root: &Path, locale: domain::Locale) -> Result<Vec<Document>> {
+pub(crate) fn read_locale(root: &Path, locale: blogcore::Locale) -> Result<Vec<Document>> {
     let root = root.join(locale.as_str());
     if !root.exists() {
         return Ok(Vec::new());
@@ -131,7 +131,7 @@ pub(crate) fn read_catalog(path: &Path) -> Result<LabelCatalog> {
     // the normal update decision, but never expose an incompatible active value.
     for entry in catalog.entries.values_mut() {
         if let Some(translation) = &mut entry.translation
-            && domain::placeholders(&entry.source) != domain::placeholders(&translation.value)
+            && blogcore::placeholders(&entry.source) != blogcore::placeholders(&translation.value)
         {
             translation.stale = true;
         }

@@ -1,13 +1,13 @@
 //! Presentation-only filtering of published category cards.
 
-use domain::CategorySectionGroup;
+use blogcore::CategorySectionGroup;
 
 pub(crate) const MAX_QUERY_CHARS: usize = 100;
 
 pub(crate) fn filter_sections(
     sections: &mut Vec<CategorySectionGroup>,
     query: &str,
-    labels: &domain::TagLabels,
+    labels: &blogcore::TagLabels,
 ) {
     // Signals come from the browser; enforce the input bound on the server as well.
     let query = query.chars().take(MAX_QUERY_CHARS).collect::<String>();
@@ -37,7 +37,7 @@ pub(crate) fn filter_sections(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{SectionPath, SiteArticleCard};
+    use blogcore::{SectionPath, SiteArticleCard};
 
     fn sections() -> Vec<CategorySectionGroup> {
         let card = |slug: &str, title: &str, description: Option<&str>, tags: &[&str]| {

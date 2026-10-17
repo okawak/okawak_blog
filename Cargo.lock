@@ -609,6 +609,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "blogcore"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "rstest",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -982,17 +993,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "domain"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "rstest",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "dtoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1085,8 +1085,8 @@ name = "export"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "blogcore",
  "clap",
- "domain",
  "indoc",
  "percent-encoding",
  "pulldown-cmark",
@@ -1687,7 +1687,7 @@ dependencies = [
  "async-trait",
  "aws-config",
  "aws-sdk-s3",
- "domain",
+ "blogcore",
  "serde",
  "serde_json",
  "tempfile",
@@ -2196,7 +2196,7 @@ name = "publish"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "domain",
+ "blogcore",
  "futures",
  "html-escape",
  "indoc",
@@ -2840,8 +2840,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "blogcore",
  "chrono",
- "domain",
  "httpdate",
  "infra",
  "serde_json",

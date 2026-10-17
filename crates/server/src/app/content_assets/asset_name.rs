@@ -13,7 +13,7 @@ module_param!(asset_name);
 
 #[route(GET)]
 async fn content_asset(cx: &Cx) -> Result<Response> {
-    let name = domain::ContentAssetName::new(path_param::<AssetName>(cx).to_string())
+    let name = blogcore::ContentAssetName::new(path_param::<AssetName>(cx).to_string())
         .map_err(|_| not_found())?;
     let bytes = crate::app::page_loader(cx)
         .loader()

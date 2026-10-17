@@ -1,5 +1,5 @@
 [package]
-name = "domain"
+name = "blogcore"
 version.workspace = true
 authors.workspace = true
 description = "Core domain logic and business rules for blog application"
@@ -7,7 +7,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-# Keep domain dependencies pure and WASM-compatible.
+# Keep blogcore dependencies pure and WASM-compatible.
 chrono.workspace = true
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true

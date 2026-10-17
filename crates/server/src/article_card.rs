@@ -1,7 +1,7 @@
 //! Shared article card component used by listing pages.
 
 use crate::i18n::{Message, t};
-use domain::{Locale, SiteArticleCard, TagLabels, build_article_path};
+use blogcore::{Locale, SiteArticleCard, TagLabels, build_article_path};
 use topcoat::{
     Result,
     context::Cx,
