@@ -23,7 +23,7 @@ aws-sdk-s3 = { version = "1", default-features = false }
 chrono = "0.4"
 clap = "4"
 futures = "0.3"
-html-escape = "0.2"
+html-escape = "0.3"
 httpdate = "1"
 indoc = "2"
 pulldown-cmark = "0.13"
