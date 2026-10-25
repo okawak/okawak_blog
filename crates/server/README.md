@@ -42,7 +42,9 @@ productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone
 
 記事card・カテゴリ・header・言語切替のlinkは`runtime::link_attrs`により、SSR結果でdocument・title・metadataを更新するruntime navigationを使います。既定の`PrefetchMode::Intent`でhover・focus・touch時に先読みし、cookieを保存する言語切替と日本語homeの`?lang=ja` linkは`Never`にします。言語選択はruntime POSTがrewriteされたGETにも適用し、validatorの判定だけはoriginal methodを使います。言語切替の表示はTopcoat UIの`toggle_group`を使います。生成Markdown内のanchor（text fragmentを含む）と外部linkはブラウザ標準のnavigationを維持します。JavaScript無効時はすべて通常のanchorとして利用できます。
 
-検索fieldは`field` / `field_label` / `field_description` / `input`を使い、入力と検索対象の説明を`aria-describedby`で関連付けます。category・tag・countは`badge`、記事一覧は`card`、状態表示は`alert`で構成します。headerの操作とnavigation linkは`button`のstyleを共有し、GitHub linkは`tooltip`で補足します。mobile menuの状態管理はTopcoat runtimeのsignalとevent expressionで構成し、独立したheader component内でsignalを作り、宣言をHTML document内に置きます。signalのidentityをrequest pathで分けて別pageへ開閉状態を持ち越しません。履歴移動とscrollの復元はTopcoat runtimeが担当します。
+検索fieldは`field` / `field_label` / `field_description` / `input`を使い、`element_id(cx)`で再描画後も安定したIDを生成し、labelと入力、検索対象の説明を関連付けます。category・tag・countは`badge`、記事一覧は`card`、状態表示は`alert`で構成します。headerの操作とnavigation linkは`button`のstyleを共有し、GitHub linkは`tooltip`で補足します。tooltipも生成IDで`aria-describedby`を関連付け、`floating`のCSS anchor positioningと配置fallbackで画面端を避けます。mobile menuの状態管理はTopcoat runtimeのsignalとevent expressionで構成し、独立したheader component内でsignalを作り、宣言をHTML document内に置きます。signalのidentityをrequest pathで分けて別pageへ開閉状態を持ち越しません。履歴移動とscrollの復元はTopcoat runtimeが担当します。
+
+件数と記事の日付はTopcoatの`l10n-number` / `l10n-datetime`で明示的な日英localeへ整形します。件数は桁区切りを付け、日付はartifactのoffsetにおける日を維持して時刻を表示しません。server内でblogcoreの`Locale`をTopcoatのlocaleへ変換し、共有modelにはframework依存を持ち込みません。UI辞書は引き続き`locales/ui.json`を使い、翻訳追跡と日本語fallbackを維持します。
 
 GitHubアイコンはTopcoatのicon componentでinline SVGを描画し、icon fontや外部icon setの取得は行いません。リンクにaccessible nameを付け、装飾のSVGは支援技術から隠します。端末間の字体を揃えるNoto Sans JPはGoogle Fontsの可変ウェイト範囲`400..700`でCSSの重複を抑え、HTML headから直接参照します。`display=swap`でフォント取得中も本文を表示します。
 

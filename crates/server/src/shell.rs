@@ -9,14 +9,15 @@ use topcoat::{
     icon::icon,
     router::{StatusCode, request},
     runtime::{Event, PrefetchMode, link_attrs, prefetch_mode, signal},
-    view::{Child, Unescaped, View, attributes, class, component, view},
+    view::{Child, Unescaped, View, attributes, class, component, element_id, view},
 };
 
 use crate::assets::{FAVICON, STYLESHEET};
 use crate::components::{
     alert::{AlertVariant, alert, alert_description, alert_title},
     button::{ButtonSize, ButtonVariant, button, button_variants},
-    tooltip::{TooltipSide, tooltip, tooltip_content},
+    floating::{FloatingAlign, FloatingSide},
+    tooltip::{tooltip, tooltip_content},
 };
 use crate::icons::GITHUB;
 
@@ -534,6 +535,7 @@ async fn site_header(
                     </ul>
 
                     <div class="border-t border-border pt-3 md:border-t-0 md:pt-0">
+                        let github_hint = element_id(cx);
                         tooltip(
                             <a
                                 href="https://github.com/okawak"
@@ -542,13 +544,16 @@ async fn site_header(
                                     ButtonSize::Icon,
                                 ))
                                 aria-label=(t(locale, Message::NavGithub))
+                                aria-describedby=(&github_hint)
                                 rel="noopener noreferrer"
                                 target="_blank"
                             >
                                 icon(data: GITHUB, size: 20)
                             </a>
                             tooltip_content(
-                                side: TooltipSide::Bottom,
+                                side: FloatingSide::Bottom,
+                                align: FloatingAlign::End,
+                                attrs: attributes! { id=(&github_hint) },
                                 (t(locale, Message::NavGithub))
                             )
                         )

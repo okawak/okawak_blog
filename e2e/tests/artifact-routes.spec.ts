@@ -501,6 +501,11 @@ test("category filtering morphs only the list and preserves browser state", asyn
   const input = page.getByRole("searchbox", { name: "記事を絞り込む" });
   await expect(input).toHaveAccessibleDescription("タイトル・説明・タグ");
   const results = page.getByRole("region", { name: "カテゴリの記事", exact: true });
+  const inputId = await input.getAttribute("id");
+  const helpId = await input.getAttribute("aria-describedby");
+  expect(inputId).toBeTruthy();
+  expect(helpId).toBeTruthy();
+  expect(inputId).not.toBe(helpId);
   const status = results.getByRole("status");
   let documentRequests = 0;
   page.on("request", (request) => {
@@ -519,14 +524,17 @@ test("category filtering morphs only the list and preserves browser state", asyn
     expect(response.status()).toBe(200);
     expect(response.headers().etag).toBeUndefined();
     await expect(status).toHaveText("1件の記事");
+    await expect(input).toHaveAttribute("id", inputId!);
+    await expect(input).toHaveAttribute("aria-describedby", helpId!);
+    await expect(input).toHaveValue(query);
     await expect(results.getByRole("link", { name: "E2E Article" })).toBeVisible();
   }
-  await input.fill("no matching article");
+  await input.fill("no matching article <>&");
   await expect(status).toHaveText("0件の記事");
   await expect(results.getByRole("link", { name: "E2E Article" })).toHaveCount(0);
   await expect(results.getByRole("heading", { name: "rust / async" })).toHaveCount(0);
   await expect(input).toBeFocused();
-  await expect(input).toHaveValue("no matching article");
+  await expect(input).toHaveValue("no matching article <>&");
 
   await input.fill("");
   await expect(status).toHaveText("1件の記事");
@@ -537,6 +545,27 @@ test("category filtering morphs only the list and preserves browser state", asyn
   await expect(page).toHaveURL(/\/tech$/);
   expect(documentRequests).toBe(0);
   expect(browserErrors).toEqual([]);
+});
+
+test("GitHub tooltip stays associated and within the viewport", async ({ page }) => {
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/tech");
+    if (width < 768) {
+      await page.locator('button[aria-controls="site-header-nav"]').click();
+    }
+    const github = page.locator("header").getByRole("link", { name: "okawakのGitHubプロフィールを開く" });
+    await github.focus();
+    const hint = page.getByRole("tooltip");
+    await expect(hint).toBeVisible();
+    await expect(hint).toHaveText("okawakのGitHubプロフィールを開く");
+    await expect(github).toHaveAttribute("aria-describedby", (await hint.getAttribute("id"))!);
+    await expect.poll(async () => {
+      const bounds = await hint.boundingBox();
+      return !!bounds && bounds.x >= 0 && bounds.y >= 0 &&
+        bounds.x + bounds.width <= width && bounds.y + bounds.height <= 844;
+    }).toBe(true);
+  }
 });
 
 test("category articles remain available without JavaScript", async ({ browser }) => {
