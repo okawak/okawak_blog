@@ -28,6 +28,10 @@ file = "src/components/card.rs"
 hash = "sha256:17438c510d30440dfa2ca38f888cd5503e292c9475b5f09de59b45edd35ebac0"
 file = "src/components/field.rs"
 
+[registries.topcoat.components.floating]
+hash = "sha256:66636f7861a3eb370ee736de1a40aff889ec15e491d7aae57b64ad05e25d5cdd"
+file = "src/components/floating.rs"
+
 [registries.topcoat.components.input]
 hash = "sha256:7fe8728a839a821af865711347189a00c29ba28b8b11dcc0d2ee06a053ca127c"
 file = "src/components/input.rs"
@@ -41,5 +45,5 @@ hash = "sha256:94a5bb621214d3aaa2abc29b79392fdb6f7706129596de9a8b66567f5fc1f15a"
 file = "src/components/toggle.rs"
 
 [registries.topcoat.components.tooltip]
-hash = "sha256:78a5dc28cfc2e6472ed7ad425cff7fd0c3640322f89729fff07d2c9ef08bdf1c"
+hash = "sha256:a38f87af652c7ceb518f53d83478cd9fa4cf3702ba9f9d0df188d0c28c79fab7"
 file = "src/components/tooltip.rs"

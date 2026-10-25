@@ -9,7 +9,7 @@ use topcoat::{
     context::Cx,
     router::error::{bad_request, not_found},
     runtime::{Event, shard, signal},
-    view::{View, attributes, view},
+    view::{View, attributes, element_id, view},
 };
 
 use crate::{
@@ -55,6 +55,8 @@ pub(crate) async fn category_articles(
         .sum();
 
     Ok(view! {
+        let query_id = element_id(cx);
+        let help_id = element_id(cx);
         <section
             id="category-articles"
             class="grid gap-6"
@@ -63,13 +65,13 @@ pub(crate) async fn category_articles(
             <div class="grid gap-3">
                 field(
                     field_label(
-                        attrs: attributes! { for="category-article-query" },
+                        attrs: attributes! { for=(&query_id) },
                         (t(locale, Message::FilterLabel))
                     )
                     input(
                         attrs: attributes! {
-                            id="category-article-query"
-                            aria-describedby="category-filter-help"
+                            id=(&query_id)
+                            aria-describedby=(&help_id)
                             type="search"
                             maxlength=(MAX_QUERY_CHARS)
                             placeholder=(t(locale, Message::FilterPlaceholder))
@@ -78,7 +80,7 @@ pub(crate) async fn category_articles(
                         }
                     )
                     field_description(
-                        attrs: attributes! { id="category-filter-help" },
+                        attrs: attributes! { id=(&help_id) },
                         (t(locale, Message::FilterPlaceholder))
                     )
                 )
