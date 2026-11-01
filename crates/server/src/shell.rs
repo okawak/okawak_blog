@@ -8,15 +8,16 @@ use topcoat::{
     context::Cx,
     icon::icon,
     router::{StatusCode, request},
-    runtime::{Event, PrefetchMode, link_attrs, prefetch_mode, signal},
-    view::{Child, Unescaped, View, attributes, class, component, element_id, view},
+    runtime::{PrefetchMode, link_attrs, prefetch_mode},
+    view::{Attributes, Child, Unescaped, View, attributes, class, component, element_id, view},
 };
 
 use crate::assets::{FAVICON, STYLESHEET};
 use crate::components::{
     alert::{AlertVariant, alert, alert_description, alert_title},
-    button::{ButtonSize, ButtonVariant, button, button_variants},
+    button::{ButtonSize, ButtonVariant, button_variants},
     floating::{FloatingAlign, FloatingSide},
+    popover::{popover, popover_content, popover_trigger},
     tooltip::{tooltip, tooltip_content},
 };
 use crate::icons::GITHUB;
@@ -342,6 +343,9 @@ window.okawakScheduleCodeHighlight = function(root) {
                     onload="window.okawakScheduleCodeHighlight && window.okawakScheduleCodeHighlight();"
                 ></script>
                 <script>(code_highlight_script)</script>
+                <script>
+                    (Unescaped::new_unchecked(include_str!("navigation.js")))
+                </script>
                 topcoat::runtime::script()
                 topcoat::dev::script()
             </head>
@@ -384,14 +388,111 @@ window.okawakScheduleCodeHighlight = function(root) {
     })
 }
 
-// Keep signal declarations inside <body>. Runtime navigation replaces <html>'s
-// children, so declarations hoisted before the document would be lost.
 #[component]
 async fn site_header(
     cx: &Cx,
     locale: Locale,
     canonical_path: &str,
     locales: &SiteLocalesDocument,
+) -> Result<impl View> {
+    let home_path = locale.path("/");
+    let home_href = if locale == Locale::Ja {
+        crate::language::choice_href(&home_path, locale)
+    } else {
+        home_path
+    };
+    let home_prefetch = if locale == Locale::Ja {
+        PrefetchMode::Never
+    } else {
+        prefetch_mode(cx)
+    };
+    // A new page gets a new panel identity; open popovers must not survive navigation.
+    let menu_cx = cx.keyed(request::uri(cx).path());
+    let menu_id = element_id(&menu_cx);
+    Ok(view! {
+        <header
+            class="sticky top-0 z-50 h-[var(--site-header-height)] border-b border-border/60 bg-[image:var(--site-header-background)] shadow-[0_8px_24px_rgb(0_0_0/0.45)] backdrop-blur-sm"
+        >
+            <div
+                class="relative mx-auto flex h-full max-w-[var(--site-content-width)] items-center justify-between gap-3 px-4 sm:px-6"
+            >
+                <a
+                    (link_attrs(cx, home_href, home_prefetch))
+                    class="mr-auto min-w-0 text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                >
+                    <h1
+                        class="m-0 truncate text-xl leading-tight font-bold sm:text-2xl"
+                    >
+                        (t(locale, Message::SiteName))
+                    </h1>
+                </a>
+                crate::language::language_switcher(
+                    locale: locale,
+                    path: canonical_path,
+                    locales: locales
+                )
+                <div class="hidden md:block">
+                    site_navigation(
+                        locale: locale,
+                        locales: locales,
+                        attrs: attributes! { id="site-header-nav" }
+                    )
+                </div>
+                popover(
+                    popover_trigger(
+                        target: &menu_id,
+                        attrs: attributes! {
+                            class=(class!(
+                                button_variants(ButtonVariant::Ghost, ButtonSize::Icon),
+                                "md:hidden",
+                            ))
+                        },
+                        // popovertarget exposes the expanded state to assistive technology.
+                        <span class="sr-only group-has-[:popover-open]/popover:hidden">
+                            (t(locale, Message::NavOpen))
+                        </span>
+                        <span
+                            class="sr-only hidden group-has-[:popover-open]/popover:block"
+                        >
+                            (t(locale, Message::NavClose))
+                        </span>
+                        <span
+                            class="flex size-5 flex-col items-center justify-center gap-1.5"
+                            aria-hidden="true"
+                        >
+                            <span
+                                class="block h-0.5 w-5 rounded-full bg-current transition-transform group-has-[:popover-open]/popover:translate-y-2 group-has-[:popover-open]/popover:rotate-45"
+                            ></span>
+                            <span
+                                class="block h-0.5 w-5 rounded-full bg-current transition-opacity group-has-[:popover-open]/popover:opacity-0"
+                            ></span>
+                            <span
+                                class="block h-0.5 w-5 rounded-full bg-current transition-transform group-has-[:popover-open]/popover:-translate-y-2 group-has-[:popover-open]/popover:-rotate-45"
+                            ></span>
+                        </span>
+                    )
+                    popover_content(
+                        id: &menu_id,
+                        align: FloatingAlign::End,
+                        attrs: attributes! {
+                            data-mobile-navigation=""
+                            class="max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-7rem)] overflow-y-auto bg-card/98 shadow-[0_18px_36px_rgb(0_0_0/0.55)] md:hidden"
+                        },
+                        site_navigation(locale: locale, locales: locales)
+                    )
+                )
+            </div>
+        </header>
+    })
+}
+
+/// Both layouts share destinations, current-page state, and prefetch policy.
+#[component]
+async fn site_navigation(
+    cx: &Cx,
+    locale: Locale,
+    locales: &SiteLocalesDocument,
+    #[default] attrs: Attributes,
 ) -> Result<impl View> {
     let home_path = locale.path("/");
     let home_href = if locale == Locale::Ja {
@@ -410,156 +511,74 @@ async fn site_header(
     let home_is_current = requested_path.trim_end_matches('/') == home_path.trim_end_matches('/');
     let about_is_current = requested_path == about_href;
     let show_about = locale == Locale::Ja || locales.path("/about", locale).is_some();
-    let menu_open_label = t(locale, Message::NavOpen).to_string();
-    let menu_close_label = t(locale, Message::NavClose).to_string();
-    // A menu belongs to its page; runtime navigation must not carry it into another URL.
-    let menu_cx = cx.keyed(requested_path);
-    let menu_open = signal(&menu_cx, || false);
     Ok(view! {
-        <header
-            class="sticky top-0 z-50 h-[var(--site-header-height)] border-b border-border/60 bg-[image:var(--site-header-background)] shadow-[0_8px_24px_rgb(0_0_0/0.45)] backdrop-blur-sm"
+        <nav
+            aria-label=(t(locale, Message::NavMain))
+            class="flex flex-col gap-3 md:flex-row md:items-center md:gap-6"
+            (attrs)
         >
-            <div
-                class="relative mx-auto flex h-full max-w-[var(--site-content-width)] items-center justify-between gap-3 px-4 sm:px-6"
+            <ul
+                class="m-0 flex list-none flex-col gap-1 p-0 md:flex-row md:items-center md:gap-2"
             >
-                <a
-                    (link_attrs(cx, home_href.clone(), home_prefetch))
-                    class="mr-auto min-w-0 text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-                >
-                    <h1
-                        class="m-0 truncate text-xl leading-tight font-bold sm:text-2xl"
+                <li>
+                    <a
+                        (link_attrs(cx, home_href, home_prefetch))
+                        aria-current=(home_is_current.then_some("page"))
+                        class=(class!(
+                            button_variants(ButtonVariant::Ghost, ButtonSize::Sm),
+                            "w-full justify-start no-underline md:w-auto",
+                            if home_is_current {
+                                "bg-foreground/5 text-primary"
+                            } else {
+                                "text-muted-foreground hover:text-foreground"
+                            },
+                        ))
                     >
-                        (t(locale, Message::SiteName))
-                    </h1>
-                </a>
+                        (t(locale, Message::NavHome))
+                    </a>
+                </li>
+                if show_about {
+                    <li>
+                        <a
+                            (link_attrs(cx, about_href, prefetch_mode(cx)))
+                            aria-current=(about_is_current.then_some("page"))
+                            class=(class!(
+                                button_variants(ButtonVariant::Ghost, ButtonSize::Sm),
+                                "w-full justify-start no-underline md:w-auto",
+                                if about_is_current {
+                                    "bg-foreground/5 text-primary"
+                                } else {
+                                    "text-muted-foreground hover:text-foreground"
+                                },
+                            ))
+                        >
+                            (t(locale, Message::NavAbout))
+                        </a>
+                    </li>
+                }
+            </ul>
 
-                crate::language::language_switcher(
-                    locale: locale,
-                    path: canonical_path,
-                    locales: locales
+            <div class="border-t border-border pt-3 md:border-t-0 md:pt-0">
+                let github_hint = element_id(cx);
+                tooltip(
+                    <a
+                        href="https://github.com/okawak"
+                        class=(button_variants(ButtonVariant::Ghost, ButtonSize::Icon))
+                        aria-label=(t(locale, Message::NavGithub))
+                        aria-describedby=(&github_hint)
+                        rel="noopener noreferrer"
+                        target="_blank"
+                    >
+                        icon(data: GITHUB, size: 20)
+                    </a>
+                    tooltip_content(
+                        side: FloatingSide::Bottom,
+                        align: FloatingAlign::End,
+                        attrs: attributes! { id=(&github_hint) },
+                        (t(locale, Message::NavGithub))
+                    )
                 )
-
-                button(
-                    variant: ButtonVariant::Ghost,
-                    size: ButtonSize::Icon,
-                    attrs: attributes! {
-                        type="button"
-                        class="md:hidden"
-                        aria-controls="site-header-nav"
-                        :aria-expanded=$(if menu_open.get() { "true" } else { "false" })
-                        :aria-label=$(if menu_open.get() {
-                            menu_close_label.clone()
-                        } else {
-                            menu_open_label.clone()
-                        })
-                        @click=$(|_event: Event| menu_open.toggle())
-                    },
-                    <div
-                        class="flex size-5 flex-col items-center justify-center gap-1.5"
-                        aria-hidden="true"
-                    >
-                        <span
-                            :class=$(if menu_open.get() {
-                                "block h-0.5 w-5 translate-y-2 rotate-45 rounded-full bg-current transition-transform"
-                            } else {
-                                "block h-0.5 w-5 rounded-full bg-current transition-all"
-                            })
-                        ></span>
-                        <span
-                            :class=$(if menu_open.get() {
-                                "block h-0.5 w-5 rounded-full bg-current opacity-0 transition-opacity"
-                            } else {
-                                "block h-0.5 w-5 rounded-full bg-current transition-all"
-                            })
-                        ></span>
-                        <span
-                            :class=$(if menu_open.get() {
-                                "block h-0.5 w-5 -translate-y-2 -rotate-45 rounded-full bg-current transition-transform"
-                            } else {
-                                "block h-0.5 w-5 rounded-full bg-current transition-all"
-                            })
-                        ></span>
-                    </div>
-                )
-
-                <nav
-                    id="site-header-nav"
-                    aria-label=(t(locale, Message::NavMain))
-                    :class=$(if menu_open.get() {
-                        "flex absolute inset-x-4 top-[calc(100%+0.5rem)] flex-col gap-3 rounded-lg border border-border bg-card/98 p-4 shadow-[0_18px_36px_rgb(0_0_0/0.55)] backdrop-blur-sm md:static md:flex md:flex-row md:items-center md:gap-6 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
-                    } else {
-                        "hidden absolute inset-x-4 top-[calc(100%+0.5rem)] flex-col gap-3 rounded-lg border border-border bg-card/98 p-4 shadow-[0_18px_36px_rgb(0_0_0/0.55)] backdrop-blur-sm md:static md:flex md:flex-row md:items-center md:gap-6 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
-                    })
-                >
-                    <ul
-                        class="m-0 flex list-none flex-col gap-1 p-0 md:flex-row md:items-center md:gap-2"
-                    >
-                        <li>
-                            <a
-                                (link_attrs(cx, home_href, home_prefetch))
-                                aria-current=(home_is_current.then_some("page"))
-                                class=(class!(
-                                    button_variants(ButtonVariant::Ghost, ButtonSize::Sm),
-                                    "w-full justify-start no-underline md:w-auto",
-                                    if home_is_current {
-                                        "bg-foreground/5 text-primary"
-                                    } else {
-                                        "text-muted-foreground hover:text-foreground"
-                                    },
-                                ))
-                                @click=$(|_e: Event| menu_open.set(false))
-                            >
-                                (t(locale, Message::NavHome))
-                            </a>
-                        </li>
-                        if show_about {
-                            <li>
-                                <a
-                                    (link_attrs(cx, about_href, prefetch_mode(cx)))
-                                    aria-current=(about_is_current.then_some("page"))
-                                    class=(class!(
-                                        button_variants(ButtonVariant::Ghost, ButtonSize::Sm),
-                                        "w-full justify-start no-underline md:w-auto",
-                                        if about_is_current {
-                                            "bg-foreground/5 text-primary"
-                                        } else {
-                                            "text-muted-foreground hover:text-foreground"
-                                        },
-                                    ))
-                                    @click=$(|_e: Event| menu_open.set(false))
-                                >
-                                    (t(locale, Message::NavAbout))
-                                </a>
-                            </li>
-                        }
-                    </ul>
-
-                    <div class="border-t border-border pt-3 md:border-t-0 md:pt-0">
-                        let github_hint = element_id(cx);
-                        tooltip(
-                            <a
-                                href="https://github.com/okawak"
-                                class=(button_variants(
-                                    ButtonVariant::Ghost,
-                                    ButtonSize::Icon,
-                                ))
-                                aria-label=(t(locale, Message::NavGithub))
-                                aria-describedby=(&github_hint)
-                                rel="noopener noreferrer"
-                                target="_blank"
-                            >
-                                icon(data: GITHUB, size: 20)
-                            </a>
-                            tooltip_content(
-                                side: FloatingSide::Bottom,
-                                align: FloatingAlign::End,
-                                attrs: attributes! { id=(&github_hint) },
-                                (t(locale, Message::NavGithub))
-                            )
-                        )
-                    </div>
-                </nav>
             </div>
-        </header>
+        </nav>
     })
 }

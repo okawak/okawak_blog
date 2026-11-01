@@ -40,6 +40,10 @@ file = "src/components/input.rs"
 hash = "sha256:6741fe1cf51bea5cfe0d0c8d25548e452661d9017529a7163bc5b60ce725a8d5"
 file = "src/components/label.rs"
 
+[registries.topcoat.components.popover]
+hash = "sha256:32946542e73a3701fb42b43b61c6795aef984b7dafe280c6d3c06e71c5666610"
+file = "src/components/popover.rs"
+
 [registries.topcoat.components.toggle]
 hash = "sha256:94a5bb621214d3aaa2abc29b79392fdb6f7706129596de9a8b66567f5fc1f15a"
 file = "src/components/toggle.rs"
