@@ -2,6 +2,8 @@
 
 本番のTopcoat SSR serverは`okawak_blog.service`で起動し、S3 artifact readerを使います。
 
+Cargoが生成する実行ファイルは`target/release/blog-server`です。配備スクリプトはこの成果物を`bin/okawak_blog`へインストールし、systemdはその配備先を起動します。`TARGET_BIN`を指定する場合は、使用する`blog-server`成果物のパスを設定します。
+
 本番環境の構成順序は[本番環境の初期構築](../docs/operations/production-setup.md)、IAM Roles Anywhereの検証、certificate更新、障害切り分けは[AWS runtime認証](../docs/operations/aws-runtime-auth.md)を一次手順とします。
 
 ## 操作する端末と設定
@@ -114,7 +116,7 @@ curl --fail http://127.0.0.1:8008/api/ready
 
 ## Runtime logging
 
-`crates/server`の起動情報、readiness failure、page document読取失敗は`tracing` eventとして標準出力へ記録し、systemd journalから確認します。log filterは`RUST_LOG`で指定し、未指定または有効なdirectiveがない場合は`info`を使います。本番unitは`RUST_LOG=info`を明示します。`debug`のようなlevelに加えて、`server=debug,topcoat=warn`のようなtarget別filterも指定できます。不正なdirectiveは無視します。`RUST_LOG`が制御するのは`tracing` eventであり、`crates/infra`に残る既存の標準エラー出力はこの設定の対象外です。
+`crates/blog-server`の起動情報、readiness failure、page document読取失敗は`tracing` eventとして標準出力へ記録し、systemd journalから確認します。log filterは`RUST_LOG`で指定し、未指定または有効なdirectiveがない場合は`info`を使います。本番unitは`RUST_LOG=info`を明示します。`debug`のようなlevelに加えて、`blog_server=debug,topcoat=warn`のようなtarget別filterも指定できます。不正なdirectiveは無視します。`RUST_LOG`が制御するのは`tracing` eventであり、`crates/blog-infra`に残る既存の標準エラー出力はこの設定の対象外です。
 
 ## Artifact cache
 

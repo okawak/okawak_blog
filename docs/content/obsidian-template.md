@@ -2,7 +2,7 @@
 
 ## 目的
 
-この文書は、`export`が処理できる Obsidian Markdown の最小テンプレートをまとめたものである。日本語の正本はprivate Obsidianに置き、`export`が選別・正規化した[公開用Markdown](public-markdown.md)だけをこのリポジトリへcommitする。`publish`は公開用Markdownを入力にする。
+この文書は、`blog-export`が処理できる Obsidian Markdown の最小テンプレートをまとめたものである。日本語の正本はprivate Obsidianに置き、`blog-export`が選別・正規化した[公開用Markdown](public-markdown.md)だけをこのリポジトリへcommitする。`blog-publish`は公開用Markdownを入力にする。
 
 ## 前提
 
@@ -78,9 +78,9 @@ updated: "2026-04-12T10:00:00+09:00"
 Obsidian link や bookmark 埋め込みを含めてよい。
 ```
 
-本文の基本的な Markdown 記法は CommonMark に従う。Obsidian 固有の解釈だけで成立する強調記法などは`publish`では補正しない。
+本文の基本的な Markdown 記法は CommonMark に従う。Obsidian 固有の解釈だけで成立する強調記法などは`blog-publish`では補正しない。
 
-Markdown table内の表示名付きWikiLinkは、cell区切りと区別するためpipeをescapeして`[[target\|label]]`と書く。embedも同様に`![[target\|alt]]`とする。table外では通常どおり`[[target|label]]`と書ける。`export`が公開対象の参照を`content:<id>`へ正規化し、`publish`が言語別の公開URLへ解決する。非公開・未解決・曖昧なノートや見出しへの参照はexport時にエラーになる。
+Markdown table内の表示名付きWikiLinkは、cell区切りと区別するためpipeをescapeして`[[target\|label]]`と書く。embedも同様に`![[target\|alt]]`とする。table外では通常どおり`[[target|label]]`と書ける。`blog-export`が公開対象の参照を`content:<id>`へ正規化し、`blog-publish`が言語別の公開URLへ解決する。非公開・未解決・曖昧なノートや見出しへの参照はexport時にエラーになる。
 
 画像はS3 Image Uploaderで圧縮・アップロードし、`![説明](https://...)`のように配信用URLを本文へ貼り付ける。exportは画像URLを保持し、画像ファイルを公開リポジトリへコピーしない。`![[image.png]]`や`![説明](image.png)`など、vault内の画像を参照する記法はエラーになる。ノートのembedは引き続き公開先へのリンクになる。
 
@@ -233,4 +233,4 @@ updated: "2026-04-12T10:00:00+09:00"
 - 同じカテゴリ配下で `kind=category` を複数作らない
 - 未完成の下書きは `is_completed: false` のままにする
 - category ごとの記事グルーピングは frontmatter ではなくディレクトリ構造で表現する
-- 原文更新後に`mise run export`を実行し、公開用Markdownの差分を確認する。英訳の手動修正・更新候補の採用は[exportの操作手順](../../crates/export/README.md)に従う
+- 原文更新後に`mise run export`を実行し、公開用Markdownの差分を確認する。英訳の手動修正・更新候補の採用は[exportの操作手順](../../crates/blog-export/README.md)に従う

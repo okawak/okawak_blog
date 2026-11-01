@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "crates/blogcore",
-    "crates/export",
-    "crates/publish",
-    "crates/infra",
-    "crates/server",
+    "crates/blog-domain",
+    "crates/blog-export",
+    "crates/blog-publish",
+    "crates/blog-infra",
+    "crates/blog-server",
 ]
 resolver = "3"
 

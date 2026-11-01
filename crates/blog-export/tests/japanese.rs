@@ -1,0 +1,740 @@
+use indoc::{formatdoc, indoc};
+use std::{fs, path::Path};
+use tempfile::TempDir;
+
+fn run_export(source: &Path, output: &Path) -> blog_export::Result<()> {
+    struct Fake;
+    impl blog_export::Translator for Fake {
+        fn translate(
+            &self,
+            request: &blog_export::TranslationRequest,
+        ) -> blog_export::Result<blog_export::Texts> {
+            Ok(request.texts.clone())
+        }
+    }
+    let settings = blog_export::TranslationSettings {
+        model: "fake".into(),
+        instruction: "test".into(),
+        glossary: blog_export::Texts::new(),
+    };
+    blog_export::export_content(source, output, &Fake, &settings).map(|_| ())
+}
+
+fn note(root: &Path, path: &str, title: &str, completed: bool, body: &str) {
+    let path = root.join(path);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        path,
+        formatdoc! {"
+            ---
+            title: {title}
+            category: tech
+            is_completed: {completed}
+            created: '2025-01-01T00:00:00+09:00'
+            updated: '2025-01-01T00:00:00+09:00'
+            private_notes: SECRET
+            ---
+            {body}
+        "},
+    )
+    .unwrap();
+}
+
+fn outputs(root: &Path) -> Vec<String> {
+    let mut paths: Vec<_> = fs::read_dir(root.join("ja"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    paths.sort();
+    paths
+        .iter()
+        .map(|p| fs::read_to_string(p).unwrap())
+        .collect()
+}
+
+#[rstest::rstest]
+#[case("Article", "Article")]
+#[case("'  Article  '", "  Article  ")]
+#[case("123", "123")]
+#[case("true", "true")]
+fn exports_only_completed_notes_allowlists_metadata_and_preserves_legacy_slug(
+    #[case] yaml_title: &str,
+    #[case] title: &str,
+) {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        yaml_title,
+        true,
+        "Public body",
+    );
+    note(
+        source.path(),
+        "tech/draft.md",
+        "Draft",
+        false,
+        "PRIVATE BODY",
+    );
+    run_export(source.path(), output.path()).unwrap();
+    let actual = outputs(output.path());
+    assert_eq!(actual.len(), 1);
+    assert!(actual[0].contains("Public body"));
+    assert!(!actual[0].contains("SECRET"));
+    assert!(!actual[0].contains("PRIVATE"));
+    assert!(!actual[0].contains("tech/article.md"));
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(format!("{title}/tech/article.md/2025-01-01T00:00:00+09:00"))
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
+    assert!(
+        output
+            .path()
+            .join(format!(
+                "ja/{}.md",
+                &digest[..blog_domain::GENERATED_ID_HASH_LENGTH]
+            ))
+            .exists()
+    );
+    run_export(source.path(), output.path()).unwrap();
+    assert_eq!(outputs(output.path()), actual);
+}
+
+#[test]
+fn incomplete_notes_do_not_require_valid_public_frontmatter() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "Public body",
+    );
+    fs::write(
+        source.path().join("tech/draft.md"),
+        indoc! {"
+            ---
+            is_completed: false
+            title: []
+            created: invalid
+            ---
+            PRIVATE BODY
+        "},
+    )
+    .unwrap();
+    run_export(source.path(), output.path()).unwrap();
+    let actual = outputs(output.path());
+    assert_eq!(actual.len(), 1);
+    assert!(actual[0].contains("Public body"));
+    assert!(!actual[0].contains("PRIVATE BODY"));
+}
+
+#[test]
+fn failed_reference_validation_does_not_change_existing_output() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "Public body",
+    );
+    run_export(source.path(), output.path()).unwrap();
+    let before = outputs(output.path());
+    note(
+        source.path(),
+        "tech/draft.md",
+        "Draft",
+        false,
+        "PRIVATE BODY",
+    );
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "[[draft]]",
+    );
+    assert!(matches!(
+        run_export(source.path(), output.path()),
+        Err(blog_export::ExportError::InvalidInput(_))
+    ));
+    assert_eq!(outputs(output.path()), before);
+}
+
+#[test]
+fn rename_and_title_update_keep_id_and_unpublish_removes_managed_output() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "Public body",
+    );
+    run_export(source.path(), output.path()).unwrap();
+    let old_name = fs::read_dir(output.path().join("ja"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .file_name();
+    fs::remove_file(source.path().join("tech/article.md")).unwrap();
+    note(
+        source.path(),
+        "tech/renamed.md",
+        "Renamed",
+        true,
+        "Public body",
+    );
+    run_export(source.path(), output.path()).unwrap();
+    assert!(output.path().join("ja").join(old_name).exists());
+    fs::write(output.path().join("README.md"), "Keep this").unwrap();
+    note(
+        source.path(),
+        "tech/renamed.md",
+        "Renamed",
+        false,
+        "Public body",
+    );
+    run_export(source.path(), output.path()).unwrap();
+    assert!(outputs(output.path()).is_empty());
+    assert_eq!(
+        fs::read_to_string(output.path().join("README.md")).unwrap(),
+        "Keep this"
+    );
+}
+
+#[test]
+fn resolves_public_wikilinks_without_exporting_local_images() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "[[target|See target]]\n![Photo](https://images.example.invalid/photo.png)\n`[[private]]`",
+    );
+    note(source.path(), "tech/target.md", "Target", true, "# Target");
+    fs::write(source.path().join("private.png"), b"private image").unwrap();
+    run_export(source.path(), output.path()).unwrap();
+    let actual = outputs(output.path()).join("\n");
+    assert!(actual.contains("[See target](content:"));
+    assert!(actual.contains("![Photo](https://images.example.invalid/photo.png)"));
+    assert!(actual.contains("`[[private]]`"));
+    assert!(!output.path().join("assets").exists());
+    assert!(!output.path().join("private.png").exists());
+}
+
+#[rstest::rstest]
+#[case("tech/secret.md")]
+#[case("tech")]
+#[case("missing")]
+fn symlink_source_is_rejected(#[case] target: &str) {
+    let source = TempDir::new().unwrap();
+    let private = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(private.path(), "tech/secret.md", "Secret", true, "SECRET");
+    std::os::unix::fs::symlink(private.path().join(target), source.path().join("leak.md")).unwrap();
+    assert!(matches!(
+        run_export(source.path(), output.path()),
+        Err(blog_export::ExportError::InvalidInput(_))
+    ));
+}
+
+#[test]
+fn symlink_output_root_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let source = tmp.path().join("source");
+    let target = tmp.path().join("target");
+    let output = tmp.path().join("content");
+    note(&source, "tech/article.md", "Article", true, "Public body");
+    fs::create_dir(&target).unwrap();
+    fs::write(target.join("keep.txt"), "Keep this").unwrap();
+    std::os::unix::fs::symlink(&target, &output).unwrap();
+
+    assert!(matches!(
+        run_export(&source, &output),
+        Err(blog_export::ExportError::InvalidInput(_))
+    ));
+    assert!(output.is_symlink());
+    assert_eq!(
+        fs::read_to_string(target.join("keep.txt")).unwrap(),
+        "Keep this"
+    );
+}
+
+#[test]
+fn hidden_source_entries_are_skipped_without_applying_ignore_files() {
+    let tmp = TempDir::new().unwrap();
+    let source = tmp.path().join(".source");
+    let output = tmp.path().join("content");
+    note(&source, "tech/article.md", "Article", true, "Public body");
+    note(&source, ".hidden.md", "Hidden", true, "Hidden body");
+    note(
+        &source,
+        ".hidden/note.md",
+        "Hidden note",
+        true,
+        "Hidden body",
+    );
+    fs::write(source.join(".ignore"), "tech/\n").unwrap();
+    fs::write(source.join(".gitignore"), "tech/\n").unwrap();
+    fs::create_dir(source.join(".git")).unwrap();
+
+    run_export(&source, &output).unwrap();
+    let actual = outputs(&output);
+    assert_eq!(actual.len(), 1);
+    assert!(actual[0].contains("Public body"));
+    assert!(!actual[0].contains("Hidden body"));
+}
+
+#[test]
+fn regular_file_source_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let source = tmp.path().join("source.md");
+    fs::write(&source, "not a directory").unwrap();
+
+    assert!(matches!(
+        run_export(&source, &tmp.path().join("content")),
+        Err(blog_export::ExportError::Io(error))
+            if error.kind() == std::io::ErrorKind::NotADirectory
+    ));
+}
+
+#[test]
+fn preserves_hidden_user_files_and_deleted_translations_in_archive() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "Public body",
+    );
+    run_export(source.path(), output.path()).unwrap();
+    fs::write(output.path().join(".keep"), "user data").unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        false,
+        "Public body",
+    );
+    run_export(source.path(), output.path()).unwrap();
+    assert_eq!(
+        fs::read_to_string(output.path().join(".keep")).unwrap(),
+        "user data"
+    );
+    assert_eq!(
+        fs::read_dir(output.path().join(".export-archive"))
+            .unwrap()
+            .count(),
+        2
+    );
+    run_export(source.path(), output.path()).unwrap();
+    assert_eq!(
+        fs::read_dir(output.path().join(".export-archive"))
+            .unwrap()
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn failed_export_preserves_unrelated_files_and_rejects_output_inside_source() {
+    let source = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "Public body",
+    );
+    assert!(matches!(
+        run_export(source.path(), &source.path().join("output")),
+        Err(blog_export::ExportError::InvalidInput(_))
+    ));
+}
+
+#[test]
+fn ambiguous_rename_requires_explicit_id() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(source.path(), "tech/a.md", "A", true, "A");
+    note(source.path(), "tech/b.md", "B", true, "B");
+    run_export(source.path(), output.path()).unwrap();
+    fs::remove_file(source.path().join("tech/a.md")).unwrap();
+    fs::remove_file(source.path().join("tech/b.md")).unwrap();
+    note(source.path(), "tech/c.md", "C", true, "C");
+    assert!(
+        run_export(source.path(), output.path())
+            .unwrap_err()
+            .to_string()
+            .contains("ambiguous")
+    );
+    assert_eq!(outputs(output.path()).len(), 2);
+}
+
+#[test]
+fn heading_references_are_stable_and_missing_anchors_stop_export() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/a.md",
+        "A",
+        true,
+        "# 見出し\n\n[[#見出し|見出しへ]]",
+    );
+    run_export(source.path(), output.path()).unwrap();
+    let result = outputs(output.path()).join("\n");
+    assert!(result.contains("<a id=\"section-"));
+    assert!(result.contains("#section-"));
+    note(
+        source.path(),
+        "tech/a.md",
+        "A",
+        true,
+        "# 見出し\n\n[[#存在しない|リンク]]",
+    );
+    assert!(run_export(source.path(), output.path()).is_err());
+    assert_eq!(outputs(output.path()).join("\n"), result);
+}
+
+#[test]
+fn public_bookmark_html_is_allowed_but_local_html_images_are_rejected() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/a.md",
+        "A",
+        true,
+        "<div class=\"bookmark\"><a href=\"https://example.com\">Public</a></div>",
+    );
+    run_export(source.path(), output.path()).unwrap();
+    note(
+        source.path(),
+        "tech/a.md",
+        "A",
+        true,
+        "<IMG SRC = 'file:///private/secret.png'>",
+    );
+    assert!(run_export(source.path(), output.path()).is_err());
+}
+
+#[test]
+fn markdown_links_resolve_the_sibling_before_a_root_note_with_the_same_name() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/sub/article.md",
+        "Article",
+        true,
+        "[Target](target.md)",
+    );
+    note(
+        source.path(),
+        "tech/sub/target.md",
+        "Sibling",
+        true,
+        "Sibling body",
+    );
+    note(source.path(), "target.md", "Root", true, "Root body");
+    let root_note = source.path().join("target.md");
+    let raw = fs::read_to_string(&root_note)
+        .unwrap()
+        .replace("category: tech", "kind: home");
+    fs::write(root_note, raw).unwrap();
+    run_export(source.path(), output.path()).unwrap();
+    let exported = outputs(output.path());
+    let sibling = exported
+        .iter()
+        .find(|text| text.contains("title: Sibling\n"))
+        .unwrap();
+    let id = sibling
+        .lines()
+        .find_map(|line| line.strip_prefix("id: "))
+        .unwrap();
+    let article = exported
+        .iter()
+        .find(|text| text.contains("title: Article\n"))
+        .unwrap();
+    assert!(article.contains(&format!("[Target](content:{id})")));
+
+    // A private sibling must not silently redirect to a different public note.
+    note(
+        source.path(),
+        "tech/sub/target.md",
+        "Sibling",
+        false,
+        "PRIVATE",
+    );
+    assert!(run_export(source.path(), output.path()).is_err());
+    assert_eq!(outputs(output.path()), exported);
+}
+
+#[rstest::rstest]
+#[case("![Photo](image.png)")]
+#[case("![Photo](my%20image.png)")]
+#[case("![[image.png]]")]
+#[case("![Photo](/private/image.png)")]
+#[case("![Photo](file:///private/image.png)")]
+#[case("![Photo](data:image/png;base64,aGVsbG8=)")]
+#[case("![Photo](mailto:me@example.com)")]
+fn local_images_are_rejected_without_changing_public_documents(#[case] body: &str) {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/sub/article.md",
+        "Article",
+        true,
+        "Public body",
+    );
+    fs::write(source.path().join("tech/sub/image.png"), b"sibling image").unwrap();
+    fs::write(source.path().join("tech/sub/my image.png"), b"other image").unwrap();
+    run_export(source.path(), output.path()).unwrap();
+    let before = outputs(output.path());
+    let english = fs::read_dir(output.path().join("en"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let before_english = fs::read(&english).unwrap();
+
+    note(source.path(), "tech/sub/article.md", "Article", true, body);
+    assert!(run_export(source.path(), output.path()).is_err());
+    assert_eq!(outputs(output.path()), before);
+    assert_eq!(fs::read(english).unwrap(), before_english);
+    assert!(!output.path().join("assets").exists());
+}
+
+#[test]
+fn markdown_url_paths_and_heading_fragments_are_decoded_before_resolution() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "[Target](My%20Note.md#%E8%A6%8B%E5%87%BA%E3%81%97)",
+    );
+    note(source.path(), "tech/My Note.md", "Target", true, "# 見出し");
+    run_export(source.path(), output.path()).unwrap();
+    let before = outputs(output.path());
+    let article = before
+        .iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    assert!(article.contains("#section-"));
+    assert!(!article.contains("%20"));
+    for path in [
+        "%2Fprivate%2Fsecret.md",
+        "..%2F..%2Fsecret.md",
+        "target%00.md",
+        "%FF.md",
+    ] {
+        note(
+            source.path(),
+            "tech/article.md",
+            "Article",
+            true,
+            &format!("[Bad]({path})"),
+        );
+        assert!(
+            run_export(source.path(), output.path()).is_err(),
+            "accepted {path}"
+        );
+        assert_eq!(outputs(output.path()), before);
+    }
+}
+
+#[rstest::rstest]
+#[case::full("[External][ref]")]
+#[case::collapsed("[ref][]")]
+#[case::shortcut("[ref]")]
+#[case::image("![Photo][ref]")]
+#[case::unused("Body without a reference")]
+fn reference_definitions_are_rejected_without_changing_public_documents(#[case] reference: &str) {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let body = indoc! {"
+        Body[^note]
+
+        [^note]: Footnote text.
+
+        ```md
+        [example]: literal.md
+        ```
+    "};
+    note(source.path(), "tech/article.md", "Article", true, body);
+    run_export(source.path(), output.path()).unwrap();
+    let before = outputs(output.path());
+    assert!(before[0].contains(body));
+
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        &formatdoc! {"
+            {reference}
+
+            [ref]: https://images.example.invalid/photo.png \"Reference title\"
+        "},
+    );
+    assert!(matches!(
+        run_export(source.path(), output.path()),
+        Err(blog_export::ExportError::InvalidInput(message)) if message.contains("reference-style"),
+    ));
+    assert_eq!(outputs(output.path()), before);
+}
+
+#[test]
+fn email_and_web_autolinks_remain_external_references() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let body = "<me@example.com> <https://example.com/a>";
+    note(source.path(), "tech/article.md", "Article", true, body);
+    run_export(source.path(), output.path()).unwrap();
+    assert!(outputs(output.path())[0].contains(body));
+}
+
+#[test]
+fn references_resolve_markdown_extensions_case_insensitively() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        "[Target](target.MD) [[target.MD|Wiki]]",
+    );
+    note(source.path(), "tech/target.MD", "Target", true, "Body");
+    run_export(source.path(), output.path()).unwrap();
+    let article = outputs(output.path())
+        .into_iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    assert!(article.contains("[Target](content:"));
+    assert!(article.contains("[Wiki](content:"));
+}
+
+#[test]
+fn markdown_link_labels_preserve_escaped_nested_and_opaque_brackets() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let labels = [
+        r"see \] escaped",
+        "see [nested]",
+        "see `]` code",
+        "see <span title=\"]\">HTML</span>",
+    ];
+    let body = labels
+        .iter()
+        .map(|label| format!("[{label}](target.md)"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    note(source.path(), "tech/article.md", "Article", true, &body);
+    note(source.path(), "tech/target.md", "Target", true, "Body");
+    run_export(source.path(), output.path()).unwrap();
+    let article = outputs(output.path())
+        .into_iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    for label in labels {
+        assert!(
+            article.contains(&format!("[{label}](content:")),
+            "lost label: {label}\n{article}"
+        );
+    }
+}
+
+#[test]
+fn wikilink_aliases_keep_existing_escapes_and_literal_brackets() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        r"[[target|see \[literal\]]] and [[target|a [bracket] label]] and [[target|two \\ slashes]] and [[tail]]",
+    );
+    note(source.path(), "tech/target.md", "Target", true, "Body");
+    note(source.path(), "tech/tail.md", r"trailing\", true, "Body");
+    run_export(source.path(), output.path()).unwrap();
+    let article = outputs(output.path())
+        .into_iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    let body = article
+        .strip_prefix("---\n")
+        .unwrap()
+        .split_once("\n---\n")
+        .unwrap()
+        .1;
+    let mut html = String::new();
+    pulldown_cmark::html::push_html(&mut html, pulldown_cmark::Parser::new(body));
+    for label in [
+        "see [literal]",
+        "a [bracket] label",
+        r"two \ slashes",
+        r"trailing\",
+    ] {
+        assert!(html.contains(&format!(">{label}</a>")), "{html}");
+    }
+}
+
+#[rstest::rstest]
+#[case("![photo](image.png)")]
+#[case("![note](image.png.md)")]
+#[case("![note](image.png.MD)")]
+#[case("![note](image.png%2Emd)")]
+fn wiki_note_embeds_remain_links_and_markdown_images_require_http_urls(#[case] image: &str) {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    note(
+        source.path(),
+        "tech/article.md",
+        "Article",
+        true,
+        indoc! {"
+            ![[image.png.md|Note embed]]
+            [Markdown note](image.png.md)
+        "},
+    );
+    note(
+        source.path(),
+        "tech/image.png.md",
+        "Image note",
+        true,
+        "Body",
+    );
+    fs::write(source.path().join("tech/image.png"), b"public image").unwrap();
+    run_export(source.path(), output.path()).unwrap();
+    let before = outputs(output.path());
+    let article = before
+        .iter()
+        .find(|s| s.contains("title: Article\n"))
+        .unwrap();
+    assert!(article.contains("[Note embed](content:"), "{article}");
+    assert!(article.contains("[Markdown note](content:"), "{article}");
+    assert!(!output.path().join("assets").exists());
+    note(source.path(), "tech/article.md", "Article", true, image);
+    assert!(run_export(source.path(), output.path()).is_err());
+    assert_eq!(outputs(output.path()), before);
+}

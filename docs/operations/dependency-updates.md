@@ -47,7 +47,7 @@ repositoryの管理権限があるアカウントで、次を実施します。
 - 通常のRust / Bun package更新ではmanifestとlockfileの差分を確認し、Rust CIを通します。Bun依存は[Bun manager](https://docs.renovatebot.com/modules/manager/bun/)が`bun.lock`も更新します。
 - Bun本体の更新PRでは`mise.toml`と`mise.lock`が同じversionになっていること、およびlockfile内の既存platformのURL・checksumが更新されていることを確認します。`mise install`後に`mise run versions-check`と`mise run test-e2e`を通します。App側でlockfile更新に失敗した場合は、そのPR上で共通toolの更新手順に従って再生成します。
 - Topcoat frameworkを手動更新するときはCLIも同じversionへ揃え、`Cargo.lock`と`mise.lock`を更新します。`mise install`後に`mise run versions-check`と通常のserver / E2E確認を通します。
-- `topcoat ui`のcomponentはrepositoryへ配置したsourceであり、Renovateは`components.toml`のhashを解釈しないため、更新有無を直接検出できません。Topcoatまたは互換範囲内の`topcoat-ui-registry`が更新されたら、`topcoat ui list --installed --package server`で保存済みhashとregistry sourceを比較します。`update available`と表示されたcomponentだけ差分を確認し、必要なら`topcoat ui add --overwrite --package server <component>`で再取得してsite固有の変更を反映し直します。
+- `topcoat ui`のcomponentはrepositoryへ配置したsourceであり、Renovateは`components.toml`のhashを解釈しないため、更新有無を直接検出できません。Topcoatまたは互換範囲内の`topcoat-ui-registry`が更新されたら、`topcoat ui list --installed --package blog-server`で保存済みhashとregistry sourceを比較します。`update available`と表示されたcomponentだけ差分を確認し、必要なら`topcoat ui add --overwrite --package blog-server <component>`で再取得してsite固有の変更を反映し直します。
 - `topcoat-*` crateはTopcoat本体からversion範囲で参照されているため、週次lockfile更新だけで変わることがあります。`Cargo.lock`の該当差分もreviewします。
 - GitHub Actionsの更新追従とSHA固定はRenovateで管理し、PRでは対応versionのcommentと参照先を確認します。Actions参照のmajor・SHA・commentを独自scriptで検証する処理は設けません。`mise run versions-check`はBun・Topcoat・Tailwindの共通build toolの整合と、workflowにtool versionや個別installerを持ち込まないことを確認します。
 - Bun本体やTailwindを手動更新する場合も、`mise.toml`と`mise.lock`の関連versionを揃え、`mise install`後に`mise run versions-check`を通します。

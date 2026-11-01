@@ -1,0 +1,209 @@
+use crate::error::Result;
+use blog_domain::{
+    ArticleIndexDocument, ArticleMeta, CategoryArtifactDocument, HomeFragmentArtifactDocument,
+    PageArtifactDocument, PublishableCategoryLanding, SiteMetadataDocument, build_article_index,
+    build_category_indexes, build_site_metadata,
+};
+
+/// JSON documents produced from validated content.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SiteDocuments {
+    pub(crate) article_index: ArticleIndexDocument,
+    pub(super) category_documents: Vec<CategoryArtifactDocument>,
+    pub(super) page_documents: Vec<PageArtifactDocument>,
+    pub(super) home_fragment: Option<HomeFragmentArtifactDocument>,
+    pub(super) site_metadata: SiteMetadataDocument,
+}
+
+impl SiteDocuments {
+    pub(crate) fn category_count(&self) -> usize {
+        self.category_documents.len()
+    }
+}
+
+pub(crate) fn build_site_documents(
+    article_metas: Vec<ArticleMeta>,
+    category_landings: Vec<PublishableCategoryLanding>,
+    page_documents: Vec<PageArtifactDocument>,
+    home_fragment: Option<HomeFragmentArtifactDocument>,
+) -> Result<SiteDocuments> {
+    page_documents
+        .iter()
+        .try_for_each(PageArtifactDocument::validate)?;
+    if let Some(home_fragment) = &home_fragment {
+        home_fragment.validate()?;
+    }
+
+    let category_metas = category_landings
+        .iter()
+        .map(|landing| landing.meta.clone())
+        .collect();
+    let article_index = build_article_index(&article_metas);
+    let category_indexes = build_category_indexes(&article_metas, category_metas);
+    let site_metadata = build_site_metadata(&category_indexes);
+    let category_documents = category_indexes
+        .iter()
+        .map(|index| {
+            let landing = category_landings
+                .iter()
+                .find(|landing| landing.meta.category == index.category)
+                .ok_or_else(|| blog_domain::DomainError::validation("category_landing"))?;
+            CategoryArtifactDocument::try_from((index, landing.body.as_str()))
+        })
+        .collect::<blog_domain::Result<Vec<_>>>()?;
+
+    Ok(SiteDocuments {
+        article_index: ArticleIndexDocument::from(article_index.as_slice()),
+        category_documents,
+        page_documents,
+        home_fragment,
+        site_metadata: SiteMetadataDocument::from(&site_metadata),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use blog_domain::{
+        Category, CategoryLandingBody, CategoryLandingMeta, SectionPath, Slug, Timestamp, Title,
+    };
+
+    fn article_meta(
+        title: &str,
+        slug: &str,
+        category: Category,
+        priority: Option<i32>,
+        created_at: &str,
+    ) -> ArticleMeta {
+        ArticleMeta {
+            slug: Slug::new(slug.to_string()).unwrap(),
+            title: Title::new(title.to_string()).unwrap(),
+            category,
+            section_path: SectionPath::default(),
+            description: Some(format!("{title} summary")),
+            tags: vec!["rust".parse().unwrap()],
+            priority,
+            created_at: Timestamp::new(created_at.to_string()).unwrap(),
+            updated_at: Timestamp::new(created_at.to_string()).unwrap(),
+        }
+    }
+
+    fn category_landing(category: Category, title: &str) -> CategoryLandingMeta {
+        CategoryLandingMeta {
+            category,
+            title: Title::new(title.to_string()).unwrap(),
+            description: None,
+            updated_at: Timestamp::new("2025-01-01T00:00:00+09:00".to_string()).unwrap(),
+        }
+    }
+
+    fn publishable_category_landing(category: Category, title: &str) -> PublishableCategoryLanding {
+        PublishableCategoryLanding::new(
+            category_landing(category, title),
+            CategoryLandingBody::new(format!("<p>{title}</p>")).unwrap(),
+        )
+    }
+
+    #[test]
+    fn test_build_site_documents() {
+        let documents = build_site_documents(
+            vec![
+                article_meta(
+                    "First",
+                    "first0000001",
+                    Category::Tech,
+                    Some(1),
+                    "2025-01-01T00:00:00+09:00",
+                ),
+                article_meta(
+                    "Second",
+                    "second000002",
+                    Category::Daily,
+                    Some(10),
+                    "2025-01-02T00:00:00+09:00",
+                ),
+            ],
+            vec![
+                publishable_category_landing(Category::Tech, "Tech"),
+                publishable_category_landing(Category::Daily, "Daily"),
+            ],
+            vec![],
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(documents.article_index.articles.len(), 2);
+        assert_eq!(documents.category_documents.len(), 2);
+        assert_eq!(documents.site_metadata.total_articles, 2);
+        assert_eq!(documents.article_index.articles[0].slug, "second000002");
+    }
+
+    #[test]
+    fn test_build_site_documents_includes_landing_only_category() {
+        let documents = build_site_documents(
+            vec![],
+            vec![publishable_category_landing(Category::Physics, "Physics")],
+            vec![],
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(documents.category_documents.len(), 1);
+        assert_eq!(documents.category_documents[0].category, "physics");
+        assert_eq!(documents.site_metadata.categories.len(), 1);
+        assert_eq!(documents.site_metadata.categories[0].article_count, 0);
+    }
+
+    #[test]
+    fn test_build_site_documents_requires_category_landing() {
+        let result = build_site_documents(
+            vec![article_meta(
+                "First",
+                "first0000001",
+                Category::Tech,
+                Some(1),
+                "2025-01-01T00:00:00+09:00",
+            )],
+            vec![],
+            vec![],
+            None,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_build_site_documents_validates_page_documents() {
+        let result = build_site_documents(
+            vec![],
+            vec![],
+            vec![PageArtifactDocument {
+                page: blog_domain::PageKey::new("about".to_string()).unwrap(),
+                title: "About".to_string(),
+                description: None,
+                html: String::new(),
+                updated_at: "2025-01-01T00:00:00+09:00".to_string(),
+            }],
+            None,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_build_site_documents_validates_home_fragment() {
+        let result = build_site_documents(
+            vec![],
+            vec![],
+            vec![],
+            Some(HomeFragmentArtifactDocument {
+                title: "Home".to_string(),
+                description: None,
+                html: "<p>Home</p>".to_string(),
+                updated_at: "invalid".to_string(),
+            }),
+        );
+
+        assert!(result.is_err());
+    }
+}

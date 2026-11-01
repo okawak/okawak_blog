@@ -11,7 +11,7 @@ concurrency:
 env:
   MISE_LOCKED: "1"
   RUST_BACKTRACE: 1
-  UPLOAD_PATH: crates/publish/dist/site
+  UPLOAD_PATH: crates/blog-publish/dist/site
 
 jobs:
   deploy:
@@ -95,9 +95,9 @@ jobs:
       - name: Generate and validate artifacts
         run: |
           set -euo pipefail
-          RUST_LOG=info cargo run --release -p publish
+          RUST_LOG=info cargo run --release -p blog-publish
 
-          bash scripts/validate_public_artifacts.sh "$UPLOAD_PATH" target/release/publish
+          bash scripts/validate_public_artifacts.sh "$UPLOAD_PATH" target/release/blog-publish
 
       - name: Build release pointer
         run: |
@@ -168,7 +168,7 @@ jobs:
           CI: "true"
           OKAWAK_BLOG_ARTIFACT_BUCKET: ${{ secrets.S3_BUCKET }}
           PLAYWRIGHT_INSTALL_WITH_DEPS: "true"
-          OKAWAK_BLOG_EXPECTED_ARTIFACT_ROOT: ${{ github.workspace }}/crates/publish/dist/site
+          OKAWAK_BLOG_EXPECTED_ARTIFACT_ROOT: ${{ github.workspace }}/crates/blog-publish/dist/site
         run: OKAWAK_BLOG_ARTIFACT_PREFIX="$ARTIFACT_PREFIX" mise run test-e2e-s3
 
       - name: Upload Playwright traces
