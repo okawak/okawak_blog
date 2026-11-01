@@ -6,7 +6,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 if [ -n "${2:-}" ]; then
   "$2" --validate-artifacts "$root"
 else
-  cargo run --quiet --locked --manifest-path "$repo_root/Cargo.toml" -p publish -- --validate-artifacts "$root"
+  cargo run --quiet --locked --manifest-path "$repo_root/Cargo.toml" -p blog-publish -- --validate-artifacts "$root"
 fi
 jq -e '
   .routes["/"] as $home_locales |

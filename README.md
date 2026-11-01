@@ -19,7 +19,7 @@ private Obsidian（obsidian/ submodule）
   -> Browser
 ```
 
-private Obsidianが日本語原文の正本です。`export`は公開対象だけを`content/`へ書き出し、翻訳の手動編集を保護します。GitHub ActionsはGit管理済みの公開コンテンツだけを使うため、private submoduleやAI認証を必要としません。
+private Obsidianが日本語原文の正本です。`blog-export`は公開対象だけを`content/`へ書き出し、翻訳の手動編集を保護します。GitHub ActionsはGit管理済みの公開コンテンツだけを使うため、private submoduleやAI認証を必要としません。
 
 ## リポジトリ構成
 
@@ -29,11 +29,11 @@ okawak_blog/
 ├── content/           # Git管理する公開Markdown・タグ辞書
 ├── translation.json   # 記事・タグ・UI共通の翻訳設定と用語集
 ├── crates/
-│   ├── export/        # private入力の抽出・正規化・翻訳
-│   ├── blogcore/      # 公開コンテンツ・artifact・pageの共有契約
-│   ├── publish/       # 公開Markdownからartifactを生成
-│   ├── infra/         # local / S3 artifact reader
-│   └── server/        # Topcoat application、UI、HTTP runtime
+│   ├── blog-export/    # private入力の抽出・正規化・翻訳
+│   ├── blog-domain/    # 公開コンテンツ・artifact・pageの共有契約
+│   ├── blog-publish/   # 公開Markdownからartifactを生成
+│   ├── blog-infra/     # local / S3 artifact reader
+│   └── blog-server/    # Topcoat application、UI、HTTP runtime
 ├── e2e/               # browser E2Eと固定artifact
 ├── docs/              # architecture、content契約、runbook
 ├── scripts/           # 検証・運用スクリプト
@@ -62,7 +62,7 @@ mise run dev-local
 
 `dev-local`はartifact生成後にTopcoatのホットリロードを起動します。Rust・styleの変更を自動反映し、対応する検索入力やメニューの状態を保ちます。公開Markdownの変更後はtaskを再起動してください。固定fixtureでUIだけを確認する場合は`mise run dev-fixture`（`http://127.0.0.1:8009/tech`）を使えます。
 
-`sync-obsidian`は現在または移動前のsubmoduleに未処理の作業がある可能性を検出すると停止します。翻訳候補の確認・手動修正・採用方法は[export README](./crates/export/README.md)を参照してください。
+`sync-obsidian`は現在または移動前のsubmoduleに未処理の作業がある可能性を検出すると停止します。翻訳候補の確認・手動修正・採用方法は[export README](./crates/blog-export/README.md)を参照してください。
 
 通常の確認は次のtaskを使います。
 
@@ -87,11 +87,11 @@ server binaryとUI assetの配備はコンテンツ公開と分離していま�
 
 - [architecture](./docs/architecture/architecture.md): 現行の責務、依存方向、重要な契約と不変条件
 - [Obsidian template](./docs/content/obsidian-template.md): private入力のfrontmatterと執筆規則
-- [公開Markdown契約](./docs/content/public-markdown.md): `export`と`publish`の境界schema
-- [export](./crates/export/README.md): 抽出・翻訳・候補採用の操作と保証
-- [publish](./crates/publish/README.md): artifact生成の入力、出力、検証
-- [server](./crates/server/README.md): Topcoat applicationとUIの実装境界
-- [UI文言カタログ](./crates/server/locales/README.md): server辞書と翻訳の運用
+- [公開Markdown契約](./docs/content/public-markdown.md): `blog-export`と`blog-publish`の境界schema
+- [export](./crates/blog-export/README.md): 抽出・翻訳・候補採用の操作と保証
+- [publish](./crates/blog-publish/README.md): artifact生成の入力、出力、検証
+- [server](./crates/blog-server/README.md): Topcoat applicationとUIの実装境界
+- [UI文言カタログ](./crates/blog-server/locales/README.md): server辞書と翻訳の運用
 - [browser E2E](./e2e/README.md): 固定fixtureと実S3の確認
 - [runtime service](./service/README.md): systemd、reader設定、probe、cache
 - [operations](./docs/operations/README.md): 本番の構築・更新・障害対応runbook

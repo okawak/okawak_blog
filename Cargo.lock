@@ -606,7 +606,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "blogcore"
+name = "blog-domain"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -614,6 +614,87 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "blog-export"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blog-domain",
+ "clap",
+ "indoc",
+ "percent-encoding",
+ "pulldown-cmark",
+ "rstest",
+ "scraper",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+ "walkdir",
+ "yaml_serde",
+]
+
+[[package]]
+name = "blog-infra"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "aws-config",
+ "aws-sdk-s3",
+ "blog-domain",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "blog-publish"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blog-domain",
+ "futures",
+ "html-escape",
+ "indoc",
+ "pulldown-cmark",
+ "regex",
+ "reqwest",
+ "rstest",
+ "scraper",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "yaml_serde",
+]
+
+[[package]]
+name = "blog-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "blog-domain",
+ "blog-infra",
+ "chrono",
+ "httpdate",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "topcoat",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1094,29 +1175,6 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "export"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "blogcore",
- "clap",
- "indoc",
- "percent-encoding",
- "pulldown-cmark",
- "rstest",
- "scraper",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "tempfile",
- "thiserror",
- "tracing",
- "tracing-subscriber",
- "walkdir",
- "yaml_serde",
 ]
 
 [[package]]
@@ -1887,21 +1945,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "infra"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "aws-config",
- "aws-sdk-s3",
- "blogcore",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
-]
-
-[[package]]
 name = "inout"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2403,31 +2446,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "publish"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "blogcore",
- "futures",
- "html-escape",
- "indoc",
- "pulldown-cmark",
- "regex",
- "reqwest",
- "rstest",
- "scraper",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
- "yaml_serde",
 ]
 
 [[package]]
@@ -3043,24 +3061,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "blogcore",
- "chrono",
- "httpdate",
- "infra",
- "serde_json",
- "tempfile",
- "tokio",
- "topcoat",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

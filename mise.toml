@@ -61,7 +61,7 @@ run = "bash scripts/sync_obsidian.sh"
 
 [tasks.export]
 description = "Export public Markdown, translate changes, and prepare protected translation candidates"
-run = "cargo run -p export --"
+run = "cargo run -p blog-export --"
 
 [tasks.format]
 description = "Format Rust and Topcoat source files"
@@ -76,22 +76,22 @@ description = "Run the local Topcoat development server with S3 artifacts"
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "s3", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008", OKAWAK_BLOG_ADDR = "127.0.0.1:8008" }
 run = '''
 : "${OKAWAK_BLOG_ARTIFACT_BUCKET:?OKAWAK_BLOG_ARTIFACT_BUCKET is required}"
-topcoat dev --package server --bin server
+topcoat dev --package blog-server --bin blog-server
 '''
 
 [tasks.dev-local]
 description = "Build checked-in public Markdown and preview the generated artifacts"
-env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/publish/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008", OKAWAK_BLOG_ADDR = "127.0.0.1:8008" }
+env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "crates/blog-publish/dist/site", OKAWAK_BLOG_SITE_ORIGIN = "http://127.0.0.1:8008", OKAWAK_BLOG_ADDR = "127.0.0.1:8008" }
 run = '''
-cargo run -p publish
-topcoat dev --package server --bin server
+cargo run -p blog-publish
+topcoat dev --package blog-server --bin blog-server
 '''
 
 [tasks.dev-fixture]
 description = "Run the Topcoat runtime with fixture artifacts"
 env = { OKAWAK_BLOG_ARTIFACT_SOURCE = "local", OKAWAK_BLOG_ARTIFACT_LOCAL_ROOT = "e2e/fixtures/site", OKAWAK_BLOG_ADDR = "127.0.0.1:8009" }
 run = '''
-topcoat dev --package server --bin server
+topcoat dev --package blog-server --bin blog-server
 '''
 
 [tasks.clean-project]
@@ -101,18 +101,18 @@ run = "cargo clean"
 [tasks.build-project]
 description = "Build the integrated Topcoat binary and asset bundle for deployment"
 depends = ["check-deps"]
-run = "topcoat asset bundle --package server --bin server --release"
+run = "topcoat asset bundle --package blog-server --bin blog-server --release"
 
 [tasks.build-deployment]
 description = "VPS internal: build a production release outside the live site directory"
 hide = true
 depends = ["check-deps"]
-run = "topcoat asset bundle --package server --bin server --release --out \"${DEPLOY_STAGED_ASSETS:-./target/assets-staged}\""
+run = "topcoat asset bundle --package blog-server --bin blog-server --release --out \"${DEPLOY_STAGED_ASSETS:-./target/assets-staged}\""
 
-[tasks.build-server]
+[tasks.build-blog-server]
 description = "Build the Topcoat server binary only"
 depends = ["check-deps"]
-run = "cargo build --release -p server --bin server"
+run = "cargo build --release -p blog-server --bin blog-server"
 
 [tasks.pull]
 description = "Pull the latest changes from origin/main"
@@ -186,13 +186,13 @@ bash scripts/tests/remote_deployment_test.sh
 bash scripts/tests/runtime_certificate_rotation_test.sh
 '''
 
-[tasks.test-blogcore]
-description = "Run blogcore tests"
-run = "cargo test -p blogcore"
+[tasks.test-blog-domain]
+description = "Run blog-domain tests"
+run = "cargo test -p blog-domain"
 
-[tasks.test-server]
+[tasks.test-blog-server]
 description = "Run server tests"
-run = "cargo test -p server"
+run = "cargo test -p blog-server"
 
 [tasks.test-e2e]
 description = "Run artifact-driven browser E2E with bun and Chromium"
@@ -223,13 +223,13 @@ run = "cargo clippy --workspace --all-targets -- -D warnings"
 description = "Run cargo check for the workspace"
 run = "cargo check --workspace"
 
-[tasks.check-blogcore]
-description = "Run cargo check for the blogcore crate"
-run = "cargo check -p blogcore"
+[tasks.check-blog-domain]
+description = "Run cargo check for the blog-domain crate"
+run = "cargo check -p blog-domain"
 
-[tasks.check-server]
+[tasks.check-blog-server]
 description = "Run cargo check for the server crate"
-run = "cargo check -p server"
+run = "cargo check -p blog-server"
 
 [tasks.bloat]
 description = "Analyze release binary size"

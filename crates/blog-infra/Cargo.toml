@@ -1,0 +1,22 @@
+[package]
+publish = false
+name = "blog-infra"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+blog-domain = { path = "../blog-domain" }
+async-trait.workspace = true
+aws-config = { workspace = true, default-features = false, features = ["credentials-process"] }
+aws-sdk-s3 = { workspace = true, default-features = false, features = ["default-https-client", "rt-tokio"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs", "sync"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

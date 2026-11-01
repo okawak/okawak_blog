@@ -32,17 +32,19 @@ private ObsidianとAI認証はローカルのexportだけが使う。GitHub Acti
 
 ## Workspaceと依存方向
 
+内部パッケージとディレクトリは`blog-`接頭辞で統一し、Rustからは`blog_domain`、`blog_export`、`blog_publish`、`blog_infra`、`blog_server`として参照する。全パッケージに`publish = false`を設定し、Cargo registryへ公開しない。実行ファイルは`blog-export`、`blog-publish`、`blog-server`である。
+
 ~~~text
 okawak_blog/
 ├── obsidian/          # private入力のgit submodule
 ├── content/           # export済みの公開Markdown・タグ辞書
 ├── translation.json   # 記事・タグ・UI共通の翻訳設定
 ├── crates/
-│   ├── export/
-│   ├── blogcore/
-│   ├── publish/
-│   ├── infra/
-│   └── server/
+│   ├── blog-export/
+│   ├── blog-domain/
+│   ├── blog-publish/
+│   ├── blog-infra/
+│   └── blog-server/
 ├── e2e/
 ├── docs/
 ├── scripts/
@@ -54,16 +56,16 @@ obsidian/は外部入力であり、crateの内部資産にしない。公開入
 
 ~~~mermaid
 flowchart TB
-    Export[crates/export] --> Blogcore[crates/blogcore]
-    Publish[crates/publish] --> Blogcore
-    Infra[crates/infra] --> Blogcore
-    Server[crates/server] --> Blogcore
+    Export[crates/blog-export] --> BlogDomain[crates/blog-domain]
+    Publish[crates/blog-publish] --> BlogDomain
+    Infra[crates/blog-infra] --> BlogDomain
+    Server[crates/blog-server] --> BlogDomain
     Server --> Infra
 ~~~
 
 exportとpublishはruntime依存ではない。serverはinfraをapplication compositionで利用するが、UI componentはstorageへ直接依存しない。
 
-### crates/export
+### crates/blog-export
 
 - private Obsidianの公開対象抽出、ノート参照・embedの正規化、安定IDの管理
 - 記事・タグ・UIに共通する差分翻訳、手動編集の保護、更新候補の生成と採用
@@ -76,18 +78,18 @@ exportとpublishはruntime依存ではない。serverはinfraをapplication comp
 
 `content`はI/Oを持たない文書codec・Markdown設定・fingerprint、`filesystem`はschemaに依存しない走査・lock・stagingを所有する。翻訳の更新判定は純粋な`translation::plan`、応答cacheは`translation::cache`、Codex実行は`translation::codex`に分ける。記事と辞書は同じ更新計画を使い、候補衝突の検証をAI呼び出しより前に完了する。下位のcontent / filesystem / outputからvault / translationへ依存させない。
 
-操作と翻訳状態の詳細は[export README](../../crates/export/README.md)を参照する。
+操作と翻訳状態の詳細は[export README](../../crates/blog-export/README.md)を参照する。
 
-### crates/blogcore
+### crates/blog-domain
 
 - 公開コンテンツ、artifact、release pointer、page documentの純粋な共有契約
 - category、slug、locale、pathなどの値と検証規則
 - artifactから表示用documentを組み立てる純粋ロジック
 - I/O、async、AWS SDK、HTTP frameworkを持たない
 
-公開Markdownのタイトル・日時・タグID・digest・section pathはblogcoreの値型が生成時・deserialization時に検証する。`PublicContentMeta::validate()`はschema versionとフィールド間の整合性を検証する。exportのvault入力も同じ値型を使い、publishへ検証済みの値を渡す。
+公開Markdownのタイトル・日時・タグID・digest・section pathはblog-domainの値型が生成時・deserialization時に検証する。`PublicContentMeta::validate()`はschema versionとフィールド間の整合性を検証する。exportのvault入力も同じ値型を使い、publishへ検証済みの値を渡す。
 
-### crates/publish
+### crates/blog-publish
 
 - 公開Markdownの読込、種別分類、安定IDによるlink解決、HTML変換、安全化、artifact生成
 - bookmark enrichmentを外部境界として注入し、pipelineが処理順を所有する
@@ -95,15 +97,15 @@ exportとpublishはruntime依存ではない。serverはinfraをapplication comp
 - lib.rsはmodule宣言とre-exportに限定し、crate外APIはpublish entrypoint、bookmark enricher、PublishError / Resultに限定する
 - path処理の対応環境はmacOSとLinuxとする
 
-入力、出力、検証方法は[publish README](../../crates/publish/README.md)を参照する。
+入力、出力、検証方法は[publish README](../../crates/blog-publish/README.md)を参照する。
 
-### crates/infra
+### crates/blog-infra
 
 - ArtifactReader / ArtifactSnapshotによるstorage非依存の読取境界
 - local filesystemとS3のreader、release解決、cache、source設定
 - vault読取、Markdown変換、S3 upload、HTTP response、UIを扱わない
 
-### crates/server
+### crates/blog-server
 
 - 単一のproduction server binary、Topcoat application、公開route、metadata、UI、asset、API
 - src/app.rsをmodule_router!()のrootとし、app/のfile moduleをURL構造へ対応させる
@@ -111,7 +113,7 @@ exportとpublishはruntime依存ではない。serverはinfraをapplication comp
 - release-aware conditional GET、health / readiness、readerの生成と注入
 - UI文言・カテゴリ表示名の辞書と、言語選択・切替
 
-file単位の構成、Topcoat、styleの境界は[server README](../../crates/server/README.md)を参照する。
+file単位の構成、Topcoat、styleの境界は[server README](../../crates/blog-server/README.md)を参照する。
 
 ### E2Eと運用
 
@@ -127,7 +129,7 @@ content kindはarticle、category、page、homeの4種類である。articleはc
 
 記事と内部linkは翻訳後も変わらないcontent IDで対応づける。タイトル、元file path、翻訳結果から公開identityを再計算しない。publishは対象言語のcontentが配信可能なら同じ言語、なければ日本語のURLへ解決する。未解決参照、曖昧な参照、公開対象外への参照はexportまたはpublishで失敗させる。
 
-タグIDは記事frontmatterに保持し、表示名はcontent/tags.jsonから同じcontent releaseへ含める。UI文言とカテゴリ表示名はserver辞書で管理し、server binaryと一緒に配備する。blogcoreは表示文言を持たず、識別子と共有schemaだけを所有する。
+タグIDは記事frontmatterに保持し、表示名はcontent/tags.jsonから同じcontent releaseへ含める。UI文言とカテゴリ表示名はserver辞書で管理し、server binaryと一緒に配備する。blog-domainは表示文言を持たず、識別子と共有schemaだけを所有する。
 
 ## Artifactとrelease
 
@@ -201,13 +203,13 @@ releaseは上書きせず、公開runをrepository単位で直列化する。失
 
 ## Pageとruntime境界
 
-blogcoreのpage documentは言語やstorageに依存しない表示データを表す。serverのpage componentはPageLoaderから、page document、タグ表示名、言語別pathをまとめたpresentationを受け取る。ArtifactPageLoaderだけがinfraのsnapshotを読み、local / S3 readerをUIへ持ち込まない。
+blog-domainのpage documentは言語やstorageに依存しない表示データを表す。serverのpage componentはPageLoaderから、page document、タグ表示名、言語別pathをまとめたpresentationを受け取る。ArtifactPageLoaderだけがinfraのsnapshotを読み、local / S3 readerをUIへ持ち込まない。
 
 1 request内のpage documentとmetadataは同じartifact snapshotから組み立てる。home fragmentだけを任意とし、必要なartifactの欠落・読取失敗を空値へ変換しない。404とstorage errorはroute境界で異なるstatusとして扱う。/api/articlesは互換endpointとして維持し、page専用APIは増やさない。
 
 公開routeはTopcoatのmodule treeから導出する。app.rsをrootとし、static segmentと`module_param!()`で宣言するdynamic segmentをfile moduleでURL構造へ対応させ、mod.rsは使わない。日本語と英語は描画処理を共有する。release-aware HTTP cacheはroute固有処理ではなくglobal layerとして構成する。
 
-responsive menuはTopcoat UIのPopoverとブラウザー標準の開閉・focus管理を使う。serverのshellがリンク選択・履歴移動・画面幅切替に伴う閉じる処理を補う。Topcoat runtimeはcategory内の記事絞り込み、UIが生成する内部linkのnavigationと先読みに使う。navigationはserverで描画したdocumentとmetadataを更新し、履歴・scrollを管理する。hover・focus・touchで先読みし、cookieを変更する言語選択linkは先読みしない。言語選択はruntime navigationのrewrite後GETにも適用する。生成Markdownのanchorは通常のbrowser navigationを維持する。初期HTMLには全記事と通常linkを含め、JavaScriptや外部CDNが失敗しても本文とnavigationを利用可能にする。UI component、asset、styleの詳細は[server README](../../crates/server/README.md)を正本とする。
+responsive menuはTopcoat UIのPopoverとブラウザー標準の開閉・focus管理を使う。serverのshellがリンク選択・履歴移動・画面幅切替に伴う閉じる処理を補う。Topcoat runtimeはcategory内の記事絞り込み、UIが生成する内部linkのnavigationと先読みに使う。navigationはserverで描画したdocumentとmetadataを更新し、履歴・scrollを管理する。hover・focus・touchで先読みし、cookieを変更する言語選択linkは先読みしない。言語選択はruntime navigationのrewrite後GETにも適用する。生成Markdownのanchorは通常のbrowser navigationを維持する。初期HTMLには全記事と通常linkを含め、JavaScriptや外部CDNが失敗しても本文とnavigationを利用可能にする。UI component、asset、styleの詳細は[server README](../../crates/blog-server/README.md)を正本とする。
 
 ## Reader、cache、HTTP
 

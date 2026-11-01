@@ -132,8 +132,8 @@ prepare_case() {
   cp "$case_dir/systemd/okawak_blog.service" "$case_dir/previous.service"
   printf 'old binary\n' >"$case_dir/bin/okawak_blog"
   printf 'old asset\n' >"$case_dir/bin/assets/old.css"
-  printf '#!/usr/bin/env bash\necho new binary\n' >"$case_dir/target/release/server"
-  chmod +x "$case_dir/bin/okawak_blog" "$case_dir/target/release/server"
+  printf '#!/usr/bin/env bash\necho new binary\n' >"$case_dir/target/release/blog-server"
+  chmod +x "$case_dir/bin/okawak_blog" "$case_dir/target/release/blog-server"
   : >"$case_dir/systemctl.log"
   : >"$case_dir/probe.log"
 }
@@ -146,7 +146,6 @@ run_activation() {
     REPO_ROOT="$case_dir" \
     SERVICE_FILE="$case_dir/service.service" \
     SYSTEMD_UNIT_DIR="$case_dir/systemd" \
-    TARGET_BIN="$case_dir/target/release/server" \
     BIN_DIR="$case_dir/bin" \
     DEPLOY_STAGED_ASSETS="$case_dir/target/assets-staged" \
     DEPLOY_PROBE_ATTEMPTS=1 \
@@ -171,7 +170,7 @@ grep -Fxq 'ProtectHome=true' "$success_case/systemd/okawak_blog.service" \
   || fail "systemd hardening was lost"
 cmp -s "$repo_root/service/okawak_blog.service" "$success_case/service.service" \
   || fail "deployment modified the source service unit"
-cmp -s "$success_case/target/release/server" "$success_case/bin/okawak_blog" \
+cmp -s "$success_case/target/release/blog-server" "$success_case/bin/okawak_blog" \
   || fail "successful activation did not install the new binary"
 [[ -f "$success_case/bin/assets/tailwind-new.css" ]] \
   || fail "successful activation did not install the new assets"

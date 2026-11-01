@@ -1,0 +1,18 @@
+mod article_slug;
+use topcoat::{
+    Result,
+    context::Cx,
+    router::{module_param, page, path_param},
+    view::View,
+};
+module_param!(category_name);
+
+#[page]
+async fn category(cx: &Cx) -> Result<impl View> {
+    crate::app::category_name::render_category(
+        cx,
+        blog_domain::Locale::En,
+        path_param::<CategoryName>(cx),
+    )
+    .await
+}
