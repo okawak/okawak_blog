@@ -795,7 +795,14 @@ async fn error_pages_keep_navigation_tied_to_the_requested_url() {
         .await;
         assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
         assert!(has_current_link(&response.body, href));
-        assert_eq!(response.body.matches("aria-current=\"page\"").count(), 1);
+        // Each layout marks exactly one destination, even on an error page.
+        let navigation = response.body.split("<nav ").skip(1).collect::<Vec<_>>();
+        assert_eq!(navigation.len(), 2);
+        for nav in navigation {
+            let nav = nav.split("</nav>").next().unwrap();
+            assert!(has_current_link(nav, href));
+            assert_eq!(nav.matches("aria-current=\"page\"").count(), 1);
+        }
     }
 }
 
@@ -855,19 +862,27 @@ async fn home_shell_exposes_topcoat_mobile_navigation_contract() {
     );
     assert!(!response.body.contains("navigation-test.js"));
     assert!(!response.body.contains("okawak-shell-version"));
-    assert!(response.body.contains("aria-controls=\"site-header-nav\""));
-    assert!(response.body.contains("aria-expanded=\"false\""));
-    assert!(
-        response
-            .body
-            .contains("aria-label=\"ナビゲーションメニューを開く\"")
-    );
-    assert!(response.body.contains("data-topcoat-on:click="));
-    assert!(response.body.contains("data-topcoat-bind:aria-expanded="));
-    assert!(response.body.contains("data-topcoat-bind:aria-label="));
-    assert!(response.body.contains("<nav id=\"site-header-nav\""));
-    assert!(response.body.contains("data-topcoat-bind:class="));
-    assert!(response.body.contains("class=\"hidden absolute inset-x-4"));
+    let panel_id = response
+        .body
+        .split("popovertarget=\"")
+        .nth(1)
+        .expect("mobile menu trigger")
+        .split('"')
+        .next()
+        .unwrap();
+    let panel = response
+        .body
+        .split("<div ")
+        .filter_map(|part| part.split('>').next())
+        .find(|attrs| attrs.contains(&format!("id=\"{panel_id}\"")))
+        .expect("trigger target exists");
+    assert!(panel.contains("popover=\"auto\""));
+    assert!(response.body.contains("data-mobile-navigation=\"\""));
+    assert!(response.body.contains("ナビゲーションメニューを開く"));
+    assert!(response.body.contains("ナビゲーションメニューを閉じる"));
+    // The browser exposes expanded state; no independently maintained signal.
+    assert!(!response.body.contains("data-topcoat-bind:aria-expanded="));
+    assert!(response.body.contains("id=\"site-header-nav\""));
     assert!(
         response
             .body

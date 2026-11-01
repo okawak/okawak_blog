@@ -347,16 +347,12 @@ test("mobile navigation stays in the viewport and exposes its state", async ({ p
 
   const header = page.locator("header");
   const logo = header.getByRole("link", { name: SITE_NAME });
-  const menuButton = header.locator('button[aria-controls="site-header-nav"]');
-  const navigation = header.locator("#site-header-nav");
+  const menuButton = header.locator('button[popovertarget]');
+  const navigation = header.locator("[data-mobile-navigation]");
 
   await expect(logo).toBeVisible();
   await expect(menuButton).toBeVisible();
-  await expect(menuButton).toHaveAttribute("aria-expanded", "false");
-  await expect(menuButton).toHaveAttribute(
-    "aria-label",
-    "ナビゲーションメニューを開く",
-  );
+  await expect(menuButton).toHaveAccessibleName("ナビゲーションメニューを開く");
   await expect(navigation).toBeHidden();
 
   const logoBox = await logo.boundingBox();
@@ -367,12 +363,9 @@ test("mobile navigation stays in the viewport and exposes its state", async ({ p
 
   await menuButton.click();
 
-  await expect(menuButton).toHaveAttribute("aria-expanded", "true");
-  await expect(menuButton).toHaveAttribute(
-    "aria-label",
-    "ナビゲーションメニューを閉じる",
-  );
+  await expect(menuButton).toHaveAccessibleName("ナビゲーションメニューを閉じる");
   await expect(navigation).toBeVisible();
+  await expect(navigation).toHaveJSProperty("popover", "auto");
 
   const navigationBox = await navigation.boundingBox();
   expect(navigationBox).not.toBeNull();
@@ -383,25 +376,25 @@ test("mobile navigation stays in the viewport and exposes its state", async ({ p
 
   await expect(page).toHaveURL(/\/about$/);
   await expect(navigation).toBeHidden();
-  await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+  await expect(menuButton).toMatchAriaSnapshot('- button "ナビゲーションメニューを開く"');
 });
 
 test("browser history reconstructs the closed mobile menu", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  const menuButton = page.locator('button[aria-controls="site-header-nav"]');
+  const menuButton = page.locator('button[popovertarget]');
   await menuButton.click();
   await page.getByRole("link", { name: "About", exact: true }).click();
   await expect(page).toHaveURL(/\/about$/);
 
   await menuButton.click();
-  await expect(menuButton).toHaveAttribute("aria-expanded", "true");
+  await expect(menuButton).toMatchAriaSnapshot('- button "ナビゲーションメニューを閉じる"');
   await page.goBack();
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByText("Fixture home content")).toBeVisible();
-  await expect(menuButton).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator("#site-header-nav")).toHaveClass(/\bhidden\b/);
+  await expect(menuButton).toMatchAriaSnapshot('- button "ナビゲーションメニューを開く"');
+  await expect(page.locator("[data-mobile-navigation]")).toBeHidden();
 });
 
 test("home article cards keep the warm surface and stay within the mobile viewport", async ({
@@ -496,11 +489,17 @@ test("category filtering morphs only the list and preserves browser state", asyn
   const browserErrors = captureBrowserErrors(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/tech");
-  const menu = page.locator('button[aria-controls="site-header-nav"]');
+  const menu = page.locator('button[popovertarget]');
   await menu.click();
+  await page.locator("header").evaluate((element) => element.setAttribute("data-preserved", "true"));
   const input = page.getByRole("searchbox", { name: "記事を絞り込む" });
   await expect(input).toHaveAccessibleDescription("タイトル・説明・タグ");
   const results = page.getByRole("region", { name: "カテゴリの記事", exact: true });
+  const inputId = await input.getAttribute("id");
+  const helpId = await input.getAttribute("aria-describedby");
+  expect(inputId).toBeTruthy();
+  expect(helpId).toBeTruthy();
+  expect(inputId).not.toBe(helpId);
   const status = results.getByRole("status");
   let documentRequests = 0;
   page.on("request", (request) => {
@@ -519,24 +518,48 @@ test("category filtering morphs only the list and preserves browser state", asyn
     expect(response.status()).toBe(200);
     expect(response.headers().etag).toBeUndefined();
     await expect(status).toHaveText("1件の記事");
+    await expect(input).toHaveAttribute("id", inputId!);
+    await expect(input).toHaveAttribute("aria-describedby", helpId!);
+    await expect(input).toHaveValue(query);
     await expect(results.getByRole("link", { name: "E2E Article" })).toBeVisible();
   }
-  await input.fill("no matching article");
+  await input.fill("no matching article <>&");
   await expect(status).toHaveText("0件の記事");
   await expect(results.getByRole("link", { name: "E2E Article" })).toHaveCount(0);
   await expect(results.getByRole("heading", { name: "rust / async" })).toHaveCount(0);
   await expect(input).toBeFocused();
-  await expect(input).toHaveValue("no matching article");
+  await expect(input).toHaveValue("no matching article <>&");
 
   await input.fill("");
   await expect(status).toHaveText("1件の記事");
   await expect(results.getByRole("link", { name: "E2E Article" })).toBeVisible();
   await expect(input).toBeFocused();
-  await expect(menu).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("header")).toHaveAttribute("data-preserved", "true");
   await expect(page.locator("main .content-prose")).toHaveAttribute("data-preserved", "true");
   await expect(page).toHaveURL(/\/tech$/);
   expect(documentRequests).toBe(0);
   expect(browserErrors).toEqual([]);
+});
+
+test("GitHub tooltip stays associated and within the viewport", async ({ page }) => {
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/tech");
+    if (width < 768) {
+      await page.locator('button[popovertarget]').click();
+    }
+    const github = page.locator("header").getByRole("link", { name: "okawakのGitHubプロフィールを開く" });
+    await github.focus();
+    const hint = page.getByRole("tooltip");
+    await expect(hint).toBeVisible();
+    await expect(hint).toHaveText("okawakのGitHubプロフィールを開く");
+    await expect(github).toHaveAttribute("aria-describedby", (await hint.getAttribute("id"))!);
+    await expect.poll(async () => {
+      const bounds = await hint.boundingBox();
+      return !!bounds && bounds.x >= 0 && bounds.y >= 0 &&
+        bounds.x + bounds.width <= width && bounds.y + bounds.height <= 844;
+    }).toBe(true);
+  }
 });
 
 test("category articles remain available without JavaScript", async ({ browser }) => {

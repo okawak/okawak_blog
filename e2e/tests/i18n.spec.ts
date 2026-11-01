@@ -36,7 +36,7 @@ test("header language choices persist and direct article URLs keep their locale"
     await expect(page).toHaveURL(`${baseURL}/tech/e2e-article`);
     await page.setViewportSize({ width: 320, height: 740 });
     await expect(switcher.getByRole("link", { name: "English" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "ナビゲーションメニューを開く" })).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("button", { name: "ナビゲーションメニューを開く" })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
     await page.screenshot({ path: testInfo.outputPath("language-menu-mobile.png") });
     await switcher.getByRole("link", { name: "English" }).click();
@@ -113,7 +113,7 @@ test("English mobile navigation keeps localized client labels", async ({ page })
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/en/about");
   await page.getByRole("button", { name: "Open navigation menu" }).click();
-  await expect(page.getByRole("button", { name: "Close navigation menu" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Close navigation menu" })).toMatchAriaSnapshot('- button "Close navigation menu"');
   await page.getByRole("link", { name: "Home", exact: true }).click();
   await expect(page).toHaveURL(`${baseURL}/en`);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");

@@ -207,7 +207,7 @@ blogcoreのpage documentは言語やstorageに依存しない表示データを�
 
 公開routeはTopcoatのmodule treeから導出する。app.rsをrootとし、static segmentと`module_param!()`で宣言するdynamic segmentをfile moduleでURL構造へ対応させ、mod.rsは使わない。日本語と英語は描画処理を共有する。release-aware HTTP cacheはroute固有処理ではなくglobal layerとして構成する。
 
-Topcoat runtimeはresponsive menu、category内の記事絞り込み、UIが生成する内部linkのnavigationと先読みに使う。navigationはserverで描画したdocumentとmetadataを更新し、履歴・scrollを管理する。hover・focus・touchで先読みし、cookieを変更する言語選択linkは先読みしない。言語選択はruntime navigationのrewrite後GETにも適用する。生成Markdownのanchorは通常のbrowser navigationを維持する。初期HTMLには全記事と通常linkを含め、JavaScriptや外部CDNが失敗しても本文とnavigationを利用可能にする。UI component、asset、styleの詳細は[server README](../../crates/server/README.md)を正本とする。
+responsive menuはTopcoat UIのPopoverとブラウザー標準の開閉・focus管理を使う。serverのshellがリンク選択・履歴移動・画面幅切替に伴う閉じる処理を補う。Topcoat runtimeはcategory内の記事絞り込み、UIが生成する内部linkのnavigationと先読みに使う。navigationはserverで描画したdocumentとmetadataを更新し、履歴・scrollを管理する。hover・focus・touchで先読みし、cookieを変更する言語選択linkは先読みしない。言語選択はruntime navigationのrewrite後GETにも適用する。生成Markdownのanchorは通常のbrowser navigationを維持する。初期HTMLには全記事と通常linkを含め、JavaScriptや外部CDNが失敗しても本文とnavigationを利用可能にする。UI component、asset、styleの詳細は[server README](../../crates/server/README.md)を正本とする。
 
 ## Reader、cache、HTTP
 

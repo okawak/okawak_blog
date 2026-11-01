@@ -24,6 +24,7 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 - `src/article_filter.rs`: タイトル・説明・タグによる記事絞り込みの純粋ロジック
 - `src/components/`: `topcoat ui`が管理し、site向けに調整したvendored UI component
 - `src/shell.rs`: HTML shell、metadata、error view、生成contentのprogressive enhancement
+- `src/navigation.js`: shellへ埋め込み、リンク選択・履歴移動・画面幅切替でmobile popoverを閉じる補助処理
 - `src/assets.rs`: application所有のbundle asset登録
 - `src/icons.rs`: 同梱したGitHub Octiconsの単一SVG（[MITライセンス](licenses/Octicons-MIT.txt)）をTopcoatのicon componentへ渡す
 - `components.toml`: Topcoat UIのtheme・component install state
@@ -42,7 +43,9 @@ productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone
 
 記事card・カテゴリ・header・言語切替のlinkは`runtime::link_attrs`により、SSR結果でdocument・title・metadataを更新するruntime navigationを使います。既定の`PrefetchMode::Intent`でhover・focus・touch時に先読みし、cookieを保存する言語切替と日本語homeの`?lang=ja` linkは`Never`にします。言語選択はruntime POSTがrewriteされたGETにも適用し、validatorの判定だけはoriginal methodを使います。言語切替の表示はTopcoat UIの`toggle_group`を使います。生成Markdown内のanchor（text fragmentを含む）と外部linkはブラウザ標準のnavigationを維持します。JavaScript無効時はすべて通常のanchorとして利用できます。
 
-検索fieldは`field` / `field_label` / `field_description` / `input`を使い、入力と検索対象の説明を`aria-describedby`で関連付けます。category・tag・countは`badge`、記事一覧は`card`、状態表示は`alert`で構成します。headerの操作とnavigation linkは`button`のstyleを共有し、GitHub linkは`tooltip`で補足します。mobile menuの状態管理はTopcoat runtimeのsignalとevent expressionで構成し、独立したheader component内でsignalを作り、宣言をHTML document内に置きます。signalのidentityをrequest pathで分けて別pageへ開閉状態を持ち越しません。履歴移動とscrollの復元はTopcoat runtimeが担当します。
+検索fieldは`field` / `field_label` / `field_description` / `input`を使い、`element_id(cx)`で再描画後も安定したIDを生成し、labelと入力、検索対象の説明を関連付けます。category・tag・countは`badge`、記事一覧は`card`、状態表示は`alert`で構成します。headerの操作とnavigation linkは`button`のstyleを共有し、GitHub linkは`tooltip`で補足します。tooltipも生成IDで`aria-describedby`を関連付け、`floating`のCSS anchor positioningと配置fallbackで画面端を避けます。mobile menuは公式`popover` / `popover_trigger` / `popover_content`を使い、`element_id`でtriggerとpanelを関連付けます。開閉、外側クリック、Escape、focus復帰と支援技術へのexpanded状態はブラウザーのPopover APIが担当し、JavaScriptなしでも操作できます。日英の開閉ラベルとアイコンは`:popover-open`に連動します。desktopとmobileは同じnavigation componentからリンクを生成します。`src/navigation.js`をshellへ埋め込み、リンク選択・履歴移動・desktop幅への切替でpanelを閉じます。panelのIDはrequest pathで分けます。履歴移動とscrollの復元はTopcoat runtimeが担当します。
+
+件数と記事の日付はTopcoatの`l10n-number` / `l10n-datetime`で明示的な日英localeへ整形します。件数は桁区切りを付け、日付はartifactのoffsetにおける日を維持して時刻を表示しません。server内でblogcoreの`Locale`をTopcoatのlocaleへ変換し、共有modelにはframework依存を持ち込みません。UI辞書は引き続き`locales/ui.json`を使い、翻訳追跡と日本語fallbackを維持します。
 
 GitHubアイコンはTopcoatのicon componentでinline SVGを描画し、icon fontや外部icon setの取得は行いません。リンクにaccessible nameを付け、装飾のSVGは支援技術から隠します。端末間の字体を揃えるNoto Sans JPはGoogle Fontsの可変ウェイト範囲`400..700`でCSSの重複を抑え、HTML headから直接参照します。`display=swap`でフォント取得中も本文を表示します。
 
@@ -54,4 +57,4 @@ Sass、Stylance、CSS module、Node / BunによるCSS生成工程はありませ
 
 `mise run dev-local`、`mise run dev`、`mise run dev-fixture`は`topcoat dev`でRust・styleの変更を監視し、再buildとasset bundleの更新を行います。`dev-local`のpublishは起動前の1回だけです。公開Markdownを変更した場合はtaskを再起動してartifactを生成し直します。
 
-shellの`topcoat::dev::script()`は`topcoat dev`実行時だけ出力されます。再build後も、対応するform入力とidentityが一致するsignal（検索語・mobile menuの開閉）を保ちます。componentやsignalの呼出位置が変わると状態がリセットされることがあり、script・base URL・doctypeの変更はfull reloadになります。productionと通常E2Eは従来どおりbundle済みbinaryを直接起動します。
+shellの`topcoat::dev::script()`は`topcoat dev`実行時だけ出力されます。再build後も、対応するform入力とidentityが一致するsignal（検索語）を保ちます。componentやsignalの呼出位置が変わると状態がリセットされることがあり、script・base URL・doctypeの変更はfull reloadになります。productionと通常E2Eは従来どおりbundle済みbinaryを直接起動します。

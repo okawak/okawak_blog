@@ -162,7 +162,7 @@ pub(crate) fn article_count(locale: Locale, count: usize) -> String {
             1 => Message::CountArticlesOne,
             _ => Message::CountArticlesMany,
         },
-        &[("count", count.to_string())],
+        &[("count", crate::format::format_count(count, locale))],
     )
 }
 pub(crate) fn category_count(locale: Locale, count: usize) -> String {
@@ -173,7 +173,7 @@ pub(crate) fn category_count(locale: Locale, count: usize) -> String {
             1 => Message::CountCategoriesOne,
             _ => Message::CountCategoriesMany,
         },
-        &[("count", count.to_string())],
+        &[("count", crate::format::format_count(count, locale))],
     )
 }
 pub(crate) fn category_name(locale: Locale, category: Category) -> &'static str {
@@ -282,6 +282,9 @@ mod tests {
         assert_eq!(article_count(Locale::En, 1), "1 article");
         assert_eq!(article_count(Locale::En, 2), "2 articles");
         assert_eq!(article_count(Locale::Ja, 1), "1件の記事");
+        assert_eq!(article_count(Locale::En, 1234), "1,234 articles");
+        assert_eq!(article_count(Locale::Ja, 1234), "1,234件の記事");
+        assert_eq!(category_count(Locale::En, 1234), "1,234 categories");
         assert_eq!(
             lookup(&LabelCatalog::default(), Locale::En, "missing"),
             "missing"
