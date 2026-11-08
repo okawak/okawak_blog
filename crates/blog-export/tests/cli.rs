@@ -77,6 +77,8 @@ exec "$FAKE_CODEX_TEST" --exact fake_codex_process --nocapture
             .args(args)
             .env("PATH", self.path("bin"))
             .env("RUST_LOG", "info")
+            // Keep log-field assertions independent of the parent terminal settings.
+            .env("NO_COLOR", "1")
             .env("FAKE_CODEX_TEST", std::env::current_exe().unwrap())
             .env("FAKE_CODEX_LOG", self.path("calls"))
             .output()
