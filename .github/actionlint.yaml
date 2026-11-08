@@ -1,0 +1,7 @@
+paths:
+  .github/workflows/upload.yml:
+    ignore:
+      # GitHub supports concurrency.queue; actionlint 1.7.12 does not yet.
+      # Remove this exception when upstream adds support:
+      # https://github.com/rhysd/actionlint/issues/657
+      - '^unexpected key "queue" for "concurrency" section\.'

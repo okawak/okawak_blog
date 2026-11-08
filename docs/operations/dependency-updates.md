@@ -10,7 +10,8 @@
 | E2EのBun package | `bun` | `e2e/package.json`、`e2e/bun.lock` |
 | Bun本体 | `mise` | `mise.toml`の`[tools].bun`、`mise.lock` |
 | GitHub Actions | `github-actions` | `.github/workflows/*.yml` |
-| Rust toolchain | `rust-toolchain` | `rust-toolchain.toml` |
+
+Rust toolchainは`rust-toolchain.toml`で`stable`を指定し、Renovateの更新対象から除外します。`minimal` profileに`clippy`・`rustfmt`を追加し、新規インストール時の容量を抑えます。ローカルでは`rustup update stable`で更新します。Rust CIの各jobと公開用workflowでは、共通build toolのセットアップ前に`rustup update stable --no-self-update`を実行します。更新によるClippy・formatの変更はCIで確認します。コンパイラのversionは固定されないため、過去のcommitを同じコンパイラで再ビルドする再現性は保証しません。
 
 - `config:best-practices`を使い、Dependency DashboardのIssueで更新状況を確認します。[presetの内容](https://docs.renovatebot.com/presets-config/#configbest-practices)
 - GitHub Actionsをcommit SHAに固定し、対応versionをcommentで追跡します。開発依存のversion固定、npmパッケージ公開後3日の待機、メンテナンス停止候補の検出、Renovate設定のmigration PRも有効になります。

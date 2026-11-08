@@ -65,6 +65,11 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Update Rust stable toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup show
+
       - name: Set up shared build tools
         uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5
 
@@ -210,13 +215,15 @@ jobs:
       - name: Notify on failure
         if: failure()
         run: |
-          echo "❌ Deployment failed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔧 Troubleshooting" >> $GITHUB_STEP_SUMMARY
-          echo "Please check the logs above for detailed error information." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Common issues:" >> $GITHUB_STEP_SUMMARY
-          echo "- Public Markdown or translation validation failures" >> $GITHUB_STEP_SUMMARY
-          echo "- AWS credentials or permissions" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifact generation or browser smoke failures" >> $GITHUB_STEP_SUMMARY
-          echo "- S3 sync issues" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "❌ Deployment failed"
+            echo ""
+            echo "### 🔧 Troubleshooting"
+            echo "Please check the logs above for detailed error information."
+            echo ""
+            echo "Common issues:"
+            echo "- Public Markdown or translation validation failures"
+            echo "- AWS credentials or permissions"
+            echo "- Artifact generation or browser smoke failures"
+            echo "- S3 sync issues"
+          } >> "$GITHUB_STEP_SUMMARY"
