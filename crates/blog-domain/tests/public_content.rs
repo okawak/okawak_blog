@@ -1,4 +1,4 @@
-use blog_domain::{ContentKind, Locale, PublicContentMeta};
+use blog_domain::{Category, ContentKind, Locale, PageKey, PublicContentMeta, SectionPath, TagId};
 
 fn metadata() -> PublicContentMeta {
     serde_json::from_value(serde_json::json!({
@@ -13,6 +13,11 @@ fn metadata() -> PublicContentMeta {
 
 #[test]
 fn locale_preserves_japanese_routes_and_separates_english_keys() {
+    for (locale, code) in [(Locale::Ja, "ja"), (Locale::En, "en")] {
+        assert_eq!(locale.as_str(), code);
+        assert_eq!(locale.to_string(), code);
+        assert_eq!(code.parse::<Locale>().unwrap(), locale);
+    }
     assert_eq!(Locale::Ja.path("/tech/legacy123456"), "/tech/legacy123456");
     assert_eq!(
         Locale::En.path("/tech/legacy123456"),
@@ -24,6 +29,97 @@ fn locale_preserves_japanese_routes_and_separates_english_keys() {
         "en/articles/index.json"
     );
     assert!("fr".parse::<Locale>().is_err());
+}
+
+#[test]
+fn public_content_kinds_require_their_own_routing_fields() {
+    for (kind, category, page, valid) in [
+        (ContentKind::Article, Some(Category::Tech), None, true),
+        (ContentKind::Article, None, None, false),
+        (
+            ContentKind::Article,
+            Some(Category::Tech),
+            Some("about"),
+            false,
+        ),
+        (ContentKind::Article, None, Some("about"), false),
+        (ContentKind::Category, Some(Category::Tech), None, true),
+        (ContentKind::Category, None, None, false),
+        (
+            ContentKind::Category,
+            Some(Category::Tech),
+            Some("about"),
+            false,
+        ),
+        (ContentKind::Category, None, Some("about"), false),
+        (ContentKind::Page, None, Some("about"), true),
+        (
+            ContentKind::Page,
+            Some(Category::Tech),
+            Some("about"),
+            false,
+        ),
+        (ContentKind::Page, None, None, false),
+        (ContentKind::Page, None, Some("contact"), false),
+        (ContentKind::Home, None, None, true),
+        (ContentKind::Home, Some(Category::Tech), None, false),
+        (ContentKind::Home, None, Some("about"), false),
+        (
+            ContentKind::Home,
+            Some(Category::Tech),
+            Some("about"),
+            false,
+        ),
+    ] {
+        let meta = PublicContentMeta {
+            kind,
+            category,
+            page: page.map(|page| PageKey::new(page.into()).unwrap()),
+            ..metadata()
+        };
+        assert_eq!(
+            meta.validate().is_ok(),
+            valid,
+            "kind={kind:?}, category={category:?}, page={page:?}"
+        );
+    }
+}
+
+#[test]
+fn tags_and_sections_are_each_restricted_to_articles() {
+    for (kind, category, page) in [
+        (ContentKind::Category, Some(Category::Tech), None),
+        (ContentKind::Page, None, Some("about")),
+        (ContentKind::Home, None, None),
+    ] {
+        let meta = PublicContentMeta {
+            kind,
+            category,
+            page: page.map(|page| PageKey::new(page.into()).unwrap()),
+            ..metadata()
+        };
+        meta.validate().unwrap();
+        for (tags, section_path) in [
+            (
+                vec![TagId::new("rust".into()).unwrap()],
+                SectionPath::default(),
+            ),
+            (vec![], SectionPath::new(vec!["rust".into()]).unwrap()),
+        ] {
+            let invalid = PublicContentMeta {
+                tags: tags.clone(),
+                section_path: section_path.clone(),
+                ..meta.clone()
+            };
+            assert!(invalid.validate().is_err(), "{kind:?}");
+            let article = PublicContentMeta {
+                tags,
+                section_path,
+                ..metadata()
+            };
+            article.validate().unwrap();
+        }
+    }
 }
 
 #[test]

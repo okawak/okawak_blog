@@ -200,6 +200,25 @@ mod tests {
     use super::{Category, SectionPath, Timestamp, Title};
 
     #[test]
+    fn title_display_preserves_source_text() {
+        let title = Title::new("  日本語の記事  ".into()).unwrap();
+        assert_eq!(title.to_string(), "  日本語の記事  ");
+    }
+
+    #[test]
+    fn categories_parse_and_display_their_public_identifiers() {
+        for (value, category) in [
+            ("tech", Category::Tech),
+            ("daily", Category::Daily),
+            ("statistics", Category::Statistics),
+            ("physics", Category::Physics),
+        ] {
+            assert_eq!(value.parse::<Category>().unwrap(), category);
+            assert_eq!(category.to_string(), value);
+        }
+    }
+
+    #[test]
     fn test_section_path_exposes_ordered_segments() {
         let path = SectionPath::new(vec!["rust".to_string(), "async".to_string()]).unwrap();
 
