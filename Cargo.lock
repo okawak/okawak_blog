@@ -685,6 +685,8 @@ dependencies = [
  "aws-smithy-types",
  "blog-domain",
  "http 1.5.0",
+ "indoc",
+ "rstest",
  "serde",
  "serde_json",
  "tempfile",

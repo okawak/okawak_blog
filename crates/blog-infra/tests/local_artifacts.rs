@@ -1,15 +1,16 @@
 use blog_domain::{Category, SiteLocalesDocument, Slug};
 use blog_infra::{ArtifactReader, ArtifactSnapshot, CachingArtifactReader, LocalArtifactReader};
+use rstest::rstest;
 use std::{fs, sync::Arc, time::Duration};
 use tempfile::TempDir;
 
 #[tokio::test]
 async fn caches_nonempty_locale_catalogs_and_article_html() {
     let root = tempfile::tempdir().unwrap();
-    std::fs::create_dir_all(root.path().join("articles/tech")).unwrap();
+    fs::create_dir_all(root.path().join("articles/tech")).unwrap();
     let catalog = r#"{"schema_version":1,"routes":{"/":["ja","en"]}}"#;
-    std::fs::write(root.path().join("locales.json"), catalog).unwrap();
-    std::fs::write(root.path().join("articles/tech/intro.html"), "<p>Intro</p>").unwrap();
+    fs::write(root.path().join("locales.json"), catalog).unwrap();
+    fs::write(root.path().join("articles/tech/intro.html"), "<p>Intro</p>").unwrap();
     let reader = CachingArtifactReader::new(
         Arc::new(LocalArtifactReader::new(root.path())),
         Duration::from_secs(60),
@@ -28,8 +29,8 @@ async fn caches_nonempty_locale_catalogs_and_article_html() {
                 .unwrap(),
             "<p>Intro</p>"
         );
-        std::fs::write(root.path().join("locales.json"), "corrupt after first read").unwrap();
-        std::fs::write(root.path().join("articles/tech/intro.html"), "changed").unwrap();
+        fs::write(root.path().join("locales.json"), "corrupt after first read").unwrap();
+        fs::write(root.path().join("articles/tech/intro.html"), "changed").unwrap();
     }
 }
 
@@ -42,12 +43,6 @@ async fn optional_catalogs_default_only_when_missing() {
         SiteLocalesDocument::default()
     );
     assert!(reader.read_tag_labels().await.unwrap().is_empty());
-    for content in [b"invalid json".as_slice(), &[255]] {
-        fs::write(root.path().join("locales.json"), content).unwrap();
-        fs::write(root.path().join("tags.json"), content).unwrap();
-        assert!(reader.read_locales().await.is_err());
-        assert!(reader.read_tag_labels().await.is_err());
-    }
     fs::write(root.path().join("tags.json"), r#"{"rust":"Rust articles"}"#).unwrap();
     assert_eq!(
         reader
@@ -58,4 +53,17 @@ async fn optional_catalogs_default_only_when_missing() {
             .map(String::as_str),
         Some("Rust articles")
     );
+}
+
+#[rstest]
+#[case::malformed_json(b"invalid json")]
+#[case::invalid_utf8(&[255])]
+#[tokio::test]
+async fn optional_catalogs_reject_invalid_content(#[case] content: &[u8]) {
+    let root = TempDir::new().unwrap();
+    let reader = LocalArtifactReader::new(root.path());
+    fs::write(root.path().join("locales.json"), content).unwrap();
+    fs::write(root.path().join("tags.json"), content).unwrap();
+    assert!(reader.read_locales().await.is_err());
+    assert!(reader.read_tag_labels().await.is_err());
 }

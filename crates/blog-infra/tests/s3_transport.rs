@@ -6,6 +6,8 @@ use blog_domain::{
     ArtifactReleasePointerDocument, Category, ContentAssetName, Locale, SiteLocalesDocument, Slug,
 };
 use blog_infra::{ArtifactReader, S3ArtifactLocation, S3ArtifactReader};
+use indoc::indoc;
+use rstest::rstest;
 
 fn event(key: &str, status: u16, body: impl Into<SdkBody>) -> ReplayEvent {
     ReplayEvent::new(
@@ -61,7 +63,12 @@ async fn release_snapshot_preserves_identity_localized_text_and_shared_binary_as
         content_commit: None,
         generated_at: "2026-01-01T00:00:00Z".into(),
     };
-    let locales = r#"{"schema_version":1,"routes":{"/":["ja","en"],"/tech/intro":["ja","en"]}}"#;
+    let locales = indoc! {r#"
+        {
+            "schema_version": 1,
+            "routes": {"/": ["ja", "en"], "/tech/intro": ["ja", "en"]}
+        }
+    "#};
     let name = ContentAssetName::new(format!("{}.png", "a".repeat(64))).unwrap();
     let (reader, transport) = reader(vec![
         event(
@@ -146,51 +153,54 @@ async fn missing_pointer_and_optional_objects_keep_legacy_japanese_behavior() {
     transport.assert_requests_match(&[]);
 }
 
+#[rstest]
+#[case::access_denied(403, "<Error><Code>AccessDenied</Code></Error>")]
+#[case::malformed_json(200, "invalid json")]
 #[tokio::test]
-async fn pointer_errors_do_not_fall_back_to_legacy_storage() {
-    for (status, body) in [
-        (403, "<Error><Code>AccessDenied</Code></Error>"),
-        (200, "invalid json"),
-    ] {
-        let (reader, transport) = reader(vec![event("current.json", status, body)]);
-        assert!(reader.snapshot().await.is_err());
-        transport.assert_requests_match(&[]);
-    }
+async fn pointer_errors_do_not_fall_back_to_legacy_storage(
+    #[case] status: u16,
+    #[case] body: &'static str,
+) {
+    let (reader, transport) = reader(vec![event("current.json", status, body)]);
+    assert!(reader.snapshot().await.is_err());
+    transport.assert_requests_match(&[]);
 }
 
+#[rstest]
+#[case::locales("locales.json".into())]
+#[case::tags("tags.json".into())]
+#[case::asset(format!("content-assets/{}.png", "c".repeat(64)))]
 #[tokio::test]
-async fn optional_objects_propagate_access_and_decoding_errors() {
+async fn optional_objects_propagate_access_errors(#[case] key: String) {
     let name = ContentAssetName::new(format!("{}.png", "c".repeat(64))).unwrap();
-    for key in [
-        "locales.json".to_owned(),
-        "tags.json".into(),
-        format!("content-assets/{}", name.as_str()),
-    ] {
-        let (reader, transport) = reader(vec![
-            missing("current.json"),
-            event(&key, 403, "<Error><Code>AccessDenied</Code></Error>"),
-        ]);
-        let snapshot = reader.snapshot().await.unwrap();
-        let failed = match key.as_str() {
-            "locales.json" => snapshot.read_locales().await.is_err(),
-            "tags.json" => snapshot.read_tag_labels().await.is_err(),
-            _ => snapshot.read_content_asset(&name).await.is_err(),
-        };
-        assert!(failed, "{key}");
-        transport.assert_requests_match(&[]);
-    }
-    for body in [b"invalid json".to_vec(), vec![255]] {
-        let (reader, transport) =
-            reader(vec![missing("current.json"), event("tags.json", 200, body)]);
-        assert!(
-            reader
-                .snapshot()
-                .await
-                .unwrap()
-                .read_tag_labels()
-                .await
-                .is_err()
-        );
-        transport.assert_requests_match(&[]);
-    }
+    let (reader, transport) = reader(vec![
+        missing("current.json"),
+        event(&key, 403, "<Error><Code>AccessDenied</Code></Error>"),
+    ]);
+    let snapshot = reader.snapshot().await.unwrap();
+    let failed = match key.as_str() {
+        "locales.json" => snapshot.read_locales().await.is_err(),
+        "tags.json" => snapshot.read_tag_labels().await.is_err(),
+        _ => snapshot.read_content_asset(&name).await.is_err(),
+    };
+    assert!(failed, "{key}");
+    transport.assert_requests_match(&[]);
+}
+
+#[rstest]
+#[case::malformed_json(b"invalid json".to_vec())]
+#[case::invalid_utf8(vec![255])]
+#[tokio::test]
+async fn optional_tags_propagate_decoding_errors(#[case] body: Vec<u8>) {
+    let (reader, transport) = reader(vec![missing("current.json"), event("tags.json", 200, body)]);
+    assert!(
+        reader
+            .snapshot()
+            .await
+            .unwrap()
+            .read_tag_labels()
+            .await
+            .is_err()
+    );
+    transport.assert_requests_match(&[]);
 }

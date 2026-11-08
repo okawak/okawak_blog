@@ -1,5 +1,6 @@
 use blog_domain::{LabelCatalog, LabelEntry};
 use blog_export::{ProtectedContent, Texts, TranslationRequest, TranslationSettings, Translator};
+use rstest::rstest;
 use std::{cell::Cell, fs};
 
 struct Fake(Cell<usize>);
@@ -514,63 +515,64 @@ fn catalog_directory_alias_uses_the_real_public_tree_lock_for_update_and_accepta
     assert_eq!(fake.0.get(), 2);
 }
 
-#[test]
-fn accepting_catalog_candidates_checks_identity_source_context_and_freshness() {
-    for field in ["key", "source", "context", "stale", "input_hash"] {
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("ui.json");
-        let mut catalog = LabelCatalog {
-            entries: [(
-                "label".into(),
-                LabelEntry {
-                    source: "原文".into(),
-                    context: "button".into(),
-                    translation: None,
-                },
-            )]
-            .into(),
-            ..Default::default()
-        };
-        save(&path, &catalog);
-        let fake = Fake(Cell::new(0));
-        blog_export::translate_catalog(&path, &fake, &settings()).unwrap();
-        catalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        catalog
-            .entries
-            .get_mut("label")
-            .unwrap()
-            .translation
-            .as_mut()
-            .unwrap()
-            .value = "Manual label".into();
-        catalog.entries.get_mut("label").unwrap().source = "更新した原文".into();
-        save(&path, &catalog);
-        blog_export::translate_catalog(&path, &fake, &settings()).unwrap();
-        let report = blog_export::translate_catalog(&path, &fake, &settings()).unwrap();
-        assert_eq!(report.reused, 1);
-        assert_eq!(report.generated, 0);
-        let candidate = fs::read_dir(root.path().join(".export-candidates/catalog"))
-            .unwrap()
-            .next()
-            .unwrap()
-            .unwrap()
-            .path();
-        let mut value: serde_json::Value =
-            serde_json::from_slice(&fs::read(&candidate).unwrap()).unwrap();
-        match field {
-            "stale" => value["translation"]["stale"] = true.into(),
-            "input_hash" => {
-                value["translation"]["provenance"]["input_hash"] = "f".repeat(64).into()
-            }
-            field => value[field] = "different".into(),
-        }
-        fs::write(&candidate, serde_json::to_vec(&value).unwrap()).unwrap();
-        let before = fs::read(&path).unwrap();
-        assert!(
-            blog_export::accept_catalog_candidate(&path, "label", &settings()).is_err(),
-            "{field}"
-        );
-        assert_eq!(fs::read(&path).unwrap(), before);
-        assert!(candidate.exists());
+#[rstest]
+#[case::key("key")]
+#[case::source("source")]
+#[case::context("context")]
+#[case::stale("stale")]
+#[case::input_hash("input_hash")]
+fn accepting_catalog_candidates_checks_identity_source_context_and_freshness(#[case] field: &str) {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("ui.json");
+    let mut catalog = LabelCatalog {
+        entries: [(
+            "label".into(),
+            LabelEntry {
+                source: "原文".into(),
+                context: "button".into(),
+                translation: None,
+            },
+        )]
+        .into(),
+        ..Default::default()
+    };
+    save(&path, &catalog);
+    let fake = Fake(Cell::new(0));
+    blog_export::translate_catalog(&path, &fake, &settings()).unwrap();
+    catalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    catalog
+        .entries
+        .get_mut("label")
+        .unwrap()
+        .translation
+        .as_mut()
+        .unwrap()
+        .value = "Manual label".into();
+    catalog.entries.get_mut("label").unwrap().source = "更新した原文".into();
+    save(&path, &catalog);
+    blog_export::translate_catalog(&path, &fake, &settings()).unwrap();
+    let report = blog_export::translate_catalog(&path, &fake, &settings()).unwrap();
+    assert_eq!(report.reused, 1);
+    assert_eq!(report.generated, 0);
+    let candidate = fs::read_dir(root.path().join(".export-candidates/catalog"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&fs::read(&candidate).unwrap()).unwrap();
+    match field {
+        "stale" => value["translation"]["stale"] = true.into(),
+        "input_hash" => value["translation"]["provenance"]["input_hash"] = "f".repeat(64).into(),
+        field => value[field] = "different".into(),
     }
+    fs::write(&candidate, serde_json::to_vec(&value).unwrap()).unwrap();
+    let before = fs::read(&path).unwrap();
+    assert!(
+        blog_export::accept_catalog_candidate(&path, "label", &settings()).is_err(),
+        "{field}"
+    );
+    assert_eq!(fs::read(&path).unwrap(), before);
+    assert!(candidate.exists());
 }

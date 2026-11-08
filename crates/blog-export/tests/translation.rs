@@ -1,4 +1,5 @@
 use blog_export::{ProtectedContent, Texts, TranslationRequest, TranslationSettings, Translator};
+use rstest::rstest;
 use std::{
     cell::Cell,
     fs,
@@ -730,64 +731,60 @@ fn codex_failure_is_typed_without_exposing_diagnostics() {
     assert!(!error.to_string().contains("PRIVATE SOURCE DIAGNOSTIC"));
 }
 
-#[test]
-fn accepting_article_candidates_checks_each_identity_and_freshness_field() {
-    for change in [
-        "original_id",
-        "original_locale",
-        "candidate_id",
-        "stale",
-        "input_hash",
-    ] {
-        let source = TempDir::new().unwrap();
-        let output = TempDir::new().unwrap();
-        write_note(source.path(), "本文");
-        blog_export::export_content(source.path(), output.path(), &Fake::new(), &settings())
-            .unwrap();
-        let en = english(output.path());
-        let ja = output.path().join("ja").join(en.file_name().unwrap());
-        let candidate = output
-            .path()
-            .join(".export-candidates")
-            .join(en.file_name().unwrap());
-        fs::create_dir_all(candidate.parent().unwrap()).unwrap();
-        fs::copy(&en, &candidate).unwrap();
-        let target = if change.starts_with("original") {
-            &ja
-        } else {
-            &candidate
-        };
-        let text = fs::read_to_string(target).unwrap();
-        let (yaml, body) = text
-            .strip_prefix("---\n")
-            .unwrap()
-            .split_once("\n---\n")
-            .unwrap();
-        let mut meta: blog_domain::PublicContentMeta = yaml_serde::from_str(yaml).unwrap();
-        match change {
-            "original_id" | "candidate_id" => meta.id = "other-id".parse().unwrap(),
-            "original_locale" => meta.locale = blog_domain::Locale::En,
-            "stale" => meta.translation.as_mut().unwrap().stale = true,
-            "input_hash" => {
-                meta.translation.as_mut().unwrap().input_hash = "f".repeat(64).parse().unwrap()
-            }
-            _ => unreachable!(),
-        }
-        meta.validate().unwrap();
-        fs::write(
-            target,
-            format!("---\n{}---\n{body}", yaml_serde::to_string(&meta).unwrap()),
-        )
+#[rstest]
+#[case::original_id("original_id")]
+#[case::original_locale("original_locale")]
+#[case::candidate_id("candidate_id")]
+#[case::stale("stale")]
+#[case::input_hash("input_hash")]
+fn accepting_article_candidates_checks_each_identity_and_freshness_field(#[case] change: &str) {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    write_note(source.path(), "本文");
+    blog_export::export_content(source.path(), output.path(), &Fake::new(), &settings()).unwrap();
+    let en = english(output.path());
+    let ja = output.path().join("ja").join(en.file_name().unwrap());
+    let candidate = output
+        .path()
+        .join(".export-candidates")
+        .join(en.file_name().unwrap());
+    fs::create_dir_all(candidate.parent().unwrap()).unwrap();
+    fs::copy(&en, &candidate).unwrap();
+    let target = if change.starts_with("original") {
+        &ja
+    } else {
+        &candidate
+    };
+    let text = fs::read_to_string(target).unwrap();
+    let (yaml, body) = text
+        .strip_prefix("---\n")
+        .unwrap()
+        .split_once("\n---\n")
         .unwrap();
-        let before = fs::read(&en).unwrap();
-        let id = en.file_stem().unwrap().to_str().unwrap().parse().unwrap();
-        assert!(
-            blog_export::accept_article_candidate(output.path(), &id, &settings()).is_err(),
-            "{change}"
-        );
-        assert_eq!(fs::read(&en).unwrap(), before);
-        assert!(candidate.exists());
+    let mut meta: blog_domain::PublicContentMeta = yaml_serde::from_str(yaml).unwrap();
+    match change {
+        "original_id" | "candidate_id" => meta.id = "other-id".parse().unwrap(),
+        "original_locale" => meta.locale = blog_domain::Locale::En,
+        "stale" => meta.translation.as_mut().unwrap().stale = true,
+        "input_hash" => {
+            meta.translation.as_mut().unwrap().input_hash = "f".repeat(64).parse().unwrap()
+        }
+        _ => unreachable!(),
     }
+    meta.validate().unwrap();
+    fs::write(
+        target,
+        format!("---\n{}---\n{body}", yaml_serde::to_string(&meta).unwrap()),
+    )
+    .unwrap();
+    let before = fs::read(&en).unwrap();
+    let id = en.file_stem().unwrap().to_str().unwrap().parse().unwrap();
+    assert!(
+        blog_export::accept_article_candidate(output.path(), &id, &settings()).is_err(),
+        "{change}"
+    );
+    assert_eq!(fs::read(&en).unwrap(), before);
+    assert!(candidate.exists());
 }
 
 #[test]
