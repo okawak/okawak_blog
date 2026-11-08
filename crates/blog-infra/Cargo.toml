@@ -18,5 +18,8 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["fs", "sync"] }
 
 [dev-dependencies]
+aws-smithy-http-client = { workspace = true, features = ["test-util"] }
+aws-smithy-types.workspace = true
+http.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

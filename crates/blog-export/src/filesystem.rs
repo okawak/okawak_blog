@@ -178,6 +178,19 @@ mod tests {
     use std::time::Duration;
 
     #[test]
+    fn visible_file_listing_excludes_directories_and_hidden_subtrees() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("visible/empty")).unwrap();
+        fs::create_dir_all(root.path().join(".hidden")).unwrap();
+        fs::write(root.path().join("visible/note.md"), "public").unwrap();
+        fs::write(root.path().join(".hidden/note.md"), "hidden").unwrap();
+        assert_eq!(
+            files(root.path()).unwrap(),
+            [root.path().join("visible/note.md")]
+        );
+    }
+
+    #[test]
     fn changed_tree_preserves_hidden_files_and_empty_directories() {
         let tmp = tempfile::tempdir().unwrap();
         let output = tmp.path().join("content");

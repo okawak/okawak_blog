@@ -77,6 +77,24 @@ mod tests {
     use super::InfraError;
 
     #[test]
+    fn not_found_messages_and_other_failures_are_distinguished() {
+        for message in ["NoSuchKey", "Not Found", "not found", "404"] {
+            let error = InfraError::s3_read("bucket", "key", std::io::Error::other(message));
+            assert!(error.is_not_found(), "{message}");
+        }
+        for error in [
+            InfraError::Io(std::io::Error::other("disk failure")),
+            InfraError::MissingConfig("bucket"),
+            InfraError::s3_read("bucket", "key", std::io::Error::other("AccessDenied")),
+            InfraError::Shared(std::sync::Arc::new(InfraError::Io(std::io::Error::other(
+                "temporary failure",
+            )))),
+        ] {
+            assert!(!error.is_not_found(), "{error}");
+        }
+    }
+
+    #[test]
     fn test_s3_read_not_found_is_detected_from_source_chain() {
         let error = InfraError::s3_read(
             "bucket",

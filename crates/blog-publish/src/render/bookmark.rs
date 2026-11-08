@@ -274,6 +274,17 @@ mod tests {
         time::{Duration, sleep, timeout},
     };
 
+    #[test]
+    fn bookmark_recognition_requires_the_entire_fragment() {
+        let bookmark = r#"<div class="bookmark"><a href="https://example.com">Example</a></div>"#;
+        assert!(parse_simple_bookmark(bookmark).is_some());
+        for html in [format!("before{bookmark}"), format!("{bookmark}after")] {
+            assert!(parse_simple_bookmark(&html).is_none(), "{html}");
+        }
+        assert!(!is_simple_bookmark_start("<div>ordinary HTML</div>"));
+        assert!(is_simple_bookmark_start(&format!(" \n{bookmark}")));
+    }
+
     #[rstest]
     #[case::ogp_title(Some("OGP title"), "Source title", "OGP title")]
     #[case::source_title(None, "Source title", "Source title")]

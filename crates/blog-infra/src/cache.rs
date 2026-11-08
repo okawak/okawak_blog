@@ -331,6 +331,36 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::UNIX_EPOCH;
 
+    #[tokio::test]
+    async fn caches_nonempty_locale_catalogs_and_article_html() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("articles/tech")).unwrap();
+        let catalog = r#"{"schema_version":1,"routes":{"/":["ja","en"]}}"#;
+        std::fs::write(root.path().join("locales.json"), catalog).unwrap();
+        std::fs::write(root.path().join("articles/tech/intro.html"), "<p>Intro</p>").unwrap();
+        let reader = CachingArtifactReader::new(
+            Arc::new(crate::LocalArtifactReader::new(root.path())),
+            Duration::from_secs(60),
+        );
+        let snapshot = reader.snapshot().await.unwrap();
+        let slug = Slug::new("intro".into()).unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                snapshot.read_locales().await.unwrap(),
+                serde_json::from_str::<SiteLocalesDocument>(catalog).unwrap()
+            );
+            assert_eq!(
+                snapshot
+                    .read_article_html(&Category::Tech, &slug)
+                    .await
+                    .unwrap(),
+                "<p>Intro</p>"
+            );
+            std::fs::write(root.path().join("locales.json"), "corrupt after first read").unwrap();
+            std::fs::write(root.path().join("articles/tech/intro.html"), "changed").unwrap();
+        }
+    }
+
     struct CountingReader {
         snapshot_calls: Arc<AtomicUsize>,
         article_reads: Arc<AtomicUsize>,

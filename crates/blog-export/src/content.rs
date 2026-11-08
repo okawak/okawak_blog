@@ -80,6 +80,41 @@ mod tests {
     use indoc::indoc;
 
     #[test]
+    fn markdown_options_recognize_each_supported_extension() {
+        use pulldown_cmark::{Event, Parser, Tag};
+        let markdown = "| head |\n| --- |\n| value |\n\nFootnote[^a]\n\n[^a]: note\n\n~~deleted~~\n\n- [x] task\n\n$x^2$\n\n[[note]]\n";
+        let events: Vec<_> = Parser::new_ext(markdown, options()).collect();
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::Start(Tag::Table(_))))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::FootnoteReference(_)))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::Start(Tag::Strikethrough)))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::TaskListMarker(true)))
+        );
+        assert!(events.iter().any(|e| matches!(e, Event::InlineMath(_))));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            Event::Start(Tag::Link {
+                link_type: pulldown_cmark::LinkType::WikiLink { .. },
+                ..
+            })
+        )));
+    }
+
+    #[test]
     fn reviewed_frontmatter_round_trips_without_changing_yaml_or_markdown() {
         let text = indoc! {"
             ---
@@ -113,5 +148,13 @@ mod tests {
         assert_eq!(document.meta.summary.as_deref(), Some("日本語: 概要\ntrue"));
         assert_eq!(document.meta.tags[0].as_str(), "true");
         assert_eq!(document.encode().unwrap(), text);
+        let mut reviewed = document.clone();
+        let mut source = document.clone();
+        source.meta.locale = blog_domain::Locale::Ja;
+        source.meta.translation = None;
+        source.meta.summary = Some("新しい原文の概要".into());
+        reviewed.refresh_translation_metadata(&source);
+        assert_eq!(reviewed.meta.summary.as_deref(), Some("日本語: 概要\ntrue"));
+        assert_eq!(reviewed.meta.translation, document.meta.translation);
     }
 }

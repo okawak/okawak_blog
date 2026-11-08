@@ -374,6 +374,30 @@ fn apply_edits(body: &str, mut edits: Vec<(Range<usize>, String)>) -> Result<Str
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn relative_paths_stay_inside_the_public_root() {
+        assert_eq!(
+            super::resolve_relative("root.md", "./sibling.md").unwrap(),
+            "sibling.md"
+        );
+        assert_eq!(
+            super::resolve_relative("tech/source.md", "../daily/target.md").unwrap(),
+            "daily/target.md"
+        );
+        assert!(super::resolve_relative("root.md", "../private.md").is_err());
+        assert!(super::resolve_relative("tech/source.md", "../../private.md").is_err());
+    }
+
+    #[test]
+    fn note_targets_reject_each_private_path_form() {
+        for target in ["folder\\note", "note\0", "/private/note", "scheme://note"] {
+            assert!(super::parse_target(target, true).is_err(), "{target:?}");
+        }
+        assert_eq!(
+            super::parse_target("note%20name#heading%20name", false).unwrap(),
+            ("note name".into(), Some("heading name".into()))
+        );
+    }
     use super::*;
     use crate::content::Document;
     use indoc::{formatdoc, indoc};

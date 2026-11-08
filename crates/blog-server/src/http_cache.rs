@@ -257,6 +257,30 @@ mod tests {
 
     const RELEASE_LAST_MODIFIED: &str = "Tue, 14 Nov 2023 22:13:20 GMT";
 
+    #[test]
+    fn validators_require_s3_with_a_nonzero_snapshot_ttl() {
+        assert!(!artifact_validators_enabled(&ArtifactSourceConfig::Local {
+            site_root: "/unused".into(),
+        }));
+        for (cache_ttl, expected) in [(Duration::ZERO, false), (Duration::from_secs(5), true)] {
+            let config = ArtifactSourceConfig::S3 {
+                location: blog_infra::S3ArtifactLocation::new("fixture", None::<String>).unwrap(),
+                cache_ttl,
+            };
+            assert_eq!(artifact_validators_enabled(&config), expected);
+        }
+    }
+
+    #[test]
+    fn opaque_tags_require_both_quotes_and_at_least_two_characters() {
+        for invalid in ["", "\"", "W/\"", "\"open", "close\"", "unquoted"] {
+            assert_eq!(weak_opaque_tag(invalid), None, "{invalid:?}");
+        }
+        for (value, expected) in [("\"\"", "\"\""), (" W/\"tag\" ", "\"tag\"")] {
+            assert_eq!(weak_opaque_tag(value), Some(expected));
+        }
+    }
+
     fn release_last_modified() -> SystemTime {
         UNIX_EPOCH + Duration::from_secs(1_700_000_000)
     }

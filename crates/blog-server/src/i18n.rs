@@ -207,6 +207,56 @@ pub(crate) fn japanese_path(path: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_or_stale_english_labels_warn_only_for_english_requests() {
+        #[derive(Clone)]
+        struct Buffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+        impl std::io::Write for Buffer {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        for locale in Locale::ALL {
+            for state in ["fresh", "stale", "missing"] {
+                let mut catalog = CATALOG.clone();
+                let entry = catalog.entries.get_mut("nav.home").unwrap();
+                match state {
+                    "stale" => entry.translation.as_mut().unwrap().stale = true,
+                    "missing" => entry.translation = None,
+                    _ => {}
+                }
+                let output = Buffer(Default::default());
+                let writer = output.clone();
+                let subscriber = tracing_subscriber::fmt()
+                    .without_time()
+                    .with_ansi(false)
+                    .with_max_level(tracing::Level::WARN)
+                    .with_writer(move || writer.clone())
+                    .finish();
+                let value = tracing::subscriber::with_default(subscriber, || {
+                    lookup(&catalog, locale, "nav.home")
+                });
+                let log = String::from_utf8(output.0.lock().unwrap().clone()).unwrap();
+                assert_eq!(
+                    log.contains("English UI message unavailable"),
+                    locale == Locale::En && state != "fresh"
+                );
+                assert_eq!(
+                    value,
+                    if locale == Locale::En && state == "fresh" {
+                        "Home"
+                    } else {
+                        "ホーム"
+                    }
+                );
+            }
+        }
+    }
     #[test]
     fn every_message_key_has_both_languages() {
         let keys = [
@@ -285,6 +335,9 @@ mod tests {
         assert_eq!(article_count(Locale::En, 1234), "1,234 articles");
         assert_eq!(article_count(Locale::Ja, 1234), "1,234件の記事");
         assert_eq!(category_count(Locale::En, 1234), "1,234 categories");
+        assert_eq!(category_count(Locale::En, 0), "0 categories");
+        assert_eq!(category_count(Locale::En, 1), "1 category");
+        assert_eq!(category_count(Locale::En, 2), "2 categories");
         assert_eq!(
             lookup(&LabelCatalog::default(), Locale::En, "missing"),
             "missing"

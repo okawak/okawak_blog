@@ -157,6 +157,15 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     #[test]
+    fn filesystem_errors_are_not_treated_as_missing_optional_inputs() {
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("regular-file");
+        fs::write(&file, "not a directory").unwrap();
+        assert!(read_tag_catalog(&file).is_err());
+        assert!(public_directory_exists(&file.join("child")).is_err());
+    }
+
+    #[test]
     fn rejects_symlinked_public_input_directories() {
         let temp = tempfile::tempdir().unwrap();
         let external = temp.path().join("external");

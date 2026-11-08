@@ -838,6 +838,120 @@ async fn internal_links_enable_navigation_without_prefetching_language_choices()
 }
 
 #[tokio::test]
+async fn site_title_links_preserve_the_page_locale_and_prefetch_policy() {
+    let router = create_router(fixture_reader(), false);
+    for (path, href, prefetch) in [
+        ("/about", "/?lang=ja", "never"),
+        ("/en/about", "/en", "intent"),
+    ] {
+        let result = response(
+            &router,
+            Request::builder().uri(path).body(Body::empty()).unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::OK);
+        let title_link = result
+            .body
+            .split("<a ")
+            .filter_map(|part| part.split_once("</a>").map(|(anchor, _)| anchor))
+            .find(|anchor| anchor.contains("<h1 "))
+            .expect("site title link");
+        assert!(
+            title_link.contains(&format!("href=\"{href}\"")),
+            "{title_link}"
+        );
+        assert!(
+            title_link.contains(&format!("data-topcoat-link=\"{prefetch}\"")),
+            "{title_link}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn runtime_home_response_varies_by_language_but_other_pages_do_not() {
+    let router = create_router(fixture_reader(), false);
+    for path in ["/", "/about"] {
+        let result = response(
+            &router,
+            Request::builder()
+                .method(Method::POST)
+                .uri(path)
+                .header(&topcoat::runtime::RUNTIME_HEADER, "true")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::ACCEPT_LANGUAGE, "ja")
+                .body(Body::from(r#"{"signals":{}}"#))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::OK);
+        if path == "/" {
+            assert_eq!(result.headers[header::VARY], "Accept-Language, Cookie");
+            assert_eq!(result.headers[header::CACHE_CONTROL], "private, no-cache");
+        } else {
+            assert!(!result.headers.contains_key(header::CACHE_CONTROL));
+        }
+    }
+}
+
+#[tokio::test]
+async fn unavailable_language_choice_on_a_runtime_page_does_not_add_home_cache_headers() {
+    let root = tempdir().unwrap();
+    std::fs::create_dir(root.path().join("pages")).unwrap();
+    std::fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site/pages/about.json"),
+        root.path().join("pages/about.json"),
+    )
+    .unwrap();
+    let router = create_router(Arc::new(LocalArtifactReader::new(root.path())), false);
+    let result = response(
+        &router,
+        Request::builder()
+            .method(Method::POST)
+            .uri("/about?lang=en")
+            .header(&topcoat::runtime::RUNTIME_HEADER, "true")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(r#"{"signals":{}}"#))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(result.status, StatusCode::OK);
+    assert!(!result.headers.contains_key(header::LOCATION));
+    assert!(!result.headers.contains_key(header::CACHE_CONTROL));
+    // Topcoat may vary by its runtime header; only home negotiates browser language.
+    assert!(
+        result
+            .headers
+            .get(header::VARY)
+            .is_none_or(|value| { !value.to_str().unwrap().contains("Accept-Language") })
+    );
+}
+
+#[tokio::test]
+async fn article_read_failure_is_not_reported_as_not_found() {
+    let root = tempdir().unwrap();
+    std::fs::create_dir_all(root.path().join("articles/tech")).unwrap();
+    std::fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../e2e/fixtures/site/articles/index.json"),
+        root.path().join("articles/index.json"),
+    )
+    .unwrap();
+    // Invalid UTF-8 is an I/O failure that is portable even when tests run as root.
+    std::fs::write(root.path().join("articles/tech/e2e-article.html"), [0xff]).unwrap();
+    let router = create_router(Arc::new(LocalArtifactReader::new(root.path())), false);
+    let result = response(
+        &router,
+        Request::builder()
+            .uri("/tech/e2e-article")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(result.status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(result.body.contains("記事の読み込みに失敗しました"));
+}
+
+#[tokio::test]
 async fn home_shell_exposes_topcoat_mobile_navigation_contract() {
     let router = create_router(fixture_reader(), false);
     let response = response(

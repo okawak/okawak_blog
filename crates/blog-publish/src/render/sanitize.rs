@@ -280,4 +280,27 @@ mod tests {
         assert!(!sanitize("<a id=\"section-123\" onclick=\"bad()\"></a>").contains("<a id="));
         assert!(!sanitize("<a id=\"section-123\">content</a>").contains("<a id="));
     }
+
+    #[test]
+    fn heading_anchors_do_not_consume_the_following_event() {
+        let output = events(
+            [
+                Event::InlineHtml("<a id=\"section-123\">".into()),
+                Event::InlineHtml("</a>".into()),
+                Event::Text("after split anchor".into()),
+                Event::Html("<a id=\"section-456\"></a>".into()),
+                Event::Text("after complete anchor".into()),
+            ]
+            .into_iter(),
+        );
+        assert_eq!(
+            output,
+            [
+                Event::Html("<a id=\"section-123\"></a>".into()),
+                Event::Text("after split anchor".into()),
+                Event::Html("<a id=\"section-456\"></a>".into()),
+                Event::Text("after complete anchor".into()),
+            ]
+        );
+    }
 }

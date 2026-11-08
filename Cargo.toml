@@ -20,11 +20,14 @@ anyhow = "1"
 async-trait = "0.1"
 aws-config = { version = "1", default-features = false }
 aws-sdk-s3 = { version = "1", default-features = false }
+aws-smithy-http-client = { version = "1", default-features = false }
+aws-smithy-types = "1"
 chrono = "0.4"
 clap = "4"
 futures = "0.3"
 html-escape = "0.3"
 httpdate = "1"
+http = "1"
 indoc = "2"
 pulldown-cmark = "0.13"
 percent-encoding = "2"
