@@ -41,12 +41,19 @@ mod tests {
     use super::*;
     #[test]
     fn validates_asset_keys_and_media_types() {
-        assert_eq!(
-            ContentAssetName::new(format!("{}.png", "a".repeat(64)))
-                .unwrap()
-                .media_type(),
-            "image/png"
-        );
+        for (extension, media_type) in [
+            ("png", "image/png"),
+            ("jpg", "image/jpeg"),
+            ("jpeg", "image/jpeg"),
+            ("gif", "image/gif"),
+            ("webp", "image/webp"),
+            ("avif", "image/avif"),
+        ] {
+            let name = format!("{}.{extension}", "a".repeat(64));
+            let asset = ContentAssetName::new(name.clone()).unwrap();
+            assert_eq!(asset.as_str(), name);
+            assert_eq!(asset.media_type(), media_type);
+        }
         for bad in ["../secret.png", "image.png", "/file.jpg", "file.svg"] {
             assert!(ContentAssetName::new(bad).is_err());
         }

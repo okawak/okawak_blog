@@ -134,6 +134,7 @@ mod tests {
 
         assert_eq!(documents.article_index.articles.len(), 2);
         assert_eq!(documents.category_documents.len(), 2);
+        assert_eq!(documents.category_count(), 2);
         assert_eq!(documents.site_metadata.total_articles, 2);
         assert_eq!(documents.article_index.articles[0].slug, "second000002");
     }

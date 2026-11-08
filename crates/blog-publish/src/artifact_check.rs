@@ -77,3 +77,24 @@ fn json_files(directory: &Path) -> Result<Vec<PathBuf>> {
     paths.sort();
     Ok(paths)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn json_scan_sorts_files_and_distinguishes_missing_directories_from_io_errors() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(json_files(&root.path().join("missing")).unwrap().is_empty());
+        for name in ["b.json", "a.json", "ignored.txt"] {
+            fs::write(root.path().join(name), "{}").unwrap();
+        }
+        assert_eq!(
+            json_files(root.path()).unwrap(),
+            [root.path().join("a.json"), root.path().join("b.json")]
+        );
+        assert!(json_files(&root.path().join("a.json")).is_err());
+        fs::create_dir(root.path().join("directory.json")).unwrap();
+        assert!(json_files(root.path()).is_err());
+    }
+}

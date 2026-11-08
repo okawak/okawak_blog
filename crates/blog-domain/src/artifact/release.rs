@@ -104,8 +104,14 @@ mod tests {
         assert!(current.validate().is_ok());
         let encoded = serde_json::to_value(&current).unwrap();
         assert_eq!(encoded["source_commit"], "source-sha");
-        current.content_commit = Some("bad revision".into());
-        assert!(current.validate().is_err());
+        // Length and hexadecimal content are independent requirements.
+        for invalid in ["a".repeat(39), "a".repeat(41), "g".repeat(40)] {
+            current.content_commit = Some(invalid);
+            assert_eq!(
+                current.validate(),
+                Err(crate::DomainError::validation("content_commit"))
+            );
+        }
     }
 
     #[test]

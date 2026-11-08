@@ -138,6 +138,38 @@ mod tests {
     }
 
     #[test]
+    fn response_text_limits_accept_the_boundary_and_reject_the_next_byte() {
+        for source in ["short".to_owned(), "a".repeat(300)] {
+            let request = TranslationRequest::new(
+                [("value".into(), source.clone())].into(),
+                String::new(),
+                &settings(Texts::new()),
+            );
+            let limit = if source.len() == 300 { 6000 } else { 4096 };
+            assert!(
+                request
+                    .validate(&[("value".into(), "a".repeat(limit))].into())
+                    .is_ok()
+            );
+            assert!(
+                request
+                    .validate(&[("value".into(), "a".repeat(limit + 1))].into())
+                    .is_err()
+            );
+        }
+        let empty = TranslationRequest::new(
+            [("value".into(), " ".into())].into(),
+            String::new(),
+            &settings(Texts::new()),
+        );
+        assert!(
+            empty
+                .validate(&[("value".into(), String::new())].into())
+                .is_ok()
+        );
+    }
+
+    #[test]
     fn request_includes_only_glossary_terms_present_in_text_or_context() {
         let request = TranslationRequest::new(
             [("value".into(), "Rustの記事".into())].into(),

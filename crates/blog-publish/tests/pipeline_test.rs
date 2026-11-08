@@ -110,6 +110,7 @@ async fn test_publish_writes_article_index_and_metadata(#[case] padded_metadata:
 
     let site_metadata: SiteMetadataDocument = read_json(site_root.join("metadata/site.json"));
     assert_eq!(site_metadata.total_articles, 1);
+    assert!(!site_root.join("en").exists());
 }
 
 #[tokio::test]
@@ -762,6 +763,14 @@ fn write_english_copies(fixture: &PublishFixture) {
 #[case("section_path", "[different-section]")]
 #[case("priority", "999")]
 #[case("updated", "'2026-09-19T00:00:00+09:00'")]
+#[case("kind", "category")]
+#[case("category", "daily")]
+#[case("tags", "[different-tag]")]
+#[case("created", "'2026-09-19T00:00:00+09:00'")]
+#[case(
+    "source_hash",
+    "'1111111111111111111111111111111111111111111111111111111111111111'"
+)]
 #[tokio::test]
 async fn rejects_divergent_english_management_metadata_without_replacing_release(
     #[case] field: &str,
@@ -858,4 +867,267 @@ async fn rejects_linked_tag_catalog_without_replacing_existing_release() {
             before
         );
     }
+}
+
+#[tokio::test]
+async fn publishes_shared_assets_referenced_from_markdown_images_links_and_tables() {
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    let name = format!("{}.png", "a".repeat(64));
+    fs::create_dir(fixture.content_dir().join("assets")).unwrap();
+    fs::write(
+        fixture.content_dir().join("assets").join(&name),
+        [0, 255, 17],
+    )
+    .unwrap();
+    fixture.write_article("tech/asset.md", "Asset", "tech", &format!(
+        "![image](/content-assets/{name})\n\n[download](/content-assets/{name})\n\n| image |\n| --- |\n| ![same](/content-assets/{name}) |\n"));
+    publish(fixture.content_dir(), fixture.output_dir())
+        .await
+        .unwrap();
+    assert_eq!(
+        fs::read(fixture.site_root().join("content-assets").join(&name)).unwrap(),
+        [0, 255, 17]
+    );
+    assert_eq!(
+        fs::read_dir(fixture.site_root().join("content-assets"))
+            .unwrap()
+            .count(),
+        1
+    );
+    let html =
+        fs::read_to_string(fixture.site_root().join("articles/tech/tech-asset.html")).unwrap();
+    assert!(html.contains(&format!("src=\"/content-assets/{name}\"")));
+    fs::remove_file(fixture.content_dir().join("assets").join(&name)).unwrap();
+    fs::create_dir(fixture.content_dir().join("assets").join(&name)).unwrap();
+    assert!(
+        publish(fixture.content_dir(), fixture.output_dir())
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        fs::read(fixture.site_root().join("content-assets").join(name)).unwrap(),
+        [0, 255, 17]
+    );
+}
+
+#[tokio::test]
+async fn english_articles_need_an_eligible_category_landing() {
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    write_english_copies(&fixture);
+    let landing = fixture.content_dir().join("en/tech-category.md");
+    fs::write(
+        &landing,
+        fs::read_to_string(&landing)
+            .unwrap()
+            .replace("stale: false", "stale: true"),
+    )
+    .unwrap();
+    publish(fixture.content_dir(), fixture.output_dir())
+        .await
+        .unwrap();
+    let index: ArticleIndexDocument = read_json(fixture.site_root().join("en/articles/index.json"));
+    assert!(index.articles.is_empty());
+    assert!(!fixture.site_root().join("en/categories/tech.json").exists());
+    assert!(fixture.site_root().join("en/pages/about.json").exists());
+}
+
+#[tokio::test]
+async fn filename_and_locale_are_independently_checked() {
+    for change in ["filename", "locale"] {
+        let fixture = PublishFixture::new();
+        fixture.write_required_site();
+        let path = fixture.content_dir().join("ja/tech-required-article.md");
+        if change == "filename" {
+            fs::rename(&path, path.with_file_name("other.md")).unwrap();
+        } else {
+            fs::write(
+                &path,
+                fs::read_to_string(&path)
+                    .unwrap()
+                    .replace("locale: ja", "locale: en"),
+            )
+            .unwrap();
+        }
+        assert!(
+            publish(fixture.content_dir(), fixture.output_dir())
+                .await
+                .is_err(),
+            "{change}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn public_links_reject_wikilinks_even_inside_tables() {
+    for body in [
+        "[[private-note]]",
+        "| link |\n| --- |\n| [[private-note]] |",
+        "[private](../note.md)",
+    ] {
+        let fixture = PublishFixture::new();
+        fixture.write_required_site();
+        fixture.write_article("tech/link.md", "Link", "tech", body);
+        assert!(
+            publish(fixture.content_dir(), fixture.output_dir())
+                .await
+                .is_err(),
+            "{body}"
+        );
+    }
+}
+
+#[test]
+fn cli_honors_input_output_and_artifact_validation() {
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    let run = |args: &[&std::ffi::OsStr]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_blog-publish"))
+            .current_dir(fixture._temp_dir.path())
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let help = run(&["--help".as_ref()]);
+    assert!(help.status.success());
+    assert!(String::from_utf8_lossy(&help.stdout).contains("--validate-artifacts SITE_ROOT"));
+    let output = run(&[
+        "--input".as_ref(),
+        fixture.content_dir().as_os_str(),
+        "--output".as_ref(),
+        fixture.output_dir().as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(fixture.site_root().join("articles/index.json").is_file());
+    assert!(
+        run(&[
+            "--validate-artifacts".as_ref(),
+            fixture.site_root().as_os_str()
+        ])
+        .status
+        .success()
+    );
+    fs::write(fixture.site_root().join("articles/index.json"), "invalid").unwrap();
+    assert!(
+        !run(&[
+            "--validate-artifacts".as_ref(),
+            fixture.site_root().as_os_str()
+        ])
+        .status
+        .success()
+    );
+}
+
+#[tokio::test]
+async fn staging_stays_beside_the_destination_for_atomic_release_replacement() {
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    let parent = fixture.output_dir().parent().unwrap().to_path_buf();
+    let staging_parent = parent.clone();
+    let enricher: BookmarkEnricher = Arc::new(move |html| {
+        let parent = staging_parent.clone();
+        Box::pin(async move {
+            let stages: Vec<_> = fs::read_dir(parent)
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .filter(|path| {
+                    path.file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .starts_with(".publish-stage-")
+                })
+                .collect();
+            assert_eq!(
+                stages.len(),
+                1,
+                "stage must share the destination parent/filesystem"
+            );
+            assert!(stages[0].join("site").is_dir());
+            html
+        })
+    });
+    publish_with_bookmark_enricher(fixture.content_dir(), fixture.output_dir(), enricher)
+        .await
+        .unwrap();
+    assert!(!fs::read_dir(parent).unwrap().any(|entry| {
+        entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".publish-stage-")
+    }));
+}
+
+#[rstest]
+#[case::success("200 OK", "Fetched title", true)]
+#[case::forbidden("403 Forbidden", "Fallback Bookmark", false)]
+#[tokio::test]
+async fn publishes_fetched_bookmark_metadata_and_falls_back_on_http_errors(
+    #[case] status: &'static str,
+    #[case] expected_title: &str,
+    #[case] fetched: bool,
+) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/article", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut request = Vec::new();
+        while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+            assert_ne!(stream.read_buf(&mut request).await.unwrap(), 0);
+        }
+        let request = String::from_utf8(request).unwrap();
+        assert!(request.starts_with("GET /article HTTP/1.1"));
+        assert!(request.contains("publish-bookmark/1.0 (+https://github.com/okawak/okawak_blog)"));
+        let body = indoc! {r#"
+            <meta property="og:title" content="Fetched title">
+            <meta name="description" content="Fetched description">
+        "#};
+        let headers = formatdoc! {"
+            HTTP/1.1 {status}
+            Content-Type: text/html
+            Content-Length: {length}
+            Connection: close
+
+            ", length = body.len()
+        };
+        stream
+            .write_all(headers.replace('\n', "\r\n").as_bytes())
+            .await
+            .unwrap();
+        stream.write_all(body.as_bytes()).await.unwrap();
+    });
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    fixture.write_article(
+        "tech/bookmark.md",
+        "Bookmark",
+        "tech",
+        &formatdoc! {r#"
+            <div class="bookmark">
+              <a href="{url}">Fallback Bookmark</a>
+            </div>
+        "#},
+    );
+    publish(fixture.content_dir(), fixture.output_dir())
+        .await
+        .unwrap();
+    let html_path = collect_html_files(&fixture.site_root().join("articles"))
+        .into_iter()
+        .find(|path| path.file_name().unwrap() == "tech-bookmark.html")
+        .unwrap();
+    let html = fs::read_to_string(html_path).unwrap();
+    assert!(html.contains("class=\"bookmark-link\""));
+    assert!(html.contains(expected_title));
+    assert_eq!(html.contains("Fetched title"), fetched);
+    assert_eq!(html.contains("Fetched description"), fetched);
+    tokio::time::timeout(std::time::Duration::from_secs(5), server)
+        .await
+        .unwrap()
+        .unwrap();
 }

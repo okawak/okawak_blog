@@ -325,13 +325,37 @@ mod tests {
     #[test]
     fn finds_article_summary_by_category_and_slug() {
         let index = ArticleIndexDocument {
-            articles: vec![sample_summary()],
+            articles: vec![
+                ArticleSummaryDocument {
+                    category: "daily".into(),
+                    title: "Same slug in another category".into(),
+                    ..sample_summary()
+                },
+                ArticleSummaryDocument {
+                    slug: "other0000001".into(),
+                    title: "Different article in the same category".into(),
+                    ..sample_summary()
+                },
+                sample_summary(),
+            ],
         };
         let slug = Slug::new("intro00000001".to_string()).unwrap();
 
         let article = find_article_summary(&index, &Category::Tech, &slug).unwrap();
 
         assert_eq!(article.title, "Intro");
+        assert_eq!(
+            find_article_summary(&index, &Category::Physics, &slug),
+            None
+        );
+        assert_eq!(
+            find_article_summary(
+                &index,
+                &Category::Tech,
+                &Slug::new("missing00001".into()).unwrap(),
+            ),
+            None
+        );
     }
 
     #[test]

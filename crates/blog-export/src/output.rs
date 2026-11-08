@@ -151,3 +151,96 @@ pub(crate) fn write_json(path: &Path, value: &impl serde::Serialize) -> Result<(
     temporary.persist(path)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn document() -> Document {
+        Document {
+            meta: serde_json::from_value(serde_json::json!({
+                "schema_version":1, "id":"article", "locale":"ja", "kind":"article",
+                "title":"原文", "category":"tech", "tags":["rust"],
+                "created":"2026-01-01T00:00:00Z", "updated":"2026-01-01T00:00:00Z",
+                "source_hash":"a".repeat(64)
+            }))
+            .unwrap(),
+            body: "本文".into(),
+        }
+    }
+
+    #[test]
+    fn public_locale_files_must_match_both_filename_and_locale() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("ja")).unwrap();
+        let path = root.path().join("ja/article.md");
+        let mut doc = document();
+        fs::write(&path, doc.encode().unwrap()).unwrap();
+        assert_eq!(read_locale(root.path(), Locale::Ja).unwrap().len(), 1);
+        doc.meta.id = "different".parse().unwrap();
+        fs::write(&path, doc.encode().unwrap()).unwrap();
+        assert!(read_locale(root.path(), Locale::Ja).is_err());
+        doc.meta.id = "article".parse().unwrap();
+        doc.meta.locale = Locale::En;
+        fs::write(path, doc.encode().unwrap()).unwrap();
+        assert!(read_locale(root.path(), Locale::Ja).is_err());
+    }
+
+    #[test]
+    fn syncing_marks_only_changed_source_text_stale_and_preserves_english_prose() {
+        for changed in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            fs::create_dir(root.path().join("ja")).unwrap();
+            fs::create_dir(root.path().join("en")).unwrap();
+            let previous = document();
+            let mut current = previous.clone();
+            if changed {
+                current.body = "更新した本文".into();
+            }
+            let mut english = previous.clone();
+            english.meta.locale = Locale::En;
+            english.meta.title = "Reviewed title".parse().unwrap();
+            english.meta.summary = Some("Reviewed summary".into());
+            english.body = "Reviewed prose".into();
+            english.meta.translation = Some(blog_domain::TranslationProvenance {
+                input_hash: crate::content::digest("input"),
+                generated_hash: crate::content::digest("generated"),
+                stale: false,
+            });
+            fs::write(root.path().join("en/article.md"), english.encode().unwrap()).unwrap();
+            sync_documents(root.path(), &[previous], &[current]).unwrap();
+            let actual = read_locale(root.path(), Locale::En).unwrap().remove(0);
+            assert_eq!(actual.meta.translation.unwrap().stale, changed);
+            assert_eq!(actual.meta.summary, english.meta.summary);
+            assert_eq!(actual.meta.title, english.meta.title);
+            assert_eq!(actual.body, english.body);
+        }
+    }
+
+    #[test]
+    fn tag_catalog_is_archived_only_when_a_tag_is_removed() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("ja")).unwrap();
+        let path = root.path().join("ja/article.md");
+        let mut doc = document();
+        fs::write(&path, doc.encode().unwrap()).unwrap();
+        sync_tags(root.path()).unwrap();
+        sync_tags(root.path()).unwrap();
+        assert!(!root.path().join(".export-archive").exists());
+        doc.meta.tags.clear();
+        fs::write(path, doc.encode().unwrap()).unwrap();
+        sync_tags(root.path()).unwrap();
+        assert!(
+            read_catalog(&root.path().join("tags.json"))
+                .unwrap()
+                .entries
+                .is_empty()
+        );
+        assert_eq!(
+            fs::read_dir(root.path().join(".export-archive"))
+                .unwrap()
+                .count(),
+            1
+        );
+    }
+}

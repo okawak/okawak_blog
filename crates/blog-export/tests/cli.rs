@@ -77,6 +77,8 @@ exec "$FAKE_CODEX_TEST" --exact fake_codex_process --nocapture
             .args(args)
             .env("PATH", self.path("bin"))
             .env("RUST_LOG", "info")
+            // Keep log-field assertions independent of the parent terminal settings.
+            .env("NO_COLOR", "1")
             .env("FAKE_CODEX_TEST", std::env::current_exe().unwrap())
             .env("FAKE_CODEX_LOG", self.path("calls"))
             .output()
@@ -139,6 +141,10 @@ fn fake_codex_process() {
     std::io::stdin().read_to_string(&mut prompt).unwrap();
     let source: Value =
         serde_json::from_str(prompt.split_once("\nUNTRUSTED_SOURCE_JSON\n").unwrap().1).unwrap();
+    let log_path = PathBuf::from(std::env::var_os("FAKE_CODEX_LOG").unwrap());
+    if fs::remove_file(log_path.with_extension("delay")).is_ok() {
+        std::thread::sleep(std::time::Duration::from_secs(11));
+    }
     let result: serde_json::Map<String, Value> = source["texts"]
         .as_object()
         .unwrap()
@@ -174,10 +180,48 @@ fn default_export_translates_every_scope_and_reuses_unchanged_results() {
         "AI translation completed",
         "UI translation started",
         "export completed",
+        "translation completed",
     ] {
         assert!(logs.contains(message), "missing progress log: {message}");
     }
     assert!(!logs.contains("本文"), "source prose must not be logged");
+    assert!(!logs.contains("still waiting for AI translation"));
+    for scope in ["Articles", "Tags", "UI"] {
+        let phase = logs
+            .lines()
+            .find(|line| {
+                line.contains("translation phase started")
+                    && line.contains(&format!("scope=\"{scope}\""))
+            })
+            .unwrap_or_else(|| panic!("missing scope {scope}: {logs}"));
+        assert!(phase.contains("ai_requests=1"), "{phase}");
+    }
+    for (scope, item) in [("Tags", "Rust"), ("UI", "greeting")] {
+        let progress = logs
+            .lines()
+            .find(|line| {
+                line.contains("translation item started") && line.contains(&format!("item={item}"))
+            })
+            .unwrap_or_else(|| panic!("missing item {item}: {logs}"));
+        assert!(
+            progress.contains(&format!("scope=\"{scope}\"")),
+            "{progress}"
+        );
+    }
+    for (scope, generated) in [("Content", 2), ("UI", 1)] {
+        let summary = logs
+            .lines()
+            .find(|line| {
+                line.contains("translation completed")
+                    && line.contains(&format!("scope=\"{scope}\""))
+            })
+            .unwrap_or_else(|| panic!("missing summary: {scope}"));
+        assert!(
+            summary.contains(&format!("generated={generated}")),
+            "{summary}"
+        );
+        assert!(summary.contains("reused=0"), "{summary}");
+    }
     assert!(
         !logs.contains("こんにちは"),
         "UI source text must not be logged"
@@ -208,6 +252,24 @@ fn default_export_translates_every_scope_and_reuses_unchanged_results() {
     project.run(&[]);
     assert_eq!(project.calls(), calls, "unchanged content must not call AI");
     assert_eq!(fs::read(&english).unwrap(), first);
+}
+
+#[test]
+fn slow_ai_reports_one_heartbeat_per_interval_without_failing_translation() {
+    let project = Project::new();
+    fs::write(
+        project.path("calls.delay"),
+        "delay only the first fake call",
+    )
+    .unwrap();
+    let result = project.run(&[]);
+    let logs = String::from_utf8(result.stderr).unwrap();
+    assert_eq!(
+        logs.matches("still waiting for AI translation").count(),
+        1,
+        "{logs}"
+    );
+    assert_eq!(project.calls(), 3);
 }
 
 #[test]

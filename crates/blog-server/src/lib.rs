@@ -58,6 +58,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn site_origin_uses_nonempty_override_or_production_default() {
+        const EXPECTED: &str = "BLOG_TEST_EXPECTED_ORIGIN";
+        if let Ok(expected) = std::env::var(EXPECTED) {
+            assert_eq!(resolved_site_origin(), expected);
+            return;
+        }
+        // Isolate environment changes from concurrent router and metadata tests.
+        for (origin, expected) in [
+            (None, SITE_ORIGIN),
+            (Some(""), SITE_ORIGIN),
+            (Some("https://preview.example"), "https://preview.example"),
+        ] {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+            child
+                .args([
+                    "--exact",
+                    "tests::site_origin_uses_nonempty_override_or_production_default",
+                ])
+                .env(EXPECTED, expected)
+                .env_remove(SITE_ORIGIN_ENV);
+            if let Some(origin) = origin {
+                child.env(SITE_ORIGIN_ENV, origin);
+            }
+            let output = child.output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
+    }
+
+    #[test]
     fn test_join_site_url_normalizes_slashes() {
         assert_eq!(
             join_site_url("https://example.com/", "/tech/intro"),

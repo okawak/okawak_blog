@@ -1,4 +1,5 @@
 use blog_export::{ProtectedContent, Texts, TranslationRequest, TranslationSettings, Translator};
+use rstest::rstest;
 use std::{
     cell::Cell,
     fs,
@@ -90,13 +91,14 @@ fn translates_only_prose_and_reuses_unchanged_manual_edits() {
     let fake = Fake::new();
     write_note(
         source.path(),
-        "# 見出し\n\n本文 **強調** `CODE_SECRET` $x^2$\n\n```rust\nCODE_SECRET\n```",
+        "# 見出し\n\n本文 **強調** `CODE_SECRET` $x^2$\n\n```rust\nCODE_SECRET\n```\n\nコードの後の本文",
     );
     blog_export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
     let path = english(output.path());
     let text = fs::read_to_string(&path).unwrap();
     assert!(text.contains("`CODE_SECRET` $x^2$"));
     assert!(text.contains("```rust\nCODE_SECRET\n```"));
+    assert!(text.contains("English コードの後の本文"));
     let manual = text.replace("English 記事", "Manually edited title");
     fs::write(&path, &manual).unwrap();
     blog_export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
@@ -133,7 +135,10 @@ fn changed_source_protects_manual_edits_and_candidate_requires_current_source(
     assert!(fs::read_to_string(&path).unwrap().contains(manual_title));
     assert!(fs::read_to_string(&path).unwrap().contains("stale: true"));
     let calls = fake.calls.get();
-    blog_export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
+    let repeated =
+        blog_export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
+    assert_eq!(repeated.reused, 1);
+    assert_eq!(repeated.generated, 0);
     assert_eq!(fake.calls.get(), calls, "the candidate must be reused");
     blog_export::accept_article_candidate(output.path(), &id, &settings()).unwrap();
     assert!(
@@ -457,7 +462,7 @@ fn inline_html_text_is_preserved_while_surrounding_prose_is_translated() {
     let fake = Fake::new();
     write_note(
         source.path(),
-        "前文 <span data-label=\"raw > value\">HTML_SECRET <b>HTML_SECRET</b></span> 後文<br> 続き <!-- <span> --> 最後\n\n<kbd>HTML_SECRET</kbd>",
+        "前文 <span data-label=\"raw > value\">HTML_SECRET <b>HTML_SECRET</b></span> 後文<br> 続き <!-- <span> --> 最後\n\n<kbd>HTML_SECRET</kbd>\n\n前 <x-one>HTML_SECRET</x-two>HTML_SECRET</x-one> 後",
     );
     blog_export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
     let translated = fs::read_to_string(english(output.path())).unwrap();
@@ -470,6 +475,8 @@ fn inline_html_text_is_preserved_while_surrounding_prose_is_translated() {
     assert!(translated.contains(" English 後文"));
     assert!(translated.contains(" English 続き"));
     assert!(translated.contains(" English 最後"));
+    assert!(translated.contains("<x-one>HTML_SECRET</x-two>HTML_SECRET</x-one>"));
+    assert!(translated.contains(" English 後"));
 }
 
 #[test]
@@ -722,4 +729,94 @@ fn codex_failure_is_typed_without_exposing_diagnostics() {
 
     assert!(matches!(&error, blog_export::ExportError::Translator(_)));
     assert!(!error.to_string().contains("PRIVATE SOURCE DIAGNOSTIC"));
+}
+
+#[rstest]
+#[case::original_id("original_id")]
+#[case::original_locale("original_locale")]
+#[case::candidate_id("candidate_id")]
+#[case::stale("stale")]
+#[case::input_hash("input_hash")]
+fn accepting_article_candidates_checks_each_identity_and_freshness_field(#[case] change: &str) {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    write_note(source.path(), "本文");
+    blog_export::export_content(source.path(), output.path(), &Fake::new(), &settings()).unwrap();
+    let en = english(output.path());
+    let ja = output.path().join("ja").join(en.file_name().unwrap());
+    let candidate = output
+        .path()
+        .join(".export-candidates")
+        .join(en.file_name().unwrap());
+    fs::create_dir_all(candidate.parent().unwrap()).unwrap();
+    fs::copy(&en, &candidate).unwrap();
+    let target = if change.starts_with("original") {
+        &ja
+    } else {
+        &candidate
+    };
+    let text = fs::read_to_string(target).unwrap();
+    let (yaml, body) = text
+        .strip_prefix("---\n")
+        .unwrap()
+        .split_once("\n---\n")
+        .unwrap();
+    let mut meta: blog_domain::PublicContentMeta = yaml_serde::from_str(yaml).unwrap();
+    match change {
+        "original_id" | "candidate_id" => meta.id = "other-id".parse().unwrap(),
+        "original_locale" => meta.locale = blog_domain::Locale::En,
+        "stale" => meta.translation.as_mut().unwrap().stale = true,
+        "input_hash" => {
+            meta.translation.as_mut().unwrap().input_hash = "f".repeat(64).parse().unwrap()
+        }
+        _ => unreachable!(),
+    }
+    meta.validate().unwrap();
+    fs::write(
+        target,
+        format!("---\n{}---\n{body}", yaml_serde::to_string(&meta).unwrap()),
+    )
+    .unwrap();
+    let before = fs::read(&en).unwrap();
+    let id = en.file_stem().unwrap().to_str().unwrap().parse().unwrap();
+    assert!(
+        blog_export::accept_article_candidate(output.path(), &id, &settings()).is_err(),
+        "{change}"
+    );
+    assert_eq!(fs::read(&en).unwrap(), before);
+    assert!(candidate.exists());
+}
+
+#[test]
+fn article_generation_rejects_a_candidate_with_a_different_id_before_calling_ai() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let fake = Fake::new();
+    write_note(source.path(), "本文");
+    blog_export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
+    let en = english(output.path());
+    fs::write(
+        &en,
+        fs::read_to_string(&en)
+            .unwrap()
+            .replace("English 記事", "Manual title"),
+    )
+    .unwrap();
+    write_note(source.path(), "更新した本文");
+    blog_export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
+    let candidate = output
+        .path()
+        .join(".export-candidates")
+        .join(en.file_name().unwrap());
+    let id = en.file_stem().unwrap().to_str().unwrap();
+    fs::write(
+        &candidate,
+        fs::read_to_string(&candidate)
+            .unwrap()
+            .replace(&format!("id: {id}"), "id: different-id"),
+    )
+    .unwrap();
+    let calls = fake.calls.get();
+    assert!(blog_export::export_content(source.path(), output.path(), &fake, &settings()).is_err());
+    assert_eq!(fake.calls.get(), calls);
 }

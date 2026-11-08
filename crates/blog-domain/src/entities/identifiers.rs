@@ -175,6 +175,19 @@ mod tests {
     use super::{PageKey, Sha256Digest, Slug, TagId};
 
     #[test]
+    fn tag_catalog_can_be_looked_up_by_exact_borrowed_identity() {
+        let catalog: std::collections::BTreeMap<TagId, &str> = [
+            (TagId::new("Rust".into()).unwrap(), "Rustの記事"),
+            (TagId::new(" tag ".into()).unwrap(), "空白を含むタグ"),
+        ]
+        .into();
+        assert_eq!(catalog.get("Rust"), Some(&"Rustの記事"));
+        assert_eq!(catalog.get(" tag "), Some(&"空白を含むタグ"));
+        assert_eq!(catalog.get("rust"), None);
+        assert_eq!(catalog.get("tag"), None);
+    }
+
+    #[test]
     fn test_page_key_rejects_reserved_home_key() {
         let error = PageKey::new("home".to_string()).unwrap_err();
 

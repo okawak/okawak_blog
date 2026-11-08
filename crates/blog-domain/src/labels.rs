@@ -127,6 +127,99 @@ mod tests {
             }),
         }
     }
+
+    #[test]
+    fn label_structure_rejects_independently_invalid_fields() {
+        for (key, source, context) in [
+            (" ", "記事", "article label"),
+            ("label", " \n ", "article label"),
+            ("label", "記事", " \t "),
+            ("label\0", "記事", "article label"),
+            ("label\r", "記事", "article label"),
+            ("label\n", "記事", "article label"),
+            ("label", "記事\0", "article label"),
+            ("label", "記事\r", "article label"),
+        ] {
+            let catalog = LabelCatalog {
+                entries: [(
+                    key.into(),
+                    LabelEntry {
+                        source: source.into(),
+                        context: context.into(),
+                        translation: None,
+                    },
+                )]
+                .into(),
+                ..Default::default()
+            };
+            assert_eq!(
+                catalog.validate_structure(),
+                Err(DomainError::validation("label entry")),
+                "{key:?}, {source:?}, {context:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn translation_text_must_be_valid_even_when_stale() {
+        for value in [" \n ", "articles\0", "articles\r"] {
+            for stale in [false, true] {
+                let mut entry = entry();
+                let translation = entry.translation.as_mut().unwrap();
+                translation.value = value.into();
+                translation.stale = stale;
+                let catalog = LabelCatalog {
+                    entries: [("count".into(), entry)].into(),
+                    ..Default::default()
+                };
+                assert_eq!(
+                    catalog.validate_structure(),
+                    Err(DomainError::validation("label translation")),
+                    "value={value:?}, stale={stale}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn valid_label_structure_allows_multiline_text() {
+        let catalog = LabelCatalog {
+            entries: [(
+                "count".into(),
+                LabelEntry {
+                    source: "記事\n{count}件".into(),
+                    translation: Some(LabelTranslation {
+                        value: "Articles\n{count} items".into(),
+                        provenance: None,
+                        stale: false,
+                    }),
+                    ..entry()
+                },
+            )]
+            .into(),
+            ..Default::default()
+        };
+        catalog.validate().unwrap();
+    }
+
+    #[test]
+    fn placeholders_keep_valid_names_and_multiplicity_in_sorted_order() {
+        assert_eq!(
+            placeholders("{z} {item_count} {A1} {item_count} {_}"),
+            ["A1", "_", "item_count", "item_count", "z"]
+        );
+        for text in [
+            "{}",
+            "{ }",
+            "{item-count}",
+            "{記事}",
+            "{count!}",
+            "{unclosed",
+        ] {
+            assert!(placeholders(text).is_empty(), "{text:?}");
+        }
+    }
+
     #[test]
     fn label_translation_requires_explicit_freshness() {
         let mut value = serde_json::to_value(entry()).unwrap();
