@@ -149,39 +149,6 @@ mod tests {
     use indoc::indoc;
     use rstest::rstest;
 
-    #[tokio::test]
-    async fn fetch_reads_metadata_from_an_http_response_and_rejects_error_status() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        for status in ["200 OK", "403 Forbidden"] {
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let url = format!("http://{}/article", listener.local_addr().unwrap());
-            let server = tokio::spawn(async move {
-                let (mut stream, _) = listener.accept().await.unwrap();
-                let mut request = Vec::new();
-                while !request.windows(4).any(|part| part == b"\r\n\r\n") {
-                    assert_ne!(stream.read_buf(&mut request).await.unwrap(), 0);
-                }
-                let request = String::from_utf8(request).unwrap();
-                assert!(request.starts_with("GET /article HTTP/1.1"));
-                assert!(request.contains(USER_AGENT));
-                let body = r#"<meta property="og:title" content="Fetched title"><meta name="description" content="Fetched description">"#;
-                stream.write_all(format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
-            });
-            let result = Fetcher::new().unwrap().fetch(&url).await;
-            if status == "200 OK" {
-                let metadata = result.unwrap();
-                assert_eq!(metadata.title.as_deref(), Some("Fetched title"));
-                assert_eq!(metadata.description.as_deref(), Some("Fetched description"));
-            } else {
-                assert!(result.is_err());
-            }
-            tokio::time::timeout(Duration::from_secs(5), server)
-                .await
-                .unwrap()
-                .unwrap();
-        }
-    }
-
     #[test]
     fn test_parse_metadata_prefers_open_graph_values() {
         let html = indoc! {r#"

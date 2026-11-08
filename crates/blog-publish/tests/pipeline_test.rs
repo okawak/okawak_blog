@@ -1062,3 +1062,55 @@ async fn staging_stays_beside_the_destination_for_atomic_release_replacement() {
             .starts_with(".publish-stage-")
     }));
 }
+
+#[tokio::test]
+async fn publishes_fetched_bookmark_metadata_and_falls_back_on_http_errors() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    for status in ["200 OK", "403 Forbidden"] {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/article", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+                assert_ne!(stream.read_buf(&mut request).await.unwrap(), 0);
+            }
+            let request = String::from_utf8(request).unwrap();
+            assert!(request.starts_with("GET /article HTTP/1.1"));
+            assert!(
+                request.contains("publish-bookmark/1.0 (+https://github.com/okawak/okawak_blog)")
+            );
+            let body = r#"<meta property="og:title" content="Fetched title"><meta name="description" content="Fetched description">"#;
+            stream.write_all(format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+        });
+        let fixture = PublishFixture::new();
+        fixture.write_required_site();
+        fixture.write_article(
+            "tech/bookmark.md",
+            "Bookmark",
+            "tech",
+            &format!("<div class=\"bookmark\"><a href=\"{url}\">Fallback Bookmark</a></div>"),
+        );
+        publish(fixture.content_dir(), fixture.output_dir())
+            .await
+            .unwrap();
+        let html_path = collect_html_files(&fixture.site_root().join("articles"))
+            .into_iter()
+            .find(|path| path.file_name().unwrap() == "tech-bookmark.html")
+            .unwrap();
+        let html = fs::read_to_string(html_path).unwrap();
+        assert!(html.contains("class=\"bookmark-link\""));
+        if status == "200 OK" {
+            assert!(html.contains("Fetched title"));
+            assert!(html.contains("Fetched description"));
+        } else {
+            assert!(html.contains("Fallback Bookmark"));
+            assert!(!html.contains("Fetched title"));
+            assert!(!html.contains("Fetched description"));
+        }
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+}

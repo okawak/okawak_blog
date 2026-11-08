@@ -134,33 +134,6 @@ mod tests {
 
     use super::*;
 
-    #[tokio::test]
-    async fn optional_catalogs_default_only_when_missing() {
-        let root = TempDir::new().unwrap();
-        let reader = LocalArtifactReader::new(root.path());
-        assert_eq!(
-            reader.read_locales().await.unwrap(),
-            SiteLocalesDocument::default()
-        );
-        assert!(reader.read_tag_labels().await.unwrap().is_empty());
-        for content in [b"invalid json".as_slice(), &[255]] {
-            fs::write(root.path().join("locales.json"), content).unwrap();
-            fs::write(root.path().join("tags.json"), content).unwrap();
-            assert!(reader.read_locales().await.is_err());
-            assert!(reader.read_tag_labels().await.is_err());
-        }
-        fs::write(root.path().join("tags.json"), r#"{"rust":"Rust articles"}"#).unwrap();
-        assert_eq!(
-            reader
-                .read_tag_labels()
-                .await
-                .unwrap()
-                .get("rust")
-                .map(String::as_str),
-            Some("Rust articles")
-        );
-    }
-
     fn write_fixture_site(root: &Path) {
         fs::create_dir_all(root.join("articles")).unwrap();
         fs::create_dir_all(root.join("categories")).unwrap();

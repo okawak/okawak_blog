@@ -1,7 +1,11 @@
-use super::*;
+use aws_sdk_s3::Client;
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region, retry::RetryConfig};
 use aws_smithy_http_client::test_util::{ReplayEvent, StaticReplayClient};
 use aws_smithy_types::body::SdkBody;
+use blog_domain::{
+    ArtifactReleasePointerDocument, Category, ContentAssetName, Locale, SiteLocalesDocument, Slug,
+};
+use blog_infra::{ArtifactReader, S3ArtifactLocation, S3ArtifactReader};
 
 fn event(key: &str, status: u16, body: impl Into<SdkBody>) -> ReplayEvent {
     ReplayEvent::new(
