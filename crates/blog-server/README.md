@@ -41,6 +41,8 @@ runtimeのpage再描画はpage自身のURLに`X-Topcoat-Runtime: true`を付け�
 
 productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。
 
+Tailwind CLI取得のHTTPエラーは、2秒・4秒の待機を挟んで最大3回試行します。取得失敗が続く場合や、HTTP以外のエラー（CSSコンパイル・ファイルI/Oなど）はbuildを失敗させます。
+
 記事card・カテゴリ・header・言語切替のlinkは`runtime::link_attrs`により、SSR結果でdocument・title・metadataを更新するruntime navigationを使います。既定の`PrefetchMode::Intent`でhover・focus・touch時に先読みし、cookieを保存する言語切替と日本語homeの`?lang=ja` linkは`Never`にします。言語選択はruntime POSTがrewriteされたGETにも適用し、validatorの判定だけはoriginal methodを使います。言語切替の表示はTopcoat UIの`toggle_group`を使います。生成Markdown内のanchor（text fragmentを含む）と外部linkはブラウザ標準のnavigationを維持します。JavaScript無効時はすべて通常のanchorとして利用できます。
 
 検索fieldは`field` / `field_label` / `field_description` / `input`を使い、`element_id(cx)`で再描画後も安定したIDを生成し、labelと入力、検索対象の説明を関連付けます。category・tag・countは`badge`、記事一覧は`card`、状態表示は`alert`で構成します。headerの操作とnavigation linkは`button`のstyleを共有し、GitHub linkは`tooltip`で補足します。tooltipも生成IDで`aria-describedby`を関連付け、`floating`のCSS anchor positioningと配置fallbackで画面端を避けます。mobile menuは公式`popover` / `popover_trigger` / `popover_content`を使い、`element_id`でtriggerとpanelを関連付けます。開閉、外側クリック、Escape、focus復帰と支援技術へのexpanded状態はブラウザーのPopover APIが担当し、JavaScriptなしでも操作できます。日英の開閉ラベルとアイコンは`:popover-open`に連動します。desktopとmobileは同じnavigation componentからリンクを生成します。`src/navigation.js`をshellへ埋め込み、リンク選択・履歴移動・desktop幅への切替でpanelを閉じます。panelのIDはrequest pathで分けます。履歴移動とscrollの復元はTopcoat runtimeが担当します。
