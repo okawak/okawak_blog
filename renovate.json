@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:best-practices"],
-  "enabledManagers": ["cargo", "bun", "mise", "github-actions", "rust-toolchain"],
+  "enabledManagers": ["cargo", "bun", "mise", "github-actions"],
   "ignoreDeps": ["topcoat", "cargo:topcoat-cli"],
   "ignorePaths": ["terraform/**", "obsidian/**"],
   "timezone": "Asia/Tokyo",
