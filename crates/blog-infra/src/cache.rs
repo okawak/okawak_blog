@@ -629,23 +629,20 @@ mod tests {
 
     #[tokio::test]
     async fn cancelled_content_asset_reads_release_in_flight_entries() {
-        let cache = Arc::new(ContentAssetCache::default());
-        let started = Arc::new(tokio::sync::Notify::new());
-        let reader = {
-            let cache = Arc::clone(&cache);
-            let started = Arc::clone(&started);
-            tokio::spawn(async move {
-                cache
-                    .get_or_try_init("cancelled", || async {
-                        started.notify_one();
-                        std::future::pending().await
-                    })
-                    .await
-            })
-        };
-        started.notified().await;
-        reader.abort();
-        assert!(reader.await.unwrap_err().is_cancelled());
+        let cache = ContentAssetCache::default();
+        let started = std::cell::Cell::new(false);
+        {
+            let mut reader = std::pin::pin!(cache.get_or_try_init("cancelled", || async {
+                started.set(true);
+                std::future::pending().await
+            }));
+            // Poll once so early completion/panic fails instead of waiting for a notification.
+            let state =
+                std::future::poll_fn(|cx| std::task::Poll::Ready(reader.as_mut().poll(cx))).await;
+            assert!(state.is_pending(), "read must remain in flight: {state:?}");
+            assert!(started.get());
+            assert_eq!(cache.entries.lock().unwrap().len(), 1);
+        } // Dropping the pending future cancels the read and releases its entry.
         assert!(cache.entries.lock().unwrap().is_empty());
     }
 
