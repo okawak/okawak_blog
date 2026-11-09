@@ -1,6 +1,6 @@
 use topcoat::{
     Result,
-    context::{Cx, app_context},
+    context::{Cx, context},
     router::{StatusCode, route},
 };
 
@@ -8,7 +8,7 @@ use super::ArtifactReaderContext;
 
 #[route(GET)]
 async fn readiness(cx: &Cx) -> Result<(StatusCode, &'static str)> {
-    let artifact_reader = &app_context::<ArtifactReaderContext>(cx).0;
+    let artifact_reader = &context::<ArtifactReaderContext>(cx).0;
     let ready = match artifact_reader.snapshot().await {
         Ok(snapshot) => snapshot.read_site_metadata().await,
         Err(error) => Err(error),

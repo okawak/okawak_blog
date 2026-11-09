@@ -7,12 +7,12 @@ use blog_domain::{ArticlePageDocument, Category, Slug, build_article_page_canoni
 use topcoat::{
     Result,
     context::Cx,
-    router::{StatusCode, module_param, page, path_param, request},
+    router::{StatusCode, module_param, page, request},
     view::{Unescaped, View, ViewExt, component, view},
 };
 
 use super::super::page_loader;
-use super::CategoryName;
+use super::category_name;
 use crate::components::badge::{BadgeVariant, badge};
 use crate::shell::{ShellMetadata, article_internal_server_error_page, not_found_page, site_shell};
 
@@ -20,13 +20,7 @@ module_param!(article_slug);
 
 #[page]
 async fn article_page(cx: &Cx) -> Result<impl View> {
-    render_article(
-        cx,
-        Locale::Ja,
-        path_param::<CategoryName>(cx),
-        path_param::<ArticleSlug>(cx),
-    )
-    .await
+    render_article(cx, Locale::Ja, category_name(cx), article_slug(cx)).await
 }
 
 pub(crate) async fn render_article(
@@ -42,13 +36,13 @@ pub(crate) async fn render_article(
     let category = match Category::from_str(category_param) {
         Ok(category) => category,
         Err(_) => {
-            return Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed());
+            return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed());
         }
     };
     let slug = match Slug::new(normalized_slug.to_string()) {
         Ok(slug) => slug,
         Err(_) => {
-            return Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed());
+            return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed());
         }
     };
 
@@ -57,10 +51,10 @@ pub(crate) async fn render_article(
         .load_article(locale, &category, &slug)
         .await
     {
-        Ok(Some(presentation)) => Ok(
-            view! { cx => article_document(presentation: presentation, locale: locale) }.boxed(),
-        ),
-        Ok(None) => Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed()),
+        Ok(Some(presentation)) => {
+            Ok(view! { article_document(presentation: presentation, locale: locale) }.boxed())
+        }
+        Ok(None) => Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
         Err(error) => {
             tracing::error!(
                 %error,
@@ -69,7 +63,6 @@ pub(crate) async fn render_article(
                 "article page artifact read failed"
             );
             Ok(view! {
-                cx =>
                 article_internal_server_error_page(
                     title: fallback_title,
                     description: fallback_description,
@@ -83,6 +76,7 @@ pub(crate) async fn render_article(
 
 #[component]
 async fn article_document(
+    cx: &Cx,
     presentation: crate::page_loader::Presentation<ArticlePageDocument>,
     locale: Locale,
 ) -> Result<impl View> {

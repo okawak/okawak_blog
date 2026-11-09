@@ -7,6 +7,7 @@ use topcoat::{
     Result,
     context::Cx,
     icon::icon,
+    metadata::{Metadata, OpenGraph, OpenGraphType},
     router::{StatusCode, request},
     runtime::{PrefetchMode, link_attrs, prefetch_mode},
     view::{Attributes, Child, Unescaped, View, attributes, class, component, element_id, view},
@@ -26,7 +27,7 @@ pub(crate) struct ShellMetadata {
     title: String,
     description: String,
     canonical_path: String,
-    og_type: &'static str,
+    og_type: OpenGraphType,
     locale: Locale,
     locales: SiteLocalesDocument,
 }
@@ -42,7 +43,7 @@ impl ShellMetadata {
             title,
             description,
             canonical_path,
-            og_type: "website",
+            og_type: OpenGraphType::Website,
             locale,
             locales: Default::default(),
         }
@@ -54,7 +55,7 @@ impl ShellMetadata {
         canonical_path: String,
     ) -> Self {
         Self {
-            og_type: "article",
+            og_type: OpenGraphType::Article,
             ..Self::website(locale, title, description, canonical_path)
         }
     }
@@ -65,7 +66,7 @@ impl ShellMetadata {
 }
 
 #[component]
-pub(crate) async fn not_found_page(canonical_path: String) -> Result<impl View> {
+pub(crate) async fn not_found_page(cx: &Cx, canonical_path: String) -> Result<impl View> {
     let locale = locale_from_path(&canonical_path);
     Ok(view! {
         site_shell(
@@ -91,6 +92,7 @@ pub(crate) async fn not_found_page(canonical_path: String) -> Result<impl View> 
 
 #[component]
 pub(crate) async fn article_internal_server_error_page(
+    cx: &Cx,
     title: String,
     description: String,
     canonical_path: String,
@@ -111,6 +113,7 @@ pub(crate) async fn article_internal_server_error_page(
 
 #[component]
 pub(crate) async fn internal_server_error_page(
+    cx: &Cx,
     title: String,
     description: String,
     canonical_path: String,
@@ -132,6 +135,7 @@ pub(crate) async fn internal_server_error_page(
 
 #[component]
 async fn status_notice(
+    cx: &Cx,
     variant: AlertVariant,
     title: Option<&str>,
     message: &str,
@@ -282,21 +286,25 @@ window.okawakScheduleCodeHighlight = function(root) {
         ..
     } = metadata;
     let canonical_url = crate::build_site_url(&canonical_path);
+    // Reuse the loaded presentation: metadata must describe the same snapshot as the body.
+    let cx = cx.with(
+        Metadata::new()
+            .title(title)
+            .description(description)
+            .canonical(canonical_url)
+            .open_graph(
+                OpenGraph::new()
+                    .kind(og_type)
+                    .site_name(t(locale, Message::SiteName)),
+            ),
+    );
 
     Ok(view! {
         (status)
         <!DOCTYPE html>
         <html lang=(locale.as_str())>
             <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>(title.clone())</title>
-                <meta name="description" content=(description.clone())>
-                <link rel="canonical" href=(canonical_url.clone())>
-                <meta property="og:title" content=(title)>
-                <meta property="og:description" content=(description)>
-                <meta property="og:url" content=(canonical_url)>
-                <meta property="og:type" content=(og_type)>
+                topcoat::metadata::tags()
                 <meta
                     property="og:locale"
                     content=(if locale == Locale::Ja { "ja_JP" } else { "en_US" })

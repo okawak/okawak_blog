@@ -1,6 +1,6 @@
-use topcoat::{Result, router::route};
+use topcoat::{Result, context::Cx, router::route};
 
 #[route(GET)]
-async fn health() -> Result<&'static str> {
+async fn health(cx: &Cx) -> Result<&'static str> {
     Ok("OK")
 }

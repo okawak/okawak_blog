@@ -3,6 +3,7 @@
 
 use topcoat::{
     Result,
+    context::Cx,
     view::{Attributes, Child, PromotedStr, StaticClass, View, class, component, view},
 };
 
@@ -57,13 +58,13 @@ impl ToggleSize {
 
 /// Classes that style the label from its input's checked, focused, and disabled states.
 const BASE: StaticClass = class!(
-    "inline-flex shrink-0 cursor-pointer items-center justify-center border \
-     border-transparent text-sm font-medium whitespace-nowrap transition-colors select-none \
-     text-muted-foreground hover:bg-foreground/5 hover:text-foreground \
-     has-[:checked]:bg-foreground/10 has-[:checked]:text-foreground \
-     has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring \
-     has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background \
-     has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50",
+    "inline-flex shrink-0 cursor-pointer items-center justify-center border",
+    "border-transparent text-sm font-medium whitespace-nowrap transition-colors select-none",
+    "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+    "has-[:checked]:bg-foreground/10 has-[:checked]:text-foreground",
+    "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+    "has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
+    "has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50",
 );
 
 /// A control that stays pressed when selected.
@@ -85,6 +86,7 @@ const BASE: StaticClass = class!(
 /// ```
 #[component]
 pub async fn toggle(
+    cx: &Cx,
     /// Whether the toggle presses on its own or as one of a group.
     #[default]
     kind: ToggleKind,
@@ -123,6 +125,7 @@ const LINK: StaticClass = class!(
 /// value. The ordinary anchor keeps navigation available without scripting.
 #[component]
 pub async fn toggle_link(
+    cx: &Cx,
     active: bool,
     #[default] size: ToggleSize,
     #[default] mut attrs: Attributes,
@@ -170,6 +173,7 @@ pub async fn toggle_link(
 /// ```
 #[component]
 pub async fn toggle_group(
+    cx: &Cx,
     #[default] mut attrs: Attributes,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {

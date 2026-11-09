@@ -24,6 +24,69 @@ use topcoat::{
 use blog_server::{app::create_router as create_router_with_assets, assets};
 
 #[tokio::test]
+async fn page_metadata_is_unique_and_includes_social_preview_defaults() {
+    let router = create_router(fixture_reader(), false);
+    for path in [
+        "/",
+        "/en",
+        "/about",
+        "/en/about",
+        "/tech",
+        "/en/tech",
+        "/tech/e2e-article",
+        "/en/tech/e2e-article",
+        "/missing/page",
+    ] {
+        let result = response(
+            &router,
+            Request::builder()
+                .uri(path)
+                .header(header::ACCEPT_LANGUAGE, "ja")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        for tag in [
+            "<meta charset=",
+            "<meta name=\"viewport\"",
+            "<title>",
+            "<meta name=\"description\"",
+            "<link rel=\"canonical\"",
+            "<meta property=\"og:title\"",
+            "<meta property=\"og:description\"",
+            "<meta property=\"og:url\"",
+            "<meta property=\"og:type\"",
+            "<meta property=\"og:locale\"",
+            "<meta property=\"og:site_name\"",
+            "<meta name=\"twitter:card\"",
+        ] {
+            assert_eq!(result.body.matches(tag).count(), 1, "{path}: {tag}");
+        }
+        assert!(
+            result.body.find("<meta charset=\"utf-8\">").unwrap() < 1024,
+            "{path}"
+        );
+        assert!(
+            result
+                .body
+                .contains("<meta name=\"twitter:card\" content=\"summary\">"),
+            "{path}"
+        );
+        let site_name = if path.starts_with("/en") {
+            "Bukusen’s Exploration Notes"
+        } else {
+            "ぶくせんの探窟メモ"
+        };
+        assert!(
+            result.body.contains(&format!(
+                "<meta property=\"og:site_name\" content=\"{site_name}\">"
+            )),
+            "{path}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn home_selects_browser_language_with_english_default_and_saved_preference() {
     let router = create_router(fixture_reader(), false);
     for (language, cookie, expected) in [

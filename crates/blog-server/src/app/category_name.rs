@@ -9,7 +9,7 @@ use blog_domain::{Category, CategoryPageDocument, build_category_page_canonical_
 use topcoat::{
     Result,
     context::Cx,
-    router::{StatusCode, module_param, page, path_param, request},
+    router::{StatusCode, module_param, page, request},
     view::{Unescaped, View, ViewExt, component, view},
 };
 
@@ -23,7 +23,7 @@ module_param!(category_name);
 
 #[page]
 async fn category_page(cx: &Cx) -> Result<impl View> {
-    render_category(cx, Locale::Ja, path_param::<CategoryName>(cx)).await
+    render_category(cx, Locale::Ja, category_name(cx)).await
 }
 
 pub(crate) async fn render_category(
@@ -35,25 +35,25 @@ pub(crate) async fn render_category(
     let category = match Category::from_str(category_param) {
         Ok(category) => category,
         Err(_) => {
-            return Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed());
+            return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed());
         }
     };
 
     match load_category(cx, category, locale).await.clone() {
-        Ok(Some(presentation)) => Ok(
-            view! { cx => category_document(presentation: presentation, locale: locale) }.boxed(),
-        ),
-        Ok(None) => Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed()),
+        Ok(Some(presentation)) => {
+            Ok(view! { category_document(presentation: presentation, locale: locale) }.boxed())
+        }
+        Ok(None) => Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
         Err(error) => {
             tracing::error!(
                 %error,
                 category = category_param,
                 "category page artifact read failed"
             );
+            let title = format!("{category_param} | {}", t(locale, Message::SiteName));
             Ok(view! {
-                cx =>
                 internal_server_error_page(
-                    title: format!("{category_param} | {}", t(locale, Message::SiteName)),
+                    title: title,
                     description: t(locale, Message::ErrorCategory).to_string(),
                     canonical_path: requested_path,
                     message: Message::ErrorCategory
@@ -66,6 +66,7 @@ pub(crate) async fn render_category(
 
 #[component]
 async fn category_document(
+    cx: &Cx,
     presentation: crate::page_loader::Presentation<CategoryPageDocument>,
     locale: Locale,
 ) -> Result<impl View> {

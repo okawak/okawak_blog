@@ -28,15 +28,12 @@ pub(crate) async fn render_about(cx: &Cx, locale: Locale) -> Result<impl View> {
         .await
     {
         Ok(Some(presentation)) => {
-            Ok(view! { cx => about_document(presentation: presentation, locale: locale) }.boxed())
+            Ok(view! { about_document(presentation: presentation, locale: locale) }.boxed())
         }
-        Ok(None) => {
-            Ok(view! { cx => not_found_page(canonical_path: locale.path("/about")) }.boxed())
-        }
+        Ok(None) => Ok(view! { not_found_page(canonical_path: locale.path("/about")) }.boxed()),
         Err(error) => {
             tracing::error!(%error, page = ABOUT_PAGE_KEY, "static page artifact read failed");
             Ok(view! {
-                cx =>
                 internal_server_error_page(
                     title: format!(
                         "{} | {}",
@@ -55,6 +52,7 @@ pub(crate) async fn render_about(cx: &Cx, locale: Locale) -> Result<impl View> {
 
 #[component]
 async fn about_document(
+    cx: &Cx,
     presentation: crate::page_loader::Presentation<StaticPageDocument>,
     locale: Locale,
 ) -> Result<impl View> {

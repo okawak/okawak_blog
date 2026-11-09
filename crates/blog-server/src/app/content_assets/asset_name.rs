@@ -4,7 +4,7 @@ use topcoat::{
     router::{
         Body, HeaderValue,
         error::{internal_server_error, not_found},
-        header, module_param, path_param,
+        header, module_param,
         response::Response,
         route,
     },
@@ -13,8 +13,8 @@ module_param!(asset_name);
 
 #[route(GET)]
 async fn content_asset(cx: &Cx) -> Result<Response> {
-    let name = blog_domain::ContentAssetName::new(path_param::<AssetName>(cx).to_string())
-        .map_err(|_| not_found())?;
+    let name =
+        blog_domain::ContentAssetName::new(asset_name(cx).to_string()).map_err(|_| not_found())?;
     let bytes = crate::app::page_loader(cx)
         .loader()
         .load_asset(&name)

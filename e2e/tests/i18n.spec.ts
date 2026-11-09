@@ -79,6 +79,8 @@ test("language links select existing translations and matching metadata", async 
   await expect(page.getByRole("heading", { name: "Recent articles" })).toBeVisible();
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${baseURL}/en`);
   await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute("content", "en_US");
+  await expect(page.locator('meta[property="og:site_name"]')).toHaveAttribute("content", "Bukusen’s Exploration Notes");
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute("content", "summary");
   await expect(page.locator('link[rel="alternate"][hreflang="ja"]')).toHaveAttribute("href", baseURL);
   await page.getByRole("link", { name: "Translated E2E Article", exact: true }).click();
   await expect(page).toHaveURL(`${baseURL}/en/tech/e2e-article`);
@@ -86,6 +88,8 @@ test("language links select existing translations and matching metadata", async 
   await expect(page.locator("main")).toContainText("#Browser testing");
   await page.getByRole("link", { name: "日本語", exact: true }).click();
   await expect(page).toHaveURL(`${baseURL}/tech/e2e-article`);
+  await expect(page.locator('meta[property="og:site_name"]')).toHaveAttribute("content", "ぶくせんの探窟メモ");
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveCount(1);
   expect(errors).toEqual([]);
 });
 
