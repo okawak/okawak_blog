@@ -7,6 +7,7 @@ use blog_domain::{ArticlePageDocument, Category, Slug, build_article_page_canoni
 use topcoat::{
     Result,
     context::Cx,
+    metadata::{Metadata, OpenGraph, OpenGraphType},
     router::{StatusCode, module_param, page, request},
     view::{Unescaped, View, ViewExt, component, view},
 };
@@ -14,7 +15,7 @@ use topcoat::{
 use super::super::page_loader;
 use super::category_name;
 use crate::components::badge::{BadgeVariant, badge};
-use crate::shell::{ShellMetadata, article_internal_server_error_page, not_found_page, site_shell};
+use crate::shell::{article_internal_server_error_page, not_found_page, site_shell};
 
 module_param!(article_slug);
 
@@ -104,9 +105,13 @@ async fn article_document(
     Ok(view! {
         site_shell(
             status: StatusCode::OK,
-            metadata: ShellMetadata::article(locale, title, description, canonical_path).with_locales(
-                locales,
-            ),
+            metadata: Metadata::new()
+                .title(title)
+                .description(description)
+                .open_graph(OpenGraph::new().kind(OpenGraphType::Article)),
+            locale: locale,
+            canonical_path: canonical_path,
+            locales: locales,
             <article
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-8 px-4 py-8 text-left sm:px-6 sm:py-12"
             >

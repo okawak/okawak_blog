@@ -41,7 +41,7 @@ runtimeのpage再描画はpage自身のURLに`X-Topcoat-Runtime: true`を付け�
 
 カテゴリの記事絞り込みはshard内の`signal(cx, String::new)`とtracked readで構成します。タイトル・説明・タグを大文字小文字を区別せず部分一致で検索し、入力はサーバー側でも先頭100文字に制限します。`/_topcoat/shards/category-articles`へ渡すカテゴリ・言語引数も再描画時に検証します。固定の引数は通常の値で渡します。ページと初期shardは`#[memoize]`で同じpage documentを共有し、再描画では`PageLoader`から再取得します。記事・section・タグのloopには`#[key(...)]`で安定したidentityを与えます。DOMにも記事・sectionの安定したIDを付け、DOM morphにより、入力フォーカスとshard外の状態を維持します。JavaScript無効時も初期HTMLの全記事とリンクを利用できます。
 
-shellはpage presentationからTopcoatの`Metadata`を組み立て、`cx.with(...)`で渡して`topcoat::metadata::tags()`をhead先頭に描画します。title、description、canonical、Open Graph、Xのsummary cardを一括出力し、`og:site_name`も日英のUI辞書に合わせます。Open Graphのtitle・description・URLはpage metadataのfallbackを使い、article / websiteは`OpenGraphType`で区別します。`og:locale`と、公開済み翻訳に限ったhreflangはshellで補います。metadataのための追加読込は行わず、本文と同じpresentationを使います。
+各pageは読み込み済みpresentationからTopcoatの`Metadata`を直接組み立て、shellへ渡します。shellは言語・公開path・公開locale情報を別の引数で受け取り、canonicalとサイト名を補って`cx.with(...)`へ登録し、`topcoat::metadata::tags()`をhead先頭に描画します。title、description、canonical、Open Graph、Xのsummary cardを一括出力し、`og:site_name`も日英のUI辞書に合わせます。Open Graphのtitle・description・URLはpage metadataのfallbackを使い、article / websiteは`OpenGraphType`で区別します。`og:locale`と、公開済み翻訳に限ったhreflangはshellで補います。metadataのための追加読込は行わず、本文と同じpresentationを使います。
 
 productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。
 

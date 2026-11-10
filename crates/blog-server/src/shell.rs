@@ -23,64 +23,23 @@ use crate::components::{
 };
 use crate::icons::GITHUB;
 
-pub(crate) struct ShellMetadata {
-    title: String,
-    description: String,
-    canonical_path: String,
-    og_type: OpenGraphType,
-    locale: Locale,
-    locales: SiteLocalesDocument,
-}
-
-impl ShellMetadata {
-    pub(crate) fn website(
-        locale: Locale,
-        title: String,
-        description: String,
-        canonical_path: String,
-    ) -> Self {
-        Self {
-            title,
-            description,
-            canonical_path,
-            og_type: OpenGraphType::Website,
-            locale,
-            locales: Default::default(),
-        }
-    }
-    pub(crate) fn article(
-        locale: Locale,
-        title: String,
-        description: String,
-        canonical_path: String,
-    ) -> Self {
-        Self {
-            og_type: OpenGraphType::Article,
-            ..Self::website(locale, title, description, canonical_path)
-        }
-    }
-    pub(crate) fn with_locales(mut self, locales: SiteLocalesDocument) -> Self {
-        self.locales = locales;
-        self
-    }
-}
-
 #[component]
 pub(crate) async fn not_found_page(cx: &Cx, canonical_path: String) -> Result<impl View> {
     let locale = locale_from_path(&canonical_path);
     Ok(view! {
         site_shell(
             status: StatusCode::NOT_FOUND,
-            metadata: ShellMetadata::website(
-                locale,
-                format!(
-                    "{} | {}",
-                    t(locale, Message::ErrorNotFoundTitle),
-                    t(locale, Message::SiteName),
-                ),
-                t(locale, Message::ErrorNotFoundDescription).to_string(),
-                canonical_path,
-            ),
+            metadata: Metadata::new()
+                .title(
+                    format!(
+                        "{} | {}",
+                        t(locale, Message::ErrorNotFoundTitle),
+                        t(locale, Message::SiteName),
+                    ),
+                )
+                .description(t(locale, Message::ErrorNotFoundDescription)),
+            locale: locale,
+            canonical_path: canonical_path,
             status_notice(
                 variant: AlertVariant::Neutral,
                 title: Some(t(locale, Message::ErrorNotFoundTitle)),
@@ -101,7 +60,12 @@ pub(crate) async fn article_internal_server_error_page(
     Ok(view! {
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
-            metadata: ShellMetadata::article(locale, title, description, canonical_path),
+            metadata: Metadata::new()
+                .title(title)
+                .description(description)
+                .open_graph(OpenGraph::new().kind(OpenGraphType::Article)),
+            locale: locale,
+            canonical_path: canonical_path,
             status_notice(
                 variant: AlertVariant::Destructive,
                 title: None,
@@ -123,7 +87,9 @@ pub(crate) async fn internal_server_error_page(
     Ok(view! {
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
-            metadata: ShellMetadata::website(locale, title, description, canonical_path),
+            metadata: Metadata::new().title(title).description(description),
+            locale: locale,
+            canonical_path: canonical_path,
             status_notice(
                 variant: AlertVariant::Destructive,
                 title: None,
@@ -158,18 +124,17 @@ async fn status_notice(
 pub(crate) async fn site_shell(
     cx: &Cx,
     status: StatusCode,
-    metadata: ShellMetadata,
+    metadata: Metadata,
+    locale: Locale,
+    canonical_path: String,
+    #[default] locales: SiteLocalesDocument,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
-    let locale = metadata.locale;
-    let available = metadata
-        .locales
-        .routes
-        .get(japanese_path(&metadata.canonical_path));
+    let available = locales.routes.get(japanese_path(&canonical_path));
     let alternates = available
         .into_iter()
         .flatten()
-        .map(|other| (*other, other.path(japanese_path(&metadata.canonical_path))))
+        .map(|other| (*other, other.path(japanese_path(&canonical_path))))
         .collect::<Vec<_>>();
     let switch_locales = if status != StatusCode::OK {
         crate::app::page_loader(cx)
@@ -178,7 +143,7 @@ pub(crate) async fn site_shell(
             .await
             .unwrap_or_default()
     } else {
-        metadata.locales.clone()
+        locales
     };
     let year = chrono::Local::now().year();
     let math_render_script = Unescaped::new_unchecked(
@@ -278,25 +243,11 @@ window.okawakScheduleCodeHighlight = function(root) {
 })();
 "#,
     );
-    let ShellMetadata {
-        title,
-        description,
-        canonical_path,
-        og_type,
-        ..
-    } = metadata;
-    let canonical_url = crate::build_site_url(&canonical_path);
-    // Reuse the loaded presentation: metadata must describe the same snapshot as the body.
+    // Canonical metadata and language links share the same published page path.
     let cx = cx.with(
-        Metadata::new()
-            .title(title)
-            .description(description)
-            .canonical(canonical_url)
-            .open_graph(
-                OpenGraph::new()
-                    .kind(og_type)
-                    .site_name(t(locale, Message::SiteName)),
-            ),
+        metadata
+            .canonical(crate::build_site_url(&canonical_path))
+            .open_graph(OpenGraph::new().site_name(t(locale, Message::SiteName))),
     );
 
     Ok(view! {

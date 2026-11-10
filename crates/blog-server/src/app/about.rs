@@ -5,12 +5,13 @@ use blog_domain::{PageKey, StaticPageDocument, build_static_page_canonical_path}
 use topcoat::{
     Result,
     context::Cx,
+    metadata::Metadata,
     router::{StatusCode, page},
     view::{Unescaped, View, ViewExt, component, view},
 };
 
 use super::page_loader;
-use crate::shell::{ShellMetadata, internal_server_error_page, not_found_page, site_shell};
+use crate::shell::{internal_server_error_page, not_found_page, site_shell};
 
 const ABOUT_PAGE_KEY: &str = "about";
 
@@ -70,9 +71,10 @@ async fn about_document(
     Ok(view! {
         site_shell(
             status: StatusCode::OK,
-            metadata: ShellMetadata::website(locale, title, description, canonical_path).with_locales(
-                locales,
-            ),
+            metadata: Metadata::new().title(title).description(description),
+            locale: locale,
+            canonical_path: canonical_path,
+            locales: locales,
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-8 px-4 py-8 text-left sm:px-6 sm:py-12"
             >

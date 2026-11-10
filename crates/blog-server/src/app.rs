@@ -21,6 +21,7 @@ use topcoat::{
     Result,
     asset::{AssetConfig, RouterBuilderAssetExt},
     context::{Cx, context, memoize},
+    metadata::Metadata,
     router::{
         Body, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode, TrailingSlash,
         error::NotFoundError,
@@ -40,7 +41,7 @@ use crate::{
     },
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
     page_loader::{PageLoadResult, PageLoaderContext},
-    shell::{ShellMetadata, internal_server_error_page, not_found_page, site_shell},
+    shell::{internal_server_error_page, not_found_page, site_shell},
 };
 
 #[page]
@@ -235,9 +236,10 @@ async fn home_document(
     Ok(view! {
         site_shell(
             status: StatusCode::OK,
-            metadata: ShellMetadata::website(locale, title, description, canonical_path).with_locales(
-                locales,
-            ),
+            metadata: Metadata::new().title(title).description(description),
+            locale: locale,
+            canonical_path: canonical_path,
+            locales: locales,
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-12 px-4 py-8 text-left sm:px-6 sm:py-12"
             >

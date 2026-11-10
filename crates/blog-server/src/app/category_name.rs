@@ -9,6 +9,7 @@ use blog_domain::{Category, CategoryPageDocument, build_category_page_canonical_
 use topcoat::{
     Result,
     context::Cx,
+    metadata::Metadata,
     router::{StatusCode, module_param, page, request},
     view::{Unescaped, View, ViewExt, component, view},
 };
@@ -16,7 +17,7 @@ use topcoat::{
 use super::load_category;
 use crate::{
     category_articles::category_articles,
-    shell::{ShellMetadata, internal_server_error_page, not_found_page, site_shell},
+    shell::{internal_server_error_page, not_found_page, site_shell},
 };
 
 module_param!(category_name);
@@ -86,12 +87,10 @@ async fn category_document(
     Ok(view! {
         site_shell(
             status: StatusCode::OK,
-            metadata: ShellMetadata::website(
-                locale,
-                title,
-                description.clone(),
-                canonical_path,
-            ).with_locales(locales),
+            metadata: Metadata::new().title(title).description(description.clone()),
+            locale: locale,
+            canonical_path: canonical_path,
+            locales: locales,
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-6 px-4 py-8 text-left sm:px-6 sm:py-12"
             >
