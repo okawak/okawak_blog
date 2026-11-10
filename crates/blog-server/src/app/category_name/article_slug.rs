@@ -47,11 +47,7 @@ pub(crate) async fn render_article(
         }
     };
 
-    match page_loader(cx)
-        .loader()
-        .load_article(locale, &category, &slug)
-        .await
-    {
+    match page_loader(cx).load_article(locale, &category, &slug).await {
         Ok(Some(presentation)) => {
             Ok(view! { article_document(presentation: presentation, locale: locale) }.boxed())
         }

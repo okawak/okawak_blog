@@ -5,11 +5,11 @@ use topcoat::{
     router::{content::Json, error::internal_server_error, route},
 };
 
-use super::ArtifactReaderContext;
+use blog_infra::DynArtifactReader;
 
 #[route(GET)]
 async fn articles(cx: &Cx) -> Result<Json<blog_domain::ArticleIndexDocument>> {
-    let artifact_reader = &context::<ArtifactReaderContext>(cx).0;
+    let artifact_reader = context::<DynArtifactReader>(cx);
     let document = match try_context::<DynArtifactSnapshot>(cx) {
         Some(snapshot) => snapshot.read_article_index().await,
         None => {

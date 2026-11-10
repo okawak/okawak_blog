@@ -23,11 +23,7 @@ async fn about(cx: &Cx) -> Result<impl View> {
 pub(crate) async fn render_about(cx: &Cx, locale: Locale) -> Result<impl View> {
     let page = PageKey::new(ABOUT_PAGE_KEY.to_string())?;
 
-    match page_loader(cx)
-        .loader()
-        .load_static_page(locale, &page)
-        .await
-    {
+    match page_loader(cx).load_static_page(locale, &page).await {
         Ok(Some(presentation)) => {
             Ok(view! { about_document(presentation: presentation, locale: locale) }.boxed())
         }

@@ -6,7 +6,7 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 
 ## applicationとruntimeの境界
 
-- `src/main.rs`: process設定、tracing subscriber、reader、listenerの初期化
+- `src/main.rs`: process設定、公開BaseUrlの検証、tracing subscriber、reader、listenerの初期化
 - `src/app.rs`: `module_router!()`を呼ぶroute tree root。home route、global layer、共有context、assetのcomposition
 - `src/app/api.rs`と`src/app/api/*.rs`: URL構造に対応するhealth、readiness、互換記事一覧API
 - `src/http_cache.rs`: release-aware validatorとconditional GET
@@ -35,7 +35,9 @@ routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL�
 
 Topcoat frameworkとCLIはworkspaceで同じversionに揃え、shardは明示したendpointを`.route(category_articles)`で登録します。applicationのglobal layerを先に追加し、最後に`.layer(RuntimeLayer::new())`を登録して、application layerより前に再描画POSTをGETへrewriteします。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
 
-routerの共有値とrequest固有値はTopcoatの統合contextへ登録し、`context::<T>(cx)` / `try_context::<T>(cx)`で取得します。共有値はrouterの`.with(...)`、release snapshotと対応するPageLoaderは`cx.with_many((snapshot, loader))`で追加します。requestの値が共有値をshadowするため、UIとAPIは同じsnapshotを参照します。先読みの既定値も`.with(PrefetchMode::Intent)`で設定します。
+`DynPageLoader`と`DynArtifactReader`はラッパーを挟まずTopcoatの統合contextへ直接登録し、`context::<T>(cx)` / `try_context::<T>(cx)`で取得します。共有値はrouterの`.with(...)`、release snapshotと対応するPageLoaderは`cx.with_many((snapshot, loader))`で追加します。requestの値が共有値をshadowするため、UIとAPIは同じsnapshotを参照します。先読みの既定値も`.with(PrefetchMode::Intent)`で設定します。
+
+公開URLの基準は起動時に`OKAWAK_BLOG_SITE_ORIGIN`から一度だけ読み、Topcoatの`BaseUrl`としてrouterへ渡します。未設定・空文字は`https://www.okawak.net`を使い、HTTP(S)の絶対URLでない値やquery・fragmentを含む値はartifact初期化前にエラーにします。canonical・Open Graph URL・hreflangは同じ`BaseUrl`を使います。URL結合は`BaseUrl::join()`へ任せ、日本語homeだけは既存契約に合わせて末尾slashなしの`BaseUrl::as_str()`を使います。
 
 runtimeのpage再描画はpage自身のURLに`X-Topcoat-Runtime: true`を付けてPOSTし、GETへ内部rewriteします。conditional GETでは`request::original_method(cx)`を参照し、再描画応答に通常pageのvalidatorを適用しません。
 

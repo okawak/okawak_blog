@@ -5,7 +5,7 @@ use blog_domain::{Locale, SiteLocalesDocument};
 use chrono::Datelike;
 use topcoat::{
     Result,
-    context::Cx,
+    context::{Cx, base_url},
     icon::icon,
     metadata::{Metadata, OpenGraph, OpenGraphType},
     router::{StatusCode, request},
@@ -138,7 +138,6 @@ pub(crate) async fn site_shell(
         .collect::<Vec<_>>();
     let switch_locales = if status != StatusCode::OK {
         crate::app::page_loader(cx)
-            .loader()
             .load_locales()
             .await
             .unwrap_or_default()
@@ -243,10 +242,16 @@ window.okawakScheduleCodeHighlight = function(root) {
 })();
 "#,
     );
-    // Canonical metadata and language links share the same published page path.
+    let site_url = base_url(cx);
+    // Keep the established slashless home URL and resolve even unmatched paths on this site.
+    let canonical = if canonical_path == "/" {
+        site_url.as_str().to_owned()
+    } else {
+        site_url.join(&canonical_path)
+    };
     let cx = cx.with(
         metadata
-            .canonical(crate::build_site_url(&canonical_path))
+            .canonical(canonical)
             .open_graph(OpenGraph::new().site_name(t(locale, Message::SiteName))),
     );
 
@@ -264,7 +269,11 @@ window.okawakScheduleCodeHighlight = function(root) {
                     <link
                         rel="alternate"
                         hreflang=(other.as_str())
-                        href=(crate::build_site_url(path))
+                        href=(if path == "/" {
+                            site_url.as_str().to_owned()
+                        } else {
+                            site_url.join(path)
+                        })
                     >
                 }
                 <link rel="stylesheet" href=(STYLESHEET)>

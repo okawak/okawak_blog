@@ -138,7 +138,7 @@ pub(crate) async fn redirect(cx: &Cx) -> Option<Response> {
     if explicit.is_none() && locale == Locale::Ja {
         return None;
     }
-    let locales = match crate::app::page_loader(cx).loader().load_locales().await {
+    let locales = match crate::app::page_loader(cx).load_locales().await {
         Ok(locales) => locales,
         Err(error) => {
             tracing::error!(%error, "language selection could not read the published locales");

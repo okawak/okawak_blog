@@ -20,7 +20,7 @@ use blog_infra::DynArtifactReader;
 use topcoat::{
     Result,
     asset::{AssetConfig, RouterBuilderAssetExt},
-    context::{Cx, context, memoize},
+    context::{BaseUrl, Cx, context, memoize},
     metadata::Metadata,
     router::{
         Body, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode, TrailingSlash,
@@ -40,7 +40,7 @@ use crate::{
         badge::{BadgeVariant, badge_variants},
     },
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
-    page_loader::{PageLoadResult, PageLoaderContext},
+    page_loader::{DynPageLoader, PageLoadResult, PageLoader},
     shell::{internal_server_error_page, not_found_page, site_shell},
 };
 
@@ -50,7 +50,7 @@ async fn home(cx: &Cx) -> Result<impl View> {
 }
 
 pub(crate) async fn render_home(cx: &Cx, locale: Locale) -> Result<impl View> {
-    match page_loader(cx).loader().load_home(locale).await {
+    match page_loader(cx).load_home(locale).await {
         Ok(Some(presentation)) => {
             Ok(view! { home_document(presentation: presentation, locale: locale) }.boxed())
         }
@@ -71,8 +71,8 @@ pub(crate) async fn render_home(cx: &Cx, locale: Locale) -> Result<impl View> {
     }
 }
 
-pub(crate) fn page_loader(cx: &Cx) -> &PageLoaderContext {
-    context::<PageLoaderContext>(cx)
+pub(crate) fn page_loader(cx: &Cx) -> &dyn PageLoader {
+    context::<DynPageLoader>(cx).as_ref()
 }
 
 // The page and its inline shard share the same published document and snapshot.
@@ -82,10 +82,7 @@ pub(crate) async fn load_category(
     category: Category,
     locale: Locale,
 ) -> PageLoadResult<Option<crate::page_loader::Presentation<CategoryPageDocument>>> {
-    page_loader(cx)
-        .loader()
-        .load_category(locale, &category)
-        .await
+    page_loader(cx).load_category(locale, &category).await
 }
 
 fn is_under_path(path: &str, prefix: &str) -> bool {
@@ -146,16 +143,11 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
             .as_ref()
             .and_then(|decision| decision.snapshot());
         if negotiate && snapshot.is_none() {
-            snapshot = context::<api::ArtifactReaderContext>(cx)
-                .0
-                .snapshot()
-                .await
-                .ok();
+            snapshot = context::<DynArtifactReader>(cx).snapshot().await.ok();
         }
         let scoped = snapshot.map(|snapshot| {
-            let loader = PageLoaderContext::new(Arc::new(ArtifactPageLoader::from_snapshot(
-                snapshot.clone(),
-            )));
+            let loader: DynPageLoader =
+                Arc::new(ArtifactPageLoader::from_snapshot(snapshot.clone()));
             cx.with_many((snapshot, loader))
         });
         let cx = scoped.as_ref().unwrap_or(cx);
@@ -194,7 +186,9 @@ pub fn create_router(
     artifact_reader: DynArtifactReader,
     validators_enabled: bool,
     assets: AssetConfig,
+    base_url: BaseUrl,
 ) -> Router {
+    let loader: DynPageLoader = Arc::new(ArtifactPageLoader::from_reader(artifact_reader.clone()));
     topcoat::router::module_router!()
         .route(crate::category_articles::category_articles)
         .trailing_slash(TrailingSlash::Redirect)
@@ -209,10 +203,9 @@ pub fn create_router(
             artifact_reader.clone(),
             validators_enabled,
         ))
-        .with(PageLoaderContext::new(Arc::new(
-            ArtifactPageLoader::from_reader(artifact_reader.clone()),
-        )))
-        .with(api::ArtifactReaderContext(artifact_reader))
+        .with(loader)
+        .with(artifact_reader)
+        .with(base_url)
         .assets(assets)
         .build()
 }

@@ -18,10 +18,84 @@ use std::{
 use tempfile::tempdir;
 use topcoat::{
     asset::{AssetConfig, Manifest, ManifestEntry},
+    context::BaseUrl,
     router::{Body, HeaderMap, Method, Router, StatusCode, header, request::Request, to_bytes},
 };
 
 use blog_server::{app::create_router as create_router_with_assets, assets};
+
+#[tokio::test]
+async fn metadata_uses_each_routers_base_url_and_preserves_canonical_paths() {
+    let routers = ["https://preview.example///", "http://127.0.0.1:8123/"].map(|origin| {
+        (
+            origin.trim_end_matches('/'),
+            create_router_with_assets(
+                fixture_reader(),
+                false,
+                test_asset_config(),
+                BaseUrl::new(origin).unwrap(),
+            ),
+        )
+    });
+    for (origin, router) in routers {
+        for (path, canonical_path, japanese, english) in [
+            ("/?campaign=test", "", "", "/en"),
+            ("/en", "/en", "", "/en"),
+            ("/about", "/about", "/about", "/en/about"),
+            ("/en/tech", "/en/tech", "/tech", "/en/tech"),
+            (
+                "/tech/e2e-article.html?campaign=test",
+                "/tech/e2e-article",
+                "/tech/e2e-article",
+                "/en/tech/e2e-article",
+            ),
+        ] {
+            let result = response(
+                &router,
+                Request::builder()
+                    .uri(path)
+                    .header(header::ACCEPT_LANGUAGE, "ja")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(result.status, StatusCode::OK, "{origin}{path}");
+            for tag in [
+                format!("<link rel=\"canonical\" href=\"{origin}{canonical_path}\">"),
+                format!("<meta property=\"og:url\" content=\"{origin}{canonical_path}\">"),
+                format!("<link rel=\"alternate\" hreflang=\"ja\" href=\"{origin}{japanese}\">"),
+                format!("<link rel=\"alternate\" hreflang=\"en\" href=\"{origin}{english}\">"),
+            ] {
+                assert!(result.body.contains(&tag), "{origin}{path}: {tag}");
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn not_found_metadata_keeps_repeated_leading_slashes_on_the_configured_site() {
+    let router = create_router_with_assets(
+        fixture_reader(),
+        false,
+        test_asset_config(),
+        BaseUrl::new("https://preview.example").unwrap(),
+    );
+    let result = response(
+        &router,
+        Request::builder()
+            .uri("//other.example/missing")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(result.status, StatusCode::NOT_FOUND);
+    assert!(result.body.contains(
+        "<link rel=\"canonical\" href=\"https://preview.example/other.example/missing\">"
+    ));
+    assert!(result.body.contains(
+        "<meta property=\"og:url\" content=\"https://preview.example/other.example/missing\">"
+    ));
+}
 
 #[tokio::test]
 async fn page_metadata_is_unique_and_includes_social_preview_defaults() {
@@ -370,7 +444,12 @@ fn test_asset_config() -> AssetConfig {
 }
 
 fn create_router(artifact_reader: DynArtifactReader, validators_enabled: bool) -> Router {
-    create_router_with_assets(artifact_reader, validators_enabled, test_asset_config())
+    create_router_with_assets(
+        artifact_reader,
+        validators_enabled,
+        test_asset_config(),
+        BaseUrl::new("https://www.okawak.net").unwrap(),
+    )
 }
 
 fn assert_html_document(body: &str) {
