@@ -1382,6 +1382,91 @@ async fn category_renders_the_published_landing_and_articles_as_html() {
 }
 
 #[tokio::test]
+async fn invalid_category_errors_share_the_conditional_get_snapshot() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let reader: DynArtifactReader = Arc::new(CountingReader {
+        inner: fixture_reader(),
+        snapshot_calls: calls.clone(),
+    });
+    let router = create_router(validator_reader(reader), true);
+    for path in [
+        "/unknown",
+        "/unknown/article",
+        "/en/unknown",
+        "/en/unknown/article",
+    ] {
+        calls.store(0, Ordering::SeqCst);
+        let result = response(
+            &router,
+            Request::builder().uri(path).body(Body::empty()).unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::NOT_FOUND, "{path}");
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "{path}");
+        assert!(!result.headers.contains_key(header::ETAG), "{path}");
+        assert!(
+            !result.headers.contains_key(header::LAST_MODIFIED),
+            "{path}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn category_parameters_preserve_localized_errors_and_decoded_values() {
+    let router = create_router(fixture_reader(), false);
+    for prefix in ["", "/en"] {
+        for suffix in ["/unknown", "/unknown/e2e-article", "/not%20a%20category"] {
+            let path = format!("{prefix}{suffix}");
+            let result = response(
+                &router,
+                Request::builder().uri(&path).body(Body::empty()).unwrap(),
+            )
+            .await;
+            assert_eq!(result.status, StatusCode::NOT_FOUND, "{path}");
+            assert!(
+                result.body.contains(if prefix.is_empty() {
+                    "<html lang=\"ja\">"
+                } else {
+                    "<html lang=\"en\">"
+                }),
+                "{path}"
+            );
+            assert!(
+                result.body.contains(&format!(
+                    "<link rel=\"canonical\" href=\"https://www.okawak.net{path}\">"
+                )),
+                "{path}"
+            );
+            assert!(result.body.contains("<title>"), "{path}");
+        }
+        for suffix in ["/T%45CH", "/T%45CH/e2e-article.html"] {
+            let path = format!("{prefix}{suffix}");
+            let result = response(
+                &router,
+                Request::builder().uri(&path).body(Body::empty()).unwrap(),
+            )
+            .await;
+            assert_eq!(result.status, StatusCode::OK, "{path}");
+        }
+    }
+    let router = create_router(Arc::new(FailingSnapshotReader), false);
+    let result = response(
+        &router,
+        Request::builder()
+            .uri("/T%45CH")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(result.status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(
+        result
+            .body
+            .contains("<title>TECH | ぶくせんの探窟メモ</title>")
+    );
+}
+
+#[tokio::test]
 async fn category_returns_not_found_for_invalid_or_missing_categories() {
     let router = create_router(fixture_reader(), false);
 

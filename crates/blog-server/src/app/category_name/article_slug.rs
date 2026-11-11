@@ -1,7 +1,6 @@
 use crate::i18n::{Message, t};
 use crate::metadata::*;
 use blog_domain::Locale;
-use std::str::FromStr;
 
 use blog_domain::{ArticlePageDocument, Category, Slug, build_article_page_canonical_path};
 use topcoat::{
@@ -21,25 +20,19 @@ module_param!(article_slug);
 
 #[page]
 async fn article_page(cx: &Cx) -> Result<impl View> {
-    render_article(cx, Locale::Ja, category_name(cx), article_slug(cx)).await
+    render_article(cx, Locale::Ja, *category_name(cx)?, article_slug(cx)).await
 }
 
 pub(crate) async fn render_article(
     cx: &Cx,
     locale: Locale,
-    category_param: &str,
+    category: Category,
     slug_param: &str,
 ) -> Result<impl View> {
     let normalized_slug = normalize_article_slug_param(slug_param);
     let requested_path = request::uri(cx).path().to_string();
     let fallback_title = format!("{normalized_slug} | {}", t(locale, Message::SiteName));
     let fallback_description = t(locale, Message::ErrorArticle).to_string();
-    let category = match Category::from_str(category_param) {
-        Ok(category) => category,
-        Err(_) => {
-            return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed());
-        }
-    };
     let slug = match Slug::new(normalized_slug.to_string()) {
         Ok(slug) => slug,
         Err(_) => {
@@ -55,7 +48,7 @@ pub(crate) async fn render_article(
         Err(error) => {
             tracing::error!(
                 %error,
-                category = category_param,
+                %category,
                 slug = normalized_slug,
                 "article page artifact read failed"
             );

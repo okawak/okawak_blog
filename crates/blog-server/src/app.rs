@@ -192,10 +192,11 @@ pub fn create_router(
     topcoat::router::module_router!()
         .route(crate::category_articles::category_articles)
         .trailing_slash(TrailingSlash::Redirect)
+        // Error pages also render within the request's artifact snapshot.
+        .layer(LayerFn::new(None::<&Path>, render_unmatched_path))
         // The framework-neutral decision filters APIs, static assets, and unsuccessful responses.
         // One global layer also avoids nested prefix layers acquiring more than one snapshot.
         .layer(LayerFn::new(None::<&Path>, artifact_conditional_get))
-        .layer(LayerFn::new(None::<&Path>, render_unmatched_path))
         // Runtime reruns must become GETs before the application layers run.
         .layer(RuntimeLayer::new())
         .with(PrefetchMode::Intent)

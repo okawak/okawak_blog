@@ -3,14 +3,12 @@ use crate::metadata::*;
 use blog_domain::Locale;
 pub(crate) mod article_slug;
 
-use std::str::FromStr;
-
 use blog_domain::{Category, CategoryPageDocument, build_category_page_canonical_path};
 use topcoat::{
     Result,
     context::Cx,
     metadata::Metadata,
-    router::{StatusCode, module_param, page, request},
+    router::{StatusCode, module_param, page, raw_path_params, request},
     view::{Unescaped, View, ViewExt, component, view},
 };
 
@@ -20,32 +18,29 @@ use crate::{
     shell::{internal_server_error_page, not_found_page, site_shell},
 };
 
-module_param!(category_name);
+module_param!(category_name: Category else not_found);
 
 #[page]
 async fn category_page(cx: &Cx) -> Result<impl View> {
-    render_category(cx, Locale::Ja, category_name(cx)).await
+    render_category(cx, Locale::Ja, *category_name(cx)?).await
 }
 
 pub(crate) async fn render_category(
     cx: &Cx,
     locale: Locale,
-    category_param: &str,
+    category: Category,
 ) -> Result<impl View> {
     let requested_path = request::uri(cx).path().to_string();
-    let category = match Category::from_str(category_param) {
-        Ok(category) => category,
-        Err(_) => {
-            return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed());
-        }
-    };
-
     match load_category(cx, category, locale).await.clone() {
         Ok(Some(presentation)) => {
             Ok(view! { category_document(presentation: presentation, locale: locale) }.boxed())
         }
         Ok(None) => Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
         Err(error) => {
+            // Preserve the requested spelling in the error title (e.g. /TECH).
+            let category_param = raw_path_params(cx)
+                .find_map(|(name, value)| (name == "category_name").then_some(value.as_str()))
+                .unwrap_or(category.as_str());
             tracing::error!(
                 %error,
                 category = category_param,
