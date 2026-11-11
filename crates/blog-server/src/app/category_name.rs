@@ -3,57 +3,53 @@ use crate::metadata::*;
 use blog_domain::Locale;
 pub(crate) mod article_slug;
 
-use std::str::FromStr;
-
 use blog_domain::{Category, CategoryPageDocument, build_category_page_canonical_path};
 use topcoat::{
     Result,
     context::Cx,
-    router::{StatusCode, module_param, page, path_param, request},
+    metadata::Metadata,
+    router::{StatusCode, module_param, page, raw_path_params, request},
     view::{Unescaped, View, ViewExt, component, view},
 };
 
 use super::load_category;
 use crate::{
     category_articles::category_articles,
-    shell::{ShellMetadata, internal_server_error_page, not_found_page, site_shell},
+    shell::{internal_server_error_page, not_found_page, site_shell},
 };
 
-module_param!(category_name);
+module_param!(category_name: Category else not_found);
 
 #[page]
 async fn category_page(cx: &Cx) -> Result<impl View> {
-    render_category(cx, Locale::Ja, path_param::<CategoryName>(cx)).await
+    render_category(cx, Locale::Ja, *category_name(cx)?).await
 }
 
 pub(crate) async fn render_category(
     cx: &Cx,
     locale: Locale,
-    category_param: &str,
+    category: Category,
 ) -> Result<impl View> {
     let requested_path = request::uri(cx).path().to_string();
-    let category = match Category::from_str(category_param) {
-        Ok(category) => category,
-        Err(_) => {
-            return Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed());
-        }
-    };
-
     match load_category(cx, category, locale).await.clone() {
-        Ok(Some(presentation)) => Ok(
-            view! { cx => category_document(presentation: presentation, locale: locale) }.boxed(),
-        ),
-        Ok(None) => Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed()),
+        Ok(Some(presentation)) => {
+            Ok(view! { category_document(presentation: presentation, locale: locale) }.boxed())
+        }
+        Ok(None) => Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
         Err(error) => {
+            // Preserve the requested spelling in the error title (e.g. /TECH).
+            let category_param = raw_path_params(cx)
+                .find_map(|(name, value)| (name == "category_name").then_some(value.as_str()))
+                .unwrap_or(category.as_str());
             tracing::error!(
                 %error,
                 category = category_param,
                 "category page artifact read failed"
             );
+            let title = format!("{category_param} | {}", t(locale, Message::SiteName));
             Ok(view! {
-                cx =>
                 internal_server_error_page(
-                    title: format!("{category_param} | {}", t(locale, Message::SiteName)),
+                    title: title,
                     description: t(locale, Message::ErrorCategory).to_string(),
                     canonical_path: requested_path,
                     message: Message::ErrorCategory
@@ -66,6 +62,7 @@ pub(crate) async fn render_category(
 
 #[component]
 async fn category_document(
+    cx: &Cx,
     presentation: crate::page_loader::Presentation<CategoryPageDocument>,
     locale: Locale,
 ) -> Result<impl View> {
@@ -85,12 +82,10 @@ async fn category_document(
     Ok(view! {
         site_shell(
             status: StatusCode::OK,
-            metadata: ShellMetadata::website(
-                locale,
-                title,
-                description.clone(),
-                canonical_path,
-            ).with_locales(locales),
+            metadata: Metadata::new().title(title).description(description.clone()),
+            locale: locale,
+            canonical_path: canonical_path,
+            locales: locales,
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-6 px-4 py-8 text-left sm:px-6 sm:py-12"
             >

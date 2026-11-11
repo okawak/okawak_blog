@@ -18,10 +18,147 @@ use std::{
 use tempfile::tempdir;
 use topcoat::{
     asset::{AssetConfig, Manifest, ManifestEntry},
+    context::BaseUrl,
     router::{Body, HeaderMap, Method, Router, StatusCode, header, request::Request, to_bytes},
 };
 
 use blog_server::{app::create_router as create_router_with_assets, assets};
+
+#[tokio::test]
+async fn metadata_uses_each_routers_base_url_and_preserves_canonical_paths() {
+    let routers = ["https://preview.example///", "http://127.0.0.1:8123/"].map(|origin| {
+        (
+            origin.trim_end_matches('/'),
+            create_router_with_assets(
+                fixture_reader(),
+                false,
+                test_asset_config(),
+                BaseUrl::new(origin).unwrap(),
+            ),
+        )
+    });
+    for (origin, router) in routers {
+        for (path, canonical_path, japanese, english) in [
+            ("/?campaign=test", "", "", "/en"),
+            ("/en", "/en", "", "/en"),
+            ("/about", "/about", "/about", "/en/about"),
+            ("/en/tech", "/en/tech", "/tech", "/en/tech"),
+            (
+                "/tech/e2e-article.html?campaign=test",
+                "/tech/e2e-article",
+                "/tech/e2e-article",
+                "/en/tech/e2e-article",
+            ),
+        ] {
+            let result = response(
+                &router,
+                Request::builder()
+                    .uri(path)
+                    .header(header::ACCEPT_LANGUAGE, "ja")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(result.status, StatusCode::OK, "{origin}{path}");
+            for tag in [
+                format!("<link rel=\"canonical\" href=\"{origin}{canonical_path}\">"),
+                format!("<meta property=\"og:url\" content=\"{origin}{canonical_path}\">"),
+                format!("<link rel=\"alternate\" hreflang=\"ja\" href=\"{origin}{japanese}\">"),
+                format!("<link rel=\"alternate\" hreflang=\"en\" href=\"{origin}{english}\">"),
+            ] {
+                assert!(result.body.contains(&tag), "{origin}{path}: {tag}");
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn not_found_metadata_keeps_repeated_leading_slashes_on_the_configured_site() {
+    let router = create_router_with_assets(
+        fixture_reader(),
+        false,
+        test_asset_config(),
+        BaseUrl::new("https://preview.example").unwrap(),
+    );
+    let result = response(
+        &router,
+        Request::builder()
+            .uri("//other.example/missing")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(result.status, StatusCode::NOT_FOUND);
+    assert!(result.body.contains(
+        "<link rel=\"canonical\" href=\"https://preview.example/other.example/missing\">"
+    ));
+    assert!(result.body.contains(
+        "<meta property=\"og:url\" content=\"https://preview.example/other.example/missing\">"
+    ));
+}
+
+#[tokio::test]
+async fn page_metadata_is_unique_and_includes_social_preview_defaults() {
+    let router = create_router(fixture_reader(), false);
+    for path in [
+        "/",
+        "/en",
+        "/about",
+        "/en/about",
+        "/tech",
+        "/en/tech",
+        "/tech/e2e-article",
+        "/en/tech/e2e-article",
+        "/missing/page",
+    ] {
+        let result = response(
+            &router,
+            Request::builder()
+                .uri(path)
+                .header(header::ACCEPT_LANGUAGE, "ja")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        for tag in [
+            "<meta charset=",
+            "<meta name=\"viewport\"",
+            "<title>",
+            "<meta name=\"description\"",
+            "<link rel=\"canonical\"",
+            "<meta property=\"og:title\"",
+            "<meta property=\"og:description\"",
+            "<meta property=\"og:url\"",
+            "<meta property=\"og:type\"",
+            "<meta property=\"og:locale\"",
+            "<meta property=\"og:site_name\"",
+            "<meta name=\"twitter:card\"",
+        ] {
+            assert_eq!(result.body.matches(tag).count(), 1, "{path}: {tag}");
+        }
+        assert!(
+            result.body.find("<meta charset=\"utf-8\">").unwrap() < 1024,
+            "{path}"
+        );
+        assert!(
+            result
+                .body
+                .contains("<meta name=\"twitter:card\" content=\"summary\">"),
+            "{path}"
+        );
+        let site_name = if path.starts_with("/en") {
+            "Bukusen’s Exploration Notes"
+        } else {
+            "ぶくせんの探窟メモ"
+        };
+        assert!(
+            result.body.contains(&format!(
+                "<meta property=\"og:site_name\" content=\"{site_name}\">"
+            )),
+            "{path}"
+        );
+    }
+}
 
 #[tokio::test]
 async fn home_selects_browser_language_with_english_default_and_saved_preference() {
@@ -307,7 +444,12 @@ fn test_asset_config() -> AssetConfig {
 }
 
 fn create_router(artifact_reader: DynArtifactReader, validators_enabled: bool) -> Router {
-    create_router_with_assets(artifact_reader, validators_enabled, test_asset_config())
+    create_router_with_assets(
+        artifact_reader,
+        validators_enabled,
+        test_asset_config(),
+        BaseUrl::new("https://www.okawak.net").unwrap(),
+    )
 }
 
 fn assert_html_document(body: &str) {
@@ -1237,6 +1379,91 @@ async fn category_renders_the_published_landing_and_articles_as_html() {
     assert!(response.body.contains("2026年1月1日"));
     assert!(response.body.contains("2026年1月2日"));
     assert!(!response.body.contains("&lt;h2&gt;Tech landing"));
+}
+
+#[tokio::test]
+async fn invalid_category_errors_share_the_conditional_get_snapshot() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let reader: DynArtifactReader = Arc::new(CountingReader {
+        inner: fixture_reader(),
+        snapshot_calls: calls.clone(),
+    });
+    let router = create_router(validator_reader(reader), true);
+    for path in [
+        "/unknown",
+        "/unknown/article",
+        "/en/unknown",
+        "/en/unknown/article",
+    ] {
+        calls.store(0, Ordering::SeqCst);
+        let result = response(
+            &router,
+            Request::builder().uri(path).body(Body::empty()).unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::NOT_FOUND, "{path}");
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "{path}");
+        assert!(!result.headers.contains_key(header::ETAG), "{path}");
+        assert!(
+            !result.headers.contains_key(header::LAST_MODIFIED),
+            "{path}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn category_parameters_preserve_localized_errors_and_decoded_values() {
+    let router = create_router(fixture_reader(), false);
+    for prefix in ["", "/en"] {
+        for suffix in ["/unknown", "/unknown/e2e-article", "/not%20a%20category"] {
+            let path = format!("{prefix}{suffix}");
+            let result = response(
+                &router,
+                Request::builder().uri(&path).body(Body::empty()).unwrap(),
+            )
+            .await;
+            assert_eq!(result.status, StatusCode::NOT_FOUND, "{path}");
+            assert!(
+                result.body.contains(if prefix.is_empty() {
+                    "<html lang=\"ja\">"
+                } else {
+                    "<html lang=\"en\">"
+                }),
+                "{path}"
+            );
+            assert!(
+                result.body.contains(&format!(
+                    "<link rel=\"canonical\" href=\"https://www.okawak.net{path}\">"
+                )),
+                "{path}"
+            );
+            assert!(result.body.contains("<title>"), "{path}");
+        }
+        for suffix in ["/T%45CH", "/T%45CH/e2e-article.html"] {
+            let path = format!("{prefix}{suffix}");
+            let result = response(
+                &router,
+                Request::builder().uri(&path).body(Body::empty()).unwrap(),
+            )
+            .await;
+            assert_eq!(result.status, StatusCode::OK, "{path}");
+        }
+    }
+    let router = create_router(Arc::new(FailingSnapshotReader), false);
+    let result = response(
+        &router,
+        Request::builder()
+            .uri("/T%45CH")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(result.status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(
+        result
+            .body
+            .contains("<title>TECH | ぶくせんの探窟メモ</title>")
+    );
 }
 
 #[tokio::test]

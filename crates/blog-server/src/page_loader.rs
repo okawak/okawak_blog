@@ -49,16 +49,3 @@ pub(crate) struct Presentation<T> {
 }
 
 pub(crate) type DynPageLoader = Arc<dyn PageLoader>;
-
-#[derive(Clone)]
-pub(crate) struct PageLoaderContext(DynPageLoader);
-
-impl PageLoaderContext {
-    pub(crate) fn new(loader: DynPageLoader) -> Self {
-        Self(loader)
-    }
-
-    pub(crate) fn loader(&self) -> &dyn PageLoader {
-        self.0.as_ref()
-    }
-}

@@ -20,14 +20,15 @@ use blog_infra::DynArtifactReader;
 use topcoat::{
     Result,
     asset::{AssetConfig, RouterBuilderAssetExt},
-    context::{Cx, app_context, memoize, try_request_context},
+    context::{BaseUrl, Cx, context, memoize},
+    metadata::Metadata,
     router::{
         Body, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode, TrailingSlash,
         error::NotFoundError,
         page, request,
         response::{IntoResponse, Response},
     },
-    runtime::{PrefetchMode, RouterBuilderRuntimeExt, link_attrs, prefetch_mode},
+    runtime::{PrefetchMode, RuntimeLayer, link_attrs, prefetch_mode},
     view::{Unescaped, View, ViewExt, attributes, class, component, view},
 };
 
@@ -39,8 +40,8 @@ use crate::{
         badge::{BadgeVariant, badge_variants},
     },
     http_cache::{ArtifactConditionalGetDecision, ArtifactHttpCacheState},
-    page_loader::{PageLoadResult, PageLoaderContext},
-    shell::{ShellMetadata, internal_server_error_page, not_found_page, site_shell},
+    page_loader::{DynPageLoader, PageLoadResult, PageLoader},
+    shell::{internal_server_error_page, not_found_page, site_shell},
 };
 
 #[page]
@@ -49,16 +50,15 @@ async fn home(cx: &Cx) -> Result<impl View> {
 }
 
 pub(crate) async fn render_home(cx: &Cx, locale: Locale) -> Result<impl View> {
-    match page_loader(cx).loader().load_home(locale).await {
+    match page_loader(cx).load_home(locale).await {
         Ok(Some(presentation)) => {
-            Ok(view! { cx => home_document(presentation: presentation, locale: locale) }.boxed())
+            Ok(view! { home_document(presentation: presentation, locale: locale) }.boxed())
         }
-        Ok(None) => Ok(view! { cx => not_found_page(canonical_path: locale.path("/")) }.boxed()),
+        Ok(None) => Ok(view! { not_found_page(canonical_path: locale.path("/")) }.boxed()),
         Err(error) => {
             tracing::error!(%error, "home page artifact read failed");
             let description = t(locale, Message::ErrorHome).to_string();
             Ok(view! {
-                cx =>
                 internal_server_error_page(
                     title: build_home_page_title(locale),
                     description: description,
@@ -71,9 +71,8 @@ pub(crate) async fn render_home(cx: &Cx, locale: Locale) -> Result<impl View> {
     }
 }
 
-pub(crate) fn page_loader(cx: &Cx) -> &PageLoaderContext {
-    try_request_context::<PageLoaderContext>(cx)
-        .unwrap_or_else(|| app_context::<PageLoaderContext>(cx))
+pub(crate) fn page_loader(cx: &Cx) -> &dyn PageLoader {
+    context::<DynPageLoader>(cx).as_ref()
 }
 
 // The page and its inline shard share the same published document and snapshot.
@@ -83,10 +82,7 @@ pub(crate) async fn load_category(
     category: Category,
     locale: Locale,
 ) -> PageLoadResult<Option<crate::page_loader::Presentation<CategoryPageDocument>>> {
-    page_loader(cx)
-        .loader()
-        .load_category(locale, &category)
-        .await
+    page_loader(cx).load_category(locale, &category).await
 }
 
 fn is_under_path(path: &str, prefix: &str) -> bool {
@@ -109,7 +105,7 @@ fn render_unmatched_path<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFut
                 if error.is::<NotFoundError>() && is_site_page_path(request::uri(cx).path()) =>
             {
                 let canonical_path = request::uri(cx).path().to_string();
-                let page = view! { cx => not_found_page(canonical_path: canonical_path) }
+                let page = view! { not_found_page(canonical_path: canonical_path) }
                     .single()
                     .await?;
                 page.into_response(cx)
@@ -128,7 +124,7 @@ fn not_modified_response(conditional_get: &ArtifactConditionalGetDecision) -> Re
 
 fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
     Box::pin(async move {
-        let state = app_context::<ArtifactHttpCacheState>(cx);
+        let state = context::<ArtifactHttpCacheState>(cx);
         let conditional_get = state
             // Runtime page re-runs rewrite POST into GET, but their signal-dependent
             // HTML must not share validators with the ordinary published page.
@@ -147,17 +143,12 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
             .as_ref()
             .and_then(|decision| decision.snapshot());
         if negotiate && snapshot.is_none() {
-            snapshot = app_context::<api::ArtifactReaderContext>(cx)
-                .0
-                .snapshot()
-                .await
-                .ok();
+            snapshot = context::<DynArtifactReader>(cx).snapshot().await.ok();
         }
         let scoped = snapshot.map(|snapshot| {
-            let loader = PageLoaderContext::new(Arc::new(ArtifactPageLoader::from_snapshot(
-                snapshot.clone(),
-            )));
-            cx.with(snapshot).with(loader)
+            let loader: DynPageLoader =
+                Arc::new(ArtifactPageLoader::from_snapshot(snapshot.clone()));
+            cx.with_many((snapshot, loader))
         });
         let cx = scoped.as_ref().unwrap_or(cx);
         // A Japanese home ETag must never suppress a redirect selected by an English browser.
@@ -195,31 +186,34 @@ pub fn create_router(
     artifact_reader: DynArtifactReader,
     validators_enabled: bool,
     assets: AssetConfig,
+    base_url: BaseUrl,
 ) -> Router {
+    let loader: DynPageLoader = Arc::new(ArtifactPageLoader::from_reader(artifact_reader.clone()));
     topcoat::router::module_router!()
         .route(crate::category_articles::category_articles)
         .trailing_slash(TrailingSlash::Redirect)
+        // Error pages also render within the request's artifact snapshot.
+        .layer(LayerFn::new(None::<&Path>, render_unmatched_path))
         // The framework-neutral decision filters APIs, static assets, and unsuccessful responses.
         // One global layer also avoids nested prefix layers acquiring more than one snapshot.
         .layer(LayerFn::new(None::<&Path>, artifact_conditional_get))
-        .layer(LayerFn::new(None::<&Path>, render_unmatched_path))
         // Runtime reruns must become GETs before the application layers run.
-        .runtime()
-        .prefetch(PrefetchMode::Intent)
-        .app_context(ArtifactHttpCacheState::new(
+        .layer(RuntimeLayer::new())
+        .with(PrefetchMode::Intent)
+        .with(ArtifactHttpCacheState::new(
             artifact_reader.clone(),
             validators_enabled,
         ))
-        .app_context(PageLoaderContext::new(Arc::new(
-            ArtifactPageLoader::from_reader(artifact_reader.clone()),
-        )))
-        .app_context(api::ArtifactReaderContext(artifact_reader))
+        .with(loader)
+        .with(artifact_reader)
+        .with(base_url)
         .assets(assets)
         .build()
 }
 
 #[component]
 async fn home_document(
+    cx: &Cx,
     presentation: crate::page_loader::Presentation<HomePageDocument>,
     locale: Locale,
 ) -> Result<impl View> {
@@ -236,9 +230,10 @@ async fn home_document(
     Ok(view! {
         site_shell(
             status: StatusCode::OK,
-            metadata: ShellMetadata::website(locale, title, description, canonical_path).with_locales(
-                locales,
-            ),
+            metadata: Metadata::new().title(title).description(description),
+            locale: locale,
+            canonical_path: canonical_path,
+            locales: locales,
             <div
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-12 px-4 py-8 text-left sm:px-6 sm:py-12"
             >

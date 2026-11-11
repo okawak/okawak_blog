@@ -5,8 +5,9 @@ use blog_domain::{Locale, SiteLocalesDocument};
 use chrono::Datelike;
 use topcoat::{
     Result,
-    context::Cx,
+    context::{Cx, base_url},
     icon::icon,
+    metadata::{Metadata, OpenGraph, OpenGraphType},
     router::{StatusCode, request},
     runtime::{PrefetchMode, link_attrs, prefetch_mode},
     view::{Attributes, Child, Unescaped, View, attributes, class, component, element_id, view},
@@ -22,64 +23,23 @@ use crate::components::{
 };
 use crate::icons::GITHUB;
 
-pub(crate) struct ShellMetadata {
-    title: String,
-    description: String,
-    canonical_path: String,
-    og_type: &'static str,
-    locale: Locale,
-    locales: SiteLocalesDocument,
-}
-
-impl ShellMetadata {
-    pub(crate) fn website(
-        locale: Locale,
-        title: String,
-        description: String,
-        canonical_path: String,
-    ) -> Self {
-        Self {
-            title,
-            description,
-            canonical_path,
-            og_type: "website",
-            locale,
-            locales: Default::default(),
-        }
-    }
-    pub(crate) fn article(
-        locale: Locale,
-        title: String,
-        description: String,
-        canonical_path: String,
-    ) -> Self {
-        Self {
-            og_type: "article",
-            ..Self::website(locale, title, description, canonical_path)
-        }
-    }
-    pub(crate) fn with_locales(mut self, locales: SiteLocalesDocument) -> Self {
-        self.locales = locales;
-        self
-    }
-}
-
 #[component]
-pub(crate) async fn not_found_page(canonical_path: String) -> Result<impl View> {
+pub(crate) async fn not_found_page(cx: &Cx, canonical_path: String) -> Result<impl View> {
     let locale = locale_from_path(&canonical_path);
     Ok(view! {
         site_shell(
             status: StatusCode::NOT_FOUND,
-            metadata: ShellMetadata::website(
-                locale,
-                format!(
-                    "{} | {}",
-                    t(locale, Message::ErrorNotFoundTitle),
-                    t(locale, Message::SiteName),
-                ),
-                t(locale, Message::ErrorNotFoundDescription).to_string(),
-                canonical_path,
-            ),
+            metadata: Metadata::new()
+                .title(
+                    format!(
+                        "{} | {}",
+                        t(locale, Message::ErrorNotFoundTitle),
+                        t(locale, Message::SiteName),
+                    ),
+                )
+                .description(t(locale, Message::ErrorNotFoundDescription)),
+            locale: locale,
+            canonical_path: canonical_path,
             status_notice(
                 variant: AlertVariant::Neutral,
                 title: Some(t(locale, Message::ErrorNotFoundTitle)),
@@ -91,6 +51,7 @@ pub(crate) async fn not_found_page(canonical_path: String) -> Result<impl View> 
 
 #[component]
 pub(crate) async fn article_internal_server_error_page(
+    cx: &Cx,
     title: String,
     description: String,
     canonical_path: String,
@@ -99,7 +60,12 @@ pub(crate) async fn article_internal_server_error_page(
     Ok(view! {
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
-            metadata: ShellMetadata::article(locale, title, description, canonical_path),
+            metadata: Metadata::new()
+                .title(title)
+                .description(description)
+                .open_graph(OpenGraph::new().kind(OpenGraphType::Article)),
+            locale: locale,
+            canonical_path: canonical_path,
             status_notice(
                 variant: AlertVariant::Destructive,
                 title: None,
@@ -111,6 +77,7 @@ pub(crate) async fn article_internal_server_error_page(
 
 #[component]
 pub(crate) async fn internal_server_error_page(
+    cx: &Cx,
     title: String,
     description: String,
     canonical_path: String,
@@ -120,7 +87,9 @@ pub(crate) async fn internal_server_error_page(
     Ok(view! {
         site_shell(
             status: StatusCode::INTERNAL_SERVER_ERROR,
-            metadata: ShellMetadata::website(locale, title, description, canonical_path),
+            metadata: Metadata::new().title(title).description(description),
+            locale: locale,
+            canonical_path: canonical_path,
             status_notice(
                 variant: AlertVariant::Destructive,
                 title: None,
@@ -132,6 +101,7 @@ pub(crate) async fn internal_server_error_page(
 
 #[component]
 async fn status_notice(
+    cx: &Cx,
     variant: AlertVariant,
     title: Option<&str>,
     message: &str,
@@ -154,27 +124,25 @@ async fn status_notice(
 pub(crate) async fn site_shell(
     cx: &Cx,
     status: StatusCode,
-    metadata: ShellMetadata,
+    metadata: Metadata,
+    locale: Locale,
+    canonical_path: String,
+    #[default] locales: SiteLocalesDocument,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
-    let locale = metadata.locale;
-    let available = metadata
-        .locales
-        .routes
-        .get(japanese_path(&metadata.canonical_path));
+    let available = locales.routes.get(japanese_path(&canonical_path));
     let alternates = available
         .into_iter()
         .flatten()
-        .map(|other| (*other, other.path(japanese_path(&metadata.canonical_path))))
+        .map(|other| (*other, other.path(japanese_path(&canonical_path))))
         .collect::<Vec<_>>();
     let switch_locales = if status != StatusCode::OK {
         crate::app::page_loader(cx)
-            .loader()
             .load_locales()
             .await
             .unwrap_or_default()
     } else {
-        metadata.locales.clone()
+        locales
     };
     let year = chrono::Local::now().year();
     let math_render_script = Unescaped::new_unchecked(
@@ -274,29 +242,25 @@ window.okawakScheduleCodeHighlight = function(root) {
 })();
 "#,
     );
-    let ShellMetadata {
-        title,
-        description,
-        canonical_path,
-        og_type,
-        ..
-    } = metadata;
-    let canonical_url = crate::build_site_url(&canonical_path);
+    let site_url = base_url(cx);
+    // Keep the established slashless home URL and resolve even unmatched paths on this site.
+    let canonical = if canonical_path == "/" {
+        site_url.as_str().to_owned()
+    } else {
+        site_url.join(&canonical_path)
+    };
+    let cx = cx.with(
+        metadata
+            .canonical(canonical)
+            .open_graph(OpenGraph::new().site_name(t(locale, Message::SiteName))),
+    );
 
     Ok(view! {
         (status)
         <!DOCTYPE html>
         <html lang=(locale.as_str())>
             <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>(title.clone())</title>
-                <meta name="description" content=(description.clone())>
-                <link rel="canonical" href=(canonical_url.clone())>
-                <meta property="og:title" content=(title)>
-                <meta property="og:description" content=(description)>
-                <meta property="og:url" content=(canonical_url)>
-                <meta property="og:type" content=(og_type)>
+                topcoat::metadata::tags()
                 <meta
                     property="og:locale"
                     content=(if locale == Locale::Ja { "ja_JP" } else { "en_US" })
@@ -305,7 +269,11 @@ window.okawakScheduleCodeHighlight = function(root) {
                     <link
                         rel="alternate"
                         hreflang=(other.as_str())
-                        href=(crate::build_site_url(path))
+                        href=(if path == "/" {
+                            site_url.as_str().to_owned()
+                        } else {
+                            site_url.join(path)
+                        })
                     >
                 }
                 <link rel="stylesheet" href=(STYLESHEET)>

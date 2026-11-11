@@ -1,5 +1,6 @@
 use topcoat::{
     Result,
+    context::Cx,
     view::{Attributes, Child, Class, StaticClass, View, class, component, view},
 };
 
@@ -37,8 +38,8 @@ impl BadgeVariant {
 
 /// Classes shared by badge variants. A border reserves the same space in every variant.
 const BASE: StaticClass = class!(
-    "inline-flex w-fit shrink-0 items-center justify-center gap-1 rounded-md \
-     border px-2 py-0.5 text-xs font-medium whitespace-nowrap",
+    "inline-flex w-fit shrink-0 items-center justify-center gap-1 rounded-md",
+    "border px-2 py-0.5 text-xs font-medium whitespace-nowrap",
 );
 
 /// Builds the full class list for a badge of the given `variant`.
@@ -68,6 +69,7 @@ pub fn badge_variants(variant: BadgeVariant) -> Class<(StaticClass, StaticClass)
 /// ```
 #[component]
 pub async fn badge(
+    cx: &Cx,
     #[default] variant: BadgeVariant,
     #[default] mut attrs: Attributes,
     #[default] child: Child<'_>,

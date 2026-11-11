@@ -1,19 +1,25 @@
 use topcoat::{
     Result,
+    context::Cx,
     view::{Attributes, Child, StaticClass, View, class, component, view},
 };
 
 /// Classes for a card with vertically stacked sections. Each section supplies its own
 /// horizontal padding so other content can span the full width.
 const CARD: StaticClass = class!(
-    "flex flex-col gap-5 rounded-xl border border-border bg-card py-6 \
-     text-card-foreground shadow-sm",
+    "flex flex-col gap-5 rounded-xl border border-border bg-card py-6",
+    "text-card-foreground shadow-sm",
+    "has-[>[data-slot=table]:first-child]:overflow-hidden",
+    "has-[>[data-slot=table]:first-child]:pt-0",
+    "has-[>[data-slot=table]:last-child]:overflow-hidden",
+    "has-[>[data-slot=table]:last-child]:pb-0",
 );
 
 /// A bordered panel that groups related content.
 ///
-/// Pass sections as children. Use a header, body, or footer as needed. `attrs` are
-/// forwarded to the `<div>`, with extra classes added to its classes.
+/// Pass a header, body, footer, or table as children. A table at either end of the
+/// card sits against that edge, without padding. `attrs` adds attributes and classes
+/// to the card's `<div>`.
 ///
 /// ```ignore
 /// view! {
@@ -32,6 +38,7 @@ const CARD: StaticClass = class!(
 /// ```
 #[component]
 pub async fn card(
+    cx: &Cx,
     #[default] mut attrs: Attributes,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
@@ -42,6 +49,7 @@ pub async fn card(
 /// optional [`card_description`].
 #[component]
 pub async fn card_header(
+    cx: &Cx,
     #[default] mut attrs: Attributes,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
@@ -58,6 +66,7 @@ pub async fn card_header(
 /// The heading of a [`card`], rendered as an `<h3>`.
 #[component]
 pub async fn card_title(
+    cx: &Cx,
     #[default] mut attrs: Attributes,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
@@ -74,6 +83,7 @@ pub async fn card_title(
 /// The supporting text under a [`card_title`].
 #[component]
 pub async fn card_description(
+    cx: &Cx,
     #[default] mut attrs: Attributes,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
@@ -90,6 +100,7 @@ pub async fn card_description(
 /// The main body of a [`card`].
 #[component]
 pub async fn card_content(
+    cx: &Cx,
     #[default] mut attrs: Attributes,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
@@ -99,6 +110,7 @@ pub async fn card_content(
 /// The closing section of a [`card`], a horizontal row for actions.
 #[component]
 pub async fn card_footer(
+    cx: &Cx,
     #[default] mut attrs: Attributes,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {

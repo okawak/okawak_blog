@@ -3,7 +3,12 @@
 use blog_domain::{Locale, SiteLocalesDocument};
 use topcoat::{
     context::Cx,
-    router::{Body, HeaderMap, HeaderValue, StatusCode, Uri, header, request, response::Response},
+    router::{
+        HeaderMap, HeaderValue, Uri,
+        error::{redirect as temporary_redirect, see_other},
+        header, request,
+        response::{IntoResponse, Response},
+    },
     runtime::{PrefetchMode, link_attrs},
     view::{View, attributes, component, view},
 };
@@ -138,7 +143,7 @@ pub(crate) async fn redirect(cx: &Cx) -> Option<Response> {
     if explicit.is_none() && locale == Locale::Ja {
         return None;
     }
-    let locales = match crate::app::page_loader(cx).loader().load_locales().await {
+    let locales = match crate::app::page_loader(cx).load_locales().await {
         Ok(locales) => locales,
         Err(error) => {
             tracing::error!(%error, "language selection could not read the published locales");
@@ -157,15 +162,12 @@ pub(crate) async fn redirect(cx: &Cx) -> Option<Response> {
         location.push('?');
         location.push_str(&query);
     }
-    let mut response = Response::new(Body::empty());
-    *response.status_mut() = if explicit.is_some() {
-        StatusCode::SEE_OTHER
+    let mut response = if explicit.is_some() {
+        see_other(&location).into_response(cx)
     } else {
-        StatusCode::TEMPORARY_REDIRECT
-    };
-    response
-        .headers_mut()
-        .insert(header::LOCATION, HeaderValue::from_str(&location).ok()?);
+        temporary_redirect(&location).into_response(cx)
+    }
+    .ok()?;
     response.headers_mut().insert(
         header::VARY,
         HeaderValue::from_static("Accept-Language, Cookie"),

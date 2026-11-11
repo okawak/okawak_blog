@@ -6,8 +6,8 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 
 ## applicationとruntimeの境界
 
-- `src/main.rs`: process設定、tracing subscriber、reader、listenerの初期化
-- `src/app.rs`: `module_router!()`を呼ぶroute tree root。home route、global layer、app context、assetのcomposition
+- `src/main.rs`: process設定、公開BaseUrlの検証、tracing subscriber、reader、listenerの初期化
+- `src/app.rs`: `module_router!()`を呼ぶroute tree root。home route、global layer、共有context、assetのcomposition
 - `src/app/api.rs`と`src/app/api/*.rs`: URL構造に対応するhealth、readiness、互換記事一覧API
 - `src/http_cache.rs`: release-aware validatorとconditional GET
 - `src/page_loader.rs`: storage非依存のpage load port
@@ -31,13 +31,19 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 - `styles.css`: Topcoat UI theme token、site chrome、`.content-prose`配下の生成HTML用styleをまとめたTailwind CSS入力
 - `build.rs`: `styles.css`をTopcoatのstylesheet assetへ変換するbuild integration
 
-routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`module_param!()`で宣言（値の取得は`path_param::<T>()`）し、route moduleに`mod.rs`は使いません。
+routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`module_param!()`で宣言し、`category_name(cx)`など宣言名のaccessorで値を取得します。カテゴリは`module_param!(category_name: Category else not_found)`で解析し、不正値は共通404処理へ渡します。404の描画もconditional GET layerが設定したsnapshotの内側で行います。route moduleに`mod.rs`は使いません。
 
-Topcoat frameworkとCLIはworkspaceで同じversionに揃え、shardは明示したendpointを`.route(category_articles)`で登録します。applicationのglobal layerを先に追加し、最後に`.runtime()`を登録して、application layerより前に再描画POSTをGETへrewriteします。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
+Topcoat frameworkとCLIはworkspaceで同じversionに揃え、shardは明示したendpointを`.route(category_articles)`で登録します。applicationのglobal layerを先に追加し、最後に`.layer(RuntimeLayer::new())`を登録して、application layerより前に再描画POSTをGETへrewriteします。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
+
+`DynPageLoader`と`DynArtifactReader`はラッパーを挟まずTopcoatの統合contextへ直接登録し、`context::<T>(cx)` / `try_context::<T>(cx)`で取得します。共有値はrouterの`.with(...)`、release snapshotと対応するPageLoaderは`cx.with_many((snapshot, loader))`で追加します。requestの値が共有値をshadowするため、UIとAPIは同じsnapshotを参照します。先読みの既定値も`.with(PrefetchMode::Intent)`で設定します。
+
+公開URLの基準は起動時に`OKAWAK_BLOG_SITE_ORIGIN`から一度だけ読み、Topcoatの`BaseUrl`としてrouterへ渡します。未設定・空文字は`https://www.okawak.net`を使い、HTTP(S)の絶対URLでない値やquery・fragmentを含む値はartifact初期化前にエラーにします。canonical・Open Graph URL・hreflangは同じ`BaseUrl`を使います。URL結合は`BaseUrl::join()`へ任せ、日本語homeだけは既存契約に合わせて末尾slashなしの`BaseUrl::as_str()`を使います。
 
 runtimeのpage再描画はpage自身のURLに`X-Topcoat-Runtime: true`を付けてPOSTし、GETへ内部rewriteします。conditional GETでは`request::original_method(cx)`を参照し、再描画応答に通常pageのvalidatorを適用しません。
 
 カテゴリの記事絞り込みはshard内の`signal(cx, String::new)`とtracked readで構成します。タイトル・説明・タグを大文字小文字を区別せず部分一致で検索し、入力はサーバー側でも先頭100文字に制限します。`/_topcoat/shards/category-articles`へ渡すカテゴリ・言語引数も再描画時に検証します。固定の引数は通常の値で渡します。ページと初期shardは`#[memoize]`で同じpage documentを共有し、再描画では`PageLoader`から再取得します。記事・section・タグのloopには`#[key(...)]`で安定したidentityを与えます。DOMにも記事・sectionの安定したIDを付け、DOM morphにより、入力フォーカスとshard外の状態を維持します。JavaScript無効時も初期HTMLの全記事とリンクを利用できます。
+
+各pageは読み込み済みpresentationからTopcoatの`Metadata`を直接組み立て、shellへ渡します。shellは言語・公開path・公開locale情報を別の引数で受け取り、canonicalとサイト名を補って`cx.with(...)`へ登録し、`topcoat::metadata::tags()`をhead先頭に描画します。title、description、canonical、Open Graph、Xのsummary cardを一括出力し、`og:site_name`も日英のUI辞書に合わせます。Open Graphのtitle・description・URLはpage metadataのfallbackを使い、article / websiteは`OpenGraphType`で区別します。`og:locale`と、公開済み翻訳に限ったhreflangはshellで補います。metadataのための追加読込は行わず、本文と同じpresentationを使います。
 
 productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。
 

@@ -74,7 +74,7 @@ fn optional_home_may_be_absent_but_must_be_readable_and_valid_when_present(
         "articles": []
     }
 "#})]
-#[case::page("pages", "about", indoc! {r#"
+#[case::static_page("pages", "about", indoc! {r#"
     {
         "page": "about",
         "title": "About",

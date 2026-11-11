@@ -1,75 +1,58 @@
 use crate::i18n::{Message, t};
 use crate::metadata::*;
 use blog_domain::Locale;
-use std::str::FromStr;
 
 use blog_domain::{ArticlePageDocument, Category, Slug, build_article_page_canonical_path};
 use topcoat::{
     Result,
     context::Cx,
-    router::{StatusCode, module_param, page, path_param, request},
+    metadata::{Metadata, OpenGraph, OpenGraphType},
+    router::{StatusCode, module_param, page, request},
     view::{Unescaped, View, ViewExt, component, view},
 };
 
 use super::super::page_loader;
-use super::CategoryName;
+use super::category_name;
 use crate::components::badge::{BadgeVariant, badge};
-use crate::shell::{ShellMetadata, article_internal_server_error_page, not_found_page, site_shell};
+use crate::shell::{article_internal_server_error_page, not_found_page, site_shell};
 
 module_param!(article_slug);
 
 #[page]
 async fn article_page(cx: &Cx) -> Result<impl View> {
-    render_article(
-        cx,
-        Locale::Ja,
-        path_param::<CategoryName>(cx),
-        path_param::<ArticleSlug>(cx),
-    )
-    .await
+    render_article(cx, Locale::Ja, *category_name(cx)?, article_slug(cx)).await
 }
 
 pub(crate) async fn render_article(
     cx: &Cx,
     locale: Locale,
-    category_param: &str,
+    category: Category,
     slug_param: &str,
 ) -> Result<impl View> {
     let normalized_slug = normalize_article_slug_param(slug_param);
     let requested_path = request::uri(cx).path().to_string();
     let fallback_title = format!("{normalized_slug} | {}", t(locale, Message::SiteName));
     let fallback_description = t(locale, Message::ErrorArticle).to_string();
-    let category = match Category::from_str(category_param) {
-        Ok(category) => category,
-        Err(_) => {
-            return Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed());
-        }
-    };
     let slug = match Slug::new(normalized_slug.to_string()) {
         Ok(slug) => slug,
         Err(_) => {
-            return Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed());
+            return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed());
         }
     };
 
-    match page_loader(cx)
-        .loader()
-        .load_article(locale, &category, &slug)
-        .await
-    {
-        Ok(Some(presentation)) => Ok(
-            view! { cx => article_document(presentation: presentation, locale: locale) }.boxed(),
-        ),
-        Ok(None) => Ok(view! { cx => not_found_page(canonical_path: requested_path) }.boxed()),
+    match page_loader(cx).load_article(locale, &category, &slug).await {
+        Ok(Some(presentation)) => {
+            Ok(view! { article_document(presentation: presentation, locale: locale) }.boxed())
+        }
+        Ok(None) => Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
         Err(error) => {
             tracing::error!(
                 %error,
-                category = category_param,
+                %category,
                 slug = normalized_slug,
                 "article page artifact read failed"
             );
             Ok(view! {
-                cx =>
                 article_internal_server_error_page(
                     title: fallback_title,
                     description: fallback_description,
@@ -83,6 +66,7 @@ pub(crate) async fn render_article(
 
 #[component]
 async fn article_document(
+    cx: &Cx,
     presentation: crate::page_loader::Presentation<ArticlePageDocument>,
     locale: Locale,
 ) -> Result<impl View> {
@@ -110,9 +94,13 @@ async fn article_document(
     Ok(view! {
         site_shell(
             status: StatusCode::OK,
-            metadata: ShellMetadata::article(locale, title, description, canonical_path).with_locales(
-                locales,
-            ),
+            metadata: Metadata::new()
+                .title(title)
+                .description(description)
+                .open_graph(OpenGraph::new().kind(OpenGraphType::Article)),
+            locale: locale,
+            canonical_path: canonical_path,
+            locales: locales,
             <article
                 class="mx-auto grid min-h-full w-full max-w-[var(--site-content-width)] gap-8 px-4 py-8 text-left sm:px-6 sm:py-12"
             >

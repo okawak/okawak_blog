@@ -1,5 +1,6 @@
 use topcoat::{
     Result,
+    context::Cx,
     view::{Attributes, Child, StaticClass, View, class, component, view},
 };
 
@@ -28,9 +29,9 @@ impl AlertVariant {
 
 /// Classes for the alert layout. The icon column collapses when no icon is present.
 const BASE: StaticClass = class!(
-    "grid w-full grid-cols-[0_1fr] items-start gap-y-1 rounded-lg border \
-     bg-background px-4 py-3 text-sm has-[>svg]:grid-cols-[1rem_1fr] has-[>svg]:gap-x-3 \
-     [&>svg]:size-4 [&>svg]:translate-y-0.5",
+    "grid w-full grid-cols-[0_1fr] items-start gap-y-1 rounded-lg border",
+    "bg-background px-4 py-3 text-sm has-[>svg]:grid-cols-[1rem_1fr] has-[>svg]:gap-x-3",
+    "[&>svg]:size-4 [&>svg]:translate-y-0.5",
 );
 
 /// A notice displayed within the page.
@@ -51,6 +52,7 @@ const BASE: StaticClass = class!(
 /// ```
 #[component]
 pub async fn alert(
+    cx: &Cx,
     /// The visual style of the notice.
     #[default]
     variant: AlertVariant,
@@ -75,6 +77,7 @@ pub async fn alert(
 /// The heading of an alert.
 #[component]
 pub async fn alert_title(
+    cx: &Cx,
     #[default] mut attrs: Attributes,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
@@ -94,6 +97,7 @@ pub async fn alert_title(
 /// Text that explains the alert and any action the reader should take.
 #[component]
 pub async fn alert_description(
+    cx: &Cx,
     #[default] mut attrs: Attributes,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
