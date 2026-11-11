@@ -87,6 +87,8 @@ exportとpublishはruntime依存ではない。serverはinfraをapplication comp
 - artifactから表示用documentを組み立てる純粋ロジック
 - I/O、async、AWS SDK、HTTP frameworkを持たない
 
+任意の`schema` featureは、公開記事一覧型のJSON schemaを`schemars`で導出する。HTTP frameworkやOpenAPIのroute設定はblog-serverに置く。
+
 公開Markdownのタイトル・日時・タグID・digest・section pathはblog-domainの値型が生成時・deserialization時に検証する。`PublicContentMeta::validate()`はschema versionとフィールド間の整合性を検証する。exportのvault入力も同じ値型を使い、publishへ検証済みの値を渡す。
 
 ### crates/blog-publish
@@ -228,6 +230,8 @@ artifact-backedなGET / HEADはprocess instance、release identity、request URI
 Topcoatのpage再描画はpage自身のURLにruntime header付きでPOSTし、runtime layerがapplication layerより前にGETへ変換するため、cache対象のmethod判定にはoriginal methodを使う。local reader、legacy root、release prefixを直接読む公開前smoke、TTL=0、health / readiness、asset、404 / error responseにはartifact validatorを付けない。
 
 /api/healthはprocess livenessだけ、/api/readyはconfigured readerからsnapshotとsite metadataを読めることを確認する。cache済みstale snapshotを配信できる場合はreadyとする。
+
+/api/openapi.jsonは、記事一覧・health・readinessの3 APIをTopcoatの登録済みrouteとOperationからOpenAPI 3.1文書として生成する。本文schemaは公開artifact型から導出し、公開URLはBaseUrlを使う。生成時にartifactを読まず、content releaseのvalidatorは付けない。SSR・asset・内部runtime routeはAPI文書へ含めない。
 
 ## 配備と運用
 

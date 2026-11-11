@@ -108,6 +108,21 @@ test("compatibility article API returns the published index", async ({ request }
   });
 });
 
+test("OpenAPI describes the public APIs from the running router", async ({ request }) => {
+  const response = await request.get("/api/openapi.json");
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toMatch(/^application\/json/);
+  const spec = await response.json();
+  expect(spec.openapi).toBe("3.1.0");
+  expect(Object.keys(spec.paths).sort()).toEqual([
+    "/api/articles", "/api/health", "/api/ready",
+  ]);
+  expect(spec.paths["/api/articles"].get.responses["200"].content["application/json"].schema)
+    .toEqual({ $ref: "#/components/schemas/ArticleIndexDocument" });
+  expect(spec.paths["/api/ready"].get.responses["503"].content["text/plain"])
+    .toBeDefined();
+});
+
 test("site declares and serves its favicon", async ({ page, request }) => {
   await page.goto("/");
 

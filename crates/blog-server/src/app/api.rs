@@ -2,4 +2,5 @@
 
 mod articles;
 mod health;
+mod openapi;
 mod ready;

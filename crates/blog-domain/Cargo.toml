@@ -7,9 +7,13 @@ description = "Core domain logic and business rules for blog application"
 edition.workspace = true
 license.workspace = true
 
+[features]
+schema = ["dep:schemars"]
+
 [dependencies]
 # Keep blog-domain dependencies pure and WASM-compatible.
 chrono.workspace = true
+schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 
