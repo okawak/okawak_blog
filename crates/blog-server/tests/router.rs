@@ -1536,7 +1536,7 @@ async fn category_renders_the_published_landing_and_articles_as_html() {
 }
 
 #[tokio::test]
-async fn invalid_category_errors_share_the_conditional_get_snapshot() {
+async fn article_and_category_not_found_pages_share_the_conditional_get_snapshot() {
     let calls = Arc::new(AtomicUsize::new(0));
     let reader: DynArtifactReader = Arc::new(CountingReader {
         inner: fixture_reader(),
@@ -1548,14 +1548,35 @@ async fn invalid_category_errors_share_the_conditional_get_snapshot() {
         "/unknown/article",
         "/en/unknown",
         "/en/unknown/article",
+        "/daily",
+        "/en/daily",
+        "/tech/missing-article.html",
+        "/en/tech/missing-article.html",
+        "/tech/not%20a%20slug.html",
+        "/en/tech/not%20a%20slug.html",
     ] {
         calls.store(0, Ordering::SeqCst);
         let result = response(
             &router,
-            Request::builder().uri(path).body(Body::empty()).unwrap(),
+            Request::builder()
+                .uri(format!("{path}?source=404"))
+                .body(Body::empty())
+                .unwrap(),
         )
         .await;
         assert_eq!(result.status, StatusCode::NOT_FOUND, "{path}");
+        let language = if path.starts_with("/en/") { "en" } else { "ja" };
+        assert!(
+            result.body.contains(&format!("<html lang=\"{language}\">")),
+            "{path}"
+        );
+        assert!(
+            result.body.contains(&format!(
+                "<link rel=\"canonical\" href=\"https://www.okawak.net{path}\">"
+            )),
+            "{path}"
+        );
+        assert_eq!(result.body.matches("<title>").count(), 1, "{path}");
         assert_eq!(calls.load(Ordering::SeqCst), 1, "{path}");
         assert!(!result.headers.contains_key(header::ETAG), "{path}");
         assert!(

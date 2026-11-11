@@ -98,7 +98,7 @@ fn is_site_page_path(path: &str) -> bool {
         && !is_under_path(path, "/content-assets")
 }
 
-fn render_unmatched_path<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
+fn render_not_found<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
     Box::pin(async move {
         match next.run(cx, body).await {
             Err(error)
@@ -193,7 +193,7 @@ pub fn create_router(
         .route(crate::category_articles::category_articles)
         .trailing_slash(TrailingSlash::Redirect)
         // Error pages also render within the request's artifact snapshot.
-        .layer(LayerFn::new(None::<&Path>, render_unmatched_path))
+        .layer(LayerFn::new(None::<&Path>, render_not_found))
         // The framework-neutral decision filters APIs, static assets, and unsuccessful responses.
         // One global layer also avoids nested prefix layers acquiring more than one snapshot.
         .layer(LayerFn::new(None::<&Path>, artifact_conditional_get))
