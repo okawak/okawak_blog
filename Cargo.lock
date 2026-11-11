@@ -3970,7 +3970,6 @@ dependencies = [
  "tokio-tungstenite",
  "topcoat-core",
  "topcoat-view",
- "tower",
 ]
 
 [[package]]

@@ -2233,25 +2233,48 @@ async fn about_shell_initializes_content_enhancements() {
 }
 
 #[tokio::test]
-async fn about_returns_not_found_page_when_artifact_is_missing() {
+async fn home_and_about_not_found_pages_share_the_snapshot_and_keep_their_locale() {
     let temp_dir = tempdir().unwrap();
-    let router = create_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
-    let response = response(
-        &router,
-        Request::builder()
-            .uri("/about")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-
-    assert_eq!(response.status, StatusCode::NOT_FOUND);
-    assert!(
-        response
-            .body
-            .contains("<title>ページが見つかりません | ぶくせんの探窟メモ</title>")
-    );
-    assert!(response.body.contains("ページが見つかりませんでした。"));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let reader: DynArtifactReader = Arc::new(CountingReader {
+        inner: Arc::new(LocalArtifactReader::new(temp_dir.path())),
+        snapshot_calls: calls.clone(),
+    });
+    let router = create_router(validator_reader(reader), true);
+    for (path, locale, message) in [
+        ("/about", "ja", "ページが見つかりませんでした。"),
+        ("/en/about", "en", "Page not found."),
+        ("/en", "en", "Page not found."),
+    ] {
+        calls.store(0, Ordering::SeqCst);
+        let result = response(
+            &router,
+            Request::builder()
+                .uri(format!("{path}?source=404"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::NOT_FOUND, "{path}");
+        assert!(
+            result.body.contains(&format!("<html lang=\"{locale}\">")),
+            "{path}"
+        );
+        assert!(result.body.contains(message), "{path}");
+        assert!(
+            result.body.contains(&format!(
+                "<link rel=\"canonical\" href=\"https://www.okawak.net{path}\">"
+            )),
+            "{path}"
+        );
+        assert_eq!(result.body.matches("<title>").count(), 1, "{path}");
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "{path}");
+        assert!(!result.headers.contains_key(header::ETAG), "{path}");
+        assert!(
+            !result.headers.contains_key(header::LAST_MODIFIED),
+            "{path}"
+        );
+    }
 }
 
 #[tokio::test]

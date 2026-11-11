@@ -24,7 +24,7 @@ use topcoat::{
     metadata::Metadata,
     router::{
         Body, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode, TrailingSlash,
-        error::NotFoundError,
+        error::{NotFoundError, not_found},
         page, request,
         response::{IntoResponse, Response},
     },
@@ -54,7 +54,7 @@ pub(crate) async fn render_home(cx: &Cx, locale: Locale) -> Result<impl View> {
         Ok(Some(presentation)) => {
             Ok(view! { home_document(presentation: presentation, locale: locale) }.boxed())
         }
-        Ok(None) => Ok(view! { not_found_page(canonical_path: locale.path("/")) }.boxed()),
+        Ok(None) => Err(not_found().into()),
         Err(error) => {
             tracing::error!(%error, "home page artifact read failed");
             let description = t(locale, Message::ErrorHome).to_string();

@@ -39,7 +39,7 @@ SSR page・asset・内部runtime route・OpenAPI文書自身には`Operation`を
 - `styles.css`: Topcoat UI theme token、site chrome、`.content-prose`配下の生成HTML用styleをまとめたTailwind CSS入力
 - `build.rs`: `styles.css`をTopcoatのstylesheet assetへ変換するbuild integration
 
-routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`module_param!()`で宣言し、`category_name(cx)`など宣言名のaccessorで値を取得します。カテゴリは`module_param!(category_name: Category else not_found)`で解析します。不正なカテゴリ・slugと記事・カテゴリの欠落はTopcoatの`NotFoundError`を返し、共通layerで日英の404を描画します。描画もconditional GET layerが設定したsnapshotの内側で行います。記事slugの`.html`正規化とstorage errorの500表示はserverが管理します。route moduleに`mod.rs`は使いません。
+routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`module_param!()`で宣言し、`category_name(cx)`など宣言名のaccessorで値を取得します。カテゴリは`module_param!(category_name: Category else not_found)`で解析します。不正なカテゴリ・slugとpageの欠落はTopcoatの`NotFoundError`を返し、共通layerで日英の404を描画します。描画もconditional GET layerが設定したsnapshotの内側で行います。content assetも`RouterErrorExt`で404へ変換しますが、siteのHTML shellは描画しません。記事slugの`.html`正規化とstorage errorの500表示はserverが管理します。route moduleに`mod.rs`は使いません。
 
 Topcoat frameworkとCLIはworkspaceで同じversionに揃え、shardは明示したendpointを`.route(category_articles)`で登録します。applicationのglobal layerを先に追加し、最後に`.layer(RuntimeLayer::new())`を登録して、application layerより前に再描画POSTをGETへrewriteします。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
 
