@@ -7,14 +7,18 @@ use topcoat::{
     Result,
     context::Cx,
     metadata::{Metadata, OpenGraph, OpenGraphType},
-    router::{StatusCode, module_param, page, request},
+    router::{
+        StatusCode,
+        error::{RouterErrorExt, not_found},
+        module_param, page, request,
+    },
     view::{Unescaped, View, ViewExt, component, view},
 };
 
 use super::super::page_loader;
 use super::category_name;
 use crate::components::badge::{BadgeVariant, badge};
-use crate::shell::{article_internal_server_error_page, not_found_page, site_shell};
+use crate::shell::{article_internal_server_error_page, site_shell};
 
 module_param!(article_slug);
 
@@ -30,22 +34,17 @@ pub(crate) async fn render_article(
     slug_param: &str,
 ) -> Result<impl View> {
     let normalized_slug = normalize_article_slug_param(slug_param);
-    let requested_path = request::uri(cx).path().to_string();
-    let fallback_title = format!("{normalized_slug} | {}", t(locale, Message::SiteName));
-    let fallback_description = t(locale, Message::ErrorArticle).to_string();
-    let slug = match Slug::new(normalized_slug.to_string()) {
-        Ok(slug) => slug,
-        Err(_) => {
-            return Ok(view! { not_found_page(canonical_path: requested_path) }.boxed());
-        }
-    };
+    let slug = Slug::new(normalized_slug.to_owned()).ok_or_not_found()?;
 
     match page_loader(cx).load_article(locale, &category, &slug).await {
         Ok(Some(presentation)) => {
             Ok(view! { article_document(presentation: presentation, locale: locale) }.boxed())
         }
-        Ok(None) => Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
+        Ok(None) => Err(not_found().into()),
         Err(error) => {
+            let requested_path = request::uri(cx).path().to_string();
+            let fallback_title = format!("{normalized_slug} | {}", t(locale, Message::SiteName));
+            let fallback_description = t(locale, Message::ErrorArticle).to_string();
             tracing::error!(
                 %error,
                 %category,

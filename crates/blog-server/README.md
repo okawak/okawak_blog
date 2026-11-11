@@ -8,10 +8,18 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 
 - `src/main.rs`: process設定、公開BaseUrlの検証、tracing subscriber、reader、listenerの初期化
 - `src/app.rs`: `module_router!()`を呼ぶroute tree root。home route、global layer、共有context、assetのcomposition
-- `src/app/api.rs`と`src/app/api/*.rs`: URL構造に対応するhealth、readiness、互換記事一覧API
+- `src/app/api.rs`と`src/app/api/*.rs`: URL構造に対応するhealth、readiness、互換記事一覧APIとOpenAPI文書
 - `src/http_cache.rs`: release-aware validatorとconditional GET
 - `src/page_loader.rs`: storage非依存のpage load port
 - `src/artifact_page_loader.rs`: artifact readerをpage load portへ接続するadapter
+
+## API仕様
+
+`GET /api/openapi.json`はTopcoatのOpenAPI 3.1生成機能で、登録済みrouteの`Operation`からAPI仕様をJSONとして返します。公開URLには起動時に検証した`BaseUrl`を使います。文書生成はartifactを読み取らないため、storage障害中も利用でき、content releaseのvalidatorは付けません。
+
+対象は既存の`GET /api/articles`、`GET /api/health`、`GET /api/ready`です。記事一覧は日本語の互換APIで、S3 snapshot cacheが有効な場合のconditional GET（304）と読取失敗（500）を記述します。healthはprocessの生存だけ、readyはsite metadataを読めること（200 / 503）を表します。本文schemaはblog-domainの`schema` featureを通じて実際の公開artifact型から導出し、同じ構造を別DTOへ複製しません。
+
+SSR page・asset・内部runtime route・OpenAPI文書自身には`Operation`を付けず、API仕様の対象にしません。OpenAPIは説明であり、実際のvalidation・認証・cache制御を変更するものではありません。
 
 ## UIとassetの境界
 
@@ -31,7 +39,7 @@ browser E2Eはserverとartifact readerを含む公開サイト全体を対象と
 - `styles.css`: Topcoat UI theme token、site chrome、`.content-prose`配下の生成HTML用styleをまとめたTailwind CSS入力
 - `build.rs`: `styles.css`をTopcoatのstylesheet assetへ変換するbuild integration
 
-routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`module_param!()`で宣言し、`category_name(cx)`など宣言名のaccessorで値を取得します。カテゴリは`module_param!(category_name: Category else not_found)`で解析し、不正値は共通404処理へ渡します。404の描画もconditional GET layerが設定したsnapshotの内側で行います。route moduleに`mod.rs`は使いません。
+routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`module_param!()`で宣言し、`category_name(cx)`など宣言名のaccessorで値を取得します。カテゴリは`module_param!(category_name: Category else not_found)`で解析します。不正なカテゴリ・slugとpageの欠落はTopcoatの`NotFoundError`を返し、共通layerで日英の404を描画します。描画もconditional GET layerが設定したsnapshotの内側で行います。content assetも`RouterErrorExt`で404へ変換しますが、siteのHTML shellは描画しません。記事slugの`.html`正規化とstorage errorの500表示はserverが管理します。route moduleに`mod.rs`は使いません。
 
 Topcoat frameworkとCLIはworkspaceで同じversionに揃え、shardは明示したendpointを`.route(category_articles)`で登録します。applicationのglobal layerを先に追加し、最後に`.layer(RuntimeLayer::new())`を登録して、application layerより前に再描画POSTをGETへrewriteします。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
 

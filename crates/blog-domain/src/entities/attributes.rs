@@ -4,6 +4,7 @@ use std::{fmt, str::FromStr};
 
 /// Ordered category-relative directory segments used for article grouping.
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(transparent)]
 pub struct SectionPath(Vec<String>);
 

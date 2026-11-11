@@ -1,6 +1,6 @@
 [tools]
 bun = "1.4.4"
-"cargo:topcoat-cli" = "0.12.0"
+"cargo:topcoat-cli" = "0.12.1"
 
 [env]
 TOPCOAT_TAILWIND_VERSION = "4.3.3"

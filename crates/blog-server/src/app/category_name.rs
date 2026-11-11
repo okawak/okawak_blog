@@ -8,14 +8,14 @@ use topcoat::{
     Result,
     context::Cx,
     metadata::Metadata,
-    router::{StatusCode, module_param, page, raw_path_params, request},
+    router::{StatusCode, error::not_found, module_param, page, raw_path_params, request},
     view::{Unescaped, View, ViewExt, component, view},
 };
 
 use super::load_category;
 use crate::{
     category_articles::category_articles,
-    shell::{internal_server_error_page, not_found_page, site_shell},
+    shell::{internal_server_error_page, site_shell},
 };
 
 module_param!(category_name: Category else not_found);
@@ -30,13 +30,13 @@ pub(crate) async fn render_category(
     locale: Locale,
     category: Category,
 ) -> Result<impl View> {
-    let requested_path = request::uri(cx).path().to_string();
     match load_category(cx, category, locale).await.clone() {
         Ok(Some(presentation)) => {
             Ok(view! { category_document(presentation: presentation, locale: locale) }.boxed())
         }
-        Ok(None) => Ok(view! { not_found_page(canonical_path: requested_path) }.boxed()),
+        Ok(None) => Err(not_found().into()),
         Err(error) => {
+            let requested_path = request::uri(cx).path().to_string();
             // Preserve the requested spelling in the error title (e.g. /TECH).
             let category_param = raw_path_params(cx)
                 .find_map(|(name, value)| (name == "category_name").then_some(value.as_str()))

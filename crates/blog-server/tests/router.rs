@@ -25,6 +25,160 @@ use topcoat::{
 use blog_server::{app::create_router as create_router_with_assets, assets};
 
 #[tokio::test]
+async fn openapi_describes_existing_apis_and_article_response_schema() {
+    let router = create_router(fixture_reader(), true);
+    let result = response(
+        &router,
+        Request::builder()
+            .uri("/api/openapi.json")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(result.status, StatusCode::OK);
+    assert_eq!(result.content_type.as_deref(), Some("application/json"));
+    assert!(!result.headers.contains_key(header::ETAG));
+    assert!(!result.headers.contains_key(header::LAST_MODIFIED));
+    let spec: serde_json::Value = serde_json::from_str(&result.body).unwrap();
+    assert_eq!(spec["openapi"], "3.1.0");
+    assert_eq!(spec["servers"][0]["url"], "https://www.okawak.net");
+    let paths = spec["paths"].as_object().unwrap();
+    assert_eq!(
+        paths.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["/api/articles", "/api/health", "/api/ready"]
+    );
+    let registered_api_paths: std::collections::BTreeSet<_> = router
+        .routes()
+        .map(|route| route.path().to_string())
+        .filter(|path| path.starts_with("/api/") && path != "/api/openapi.json")
+        .collect();
+    assert_eq!(registered_api_paths, paths.keys().cloned().collect());
+    for path in paths.values() {
+        assert_eq!(
+            path.as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["get"]
+        );
+    }
+    let articles = &paths["/api/articles"]["get"]["responses"];
+    assert!(articles.get("304").is_some());
+    assert!(articles["304"].get("content").is_none());
+    assert!(articles.get("500").is_some());
+    assert_eq!(
+        articles["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/ArticleIndexDocument"
+    );
+    assert!(paths["/api/ready"]["get"]["responses"].get("503").is_some());
+    for path in ["/api/health", "/api/ready"] {
+        assert!(
+            paths[path]["get"]["responses"]["200"]["content"]
+                .get("text/plain")
+                .is_some()
+        );
+    }
+    let schemas = &spec["components"]["schemas"];
+    assert_eq!(
+        schemas["ArticleIndexDocument"]["properties"]["articles"]["items"]["$ref"],
+        "#/components/schemas/ArticleSummaryDocument"
+    );
+    assert_eq!(schemas["SectionPath"]["type"], "array");
+    assert_eq!(schemas["SectionPath"]["items"]["type"], "string");
+    let result = response(
+        &router,
+        Request::builder()
+            .uri("/api/articles")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(result.status, StatusCode::OK);
+    let index: serde_json::Value = serde_json::from_str(&result.body).unwrap();
+    let properties = schemas["ArticleSummaryDocument"]["properties"]
+        .as_object()
+        .unwrap();
+    let required = schemas["ArticleSummaryDocument"]["required"]
+        .as_array()
+        .unwrap();
+    for article in index["articles"].as_array().unwrap() {
+        assert!(
+            article
+                .as_object()
+                .unwrap()
+                .keys()
+                .all(|key| properties.contains_key(key))
+        );
+        assert!(
+            required
+                .iter()
+                .all(|key| article.get(key.as_str().unwrap()).is_some())
+        );
+    }
+    for optional in ["description", "priority"] {
+        assert!(properties.contains_key(optional));
+        assert!(!required.iter().any(|key| key == optional));
+    }
+}
+
+#[tokio::test]
+async fn openapi_uses_configured_origin_without_reading_artifacts() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let reader: DynArtifactReader = Arc::new(CountingReader {
+        inner: Arc::new(FailingSnapshotReader),
+        snapshot_calls: calls.clone(),
+    });
+    let router = create_router_with_assets(
+        reader,
+        true,
+        test_asset_config(),
+        BaseUrl::new("https://preview.example").unwrap(),
+    );
+    let result = response(
+        &router,
+        Request::builder()
+            .uri("/api/openapi.json")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(result.status, StatusCode::OK);
+    let spec: serde_json::Value = serde_json::from_str(&result.body).unwrap();
+    assert_eq!(spec["servers"][0]["url"], "https://preview.example");
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    for (path, status, body) in [
+        ("/api/health", StatusCode::OK, "OK"),
+        ("/api/ready", StatusCode::SERVICE_UNAVAILABLE, "NOT READY"),
+        (
+            "/api/articles",
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal server error",
+        ),
+    ] {
+        let result = response(
+            &router,
+            Request::builder().uri(path).body(Body::empty()).unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, status);
+        assert_eq!(result.body, body);
+        let media_type = result
+            .content_type
+            .as_deref()
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap();
+        assert!(
+            spec["paths"][path]["get"]["responses"][status.as_str()]["content"]
+                .get(media_type)
+                .is_some()
+        );
+    }
+}
+
+#[tokio::test]
 async fn metadata_uses_each_routers_base_url_and_preserves_canonical_paths() {
     let routers = ["https://preview.example///", "http://127.0.0.1:8123/"].map(|origin| {
         (
@@ -1382,7 +1536,7 @@ async fn category_renders_the_published_landing_and_articles_as_html() {
 }
 
 #[tokio::test]
-async fn invalid_category_errors_share_the_conditional_get_snapshot() {
+async fn article_and_category_not_found_pages_share_the_conditional_get_snapshot() {
     let calls = Arc::new(AtomicUsize::new(0));
     let reader: DynArtifactReader = Arc::new(CountingReader {
         inner: fixture_reader(),
@@ -1394,14 +1548,35 @@ async fn invalid_category_errors_share_the_conditional_get_snapshot() {
         "/unknown/article",
         "/en/unknown",
         "/en/unknown/article",
+        "/daily",
+        "/en/daily",
+        "/tech/missing-article.html",
+        "/en/tech/missing-article.html",
+        "/tech/not%20a%20slug.html",
+        "/en/tech/not%20a%20slug.html",
     ] {
         calls.store(0, Ordering::SeqCst);
         let result = response(
             &router,
-            Request::builder().uri(path).body(Body::empty()).unwrap(),
+            Request::builder()
+                .uri(format!("{path}?source=404"))
+                .body(Body::empty())
+                .unwrap(),
         )
         .await;
         assert_eq!(result.status, StatusCode::NOT_FOUND, "{path}");
+        let language = if path.starts_with("/en/") { "en" } else { "ja" };
+        assert!(
+            result.body.contains(&format!("<html lang=\"{language}\">")),
+            "{path}"
+        );
+        assert!(
+            result.body.contains(&format!(
+                "<link rel=\"canonical\" href=\"https://www.okawak.net{path}\">"
+            )),
+            "{path}"
+        );
+        assert_eq!(result.body.matches("<title>").count(), 1, "{path}");
         assert_eq!(calls.load(Ordering::SeqCst), 1, "{path}");
         assert!(!result.headers.contains_key(header::ETAG), "{path}");
         assert!(
@@ -2058,25 +2233,48 @@ async fn about_shell_initializes_content_enhancements() {
 }
 
 #[tokio::test]
-async fn about_returns_not_found_page_when_artifact_is_missing() {
+async fn home_and_about_not_found_pages_share_the_snapshot_and_keep_their_locale() {
     let temp_dir = tempdir().unwrap();
-    let router = create_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
-    let response = response(
-        &router,
-        Request::builder()
-            .uri("/about")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-
-    assert_eq!(response.status, StatusCode::NOT_FOUND);
-    assert!(
-        response
-            .body
-            .contains("<title>ページが見つかりません | ぶくせんの探窟メモ</title>")
-    );
-    assert!(response.body.contains("ページが見つかりませんでした。"));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let reader: DynArtifactReader = Arc::new(CountingReader {
+        inner: Arc::new(LocalArtifactReader::new(temp_dir.path())),
+        snapshot_calls: calls.clone(),
+    });
+    let router = create_router(validator_reader(reader), true);
+    for (path, locale, message) in [
+        ("/about", "ja", "ページが見つかりませんでした。"),
+        ("/en/about", "en", "Page not found."),
+        ("/en", "en", "Page not found."),
+    ] {
+        calls.store(0, Ordering::SeqCst);
+        let result = response(
+            &router,
+            Request::builder()
+                .uri(format!("{path}?source=404"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::NOT_FOUND, "{path}");
+        assert!(
+            result.body.contains(&format!("<html lang=\"{locale}\">")),
+            "{path}"
+        );
+        assert!(result.body.contains(message), "{path}");
+        assert!(
+            result.body.contains(&format!(
+                "<link rel=\"canonical\" href=\"https://www.okawak.net{path}\">"
+            )),
+            "{path}"
+        );
+        assert_eq!(result.body.matches("<title>").count(), 1, "{path}");
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "{path}");
+        assert!(!result.headers.contains_key(header::ETAG), "{path}");
+        assert!(
+            !result.headers.contains_key(header::LAST_MODIFIED),
+            "{path}"
+        );
+    }
 }
 
 #[tokio::test]

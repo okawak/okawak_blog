@@ -5,6 +5,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ArticleSummaryDocument {
     pub slug: String,
     pub title: String,
@@ -59,6 +60,7 @@ impl TryFrom<&ArticleSummaryDocument> for PublishedArticleSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ArticleIndexDocument {
     pub articles: Vec<ArticleSummaryDocument>,
 }

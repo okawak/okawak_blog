@@ -6,12 +6,12 @@ use topcoat::{
     Result,
     context::Cx,
     metadata::Metadata,
-    router::{StatusCode, page},
+    router::{StatusCode, error::not_found, page},
     view::{Unescaped, View, ViewExt, component, view},
 };
 
 use super::page_loader;
-use crate::shell::{internal_server_error_page, not_found_page, site_shell};
+use crate::shell::{internal_server_error_page, site_shell};
 
 const ABOUT_PAGE_KEY: &str = "about";
 
@@ -27,7 +27,7 @@ pub(crate) async fn render_about(cx: &Cx, locale: Locale) -> Result<impl View> {
         Ok(Some(presentation)) => {
             Ok(view! { about_document(presentation: presentation, locale: locale) }.boxed())
         }
-        Ok(None) => Ok(view! { not_found_page(canonical_path: locale.path("/about")) }.boxed()),
+        Ok(None) => Err(not_found().into()),
         Err(error) => {
             tracing::error!(%error, page = ABOUT_PAGE_KEY, "static page artifact read failed");
             Ok(view! {
