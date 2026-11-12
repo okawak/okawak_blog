@@ -57,7 +57,8 @@ changes="$(git status --porcelain)"
 [[ -z "$changes" ]] || { echo "deploy-vps: VPS checkout has uncommitted changes" >&2; exit 1; }
 git fetch origin main
 git merge-base --is-ancestor HEAD FETCH_HEAD || { echo "deploy-vps: VPS has commits outside origin/main; resolve them before deploying" >&2; exit 1; }
-exec mise run production-deploy
+# The task is loaded before it pulls main, so also support checkouts without raw = true yet.
+exec mise run --raw production-deploy
 EOF
 )"
   ;;

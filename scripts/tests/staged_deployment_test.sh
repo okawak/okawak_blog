@@ -18,6 +18,16 @@ write_command_stubs() {
   mkdir -p "$stub_dir"
   cat >"$stub_dir/sudo" <<'EOF'
 #!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$STUB_SUDO_LOG"
+case "$1" in
+  -v) exit "${STUB_SUDO_AUTH_STATUS:-0}" ;;
+  -n)
+    shift
+    [[ "${STUB_SUDO_COMMAND_FAIL:-false}" != true ]] || exit 1
+    ;;
+  *) echo "unexpected interactive sudo after authentication" >&2; exit 1 ;;
+esac
 exec "$@"
 EOF
   cat >"$stub_dir/install" <<'EOF'
@@ -136,6 +146,7 @@ prepare_case() {
   chmod +x "$case_dir/bin/okawak_blog" "$case_dir/target/release/blog-server"
   : >"$case_dir/systemctl.log"
   : >"$case_dir/probe.log"
+  : >"$case_dir/sudo.log"
 }
 
 run_activation() {
@@ -154,8 +165,39 @@ run_activation() {
     STUB_PROBE_LOG="$case_dir/probe.log" \
     STUB_SYSTEMCTL_LOG="$case_dir/systemctl.log" \
     STUB_SYSTEMD_DIR="$case_dir/systemd" \
+    STUB_SUDO_LOG="$case_dir/sudo.log" \
     bash "$activation_script"
 }
+
+# Authentication failure must leave the live release and staging untouched,
+# without another password prompt or any rollback/service operation.
+for failure in authentication expired-authentication; do
+  auth_case="$test_root/$failure"
+  prepare_case "$auth_case"
+  auth_status=1
+  command_fail=false
+  if [[ "$failure" == expired-authentication ]]; then
+    auth_status=0
+    command_fail=true
+  fi
+  if STUB_SUDO_AUTH_STATUS="$auth_status" STUB_SUDO_COMMAND_FAIL="$command_fail" \
+    run_activation "$auth_case" false; then
+    fail "$failure unexpectedly completed activation"
+  fi
+  [[ "$(head -1 "$auth_case/sudo.log")" == -v ]] || fail "sudo authentication was not checked first"
+  if [[ "$failure" == authentication ]]; then
+    [[ "$(cat "$auth_case/sudo.log")" == -v ]] || fail "authentication failure retried sudo"
+  fi
+  [[ ! -s "$auth_case/systemctl.log" ]] || fail "$failure changed service state"
+  [[ ! -s "$auth_case/probe.log" ]] || fail "$failure reached health probes"
+  cmp -s "$auth_case/previous.service" "$auth_case/systemd/okawak_blog.service" \
+    || fail "$failure changed the installed unit"
+  grep -qx 'old binary' "$auth_case/bin/okawak_blog" || fail "$failure changed the binary"
+  [[ -f "$auth_case/bin/assets/old.css" ]] || fail "$failure changed the live assets"
+  [[ -f "$auth_case/target/assets-staged/tailwind-new.css" ]] || fail "$failure consumed staging"
+  [[ ! -e "$auth_case/systemd/okawak_blog.service.rollback" ]] || fail "$failure created a unit backup"
+  [[ ! -e "$auth_case/bin/assets.failed" ]] || fail "$failure started rollback"
+done
 
 success_case="$test_root/success"
 prepare_case "$success_case"
