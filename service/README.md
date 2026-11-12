@@ -42,6 +42,12 @@ mise run deploy-vps -- --help
 
 実行中は端末とSSH接続を維持し、別のデプロイや証明書更新を並行実行しないでください。VPS側の失敗は管理端末へ非ゼロの終了コードで返し、デプロイ成功時は`production-deploy completed`を表示します。公開URLのreadinessとホーム・記事の表示も確認します。
 
+SSH経由の操作・証明書更新と、VPS内部の`production-deploy`・`quick-deploy`は`raw = true`で端末の入出力を直接接続します。通常の`mise run deploy-vps`でパスワードを入力でき、追加の`--raw`指定は不要です。
+
+管理端末のcheckoutは先に最新mainへ更新してください。VPSではmain取得前の設定で`production-deploy`を起動するため、SSH経由の呼び出しにも`--raw`を指定し、旧設定からの更新時にも対話入力を維持します。
+
+配備スクリプトはビルド・staging検証後、稼働中releaseの変更前に`sudo -v`で認証します。認証失敗・タイムアウト時はそこで終了し、service操作やrollbackへ進みません。以降の配備・rollbackは`sudo -n`を使い、権限不足や認証の有効期限切れで再びパスワード待ちになることを防ぎます。配備途中に権限を失った場合はrollbackも失敗し得るため、表示されたエラーとservice状態を確認してください。
+
 ```bash
 curl --fail -H 'Cache-Control: no-cache' \
   "https://www.okawak.net/api/ready?deploy-check=$(date +%s)"

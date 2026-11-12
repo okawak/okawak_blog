@@ -51,7 +51,7 @@ cat >"$test_root/bin/mise" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'mise %s\n' "$*" >>"$STUB_REMOTE_LOG"
-[[ "$*" == 'run production-deploy' ]]
+[[ "$*" == 'run --raw production-deploy' ]]
 exit "${STUB_DEPLOY_STATUS:-0}"
 EOF
 cat >"$test_root/bin/sudo" <<'EOF'
@@ -98,7 +98,7 @@ export OKAWAK_BLOG_VPS_REPO_DIR=/opt/okawak_blog
 
 run_case 0 bash "$deployment_script" deploy
 [[ "$(head -2 "$STUB_SSH_LOG")" == $'-tt\ntest-vps' ]] || fail "configured SSH alias/TTY not used"
-[[ "$(cat "$STUB_REMOTE_LOG")" == $'cd /opt/okawak_blog\ngit branch --show-current\ngit status --porcelain\ngit fetch origin main\ngit merge-base --is-ancestor HEAD FETCH_HEAD\nmise run production-deploy' ]] \
+[[ "$(cat "$STUB_REMOTE_LOG")" == $'cd /opt/okawak_blog\ngit branch --show-current\ngit status --porcelain\ngit fetch origin main\ngit merge-base --is-ancestor HEAD FETCH_HEAD\nmise run --raw production-deploy' ]] \
   || fail "remote preflight/deploy order is incorrect"
 
 run_case 0 env OKAWAK_BLOG_VPS_REPO_DIR=/srv/apps/okawak_blog STUB_EXPECTED_REPO_DIR=/srv/apps/okawak_blog \

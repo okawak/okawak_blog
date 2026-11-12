@@ -123,23 +123,29 @@ description = "Pull the latest changes from origin/main and update submodules"
 depends = ["pull"]
 run = "git submodule update --init --recursive"
 
+# Keep terminal I/O connected for SSH/sudo, including nested deployment tasks.
 [tasks.status-vps]
+raw = true
 description = "Management host: show the VPS service status via SSH"
 run = "bash scripts/vps.sh status"
 
 [tasks.logs-vps]
+raw = true
 description = "Management host: follow VPS service logs via SSH"
 run = "bash scripts/vps.sh logs"
 
 [tasks.logs-recent-vps]
+raw = true
 description = "Management host: show the latest 50 VPS service log lines via SSH"
 run = "bash scripts/vps.sh logs-recent"
 
 [tasks.restart-vps]
+raw = true
 description = "Management host: restart the VPS application via SSH"
 run = "bash scripts/vps.sh restart"
 
 [tasks.production-deploy]
+raw = true
 description = "VPS internal: pull, build, and deploy (called by deploy-vps)"
 hide = true
 run = '''
@@ -150,10 +156,12 @@ echo "production-deploy completed"
 '''
 
 [tasks.deploy-vps]
+raw = true
 description = "Management host: deploy origin/main via SSH; build and activate on the VPS"
 run = "bash scripts/vps.sh deploy"
 
 [tasks.quick-deploy]
+raw = true
 description = "VPS internal: build and activate a release with rollback protection"
 hide = true
 run = '''
@@ -164,6 +172,7 @@ echo "quick-deploy completed"
 '''
 
 [tasks.rotate-runtime-certificate]
+raw = true
 description = "Management host: rotate the production IAM Roles Anywhere client certificate"
 run = "bash scripts/rotate_runtime_certificate.sh"
 
