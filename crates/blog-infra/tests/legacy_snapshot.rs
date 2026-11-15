@@ -31,7 +31,7 @@ impl ArtifactSnapshot for LegacySnapshot {
         &self,
         _: &Category,
         _: &Slug,
-    ) -> Result<Option<Arc<blog_domain::ArticleArtifactDocument>>> {
+    ) -> Result<Option<Arc<blog_domain::PublishableArticle>>> {
         unavailable()
     }
     async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {

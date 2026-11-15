@@ -31,8 +31,8 @@ pub use page::{
 };
 pub use publication::{
     ArticleBody, ArticleMeta, CategoryIndex, CategoryLandingBody, CategoryLandingMeta,
-    CategoryMetadata, PublishableArticle, PublishableCategoryLanding, PublishedArticleSummary,
-    SiteMetadata, build_article_index, build_category_indexes, build_site_metadata,
+    CategoryMetadata, PublishableArticle, PublishableCategoryLanding, SiteMetadata,
+    build_article_index, build_category_indexes, build_site_metadata,
 };
 
 mod labels;

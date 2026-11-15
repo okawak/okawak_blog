@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use blog_domain::{
     ArticleArtifactDocument, ArticleIndexDocument, Category, CategoryArtifactDocument,
     ContentAssetName, HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey,
-    SiteLocalesDocument, SiteMetadataDocument, Slug,
+    PublishableArticle, SiteLocalesDocument, SiteMetadataDocument, Slug,
 };
 
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, Result};
@@ -110,15 +110,14 @@ impl ArtifactSnapshot for LocalArtifactReader {
         &self,
         category: &Category,
         slug: &Slug,
-    ) -> Result<Option<Arc<ArticleArtifactDocument>>> {
+    ) -> Result<Option<Arc<PublishableArticle>>> {
         let path = format!("articles/{}/{}.json", category.as_str(), slug.as_str());
         let article = match self.read_json::<ArticleArtifactDocument>(&path).await {
             Ok(article) => article,
             Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error),
         };
-        article.validate(category, slug)?;
-        Ok(Some(Arc::new(article)))
+        Ok(Some(Arc::new(article.into_article(category, slug)?)))
     }
 
     async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
@@ -268,7 +267,7 @@ mod tests {
         assert_eq!(category.title, "Tech");
         assert_eq!(category.html, "<article><h1>Tech</h1></article>");
         assert_eq!(metadata.total_articles, 1);
-        assert_eq!(html.unwrap().html, "<h1>Intro</h1>");
+        assert_eq!(html.unwrap().body.as_str(), "<h1>Intro</h1>");
         assert_eq!(page.page.as_str(), "about");
         assert_eq!(page.title, "About");
         assert_eq!(home_fragment.title, "Home");

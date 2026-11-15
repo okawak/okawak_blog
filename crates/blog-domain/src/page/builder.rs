@@ -3,9 +3,9 @@ use super::{
     HomePageDocument, SiteArticleCard, SiteCategorySummary, StaticPageDocument,
 };
 use crate::{
-    ArticleArtifactDocument, ArticleIndexDocument, ArticleSummaryDocument, Category,
-    CategoryArtifactDocument, DomainError, HomeFragmentArtifactDocument, PageArtifactDocument,
-    PublishedArticleSummary, Result, SectionPath, SiteMetadataDocument,
+    ArticleIndexDocument, ArticleMeta, ArticleSummaryDocument, Category, CategoryArtifactDocument,
+    DomainError, HomeFragmentArtifactDocument, PageArtifactDocument, PublishableArticle, Result,
+    SectionPath, SiteMetadataDocument,
 };
 use std::{str::FromStr, sync::Arc};
 
@@ -13,10 +13,15 @@ impl TryFrom<&ArticleSummaryDocument> for SiteArticleCard {
     type Error = DomainError;
 
     fn try_from(document: &ArticleSummaryDocument) -> Result<Self> {
-        let summary = PublishedArticleSummary::try_from(document)?;
+        Ok(ArticleMeta::try_from(document.clone())?.into())
+    }
+}
+
+impl From<ArticleMeta> for SiteArticleCard {
+    fn from(summary: ArticleMeta) -> Self {
         let category = summary.category;
 
-        Ok(Self {
+        Self {
             slug: summary.slug,
             title: summary.title,
             category,
@@ -30,7 +35,7 @@ impl TryFrom<&ArticleSummaryDocument> for SiteArticleCard {
             priority: summary.priority,
             created_at: summary.created_at.to_string(),
             updated_at: summary.updated_at.to_string(),
-        })
+        }
     }
 }
 
@@ -79,17 +84,11 @@ fn build_home_fragment_document(
     })
 }
 
-pub fn build_article_page_document(
-    artifact: &ArticleArtifactDocument,
-) -> Result<ArticlePageDocument> {
-    if artifact.html.trim().is_empty() {
-        return Err(DomainError::validation("html"));
+pub fn build_article_page_document(article: &PublishableArticle) -> ArticlePageDocument {
+    ArticlePageDocument {
+        article: article.meta.clone().into(),
+        html: article.body.as_str().to_owned(),
     }
-
-    Ok(ArticlePageDocument {
-        article: SiteArticleCard::try_from(&artifact.summary)?,
-        html: artifact.html.clone(),
-    })
 }
 
 pub fn build_category_page_document(
@@ -242,24 +241,13 @@ mod tests {
 
     #[test]
     fn builds_article_page_document() {
-        let document = build_article_page_document(&ArticleArtifactDocument {
-            summary: sample_summary(),
-            html: "<article><h1>Intro</h1></article>".into(),
-        })
-        .unwrap();
-
+        let article = PublishableArticle::new(
+            ArticleMeta::try_from(sample_summary()).unwrap(),
+            crate::ArticleBody::new("<article><h1>Intro</h1></article>".into()).unwrap(),
+        );
+        let document = build_article_page_document(&article);
         assert_eq!(document.article.slug.as_str(), "intro00000001");
         assert!(document.html.contains("<h1>Intro</h1>"));
-    }
-
-    #[test]
-    fn rejects_blank_article_html() {
-        let result = build_article_page_document(&ArticleArtifactDocument {
-            summary: sample_summary(),
-            html: "   ".into(),
-        });
-
-        assert_eq!(result, Err(DomainError::validation("html")));
     }
 
     #[test]

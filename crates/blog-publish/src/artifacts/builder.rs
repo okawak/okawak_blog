@@ -34,22 +34,12 @@ pub(crate) fn build_site_documents(
         home_fragment.validate()?;
     }
 
-    let category_metas = category_landings
-        .iter()
-        .map(|landing| landing.meta.clone())
-        .collect();
     let article_index = build_article_index(&article_metas);
-    let category_indexes = build_category_indexes(&article_metas, category_metas);
+    let category_indexes = build_category_indexes(&article_metas, category_landings);
     let site_metadata = build_site_metadata(&category_indexes);
     let category_documents = category_indexes
-        .iter()
-        .map(|index| {
-            let landing = category_landings
-                .iter()
-                .find(|landing| landing.meta.category == index.category)
-                .ok_or_else(|| blog_domain::DomainError::validation("category_landing"))?;
-            CategoryArtifactDocument::try_from((index, landing.body.as_str()))
-        })
+        .into_iter()
+        .map(CategoryArtifactDocument::try_from)
         .collect::<blog_domain::Result<Vec<_>>>()?;
 
     Ok(SiteDocuments {

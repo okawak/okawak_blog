@@ -120,7 +120,8 @@ async fn release_snapshot_preserves_identity_localized_text_and_shared_binary_as
             .await
             .unwrap()
             .unwrap()
-            .html,
+            .body
+            .as_str(),
         "<p>English 日本</p>"
     );
     assert_eq!(
@@ -218,11 +219,14 @@ fn article_json(html: &str) -> String {
     .to_string()
 }
 
+#[rstest]
+#[case::no_such_key("<Error><Code>NoSuchKey</Code><Message>missing</Message></Error>")]
+#[case::http_status_only("")]
 #[tokio::test]
-async fn missing_article_json_does_not_request_index_or_html() {
+async fn missing_article_json_does_not_request_index_or_html(#[case] body: &str) {
     let (reader, transport) = reader(vec![
         missing("current.json"),
-        missing("articles/tech/intro.json"),
+        event("articles/tech/intro.json", 404, body),
     ]);
     let snapshot = reader.snapshot().await.unwrap();
     assert!(
@@ -237,6 +241,7 @@ async fn missing_article_json_does_not_request_index_or_html() {
 
 #[rstest]
 #[case::access_denied(403, "<Error><Code>AccessDenied</Code></Error>".into())]
+#[case::misleading_message(403, "<Error><Code>AccessDenied</Code><Message>not found: 404 NoSuchKey</Message></Error>".into())]
 #[case::malformed_json(200, "invalid json".into())]
 #[case::empty_html(200, article_json("  "))]
 #[case::wrong_identity(200, article_json("<p>Intro</p>").replace("intro", "other"))]

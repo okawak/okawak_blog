@@ -2,8 +2,8 @@ use std::{sync::Arc, time::SystemTime};
 
 use async_trait::async_trait;
 use blog_domain::{
-    ArticleArtifactDocument, ArticleIndexDocument, Category, CategoryArtifactDocument,
-    ContentAssetName, HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey,
+    ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
+    HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, PublishableArticle,
     SiteLocalesDocument, SiteMetadataDocument, Slug,
 };
 
@@ -52,13 +52,13 @@ pub trait ArtifactSnapshot: Send + Sync {
         category: &Category,
     ) -> Result<Arc<CategoryArtifactDocument>>;
     async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>>;
-    /// Reads one immutable article by identity; missing articles return None.
+    /// Reads and validates one immutable article by identity; missing articles return None.
     /// Storage and validation failures remain errors, not missing content.
     async fn read_article(
         &self,
         category: &Category,
         slug: &Slug,
-    ) -> Result<Option<Arc<ArticleArtifactDocument>>>;
+    ) -> Result<Option<Arc<PublishableArticle>>>;
     async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>>;
     async fn read_page_document(&self, page: &PageKey) -> Result<Arc<PageArtifactDocument>>;
 }

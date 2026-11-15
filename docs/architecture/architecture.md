@@ -89,7 +89,7 @@ exportとpublishはruntime依存ではない。serverはinfraをapplication comp
 
 任意の`schema` featureは、公開記事一覧型のJSON schemaを`schemars`で導出する。HTTP frameworkやOpenAPIのroute設定はblog-serverに置く。
 
-公開Markdownのタイトル・日時・タグID・digest・section pathはblog-domainの値型が生成時・deserialization時に検証する。`PublicContentMeta::validate()`はschema versionとフィールド間の整合性を検証する。exportのvault入力も同じ値型を使い、publishへ検証済みの値を渡す。
+公開Markdownのタイトル・日時・タグID・digest・section pathはblog-domainの値型が生成時・deserialization時に検証する。`PublicContentMeta::validate()`はschema versionとフィールド間の整合性を検証する。exportのvault入力も同じ値型を使い、publishへ検証済みの値を渡す。記事のメタデータはArticleMetaに統一し、一覧用に同じフィールドのmodelを重複定義しない。CategoryIndexはPublishableCategoryLandingを本文ごと保持し、artifact生成時にlandingを検索し直さない。
 
 ### crates/blog-publish
 
@@ -160,7 +160,7 @@ site/
 
 locales.jsonは同じreleaseで実在するpathとlocaleの対応、content-assets/は言語間で共有するcontent hash付きassetを持つ。各言語のmetadataはその言語で配信する記事だけを集計する。
 
-記事のJSONは`ArticleArtifactDocument { summary, html }`であり、summaryは同じlocaleのarticles/index.jsonと一致する。publish前の検証で両者を照合する。local / S3 readerは指定category・slugと文書のidentityを検証する。記事JSONが存在しない場合は欠落、破損・権限エラーは失敗として返す。一覧や記事HTMLを代わりに読まない。生成・読取ともに同じArticleArtifactDocumentを使う。
+記事のJSONは`ArticleArtifactDocument { summary, html }`であり、summaryは同じlocaleのarticles/index.jsonと一致する。publish前の検証で両者を照合する。local / S3 readerは指定category・slugと文書のidentityを検証する。記事JSONが存在しない場合は欠落、破損・権限エラーは失敗として返す。S3の欠落はSDKのNoSuchKeyまたはHTTP 404で判定し、エラーメッセージの文字列では判断しない。一覧や記事HTMLを代わりに読まない。保存形式はArticleArtifactDocumentに統一し、reader境界でidentity・メタデータ・本文を検証して既存のPublishableArticleへ変換する。cacheとSSRはこの検証済みmodelを使い、page builderで再検証しない。
 
 home.jsonはhome fragmentがある場合だけ生成する。en/ subtreeも配信可能な英語contentがある場合だけ生成する。
 
@@ -201,7 +201,7 @@ releaseは上書きせず、公開runをrepository単位で直列化する。失
 
 /articles/:slugと/categories/:categoryは現行の公開routeではない。末尾slashはqueryを維持した308で正規URLへ移す。
 
-トップページのGET / HEADだけは、保存済みlocale cookie、Accept-Language、英語の順で初期言語を選ぶ。記事などの直接URLはブラウザ設定で変更しない。言語切替は同じpageの翻訳、対象言語homeの順に移動し、対象言語が公開されていなければ無効にする。選択はhost限定、Path=/、HttpOnly、SameSite=Laxのcookieへ1年間保存する。
+トップページのGET / HEADだけは、保存済みlocale cookie、Accept-Language、英語の順で初期言語を選ぶ。記事などの直接URLはブラウザ設定で変更しない。言語切替は同じpageの翻訳、対象言語homeの順に移動し、対象言語が公開されていなければ無効にする。選択はhost限定、Path=/、HttpOnly、SameSite=Laxのcookieへ1年間保存する。Cookieの解析とSet-Cookie生成はTopcoatのCookieLayer / CookieJarに委譲する。
 
 同じpageの翻訳が実在する場合だけhreflangを出す。英語artifactがないURLは英語404とし、日本語本文を英語版として配信しない。英語UI文言の欠落・更新待ちは日本語、未知のUI keyはkey文字列、英語タグ表示名の欠落は日本語名へfallbackする。
 
@@ -231,7 +231,7 @@ S3 snapshot cacheは既定5秒のTTLを持つ。TTL後もrelease identityが同�
 
 snapshot更新に失敗した場合、cache済みの直前のimmutable releaseを配信し、次のTTLで再試行する。運用中にcurrent.jsonが消えてもlegacy rootへ戻らない。初回取得失敗、legacy root、TTL=0ではstale fallbackしない。未取得artifactのread失敗まで隠さず、そのrequestはerrorにする。
 
-artifact-backedなGET / HEADはprocess instance、release identity、request URIからweak ETag、release生成時刻とprocess起動時刻からLast-Modifiedを作る。URIを含めて異なるrepresentationのvalidatorを分離し、process再起動でもvalidatorを変えてserver / UI更新後の古いrepresentationを再利用させない。If-None-MatchをIf-Modified-Sinceより優先し、resourceが存在する成功responseだけを304へ変換する。
+artifact-backedなGET / HEADはprocess instance、release identity、request URIからweak ETag、release生成時刻とprocess起動時刻からLast-Modifiedを作る。URIを含めて異なるrepresentationのvalidatorを分離し、process再起動でもvalidatorを変えてserver / UI更新後の古いrepresentationを再利用させない。ETagの解析・weak比較はheaders crateに委譲する。wildcard単独では描画前の304を返さない。If-None-MatchをIf-Modified-Sinceより優先し、resourceが存在する成功responseだけを304へ変換する。
 
 Topcoatのpage再描画はpage自身のURLにruntime header付きでPOSTし、runtime layerがapplication layerより前にGETへ変換するため、cache対象のmethod判定にはoriginal methodを使う。local reader、legacy root、release prefixを直接読む公開前smoke、TTL=0、health / readiness、asset、404 / error responseにはartifact validatorを付けない。
 

@@ -60,8 +60,8 @@ async fn direct_article_reads_need_no_index_and_isolate_locales_and_categories()
         );
         let first = first.unwrap().unwrap();
         let second = second.unwrap().unwrap();
-        assert_eq!(first.summary.title, expected);
-        assert_eq!(first.html, format!("<p>{expected}</p>"));
+        assert_eq!(first.meta.title.as_str(), expected);
+        assert_eq!(first.body.as_str(), format!("<p>{expected}</p>"));
         assert!(Arc::ptr_eq(&first, &second));
     }
 }
@@ -86,8 +86,9 @@ async fn failed_article_load_is_retried_without_caching_the_error() {
             .await
             .unwrap()
             .unwrap()
-            .summary
-            .title,
+            .meta
+            .title
+            .as_str(),
         "Recovered"
     );
 }

@@ -19,7 +19,7 @@ mise run dev-local
 
 記事は`articles/<category>/<slug>.json`に`summary`と`html`をまとめて保存する。SSRはカテゴリとIDで単体取得し、一覧の読込を必要としない。記事HTML単体は生成・読取しない。
 
-`--validate-artifacts`は生成済みsiteを読み、SSRと同じblog-domainのpage builderで全言語のhome・記事・カテゴリ・固定ページを検証し、記事JSONのsummaryと一覧の一致も確認する。生成処理・AI・uploadは実行しない。公開前の`scripts/validate_public_artifacts.sh`はこの検証とartifact間の集合・件数照合を行う。workflowでは生成に使用したrelease版publish binaryを再利用する。
+`--validate-artifacts`は生成済みsiteを読み、SSRと同じblog-domainの記事model変換・page builderで全言語のhome・記事・カテゴリ・固定ページを検証し、記事JSONのsummaryと一覧の一致も確認する。生成処理・AI・uploadは実行しない。公開前の`scripts/validate_public_artifacts.sh`はこの検証とartifact間の集合・件数照合を行う。workflowでは生成に使用したrelease版publish binaryを再利用する。
 
 本文はpulldown-cmarkのevent pipelineでHTMLに変換し、URLとraw HTMLを安全化する。数式とコードは既存の描画を維持する。exportが作る空の見出しanchorと、従来のsimple bookmark構文だけをraw HTMLとして許可する。bookmarkは既存のOGP取得処理で拡張する。
 

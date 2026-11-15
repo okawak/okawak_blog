@@ -3,8 +3,7 @@ use anyhow::{Context, Result, ensure};
 use blog_domain::{
     ArticleArtifactDocument, ArticleIndexDocument, CategoryArtifactDocument,
     HomeFragmentArtifactDocument, PageArtifactDocument, SiteLocalesDocument, SiteMetadataDocument,
-    build_article_page_document, build_category_page_document, build_home_page_document,
-    build_static_page_document,
+    build_category_page_document, build_home_page_document, build_static_page_document,
 };
 use serde::de::DeserializeOwned;
 use std::{
@@ -37,7 +36,7 @@ pub(crate) fn validate(root: &Path) -> Result<()> {
                 "article summary differs from index: {}",
                 path.display()
             );
-            build_article_page_document(&document)?;
+            document.into_article(&article.category.parse()?, &article.slug.parse()?)?;
         }
         for path in json_files(&root.join("categories"))? {
             let category: CategoryArtifactDocument = read_json(&path)?;

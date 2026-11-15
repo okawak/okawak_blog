@@ -21,9 +21,10 @@ use topcoat::{
     Result,
     asset::{AssetConfig, RouterBuilderAssetExt},
     context::{BaseUrl, Cx, context, memoize},
+    cookie::CookieLayer,
     metadata::Metadata,
     router::{
-        Body, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode, TrailingSlash,
+        Body, Layer, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode, TrailingSlash,
         error::{NotFoundError, not_found},
         page, request,
         response::{IntoResponse, Response},
@@ -202,6 +203,10 @@ pub fn create_router(
         .layer(LayerFn::new(None::<&Path>, artifact_conditional_get))
         // Runtime reruns must become GETs before the application layers run.
         .layer(RuntimeLayer::new())
+        // Language selection runs globally, including unmatched paths and redirects.
+        .layer(LayerFn::new(None::<&Path>, |cx, body, next| {
+            CookieLayer.handle(cx, body, next)
+        }))
         .with(PrefetchMode::Intent)
         .with(ArtifactHttpCacheState::new(
             artifact_reader.clone(),

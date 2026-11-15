@@ -3,6 +3,7 @@
 use blog_domain::{Locale, SiteLocalesDocument};
 use topcoat::{
     context::Cx,
+    cookie::{Cookie, Cookies, SameSite, cookies, time::Duration},
     router::{
         HeaderMap, HeaderValue, Uri,
         error::{redirect as temporary_redirect, see_other},
@@ -35,16 +36,6 @@ fn explicit_choice(uri: &Uri) -> Option<Locale> {
 }
 
 fn preferred_locale(headers: &HeaderMap) -> Locale {
-    for value in headers.get_all(header::COOKIE) {
-        for cookie in value.to_str().unwrap_or_default().split(';') {
-            if let Some((name, value)) = cookie.trim().split_once('=')
-                && name == COOKIE
-                && let Ok(locale) = value.parse()
-            {
-                return locale;
-            }
-        }
-    }
     let mut japanese: Option<(u16, usize)> = None;
     let mut english: Option<(u16, usize)> = None;
     let mut wildcard: Option<(u16, usize)> = None;
@@ -139,7 +130,13 @@ pub(crate) fn vary_home(response: &mut Response) {
 pub(crate) async fn redirect(cx: &Cx) -> Option<Response> {
     let uri = request::uri(cx);
     let explicit = explicit_choice(uri);
-    let locale = explicit.unwrap_or_else(|| preferred_locale(request::headers(cx)));
+    let locale = explicit
+        .or_else(|| {
+            cookies(cx)
+                .get(COOKIE)
+                .and_then(|cookie| cookie.value().parse().ok())
+        })
+        .unwrap_or_else(|| preferred_locale(request::headers(cx)));
     if explicit.is_none() && locale == Locale::Ja {
         return None;
     }
@@ -176,12 +173,13 @@ pub(crate) async fn redirect(cx: &Cx) -> Option<Response> {
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     if explicit.is_some() {
-        response.headers_mut().insert(
-            header::SET_COOKIE,
-            HeaderValue::from_str(&format!(
-                "{COOKIE}={locale}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax"
-            ))
-            .ok()?,
+        cookies(cx).add(
+            Cookie::build((COOKIE, locale.to_string()))
+                .path("/")
+                .max_age(Duration::days(365))
+                .http_only(true)
+                .same_site(SameSite::Lax)
+                .build(),
         );
     }
     Some(response)

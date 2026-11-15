@@ -1,8 +1,8 @@
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactReader, DynArtifactSnapshot, Result};
 use async_trait::async_trait;
 use blog_domain::{
-    ArticleArtifactDocument, ArticleIndexDocument, Category, CategoryArtifactDocument,
-    ContentAssetName, HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey,
+    ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
+    HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, PublishableArticle,
     SiteLocalesDocument, SiteMetadataDocument, Slug,
 };
 use std::{
@@ -117,7 +117,7 @@ struct CachingArtifactSnapshot {
     site_metadata: OnceCell<Arc<SiteMetadataDocument>>,
     home_fragment: OnceCell<Arc<HomeFragmentArtifactDocument>>,
     category_documents: KeyedCache<Arc<CategoryArtifactDocument>>,
-    articles: HashMap<Category, OptionalCache<Arc<ArticleArtifactDocument>>>,
+    articles: HashMap<Category, OptionalCache<Arc<PublishableArticle>>>,
     page_documents: KeyedCache<Arc<PageArtifactDocument>>,
 }
 
@@ -216,7 +216,7 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
         &self,
         category: &Category,
         slug: &Slug,
-    ) -> Result<Option<Arc<ArticleArtifactDocument>>> {
+    ) -> Result<Option<Arc<PublishableArticle>>> {
         self.articles[category]
             .get_or_try_init(slug.as_str(), || self.inner.read_article(category, slug))
             .await
@@ -482,7 +482,7 @@ mod tests {
             &self,
             _: &Category,
             _: &Slug,
-        ) -> Result<Option<Arc<ArticleArtifactDocument>>> {
+        ) -> Result<Option<Arc<PublishableArticle>>> {
             Ok(None)
         }
 

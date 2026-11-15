@@ -1,3 +1,4 @@
+use aws_sdk_s3::{error::SdkError, operation::get_object::GetObjectError};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -45,28 +46,18 @@ impl InfraError {
         match self {
             Self::Shared(error) => error.is_not_found(),
             Self::Io(error) => error.kind() == std::io::ErrorKind::NotFound,
-            Self::S3Read { source, .. } => Self::error_is_not_found(source.as_ref()),
+            Self::S3Read { source, .. } => source
+                .downcast_ref::<SdkError<GetObjectError>>()
+                .is_some_and(|error| {
+                    error
+                        .as_service_error()
+                        .is_some_and(GetObjectError::is_no_such_key)
+                        || error
+                            .raw_response()
+                            .is_some_and(|response| response.status().as_u16() == 404)
+                }),
             _ => false,
         }
-    }
-
-    fn error_is_not_found(error: &(dyn std::error::Error + 'static)) -> bool {
-        if let Some(io_error) = error.downcast_ref::<std::io::Error>()
-            && io_error.kind() == std::io::ErrorKind::NotFound
-        {
-            return true;
-        }
-
-        let message = error.to_string();
-        if message.contains("NoSuchKey")
-            || message.contains("Not Found")
-            || message.contains("not found")
-            || message.contains("404")
-        {
-            return true;
-        }
-
-        error.source().is_some_and(Self::error_is_not_found)
     }
 }
 
@@ -78,7 +69,7 @@ mod tests {
     fn not_found_messages_and_other_failures_are_distinguished() {
         for message in ["NoSuchKey", "Not Found", "not found", "404"] {
             let error = InfraError::s3_read("bucket", "key", std::io::Error::other(message));
-            assert!(error.is_not_found(), "{message}");
+            assert!(!error.is_not_found(), "{message}");
         }
         for error in [
             InfraError::Io(std::io::Error::other("disk failure")),
@@ -90,28 +81,6 @@ mod tests {
         ] {
             assert!(!error.is_not_found(), "{error}");
         }
-    }
-
-    #[test]
-    fn test_s3_read_not_found_is_detected_from_source_chain() {
-        let error = InfraError::s3_read(
-            "bucket",
-            "missing.html",
-            std::io::Error::new(std::io::ErrorKind::NotFound, "missing object"),
-        );
-
-        assert!(error.is_not_found());
-    }
-
-    #[test]
-    fn test_s3_read_not_found_is_detected_from_message() {
-        let error = InfraError::s3_read(
-            "bucket",
-            "missing.html",
-            std::io::Error::other("NoSuchKey: missing"),
-        );
-
-        assert!(error.is_not_found());
     }
 
     #[test]

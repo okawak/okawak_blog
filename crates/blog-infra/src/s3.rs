@@ -5,7 +5,8 @@ use aws_sdk_s3::Client;
 use blog_domain::{
     ArticleArtifactDocument, ArticleIndexDocument, ArtifactReleasePointerDocument, Category,
     CategoryArtifactDocument, ContentAssetName, HomeFragmentArtifactDocument, Locale,
-    PageArtifactDocument, PageKey, SiteLocalesDocument, SiteMetadataDocument, Slug,
+    PageArtifactDocument, PageKey, PublishableArticle, SiteLocalesDocument, SiteMetadataDocument,
+    Slug,
 };
 
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, InfraError, Result};
@@ -244,15 +245,14 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
         &self,
         category: &Category,
         slug: &Slug,
-    ) -> Result<Option<Arc<ArticleArtifactDocument>>> {
+    ) -> Result<Option<Arc<PublishableArticle>>> {
         let path = format!("articles/{}/{}.json", category.as_str(), slug.as_str());
         let article = match self.read_json::<ArticleArtifactDocument>(&path).await {
             Ok(article) => article,
             Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error),
         };
-        article.validate(category, slug)?;
-        Ok(Some(Arc::new(article)))
+        Ok(Some(Arc::new(article.into_article(category, slug)?)))
     }
 
     async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {

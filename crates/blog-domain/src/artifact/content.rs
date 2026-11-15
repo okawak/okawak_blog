@@ -1,6 +1,6 @@
 use crate::{
-    Category, CategoryIndex, CategoryMetadata, PageKey, PublishedArticleSummary, SectionPath,
-    SiteMetadata, Slug, Timestamp, Title,
+    ArticleBody, ArticleMeta, Category, CategoryIndex, CategoryMetadata, PageKey,
+    PublishableArticle, SectionPath, SiteMetadata, Slug, Timestamp, Title,
 };
 use serde::{Deserialize, Serialize};
 
@@ -13,12 +13,18 @@ pub struct ArticleArtifactDocument {
 }
 
 impl ArticleArtifactDocument {
-    pub fn validate(&self, category: &Category, slug: &Slug) -> crate::Result<()> {
+    pub fn into_article(
+        self,
+        category: &Category,
+        slug: &Slug,
+    ) -> crate::Result<PublishableArticle> {
         if self.summary.category != category.as_str() || self.summary.slug != slug.as_str() {
             return Err(crate::DomainError::validation("article identity mismatch"));
         }
-        PublishedArticleSummary::try_from(&self.summary)?;
-        validate_html(&self.html)
+        Ok(PublishableArticle::new(
+            self.summary.try_into()?,
+            ArticleBody::new(self.html)?,
+        ))
     }
 }
 
@@ -55,40 +61,24 @@ pub struct ArticleSummaryDocument {
     pub updated_at: String,
 }
 
-impl From<&PublishedArticleSummary> for ArticleSummaryDocument {
-    fn from(summary: &PublishedArticleSummary) -> Self {
-        Self {
-            slug: summary.slug.as_str().to_string(),
-            title: summary.title.as_str().to_string(),
-            category: summary.category.as_str().to_string(),
-            section_path: summary.section_path.clone(),
-            description: summary.description.clone(),
-            tags: summary.tags.iter().map(ToString::to_string).collect(),
-            priority: summary.priority,
-            created_at: summary.created_at.to_string(),
-            updated_at: summary.updated_at.to_string(),
-        }
-    }
-}
-
-impl TryFrom<&ArticleSummaryDocument> for PublishedArticleSummary {
+impl TryFrom<ArticleSummaryDocument> for ArticleMeta {
     type Error = crate::DomainError;
 
-    fn try_from(document: &ArticleSummaryDocument) -> crate::Result<Self> {
+    fn try_from(document: ArticleSummaryDocument) -> crate::Result<Self> {
         Ok(Self {
-            slug: Slug::new(document.slug.clone())?,
-            title: Title::new(document.title.clone())?.trimmed(),
+            slug: Slug::new(document.slug)?,
+            title: Title::new(document.title)?.trimmed(),
             category: document.category.parse::<Category>()?,
-            section_path: document.section_path.clone(),
-            description: document.description.clone(),
+            section_path: document.section_path,
+            description: document.description,
             tags: document
                 .tags
-                .iter()
-                .map(|tag| tag.parse())
+                .into_iter()
+                .map(crate::TagId::new)
                 .collect::<crate::Result<_>>()?,
             priority: document.priority,
-            created_at: Timestamp::new(document.created_at.clone())?.trimmed(),
-            updated_at: Timestamp::new(document.updated_at.clone())?.trimmed(),
+            created_at: Timestamp::new(document.created_at)?.trimmed(),
+            updated_at: Timestamp::new(document.updated_at)?.trimmed(),
         })
     }
 }
@@ -99,8 +89,8 @@ pub struct ArticleIndexDocument {
     pub articles: Vec<ArticleSummaryDocument>,
 }
 
-impl From<&[PublishedArticleSummary]> for ArticleIndexDocument {
-    fn from(articles: &[PublishedArticleSummary]) -> Self {
+impl From<&[ArticleMeta]> for ArticleIndexDocument {
+    fn from(articles: &[ArticleMeta]) -> Self {
         Self {
             articles: articles.iter().map(ArticleSummaryDocument::from).collect(),
         }
@@ -118,24 +108,20 @@ pub struct CategoryArtifactDocument {
     pub articles: Vec<ArticleSummaryDocument>,
 }
 
-impl TryFrom<(&CategoryIndex, &str)> for CategoryArtifactDocument {
+impl TryFrom<CategoryIndex> for CategoryArtifactDocument {
     type Error = crate::DomainError;
 
-    fn try_from((index, html): (&CategoryIndex, &str)) -> crate::Result<Self> {
-        if html.trim().is_empty() {
-            return Err(crate::DomainError::validation("html"));
-        }
+    fn try_from(index: CategoryIndex) -> crate::Result<Self> {
         let landing = index
             .landing
-            .as_ref()
             .ok_or_else(|| crate::DomainError::validation("category_landing"))?;
 
         Ok(Self {
             category: index.category.as_str().to_string(),
-            title: landing.title.as_str().to_string(),
-            description: landing.description.clone(),
-            html: html.to_string(),
-            updated_at: landing.updated_at.to_string(),
+            title: landing.meta.title.to_string(),
+            description: landing.meta.description,
+            html: landing.body.into_string(),
+            updated_at: landing.meta.updated_at.to_string(),
             articles: index
                 .articles
                 .iter()
@@ -252,11 +238,14 @@ fn validate_html(html: &str) -> crate::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Category, CategoryLandingMeta, PageKey, Slug, Timestamp, Title};
+    use crate::{
+        Category, CategoryLandingBody, CategoryLandingMeta, PageKey, PublishableCategoryLanding,
+        Slug, Timestamp, Title,
+    };
 
     #[test]
     fn test_article_summary_document_conversion() {
-        let summary = PublishedArticleSummary {
+        let summary = ArticleMeta {
             slug: Slug::new("abc123def456".to_string()).unwrap(),
             title: Title::new("Test Output".to_string()).unwrap(),
             category: Category::Tech,
@@ -275,15 +264,38 @@ mod tests {
         assert!(json.contains("\"slug\":\"abc123def456\""));
         assert!(json.contains("\"category\":\"tech\""));
         assert!(json.contains("\"section_path\":[\"block\"]"));
-        assert_eq!(
-            PublishedArticleSummary::try_from(&document).unwrap(),
-            summary
-        );
+        assert_eq!(ArticleMeta::try_from(document).unwrap(), summary);
+    }
+
+    #[test]
+    fn article_artifact_converts_to_normalized_metadata_without_changing_html() {
+        let document = ArticleArtifactDocument {
+            summary: ArticleSummaryDocument {
+                slug: "intro".into(),
+                title: "  Intro  ".into(),
+                category: "tech".into(),
+                section_path: SectionPath::default(),
+                description: None,
+                tags: vec!["rust".into()],
+                priority: None,
+                created_at: " 2025-01-01T00:00:00Z ".into(),
+                updated_at: " 2025-01-02T00:00:00Z ".into(),
+            },
+            html: " <p>Intro</p> ".into(),
+        };
+        let article = document
+            .into_article(&Category::Tech, &"intro".parse().unwrap())
+            .unwrap();
+        assert_eq!(article.meta.title.as_str(), "Intro");
+        assert_eq!(article.meta.created_at.as_str(), "2025-01-01T00:00:00Z");
+        assert_eq!(article.meta.updated_at.as_str(), "2025-01-02T00:00:00Z");
+        assert_eq!(article.meta.tags[0].as_str(), "rust");
+        assert_eq!(article.body.as_str(), " <p>Intro</p> ");
     }
 
     #[test]
     fn test_article_summary_document_keeps_empty_tags_field() {
-        let summary = PublishedArticleSummary {
+        let summary = ArticleMeta {
             slug: Slug::new("emptytags001".to_string()).unwrap(),
             title: Title::new("Empty Tags".to_string()).unwrap(),
             category: Category::Daily,
@@ -332,7 +344,7 @@ mod tests {
             updated_at: "2025-01-01T00:00:00+09:00".to_string(),
         };
 
-        assert!(PublishedArticleSummary::try_from(&document).is_err());
+        assert!(ArticleMeta::try_from(document).is_err());
     }
 
     #[test]
@@ -399,11 +411,14 @@ mod tests {
         };
         let index = CategoryIndex {
             category: Category::Tech,
-            landing: Some(landing),
+            landing: Some(PublishableCategoryLanding::new(
+                landing,
+                CategoryLandingBody::new("<p>Technology</p>".into()).unwrap(),
+            )),
             articles: vec![],
         };
 
-        let document = CategoryArtifactDocument::try_from((&index, "<p>Technology</p>")).unwrap();
+        let document = CategoryArtifactDocument::try_from(index).unwrap();
 
         assert_eq!(document.title, "Technology");
         assert_eq!(document.description.as_deref(), Some("Technology landing"));
@@ -420,22 +435,19 @@ mod tests {
             articles: vec![],
         };
 
-        assert!(CategoryArtifactDocument::try_from((&index, "<p>Technology</p>")).is_err());
+        assert!(CategoryArtifactDocument::try_from(index).is_err());
     }
 
     #[test]
     fn test_category_artifact_document_rejects_blank_html() {
-        let index = CategoryIndex {
-            category: Category::Tech,
-            landing: Some(CategoryLandingMeta {
-                category: Category::Tech,
-                title: Title::new("Technology".to_string()).unwrap(),
-                description: None,
-                updated_at: Timestamp::new("2025-01-02T00:00:00+09:00".to_string()).unwrap(),
-            }),
+        let document = CategoryArtifactDocument {
+            category: "tech".into(),
+            title: "Technology".into(),
+            description: None,
+            html: "  ".into(),
+            updated_at: "2025-01-02T00:00:00+09:00".into(),
             articles: vec![],
         };
-
-        assert!(CategoryArtifactDocument::try_from((&index, "  ")).is_err());
+        assert!(document.validate_landing().is_err());
     }
 }

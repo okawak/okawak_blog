@@ -118,7 +118,7 @@ impl PageLoader for ArtifactPageLoader {
         else {
             return Ok(None);
         };
-        let document = build_article_page_document(&article).map_err(|error| error.to_string())?;
+        let document = build_article_page_document(&article);
         presentation(document, &root, &snapshot).await.map(Some)
     }
 
@@ -225,7 +225,7 @@ mod tests {
             &self,
             _: &Category,
             _: &Slug,
-        ) -> Result<Option<Arc<blog_domain::ArticleArtifactDocument>>> {
+        ) -> Result<Option<Arc<blog_domain::PublishableArticle>>> {
             panic!("home must not read article HTML")
         }
 

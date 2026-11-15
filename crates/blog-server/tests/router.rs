@@ -384,10 +384,18 @@ async fn manual_language_choice_is_saved_and_falls_back_to_the_published_home() 
         .await;
         assert_eq!(result.status, StatusCode::SEE_OTHER, "{path}");
         assert_eq!(result.headers[header::LOCATION], location);
+        let cookie =
+            topcoat::cookie::Cookie::parse(result.headers[header::SET_COOKIE].to_str().unwrap())
+                .unwrap();
+        assert_eq!(cookie.name(), "okawak_locale");
+        assert_eq!(cookie.value(), language);
+        assert_eq!(cookie.path(), Some("/"));
         assert_eq!(
-            result.headers[header::SET_COOKIE],
-            format!("okawak_locale={language}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax")
+            cookie.max_age(),
+            Some(topcoat::cookie::time::Duration::days(365))
         );
+        assert_eq!(cookie.http_only(), Some(true));
+        assert_eq!(cookie.same_site(), Some(topcoat::cookie::SameSite::Lax));
         assert_eq!(result.headers[header::CACHE_CONTROL], "no-store");
         assert!(!result.headers.contains_key(header::ETAG));
     }
@@ -741,7 +749,7 @@ impl ArtifactSnapshot for ValidatorSnapshot {
         &self,
         category: &Category,
         slug: &Slug,
-    ) -> Result<Option<Arc<blog_domain::ArticleArtifactDocument>>> {
+    ) -> Result<Option<Arc<blog_domain::PublishableArticle>>> {
         self.inner.read_article(category, slug).await
     }
 
