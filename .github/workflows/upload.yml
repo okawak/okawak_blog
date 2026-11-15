@@ -81,21 +81,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install pkg-config libssl-dev
 
-      - name: Cargo cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        env:
+          # Match Rust CI's cache key environment; publish steps keep backtraces enabled.
+          CARGO_TERM_COLOR: always
+          RUST_BACKTRACE: ""
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-upload-${{ hashFiles('mise.toml', 'mise.lock', '**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-browser-e2e-${{ hashFiles('mise.toml', 'mise.lock', '**/Cargo.lock') }}
-            ${{ runner.os }}-rust-ci-${{ hashFiles('**/Cargo.lock') }}
-            ${{ runner.os }}-browser-e2e-
-            ${{ runner.os }}-rust-ci-
-            ${{ runner.os }}-cargo-
+          shared-key: rust-ci-${{ hashFiles('Cargo.toml') }}
+          cache-bin: "false"
+          # Rust CI's verify job owns the shared cache; publication only restores it.
+          save-if: "false"
 
       - name: Generate and validate artifacts
         run: |
