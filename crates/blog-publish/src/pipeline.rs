@@ -205,7 +205,13 @@ async fn process_article(
 ) -> Result<blog_domain::ArticleMeta> {
     let article = render_article(parsed_file, link_index, enrich).await?;
     tokio::task::spawn_blocking(move || {
-        write_article_page(&site_output, &article.meta, article.body.as_str())?;
+        write_article_page(
+            &site_output,
+            &blog_domain::ArticleArtifactDocument {
+                summary: (&article.meta).into(),
+                html: article.body.into_string(),
+            },
+        )?;
         Ok::<_, PublishError>(article.meta)
     })
     .await?

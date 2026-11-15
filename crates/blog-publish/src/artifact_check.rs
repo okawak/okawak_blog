@@ -31,20 +31,7 @@ pub(crate) fn validate(root: &Path) -> Result<()> {
                 "articles/{}/{}.json",
                 article.category, article.slug
             ));
-            let document: ArticleArtifactDocument = match fs::read(&path) {
-                Ok(bytes) => {
-                    serde_json::from_slice(&bytes).with_context(|| path.display().to_string())?
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    let legacy_path = path.with_extension("html");
-                    ArticleArtifactDocument {
-                        summary: article.clone(),
-                        html: fs::read_to_string(&legacy_path)
-                            .with_context(|| legacy_path.display().to_string())?,
-                    }
-                }
-                Err(error) => return Err(error.into()),
-            };
+            let document: ArticleArtifactDocument = read_json(&path)?;
             ensure!(
                 document.summary == *article,
                 "article summary differs from index: {}",

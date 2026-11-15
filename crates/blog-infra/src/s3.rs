@@ -115,10 +115,6 @@ impl S3ArtifactSnapshot {
         }
     }
 
-    async fn read_text(&self, relative: &str) -> Result<String> {
-        Ok(String::from_utf8(self.read_bytes(relative).await?.into())?)
-    }
-
     async fn read_bytes(&self, relative: &str) -> Result<bytes::Bytes> {
         let key = self.location.key_for(&self.locale.artifact_key(relative));
         let response = self
@@ -252,31 +248,7 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
         let path = format!("articles/{}/{}.json", category.as_str(), slug.as_str());
         let article = match self.read_json::<ArticleArtifactDocument>(&path).await {
             Ok(article) => article,
-            Err(error) if error.is_not_found() => {
-                // Legacy releases store metadata in the index and HTML separately.
-                let index = self.read_article_index().await?;
-                let Some(summary) = index.articles.iter().find(|article| {
-                    article.category == category.as_str() && article.slug == slug.as_str()
-                }) else {
-                    return Ok(None);
-                };
-                let html = match self
-                    .read_text(&format!(
-                        "articles/{}/{}.html",
-                        category.as_str(),
-                        slug.as_str()
-                    ))
-                    .await
-                {
-                    Ok(html) => html,
-                    Err(error) if error.is_not_found() => return Ok(None),
-                    Err(error) => return Err(error),
-                };
-                ArticleArtifactDocument {
-                    summary: summary.clone(),
-                    html,
-                }
-            }
+            Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error),
         };
         article.validate(category, slug)?;

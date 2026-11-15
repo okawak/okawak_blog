@@ -219,27 +219,18 @@ fn article_json(html: &str) -> String {
 }
 
 #[tokio::test]
-async fn missing_article_json_reads_legacy_index_and_html() {
-    let article: serde_json::Value = serde_json::from_str(&article_json("<p>Legacy</p>")).unwrap();
+async fn missing_article_json_does_not_request_index_or_html() {
     let (reader, transport) = reader(vec![
         missing("current.json"),
         missing("articles/tech/intro.json"),
-        event(
-            "articles/index.json",
-            200,
-            serde_json::json!({"articles": [article["summary"]]}).to_string(),
-        ),
-        event("articles/tech/intro.html", 200, "<p>Legacy</p>"),
     ]);
     let snapshot = reader.snapshot().await.unwrap();
-    assert_eq!(
+    assert!(
         snapshot
             .read_article(&Category::Tech, &"intro".parse().unwrap())
             .await
             .unwrap()
-            .unwrap()
-            .html,
-        "<p>Legacy</p>"
+            .is_none()
     );
     transport.assert_requests_match(&[]);
 }
@@ -250,10 +241,7 @@ async fn missing_article_json_reads_legacy_index_and_html() {
 #[case::empty_html(200, article_json("  "))]
 #[case::wrong_identity(200, article_json("<p>Intro</p>").replace("intro", "other"))]
 #[tokio::test]
-async fn article_errors_do_not_fall_back_to_legacy_storage(
-    #[case] status: u16,
-    #[case] body: String,
-) {
+async fn article_errors_are_propagated(#[case] status: u16, #[case] body: String) {
     let (reader, transport) = reader(vec![
         missing("current.json"),
         event("articles/tech/intro.json", status, body),

@@ -114,31 +114,7 @@ impl ArtifactSnapshot for LocalArtifactReader {
         let path = format!("articles/{}/{}.json", category.as_str(), slug.as_str());
         let article = match self.read_json::<ArticleArtifactDocument>(&path).await {
             Ok(article) => article,
-            Err(error) if error.is_not_found() => {
-                // Legacy releases store metadata in the index and HTML separately.
-                let index = self.read_article_index().await?;
-                let Some(summary) = index.articles.iter().find(|article| {
-                    article.category == category.as_str() && article.slug == slug.as_str()
-                }) else {
-                    return Ok(None);
-                };
-                let html = match tokio::fs::read_to_string(self.artifact_path(&format!(
-                    "articles/{}/{}.html",
-                    category.as_str(),
-                    slug.as_str()
-                )))
-                .await
-                .map_err(crate::InfraError::from)
-                {
-                    Ok(html) => html,
-                    Err(error) if error.is_not_found() => return Ok(None),
-                    Err(error) => return Err(error),
-                };
-                ArticleArtifactDocument {
-                    summary: summary.clone(),
-                    html,
-                }
-            }
+            Err(error) if error.is_not_found() => return Ok(None),
             Err(error) => return Err(error),
         };
         article.validate(category, slug)?;
@@ -224,9 +200,15 @@ mod tests {
         )
         .unwrap();
         fs::create_dir_all(root.join("articles/tech")).unwrap();
+        let index: ArticleIndexDocument =
+            serde_json::from_slice(&fs::read(root.join("articles/index.json")).unwrap()).unwrap();
         fs::write(
-            root.join("articles/tech/intro00000001.html"),
-            "<h1>Intro</h1>",
+            root.join("articles/tech/intro00000001.json"),
+            serde_json::to_vec(&ArticleArtifactDocument {
+                summary: index.articles.into_iter().next().unwrap(),
+                html: "<h1>Intro</h1>".into(),
+            })
+            .unwrap(),
         )
         .unwrap();
         fs::write(

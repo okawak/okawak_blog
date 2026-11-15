@@ -1230,14 +1230,8 @@ async fn unavailable_language_choice_on_a_runtime_page_does_not_add_home_cache_h
 async fn article_read_failure_is_not_reported_as_not_found() {
     let root = tempdir().unwrap();
     std::fs::create_dir_all(root.path().join("articles/tech")).unwrap();
-    std::fs::copy(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../e2e/fixtures/site/articles/index.json"),
-        root.path().join("articles/index.json"),
-    )
-    .unwrap();
     // Invalid UTF-8 is an I/O failure that is portable even when tests run as root.
-    std::fs::write(root.path().join("articles/tech/e2e-article.html"), [0xff]).unwrap();
+    std::fs::write(root.path().join("articles/tech/e2e-article.json"), [0xff]).unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(root.path())), false);
     let result = response(
         &router,
@@ -2000,14 +1994,14 @@ async fn article_returns_internal_server_error_for_invalid_artifacts() {
     let temp_dir = tempdir().unwrap();
     std::fs::create_dir_all(temp_dir.path().join("articles/tech")).unwrap();
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site");
-    std::fs::copy(
-        fixture_root.join("articles/index.json"),
-        temp_dir.path().join("articles/index.json"),
+    let mut article: blog_domain::ArticleArtifactDocument = serde_json::from_slice(
+        &std::fs::read(fixture_root.join("articles/tech/e2e-article.json")).unwrap(),
     )
     .unwrap();
+    article.html = "   ".into();
     std::fs::write(
-        temp_dir.path().join("articles/tech/e2e-article.html"),
-        "   ",
+        temp_dir.path().join("articles/tech/e2e-article.json"),
+        serde_json::to_vec(&article).unwrap(),
     )
     .unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
@@ -2034,10 +2028,13 @@ async fn article_returns_internal_server_error_for_invalid_artifacts() {
             .body
             .contains("<meta property=\"og:type\" content=\"article\">")
     );
+}
 
+#[tokio::test]
+async fn missing_article_returns_not_found_without_an_index() {
     let empty_dir = tempdir().unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(empty_dir.path())), false);
-    let missing_index_response = response(
+    let missing_article_response = response(
         &router,
         Request::builder()
             .uri("/tech/e2e-article")
@@ -2046,14 +2043,11 @@ async fn article_returns_internal_server_error_for_invalid_artifacts() {
     )
     .await;
 
-    assert_eq!(
-        missing_index_response.status,
-        StatusCode::INTERNAL_SERVER_ERROR
-    );
+    assert_eq!(missing_article_response.status, StatusCode::NOT_FOUND);
     assert!(
-        missing_index_response
+        missing_article_response
             .body
-            .contains("記事の読み込みに失敗しました")
+            .contains("ページが見つかりませんでした。")
     );
 }
 

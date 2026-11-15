@@ -93,46 +93,31 @@ async fn failed_article_load_is_retried_without_caching_the_error() {
 }
 
 #[tokio::test]
-async fn legacy_articles_preserve_first_match_and_missing_article_behavior() {
+async fn missing_article_json_returns_none_without_reading_index_or_html() {
     let root = TempDir::new().unwrap();
+    let reader = LocalArtifactReader::new(root.path());
+    let slug = "intro".parse().unwrap();
+    assert!(
+        reader
+            .read_article(&Category::Tech, &slug)
+            .await
+            .unwrap()
+            .is_none()
+    );
     fs::create_dir_all(root.path().join("articles/tech")).unwrap();
     fs::write(
         root.path().join("articles/index.json"),
         serde_json::to_vec(&serde_json::json!({
-            "articles": [summary("tech", "intro", "First"), summary("tech", "intro", "Duplicate")]
+            "articles": [summary("tech", "intro", "Intro")]
         }))
         .unwrap(),
     )
     .unwrap();
     fs::write(
         root.path().join("articles/tech/intro.html"),
-        "<p>Legacy</p>",
+        "<p>Unsupported format</p>",
     )
     .unwrap();
-    let reader = LocalArtifactReader::new(root.path());
-    let slug = "intro".parse().unwrap();
-    let article = reader
-        .read_article(&Category::Tech, &slug)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(article.summary.title, "First");
-    assert_eq!(article.html, "<p>Legacy</p>");
-    assert!(
-        reader
-            .read_article(&Category::Daily, &slug)
-            .await
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        reader
-            .read_article(&Category::Tech, &"missing".parse().unwrap())
-            .await
-            .unwrap()
-            .is_none()
-    );
-    fs::remove_file(root.path().join("articles/tech/intro.html")).unwrap();
     assert!(
         reader
             .read_article(&Category::Tech, &slug)
@@ -149,22 +134,9 @@ async fn legacy_articles_preserve_first_match_and_missing_article_behavior() {
 #[case::blank_html(serde_json::json!({"summary": summary("tech", "intro", "Empty"), "html": "  "}))]
 #[case::invalid_metadata(serde_json::json!({"summary": summary("tech", "intro", ""), "html": "<p>Other</p>"}))]
 #[tokio::test]
-async fn invalid_article_does_not_fall_back_to_valid_legacy_data(
-    #[case] document: serde_json::Value,
-) {
+async fn invalid_article_json_is_an_error(#[case] document: serde_json::Value) {
     let root = TempDir::new().unwrap();
     fs::create_dir_all(root.path().join("articles/tech")).unwrap();
-    fs::write(
-        root.path().join("articles/index.json"),
-        serde_json::to_vec(&serde_json::json!({"articles": [summary("tech", "intro", "Legacy")]}))
-            .unwrap(),
-    )
-    .unwrap();
-    fs::write(
-        root.path().join("articles/tech/intro.html"),
-        "<p>Legacy</p>",
-    )
-    .unwrap();
     fs::write(
         root.path().join("articles/tech/intro.json"),
         serde_json::to_vec(&document).unwrap(),

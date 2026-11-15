@@ -28,8 +28,8 @@ impl ArticleBody {
         Ok(Self(html))
     }
 
-    pub fn as_str(&self) -> &str {
-        &self.0
+    pub fn into_string(self) -> String {
+        self.0
     }
 }
 
@@ -254,7 +254,7 @@ mod tests {
         assert!(ArticleBody::new("   ".to_string()).is_err());
         let body = ArticleBody::new("<p>body</p>".to_string()).unwrap();
 
-        assert_eq!(body.as_str(), "<p>body</p>");
+        assert_eq!(body.into_string(), "<p>body</p>");
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use super::builder::SiteDocuments;
 use crate::error::Result;
 
-use blog_domain::{ArticleMeta, ArticleSummaryDocument, Locale};
+use blog_domain::{ArticleArtifactDocument, Locale};
 use serde::Serialize;
 use std::{
     fs::{self, File},
@@ -33,28 +33,15 @@ impl SiteOutput {
 
 pub(crate) fn write_article_page(
     site_output: &SiteOutput,
-    meta: &ArticleMeta,
-    html: &str,
+    article: &ArticleArtifactDocument,
 ) -> Result<PathBuf> {
-    // Borrow the rendered body while serializing the ArticleArtifactDocument contract.
-    #[derive(Serialize)]
-    struct Article<'a> {
-        summary: ArticleSummaryDocument,
-        html: &'a str,
-    }
     let article_dir = site_output
         .root
         .join("articles")
-        .join(meta.category.as_str());
+        .join(&article.summary.category);
     fs::create_dir_all(&article_dir)?;
-    let output_file_path = article_dir.join(format!("{}.json", meta.slug));
-    write_json(
-        &output_file_path,
-        &Article {
-            summary: meta.into(),
-            html,
-        },
-    )?;
+    let output_file_path = article_dir.join(format!("{}.json", article.summary.slug));
+    write_json(&output_file_path, article)?;
     Ok(output_file_path)
 }
 
@@ -162,7 +149,14 @@ mod tests {
         )
         .unwrap();
 
-        let article_path = write_article_page(&output, &article, "<h1>Artifact Test</h1>").unwrap();
+        let article_path = write_article_page(
+            &output,
+            &ArticleArtifactDocument {
+                summary: (&article).into(),
+                html: "<h1>Artifact Test</h1>".into(),
+            },
+        )
+        .unwrap();
         write_site_documents(&output, &documents).unwrap();
 
         let stored: blog_domain::ArticleArtifactDocument =

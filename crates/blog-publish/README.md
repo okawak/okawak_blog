@@ -17,9 +17,7 @@ mise run dev-local
 
 全言語を一時ディレクトリで生成・検証してからsiteを入れ替える。失敗時は既存siteを保持し、成功時は削除された記事のartifactも消える。中断で `dist/.site-backup` が残った場合は、新旧siteを比較して復旧してから再実行する。
 
-記事は`articles/<category>/<slug>.json`に`summary`と`html`をまとめて保存する。SSRはカテゴリとIDで単体取得し、一覧の読込を必要としない。既存releaseの分離された記事HTMLはreader側で引き続き読み取れる。
-
-新形式を初めて公開するときは、先に対応するserverを配備し、その後に公開workflowを実行する。旧serverは記事JSONを読めないため、旧serverへ戻す場合はartifactも旧形式のreleaseへ戻す。
+記事は`articles/<category>/<slug>.json`に`summary`と`html`をまとめて保存する。SSRはカテゴリとIDで単体取得し、一覧の読込を必要としない。記事HTML単体は生成・読取しない。
 
 `--validate-artifacts`は生成済みsiteを読み、SSRと同じblog-domainのpage builderで全言語のhome・記事・カテゴリ・固定ページを検証し、記事JSONのsummaryと一覧の一致も確認する。生成処理・AI・uploadは実行しない。公開前の`scripts/validate_public_artifacts.sh`はこの検証とartifact間の集合・件数照合を行う。workflowでは生成に使用したrelease版publish binaryを再利用する。
 

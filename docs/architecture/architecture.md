@@ -160,7 +160,7 @@ site/
 
 locales.jsonは同じreleaseで実在するpathとlocaleの対応、content-assets/は言語間で共有するcontent hash付きassetを持つ。各言語のmetadataはその言語で配信する記事だけを集計する。
 
-記事のJSONは`ArticleArtifactDocument { summary, html }`であり、summaryは同じlocaleのarticles/index.jsonと一致する。publish前の検証で両者を照合する。local / S3 readerは指定category・slugと文書のidentityを検証する。旧releaseとの互換性のため、記事JSONが存在しない場合だけ従来のindex.jsonと記事HTMLを読む。JSONの破損・権限エラーはフォールバックせず失敗として返す。
+記事のJSONは`ArticleArtifactDocument { summary, html }`であり、summaryは同じlocaleのarticles/index.jsonと一致する。publish前の検証で両者を照合する。local / S3 readerは指定category・slugと文書のidentityを検証する。記事JSONが存在しない場合は欠落、破損・権限エラーは失敗として返す。一覧や記事HTMLを代わりに読まない。生成・読取ともに同じArticleArtifactDocumentを使う。
 
 home.jsonはhome fragmentがある場合だけ生成する。en/ subtreeも配信可能な英語contentがある場合だけ生成する。
 

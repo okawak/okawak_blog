@@ -11,8 +11,6 @@ pub enum InfraError {
     Io(#[from] std::io::Error),
     #[error("failed to decode artifact json: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("failed to decode artifact utf-8 content: {0}")]
-    Utf8(#[from] std::string::FromUtf8Error),
     #[error("missing artifact configuration: {0}")]
     MissingConfig(&'static str),
     #[error("invalid artifact configuration {key}: {value}")]
