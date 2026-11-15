@@ -192,10 +192,10 @@ fn invalid_vault_metadata_stops_before_translation_and_preserves_both_locales() 
         ("category: tech", "category: tech\ntags: ['   ']"),
     ] {
         fs::write(&source_path, original.replace(from, to)).unwrap();
-        assert!(matches!(
+        std::assert_matches!(
             blog_export::export_content(source.path(), output.path(), &fake, &settings()),
             Err(blog_export::ExportError::Yaml(_))
-        ));
+        );
         assert_eq!(fake.calls.get(), 1);
         assert_eq!((fs::read(&ja).unwrap(), fs::read(&en).unwrap()), before);
     }
@@ -571,10 +571,10 @@ fn invalid_article_response_is_not_cached_and_retry_can_succeed() {
     let output = TempDir::new().unwrap();
     write_note(source.path(), "本文");
     let retry = Retry(Cell::new(0));
-    assert!(matches!(
+    std::assert_matches!(
         blog_export::export_content(source.path(), output.path(), &retry, &settings()),
         Err(blog_export::ExportError::InvalidTranslation(_))
-    ));
+    );
     blog_export::export_content(source.path(), output.path(), &retry, &settings()).unwrap();
     assert_eq!(retry.0.get(), 2);
     assert!(
@@ -631,10 +631,10 @@ fn failure_rolls_back_outputs_and_retry_reuses_completed_units() {
         calls: Cell::new(0),
         fail_after: 1,
     };
-    assert!(matches!(
+    std::assert_matches!(
         blog_export::export_content(source.path(), output.path(), &failing, &settings()),
         Err(blog_export::ExportError::Translator(_))
-    ));
+    );
     assert!(!output.path().join("en").exists());
     assert!(!output.path().join("ja").exists());
     let retry = Fake::new();
@@ -727,7 +727,7 @@ fn codex_failure_is_typed_without_exposing_diagnostics() {
         })
         .unwrap_err();
 
-    assert!(matches!(&error, blog_export::ExportError::Translator(_)));
+    std::assert_matches!(&error, blog_export::ExportError::Translator(_));
     assert!(!error.to_string().contains("PRIVATE SOURCE DIAGNOSTIC"));
 }
 

@@ -169,5 +169,5 @@ async fn article_document(
 }
 
 fn normalize_article_slug_param(slug: &str) -> &str {
-    slug.strip_suffix(".html").unwrap_or(slug)
+    slug.trim_suffix(".html")
 }

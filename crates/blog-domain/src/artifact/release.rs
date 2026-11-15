@@ -128,19 +128,19 @@ mod tests {
         let mut pointer = release_pointer("releases/release-123/site");
         pointer.schema_version += 1;
 
-        assert!(matches!(
+        std::assert_matches!(
             pointer.validate(),
             Err(crate::DomainError::ValidationError { field }) if field == "schema_version"
-        ));
+        );
     }
 
     #[test]
     fn artifact_release_pointer_rejects_unsafe_prefixes() {
         for prefix in ["", "/releases/one", "releases/../site", "releases/one/"] {
-            assert!(matches!(
+            std::assert_matches!(
                 release_pointer(prefix).validate(),
                 Err(crate::DomainError::ValidationError { field }) if field == "artifact_prefix"
-            ));
+            );
         }
     }
 
@@ -154,10 +154,10 @@ mod tests {
             let mut pointer = release_pointer("releases/release-123/site");
             pointer.generated_at = generated_at.to_string();
 
-            assert!(matches!(
+            std::assert_matches!(
                 pointer.validate(),
                 Err(crate::DomainError::ValidationError { field }) if field == "generated_at"
-            ));
+            );
         }
 
         let mut pointer = release_pointer("releases/release-123/site");

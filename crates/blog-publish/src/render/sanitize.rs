@@ -10,11 +10,8 @@ pub(super) fn events<'a>(parser: impl Iterator<Item = Event<'a>>) -> Vec<Event<'
     while let Some(event) = parser.next() {
         if let Event::Html(html) | Event::InlineHtml(html) = &event {
             let text = html.trim();
-            let opening = text.strip_suffix("</a>").unwrap_or(text);
-            if let Some(id) = opening
-                .strip_prefix("<a id=\"section-")
-                .and_then(|s| s.strip_suffix("\">"))
-            {
+            let opening = text.trim_suffix("</a>");
+            if let Some(id) = opening.strip_circumfix("<a id=\"section-", "\">") {
                 let valid =
                     !id.is_empty() && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-');
                 let complete = text.ends_with("</a>");

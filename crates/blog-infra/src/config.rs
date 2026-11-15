@@ -178,11 +178,11 @@ mod tests {
             _ => None,
         });
 
-        assert!(matches!(
+        std::assert_matches!(
             result,
             Err(InfraError::InvalidConfig { key, value })
                 if key == ARTIFACT_CACHE_TTL_SECONDS_ENV && value == "soon"
-        ));
+        );
     }
 
     #[test]
@@ -192,10 +192,7 @@ mod tests {
             _ => None,
         });
 
-        assert!(matches!(
-            result,
-            Err(InfraError::MissingConfig(ARTIFACT_BUCKET_ENV))
-        ));
+        std::assert_matches!(result, Err(InfraError::MissingConfig(ARTIFACT_BUCKET_ENV)));
     }
 
     #[test]
@@ -205,9 +202,9 @@ mod tests {
             _ => None,
         });
 
-        assert!(matches!(
+        std::assert_matches!(
             result,
             Err(InfraError::UnsupportedSource(source)) if source == "filesystem"
-        ));
+        );
     }
 }

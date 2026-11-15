@@ -20,13 +20,9 @@ pub(crate) fn locked<T>(output: &Path, build: impl FnOnce() -> Result<T>) -> Res
         .write(true)
         .create_new(true)
         .open(&lock)?;
-    struct Lock<'a>(&'a Path);
-    impl Drop for Lock<'_> {
-        fn drop(&mut self) {
-            let _ = fs::remove_file(self.0);
-        }
-    }
-    let _lock = Lock(&lock);
+    let _lock = std::mem::DropGuard::new(&lock, |path| {
+        let _ = fs::remove_file(path);
+    });
     if backup.exists() {
         return Err(ExportError::invalid_input(format!(
             "export backup exists; recover it before retrying: {}",
@@ -168,7 +164,7 @@ pub(crate) fn walk(root: &Path, hidden: bool) -> impl Iterator<Item = Result<Dir
 
 pub(crate) fn parent(path: &Path) -> &Path {
     path.parent()
-        .filter(|p| !p.as_os_str().is_empty())
+        .filter(|p| !p.is_empty())
         .unwrap_or(Path::new("."))
 }
 
@@ -273,7 +269,7 @@ mod tests {
             panic!("build must not run while output contains a symlink");
         });
 
-        assert!(matches!(result, Err(ExportError::InvalidInput(_))));
+        std::assert_matches!(result, Err(ExportError::InvalidInput(_)));
         assert_eq!(fs::read(output.join("file.txt")).unwrap(), b"original");
         assert!(output.join(".link").is_symlink());
     }
@@ -290,7 +286,7 @@ mod tests {
             panic!("build must not run while a backup exists");
         });
 
-        assert!(matches!(result, Err(ExportError::InvalidInput(_))));
+        std::assert_matches!(result, Err(ExportError::InvalidInput(_)));
         assert_eq!(
             fs::read_to_string(backup.join("file.txt")).unwrap(),
             "recover this"
@@ -315,7 +311,7 @@ mod tests {
             Err(ExportError::invalid_input("build failed"))
         });
 
-        assert!(matches!(result, Err(ExportError::InvalidInput(_))));
+        std::assert_matches!(result, Err(ExportError::InvalidInput(_)));
         assert_eq!(
             fs::read_to_string(output.join("file.txt")).unwrap(),
             "original"

@@ -202,10 +202,10 @@ mod tests {
         ];
 
         for response in invalid {
-            assert!(matches!(
+            std::assert_matches!(
                 request.validate(&response),
                 Err(ExportError::InvalidTranslation(_))
-            ));
+            );
         }
         assert!(
             request

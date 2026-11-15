@@ -149,16 +149,13 @@ impl PublicContentMeta {
         let path = match self.kind {
             ContentKind::Article => format!(
                 "/{}/{}",
-                self.category.map(|c| c.as_str()).unwrap_or_default(),
+                self.category.map_or_default(|c| c.as_str()),
                 self.id
             ),
             ContentKind::Category => {
-                format!("/{}", self.category.map(|c| c.as_str()).unwrap_or_default())
+                format!("/{}", self.category.map_or_default(|c| c.as_str()))
             }
-            ContentKind::Page => format!(
-                "/{}",
-                self.page.as_ref().map(PageKey::as_str).unwrap_or_default()
-            ),
+            ContentKind::Page => format!("/{}", self.page.as_ref().map_or_default(PageKey::as_str)),
             ContentKind::Home => "/".into(),
         };
         self.locale.path(&path)

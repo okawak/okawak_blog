@@ -39,7 +39,7 @@ async fn test_publish_with_empty_directory() {
 
     let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
-    assert!(matches!(result, Err(PublishError::NoArticles)));
+    std::assert_matches!(result, Err(PublishError::NoArticles));
 }
 
 #[tokio::test]
@@ -50,7 +50,7 @@ async fn test_publish_requires_about_page() {
 
     let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
-    assert!(matches!(result, Err(PublishError::MissingAboutPage)));
+    std::assert_matches!(result, Err(PublishError::MissingAboutPage));
     assert!(!fixture.output_dir().exists());
 }
 
@@ -205,10 +205,7 @@ async fn test_publish_rejects_duplicate_home_files() {
 
     let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
-    assert!(matches!(
-        result,
-        Err(PublishError::ContentErrors { count: 1 })
-    ));
+    std::assert_matches!(result, Err(PublishError::ContentErrors { count: 1 }));
     assert!(!fixture.output_dir().exists());
 }
 
@@ -262,12 +259,12 @@ async fn test_publish_rejects_missing_category_landing_before_writing() {
 
     let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
-    assert!(matches!(
+    std::assert_matches!(
         result,
         Err(PublishError::MissingCategoryLanding {
             category: blog_domain::Category::Tech
         })
-    ));
+    );
     assert!(!fixture.output_dir().exists());
 }
 
@@ -313,10 +310,7 @@ async fn test_publish_rejects_non_existent_content_directory() {
 
     let result = publish(&missing_dir, fixture.output_dir()).await;
 
-    assert!(matches!(
-        result,
-        Err(PublishError::InvalidSourceDirectory(_))
-    ));
+    std::assert_matches!(result, Err(PublishError::InvalidSourceDirectory(_)));
     assert!(!fixture.output_dir().exists());
 }
 
@@ -501,10 +495,7 @@ async fn test_publish_rejects_content_errors_without_writing_artifacts() {
 
     let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
-    assert!(matches!(
-        result,
-        Err(PublishError::ContentErrors { count: 1 })
-    ));
+    std::assert_matches!(result, Err(PublishError::ContentErrors { count: 1 }));
     assert!(!fixture.output_dir().exists());
 }
 

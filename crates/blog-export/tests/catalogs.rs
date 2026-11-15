@@ -116,10 +116,10 @@ fn invalid_placeholder_response_leaves_catalog_unchanged() {
     };
     save(&path, &catalog);
     let before = fs::read(&path).unwrap();
-    assert!(matches!(
+    std::assert_matches!(
         blog_export::translate_catalog(&path, &Broken, &settings()),
         Err(blog_export::ExportError::InvalidTranslation(_))
-    ));
+    );
     assert_eq!(fs::read(path).unwrap(), before);
 }
 
