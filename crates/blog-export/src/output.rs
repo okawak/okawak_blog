@@ -108,14 +108,18 @@ pub(crate) fn sync_tags(stage: &Path) -> Result<()> {
     }
     catalog.entries.retain(|key, _| tags.contains(key.as_str()));
     for tag in tags {
-        let tag = tag.to_string();
-        catalog.entries.entry(tag.clone()).or_insert(LabelEntry {
-            source: tag,
-            context:
-                "Public blog tag label; concise noun phrase. Do not change technical proper nouns."
-                    .into(),
-            translation: None,
-        });
+        catalog
+            .entries
+            .entry(tag.to_string())
+            .or_insert_with_key(|tag| LabelEntry {
+                source: tag.clone(),
+                context: concat!(
+                    "Public blog tag label; concise noun phrase. ",
+                    "Do not change technical proper nouns."
+                )
+                .into(),
+                translation: None,
+            });
     }
     catalog.validate()?;
     write_json(&path, &catalog)

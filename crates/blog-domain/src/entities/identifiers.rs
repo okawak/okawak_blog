@@ -1,6 +1,6 @@
 use crate::error::{DomainError, Result};
 use serde::{Deserialize, Deserializer, Serialize};
-use std::{fmt, str::FromStr};
+use std::{fmt, fmt::Write as _, str::FromStr};
 
 macro_rules! impl_display_and_deserialize {
     ($type:ty) => {
@@ -106,7 +106,11 @@ impl Sha256Digest {
     }
 
     pub fn from_bytes(bytes: [u8; 32]) -> Self {
-        Self(bytes.iter().map(|b| format!("{b:02x}")).collect())
+        let mut hex = String::with_capacity(64);
+        for byte in bytes {
+            write!(hex, "{byte:02x}").expect("writing to a String cannot fail");
+        }
+        Self(hex)
     }
 
     pub fn as_str(&self) -> &str {
