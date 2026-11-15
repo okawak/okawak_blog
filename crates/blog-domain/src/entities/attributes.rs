@@ -70,7 +70,12 @@ impl Title {
 
     /// Normalize surrounding whitespace explicitly at the presentation boundary.
     pub fn trimmed(self) -> Self {
-        Self(self.0.trim().to_owned())
+        let trimmed = self.0.trim();
+        if trimmed.len() == self.0.len() {
+            self
+        } else {
+            Self(trimmed.to_owned())
+        }
     }
 }
 
@@ -118,7 +123,12 @@ impl Timestamp {
 
     /// Normalize surrounding whitespace explicitly at the presentation boundary.
     pub fn trimmed(self) -> Self {
-        Self(self.0.trim().to_owned())
+        let trimmed = self.0.trim();
+        if trimmed.len() == self.0.len() {
+            self
+        } else {
+            Self(trimmed.to_owned())
+        }
     }
 }
 

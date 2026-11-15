@@ -78,7 +78,10 @@ pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
             });
         }
     }
-    documents.sort_by_key(|d| (d.meta.locale.as_str(), d.meta.id.to_string()));
+    documents.sort_by(|a, b| {
+        (a.meta.locale.as_str(), a.meta.id.as_str())
+            .cmp(&(b.meta.locale.as_str(), b.meta.id.as_str()))
+    });
     let japanese: HashMap<_, _> = documents
         .iter()
         .filter(|d| d.meta.locale == Locale::Ja)
