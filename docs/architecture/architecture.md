@@ -201,7 +201,7 @@ releaseは上書きせず、公開runをrepository単位で直列化する。失
 
 /articles/:slugと/categories/:categoryは現行の公開routeではない。末尾slashはqueryを維持した308で正規URLへ移す。
 
-トップページのGET / HEADだけは、保存済みlocale cookie、Accept-Language、英語の順で初期言語を選ぶ。記事などの直接URLはブラウザ設定で変更しない。言語切替は同じpageの翻訳、対象言語homeの順に移動し、対象言語が公開されていなければ無効にする。選択はhost限定、Path=/、HttpOnly、SameSite=Laxのcookieへ1年間保存する。Cookieの解析とSet-Cookie生成はTopcoatのCookieLayer / CookieJarに委譲する。
+トップページのGET / HEADだけは、保存済みlocale cookie、Accept-Language、英語の順で初期言語を選ぶ。記事などの直接URLはブラウザ設定で変更しない。言語切替は同じpageの翻訳、対象言語homeの順に移動し、対象言語が公開されていなければ無効にする。選択はhost限定、Path=/、HttpOnly、SameSite=Laxのcookieへ1年間保存する。Cookieの解析とSet-Cookie生成はTopcoatのCookieLayer / CookieJarに委譲する。Accept-Languageの解析と日英の照合はTopcoatのaccept_language / negotiateに委譲する。wildcardとq=0は候補から除外し、有効な候補が日英どちらにも一致しなければ英語を選ぶ。独自の重み計算やwildcard補正は行わない。
 
 同じpageの翻訳が実在する場合だけhreflangを出す。英語artifactがないURLは英語404とし、日本語本文を英語版として配信しない。英語UI文言の欠落・更新待ちは日本語、未知のUI keyはkey文字列、英語タグ表示名の欠落は日本語名へfallbackする。
 

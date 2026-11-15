@@ -4,8 +4,9 @@ use blog_domain::{Locale, SiteLocalesDocument};
 use topcoat::{
     context::Cx,
     cookie::{Cookie, Cookies, SameSite, cookies, time::Duration},
+    l10n::{accept_language, locale, negotiate},
     router::{
-        HeaderMap, HeaderValue, Uri,
+        HeaderValue, Uri,
         error::{redirect as temporary_redirect, see_other},
         header, request,
         response::{IntoResponse, Response},
@@ -35,72 +36,10 @@ fn explicit_choice(uri: &Uri) -> Option<Locale> {
     choices.next().is_none().then_some(choice)
 }
 
-fn preferred_locale(headers: &HeaderMap) -> Locale {
-    let mut japanese: Option<(u16, usize)> = None;
-    let mut english: Option<(u16, usize)> = None;
-    let mut wildcard: Option<(u16, usize)> = None;
-    let ranges = headers
-        .get_all(header::ACCEPT_LANGUAGE)
-        .iter()
-        .flat_map(|value| value.to_str().unwrap_or_default().split(','));
-    for (order, range) in ranges.enumerate() {
-        let mut parts = range.trim().split(';');
-        let tag = parts.next().unwrap_or_default().trim().to_ascii_lowercase();
-        let slot = match tag.split('-').next() {
-            Some("ja") => &mut japanese,
-            Some("en") => &mut english,
-            Some("*") if tag == "*" => &mut wildcard,
-            _ => continue,
-        };
-        if tag != "*"
-            && !tag.split('-').all(|part| {
-                !part.is_empty()
-                    && part.len() <= 8
-                    && part.bytes().all(|c| c.is_ascii_alphanumeric())
-            })
-        {
-            continue;
-        }
-        let weight = match (parts.next(), parts.next()) {
-            (None, None) => Some(1000),
-            (Some(parameter), None) => parameter.trim().strip_prefix("q=").and_then(quality),
-            _ => None,
-        };
-        if let Some(weight) = weight
-            && slot.is_none_or(|(previous, _)| weight > previous)
-        {
-            *slot = Some((weight, order));
-        }
-    }
-    // Keep explicit zero weights: the wildcard must not re-enable an excluded language.
-    [
-        (Locale::En, english.or(wildcard)),
-        (Locale::Ja, japanese.or(wildcard)),
-    ]
-    .into_iter()
-    .filter_map(|(locale, weight)| {
-        weight
-            .filter(|(weight, _)| *weight > 0)
-            .map(|(weight, order)| (locale, weight, order))
-    })
-    .min_by_key(|(_, weight, order)| (std::cmp::Reverse(*weight), *order))
-    .map(|(locale, _, _)| locale)
-    .unwrap_or(Locale::En)
-}
-
-fn quality(value: &str) -> Option<u16> {
-    let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
-    if !matches!(whole, "0" | "1")
-        || fraction.len() > 3
-        || !fraction.bytes().all(|b| b.is_ascii_digit())
-    {
-        return None;
-    }
-    let fraction: u16 = format!("{fraction:0<3}").parse().ok()?;
-    match whole {
-        "0" => Some(fraction),
-        "1" if fraction == 0 => Some(1000),
-        _ => None,
+fn preferred_locale(cx: &Cx) -> Locale {
+    match negotiate(accept_language(cx), &[locale!("ja"), locale!("en")]) {
+        Some(locale) if locale == &locale!("ja") => Locale::Ja,
+        _ => Locale::En,
     }
 }
 
@@ -136,7 +75,7 @@ pub(crate) async fn redirect(cx: &Cx) -> Option<Response> {
                 .get(COOKIE)
                 .and_then(|cookie| cookie.value().parse().ok())
         })
-        .unwrap_or_else(|| preferred_locale(request::headers(cx)));
+        .unwrap_or_else(|| preferred_locale(cx));
     if explicit.is_none() && locale == Locale::Ja {
         return None;
     }
@@ -251,9 +190,16 @@ mod tests {
             ("ja;q=0.8, en;q=0.8, ja;q=0.8", Locale::Ja),
             ("ja;q=0", Locale::En),
         ] {
-            let mut headers = HeaderMap::new();
-            headers.insert(header::ACCEPT_LANGUAGE, HeaderValue::from_static(value));
-            assert_eq!(preferred_locale(&headers), expected, "{value}");
+            let (parts, ()) = request::Request::builder()
+                .header(header::ACCEPT_LANGUAGE, value)
+                .body(())
+                .unwrap()
+                .into_parts();
+            assert_eq!(
+                preferred_locale(&Cx::new().with(parts)),
+                expected,
+                "{value}"
+            );
         }
     }
 
@@ -278,23 +224,6 @@ mod tests {
             destination(&SiteLocalesDocument::default(), "/", Locale::En),
             None
         );
-    }
-
-    #[test]
-    fn qualities_are_bounded_http_weights() {
-        for (input, expected) in [
-            ("1", Some(1000)),
-            ("1.000", Some(1000)),
-            ("0.7", Some(700)),
-            ("0.025", Some(25)),
-            ("0", Some(0)),
-            ("1.1", None),
-            ("0.1234", None),
-            ("NaN", None),
-            ("-1", None),
-        ] {
-            assert_eq!(quality(input), expected, "{input}");
-        }
     }
 
     #[test]
