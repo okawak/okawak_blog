@@ -68,7 +68,7 @@ pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
             if body.trim().is_empty() {
                 return Err(invalid("public body must not be empty"));
             }
-            if !identities.insert((locale, meta.id.clone())) || !routes.insert(meta.path()) {
+            if !identities.insert((locale, meta.id.clone())) || !routes.insert(meta.path(locale)) {
                 return Err(invalid("duplicate public identity or route"));
             }
             documents.push(Document {

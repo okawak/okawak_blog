@@ -59,10 +59,7 @@ pub async fn publish_with_bookmark_enricher(
         }
         locales.routes.entry("/".into()).or_default().push(locale);
         for doc in &docs {
-            let available = locales
-                .routes
-                .entry(doc.meta.path_in(Locale::Ja))
-                .or_default();
+            let available = locales.routes.entry(doc.meta.path(Locale::Ja)).or_default();
             if !available.contains(&locale) {
                 available.push(locale);
             }
