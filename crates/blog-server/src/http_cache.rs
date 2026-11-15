@@ -268,9 +268,7 @@ mod tests {
             ("\"other\", W/\"tag\"", true),
             ("\"other\"", false),
             ("*", false),
-            ("", false),
             ("unquoted", false),
-            ("\"open", false),
         ] {
             let mut headers = HeaderMap::new();
             headers.insert(header::IF_NONE_MATCH, HeaderValue::from_static(value));

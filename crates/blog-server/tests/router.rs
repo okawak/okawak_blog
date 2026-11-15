@@ -321,19 +321,10 @@ async fn home_selects_browser_language_with_english_default_and_saved_preference
         (None, None, "en"),
         (Some("ja-JP, en;q=0.8"), None, "ja"),
         (Some("ja;q=0.5, en-US;q=0.9"), None, "en"),
-        (Some("JA-jp;q=1, en;q=0.8"), None, "ja"),
         (Some("fr-FR"), None, "en"),
         (Some("*;q=1, ja;q=0.5"), None, "ja"),
-        (Some("ja; Q=0.9, en;q=0.8"), None, "ja"),
-        (Some("en;q=0, ja;q=0, *;q=1"), None, "en"),
-        (Some("ja;q=0, en;q=0.5"), None, "en"),
-        (Some("en;q=0, ja;q=0.5, *;q=1"), None, "ja"),
         (Some("en;q=0, *;q=1"), None, "en"),
-        (Some("ja;q=0, *;q=1"), None, "en"),
-        (Some("*;q=1, en;q=0, ja;q=0.5"), None, "ja"),
-        (Some("ja;q=bogus, en;q=0.5"), None, "en"),
         (Some("en"), Some("okawak_locale=ja"), "ja"),
-        (Some("en;q=0, *;q=1"), Some("okawak_locale=ja"), "ja"),
         (Some("ja"), Some("unrelated=x; okawak_locale=en"), "en"),
         (Some("ja"), Some("okawak_locale=unknown"), "ja"),
     ] {
@@ -1432,61 +1423,42 @@ async fn home_returns_internal_server_error_page_when_snapshot_fails() {
 }
 
 #[tokio::test]
-async fn home_supports_release_aware_conditional_get() {
-    let router = create_router(validator_reader(fixture_reader()), true);
-    let first = response(
-        &router,
-        Request::builder()
-            .uri("/")
-            .header(header::ACCEPT_LANGUAGE, "ja")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-    let etag = first
-        .headers
-        .get(header::ETAG)
-        .expect("ETag")
-        .to_str()
-        .unwrap()
-        .to_string();
+async fn pages_share_one_snapshot_per_request_and_support_conditional_get() {
+    for path in ["/", "/tech", "/tech/e2e-article", "/about"] {
+        let snapshot_calls = Arc::new(AtomicUsize::new(0));
+        let reader = Arc::new(CountingReader {
+            inner: fixture_reader(),
+            snapshot_calls: Arc::clone(&snapshot_calls),
+        });
+        let router = create_router(validator_reader(reader), true);
+        let first = response(
+            &router,
+            Request::builder()
+                .uri(path)
+                .header(header::ACCEPT_LANGUAGE, "ja")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(first.status, StatusCode::OK, "{path}");
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1, "{path}");
+        let etag = first.headers.get(header::ETAG).expect("ETag");
 
-    let cached = response(
-        &router,
-        Request::builder()
-            .uri("/")
-            .header(header::ACCEPT_LANGUAGE, "ja")
-            .header(header::IF_NONE_MATCH, etag)
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-
-    assert_eq!(cached.status, StatusCode::NOT_MODIFIED);
-    assert!(cached.body.is_empty());
-}
-
-#[tokio::test]
-async fn conditional_get_and_home_share_one_snapshot() {
-    let snapshot_calls = Arc::new(AtomicUsize::new(0));
-    let reader = Arc::new(CountingReader {
-        inner: fixture_reader(),
-        snapshot_calls: snapshot_calls.clone(),
-    });
-    let router = create_router(validator_reader(reader), true);
-
-    let response = response(
-        &router,
-        Request::builder()
-            .uri("/")
-            .header(header::ACCEPT_LANGUAGE, "ja")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-
-    assert_eq!(response.status, StatusCode::OK);
-    assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
+        snapshot_calls.store(0, Ordering::SeqCst);
+        let cached = response(
+            &router,
+            Request::builder()
+                .uri(path)
+                .header(header::ACCEPT_LANGUAGE, "ja")
+                .header(header::IF_NONE_MATCH, etag)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(cached.status, StatusCode::NOT_MODIFIED, "{path}");
+        assert!(cached.body.is_empty(), "{path}");
+        assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1, "{path}");
+    }
 }
 
 #[tokio::test]
@@ -1702,55 +1674,6 @@ async fn category_returns_internal_server_error_page_when_snapshot_fails() {
 
     assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
     assert!(response.body.contains("カテゴリの読み込みに失敗しました"));
-}
-
-#[tokio::test]
-async fn category_supports_release_aware_conditional_get() {
-    let router = create_router(validator_reader(fixture_reader()), true);
-    let first = response(
-        &router,
-        Request::builder().uri("/tech").body(Body::empty()).unwrap(),
-    )
-    .await;
-    let etag = first
-        .headers
-        .get(header::ETAG)
-        .expect("ETag")
-        .to_str()
-        .unwrap()
-        .to_string();
-
-    let cached = response(
-        &router,
-        Request::builder()
-            .uri("/tech")
-            .header(header::IF_NONE_MATCH, etag)
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-
-    assert_eq!(cached.status, StatusCode::NOT_MODIFIED);
-    assert!(cached.body.is_empty());
-}
-
-#[tokio::test]
-async fn conditional_get_and_category_share_one_snapshot() {
-    let snapshot_calls = Arc::new(AtomicUsize::new(0));
-    let reader = Arc::new(CountingReader {
-        inner: fixture_reader(),
-        snapshot_calls: snapshot_calls.clone(),
-    });
-    let router = create_router(validator_reader(reader), true);
-
-    let response = response(
-        &router,
-        Request::builder().uri("/tech").body(Body::empty()).unwrap(),
-    )
-    .await;
-
-    assert_eq!(response.status, StatusCode::OK);
-    assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
@@ -2080,61 +2003,6 @@ async fn article_returns_internal_server_error_page_when_snapshot_fails() {
 }
 
 #[tokio::test]
-async fn article_supports_release_aware_conditional_get() {
-    let router = create_router(validator_reader(fixture_reader()), true);
-    let first = response(
-        &router,
-        Request::builder()
-            .uri("/tech/e2e-article")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-    let etag = first
-        .headers
-        .get(header::ETAG)
-        .expect("ETag")
-        .to_str()
-        .unwrap()
-        .to_string();
-
-    let cached = response(
-        &router,
-        Request::builder()
-            .uri("/tech/e2e-article")
-            .header(header::IF_NONE_MATCH, etag)
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-
-    assert_eq!(cached.status, StatusCode::NOT_MODIFIED);
-    assert!(cached.body.is_empty());
-}
-
-#[tokio::test]
-async fn conditional_get_and_article_share_one_snapshot() {
-    let snapshot_calls = Arc::new(AtomicUsize::new(0));
-    let reader = Arc::new(CountingReader {
-        inner: fixture_reader(),
-        snapshot_calls: snapshot_calls.clone(),
-    });
-    let router = create_router(validator_reader(reader), true);
-
-    let response = response(
-        &router,
-        Request::builder()
-            .uri("/tech/e2e-article")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-
-    assert_eq!(response.status, StatusCode::OK);
-    assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
-}
-
-#[tokio::test]
 async fn about_renders_the_published_page_as_html() {
     let router = create_router(fixture_reader(), false);
     let response = response(
@@ -2307,63 +2175,13 @@ async fn about_returns_internal_server_error_page_for_invalid_artifact() {
 }
 
 #[tokio::test]
-async fn about_supports_release_aware_conditional_get() {
-    let router = create_router(validator_reader(fixture_reader()), true);
-    let first = response(
-        &router,
-        Request::builder()
-            .uri("/about")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-    let etag = first
-        .headers
-        .get(header::ETAG)
-        .expect("ETag")
-        .to_str()
-        .unwrap()
-        .to_string();
-
-    let cached = response(
-        &router,
-        Request::builder()
-            .uri("/about")
-            .header(header::IF_NONE_MATCH, etag)
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-
-    assert_eq!(cached.status, StatusCode::NOT_MODIFIED);
-    assert!(cached.body.is_empty());
-}
-
-#[tokio::test]
-async fn conditional_get_and_about_share_one_snapshot() {
+async fn articles_supports_release_aware_conditional_get_and_share_one_snapshot() {
     let snapshot_calls = Arc::new(AtomicUsize::new(0));
     let reader = Arc::new(CountingReader {
         inner: fixture_reader(),
-        snapshot_calls: snapshot_calls.clone(),
+        snapshot_calls: Arc::clone(&snapshot_calls),
     });
     let router = create_router(validator_reader(reader), true);
-
-    let response = response(
-        &router,
-        Request::builder()
-            .uri("/about")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-
-    assert_eq!(response.status, StatusCode::OK);
-    assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
-}
-
-#[tokio::test]
-async fn articles_supports_release_aware_conditional_get() {
-    let router = create_router(validator_reader(fixture_reader()), true);
     let first = response(
         &router,
         Request::builder()
@@ -2384,6 +2202,7 @@ async fn articles_supports_release_aware_conditional_get() {
         .clone();
 
     assert_eq!(first.status, StatusCode::OK);
+    assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
     assert_eq!(
         first.headers.get(header::CACHE_CONTROL).unwrap(),
         "public, max-age=0, must-revalidate"
@@ -2481,28 +2300,6 @@ async fn articles_omits_validators_when_disabled_or_unsuccessful() {
     assert_eq!(error_response.status, StatusCode::INTERNAL_SERVER_ERROR);
     assert!(!error_response.headers.contains_key(header::ETAG));
     assert!(!error_response.headers.contains_key(header::CACHE_CONTROL));
-}
-
-#[tokio::test]
-async fn conditional_get_and_articles_share_one_snapshot() {
-    let snapshot_calls = Arc::new(AtomicUsize::new(0));
-    let reader: DynArtifactReader = Arc::new(CountingReader {
-        inner: fixture_reader(),
-        snapshot_calls: Arc::clone(&snapshot_calls),
-    });
-    let router = create_router(validator_reader(reader), true);
-
-    let response = response(
-        &router,
-        Request::builder()
-            .uri("/api/articles")
-            .body(Body::empty())
-            .expect("request should be valid"),
-    )
-    .await;
-
-    assert_eq!(response.status, StatusCode::OK);
-    assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]

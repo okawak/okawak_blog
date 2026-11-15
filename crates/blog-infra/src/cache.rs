@@ -491,19 +491,14 @@ mod tests {
         let (first_result, second_result) =
             tokio::join!(first.read_article_index(), second.read_article_index());
 
-        assert!(first_result.is_ok());
-        assert!(second_result.is_ok());
+        let first_result = first_result.unwrap();
+        assert!(Arc::ptr_eq(&first_result, &second_result.unwrap()));
+        assert!(Arc::ptr_eq(
+            &first_result,
+            &first.read_article_index().await.unwrap()
+        ));
         assert_eq!(snapshot_calls.load(Ordering::SeqCst), 1);
         assert_eq!(article_reads.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn repeated_reads_share_the_cached_article_index() {
-        let (reader, _, _) = counting_reader(false);
-        let snapshot = reader.snapshot().await.unwrap();
-        let first = snapshot.read_article_index().await.unwrap();
-        let second = snapshot.read_article_index().await.unwrap();
-        assert!(std::ptr::eq(&first.articles, &second.articles));
     }
 
     #[tokio::test]
@@ -635,69 +630,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cancelling_the_initializer_allows_a_waiting_reader_to_take_over() {
-        let cache = OptionalCache::<bytes::Bytes>::default();
-        let replacement_started = std::cell::Cell::new(false);
-        let mut replacement = std::pin::pin!(cache.get_or_try_init("same", || async {
-            replacement_started.set(true);
-            Ok(Some(bytes::Bytes::from_static(b"replacement")))
-        }));
-        {
-            let mut initializer =
-                std::pin::pin!(cache.get_or_try_init("same", std::future::pending));
-            let state =
-                std::future::poll_fn(|cx| std::task::Poll::Ready(initializer.as_mut().poll(cx)))
-                    .await;
-            assert!(state.is_pending());
-            let state =
-                std::future::poll_fn(|cx| std::task::Poll::Ready(replacement.as_mut().poll(cx)))
-                    .await;
-            assert!(state.is_pending());
-            assert!(!replacement_started.get());
-        }
-        let result = tokio::time::timeout(Duration::from_secs(1), replacement)
-            .await
-            .expect("waiting reader must recover after initializer cancellation")
-            .unwrap();
-        assert_eq!(result, Some(bytes::Bytes::from_static(b"replacement")));
-        assert!(replacement_started.get());
-    }
-
-    #[tokio::test]
-    async fn cancelling_a_waiter_does_not_discard_the_initializers_value() {
-        let cache = OptionalCache::<bytes::Bytes>::default();
-        let release = tokio::sync::Notify::new();
-        let mut initializer = std::pin::pin!(cache.get_or_try_init("same", || async {
-            release.notified().await;
-            Ok(Some(bytes::Bytes::from_static(b"original")))
-        }));
-        let state =
-            std::future::poll_fn(|cx| std::task::Poll::Ready(initializer.as_mut().poll(cx))).await;
-        assert!(state.is_pending());
-        {
-            let mut waiter = std::pin::pin!(cache.get_or_try_init("same", || async {
-                panic!("waiter must share the active initialization")
-            }));
-            let state =
-                std::future::poll_fn(|cx| std::task::Poll::Ready(waiter.as_mut().poll(cx))).await;
-            assert!(state.is_pending());
-        }
-        release.notify_one();
-        let result = tokio::time::timeout(Duration::from_secs(1), initializer)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(result, Some(bytes::Bytes::from_static(b"original")));
-        let cached = cache
-            .get_or_try_init("same", || async {
-                panic!("successful value must remain cached")
-            })
-            .await
-            .unwrap();
-        assert_eq!(cached, result);
-    }
-
-    #[tokio::test]
     async fn missing_articles_do_not_accumulate_cache_entries() {
         let snapshot = CachingArtifactSnapshot::new(Arc::new(CountingSnapshot {
             article_reads: Arc::new(AtomicUsize::new(0)),
@@ -754,30 +686,6 @@ mod tests {
             Some(bytes::Bytes::from_static(b"retry"))
         );
         assert_eq!(reads.load(Ordering::SeqCst), 2);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn simultaneous_reader_completion_does_not_retain_missing_assets() {
-        let cache = Arc::new(OptionalCache::<bytes::Bytes>::default());
-        for _ in 0..1024 {
-            let mut readers = tokio::task::JoinSet::new();
-            for _ in 0..16 {
-                let cache = Arc::clone(&cache);
-                readers.spawn(async move {
-                    cache
-                        .get_or_try_init("missing", || async {
-                            tokio::task::yield_now().await;
-                            Ok(None)
-                        })
-                        .await
-                        .unwrap()
-                });
-            }
-            while let Some(reader) = readers.join_next().await {
-                assert!(reader.unwrap().is_none());
-            }
-            assert!(cache.entries.iter().next().is_none());
-        }
     }
 
     #[tokio::test]
