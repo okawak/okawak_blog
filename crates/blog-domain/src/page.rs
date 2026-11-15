@@ -3,7 +3,7 @@ mod path;
 
 pub use builder::{
     build_article_page_document, build_category_page_document, build_home_page_document,
-    build_static_page_document, find_article_summary,
+    build_static_page_document,
 };
 pub use path::{
     build_article_page_canonical_path, build_article_path, build_category_page_canonical_path,
@@ -12,6 +12,7 @@ pub use path::{
 
 use crate::{Category, PageKey, SectionPath, Slug, Title};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SiteArticleCard {
@@ -60,7 +61,7 @@ pub struct CategoryPageDocument {
     pub description: Option<String>,
     pub html: String,
     pub sections: Vec<CategorySectionGroup>,
-    pub articles: Vec<SiteArticleCard>,
+    pub articles: Vec<Arc<SiteArticleCard>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,5 +76,5 @@ pub struct StaticPageDocument {
 pub struct CategorySectionGroup {
     pub section_path: SectionPath,
     pub heading: String,
-    pub articles: Vec<SiteArticleCard>,
+    pub articles: Vec<Arc<SiteArticleCard>>,
 }

@@ -1,13 +1,38 @@
 use crate::error::Result;
 
 use scraper::{ElementRef, Html, Selector};
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{Arc, LazyLock},
+    time::Duration,
+};
 use tokio::sync::Semaphore;
 use url::Url;
 
 const CONCURRENT_REQUEST_LIMIT: usize = 8;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const USER_AGENT: &str = "publish-bookmark/1.0 (+https://github.com/okawak/okawak_blog)";
+
+static TITLE_SELECTORS: LazyLock<[Selector; 2]> = LazyLock::new(|| {
+    ["meta[property='og:title']", "meta[name='twitter:title']"].map(parse_selector)
+});
+static TITLE_ELEMENT: LazyLock<Selector> = LazyLock::new(|| parse_selector("title"));
+static DESCRIPTION_SELECTORS: LazyLock<[Selector; 3]> = LazyLock::new(|| {
+    [
+        "meta[property='og:description']",
+        "meta[name='twitter:description']",
+        "meta[name='description']",
+    ]
+    .map(parse_selector)
+});
+static IMAGE_SELECTORS: LazyLock<[Selector; 2]> = LazyLock::new(|| {
+    ["meta[property='og:image']", "meta[name='twitter:image']"].map(parse_selector)
+});
+static ICON_SELECTORS: LazyLock<[Selector; 2]> =
+    LazyLock::new(|| ["link[rel~='icon']", "link[rel~='apple-touch-icon']"].map(parse_selector));
+
+fn parse_selector(selector: &str) -> Selector {
+    Selector::parse(selector).expect("metadata selector must be valid")
+}
 
 #[derive(Clone)]
 pub(super) struct Fetcher {
@@ -62,65 +87,41 @@ fn parse_metadata(url: &str, html_content: &str) -> Metadata {
     let base_url = Url::parse(url).ok();
 
     Metadata {
-        title: extract_first_attribute(
-            &document,
-            &["meta[property='og:title']", "meta[name='twitter:title']"],
-            "content",
-        )
-        .or_else(|| extract_text(&document, "title")),
-        description: extract_first_attribute(
-            &document,
-            &[
-                "meta[property='og:description']",
-                "meta[name='twitter:description']",
-                "meta[name='description']",
-            ],
-            "content",
-        ),
+        title: extract_first_attribute(&document, &*TITLE_SELECTORS, "content")
+            .or_else(|| extract_text(&document, &TITLE_ELEMENT)),
+        description: extract_first_attribute(&document, &*DESCRIPTION_SELECTORS, "content"),
         image_url: base_url.as_ref().and_then(|base_url| {
-            extract_first_url(
-                &document,
-                base_url,
-                &["meta[property='og:image']", "meta[name='twitter:image']"],
-                "content",
-            )
+            extract_first_url(&document, base_url, &*IMAGE_SELECTORS, "content")
         }),
-        favicon_url: base_url.as_ref().and_then(|base_url| {
-            extract_first_url(
-                &document,
-                base_url,
-                &["link[rel~='icon']", "link[rel~='apple-touch-icon']"],
-                "href",
-            )
-        }),
+        favicon_url: base_url
+            .as_ref()
+            .and_then(|base_url| extract_first_url(&document, base_url, &*ICON_SELECTORS, "href")),
     }
 }
 
-fn extract_first_attribute(document: &Html, selectors: &[&str], attribute: &str) -> Option<String> {
+fn extract_first_attribute(
+    document: &Html,
+    selectors: &[Selector],
+    attribute: &str,
+) -> Option<String> {
     selectors.iter().find_map(|selector| {
-        let selector = Selector::parse(selector).expect("metadata selector must be valid");
         document
-            .select(&selector)
+            .select(selector)
             .find_map(|element| extract_attribute(element, attribute))
+            .map(str::to_owned)
     })
 }
 
-fn extract_attribute(element: ElementRef<'_>, attribute: &str) -> Option<String> {
+fn extract_attribute<'a>(element: ElementRef<'a>, attribute: &str) -> Option<&'a str> {
     element
         .value()
         .attr(attribute)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(str::to_owned)
 }
 
-fn extract_text(document: &Html, selector: &str) -> Option<String> {
-    let selector = Selector::parse(selector).expect("metadata selector must be valid");
-    let text = document
-        .select(&selector)
-        .next()?
-        .text()
-        .collect::<String>();
+fn extract_text(document: &Html, selector: &Selector) -> Option<String> {
+    let text = document.select(selector).next()?.text().collect::<String>();
     let text = text.trim();
 
     (!text.is_empty()).then(|| text.to_owned())
@@ -129,14 +130,13 @@ fn extract_text(document: &Html, selector: &str) -> Option<String> {
 fn extract_first_url(
     document: &Html,
     base_url: &Url,
-    selectors: &[&str],
+    selectors: &[Selector],
     attribute: &str,
 ) -> Option<String> {
     selectors.iter().find_map(|selector| {
-        let selector = Selector::parse(selector).expect("metadata selector must be valid");
-        document.select(&selector).find_map(|element| {
+        document.select(selector).find_map(|element| {
             let value = extract_attribute(element, attribute)?;
-            let url = base_url.join(&value).ok()?;
+            let url = base_url.join(value).ok()?;
 
             matches!(url.scheme(), "http" | "https").then(|| url.to_string())
         })

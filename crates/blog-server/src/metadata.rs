@@ -129,7 +129,7 @@ mod tests {
             description: description.map(str::to_string),
             html: "<article><h1>Rust</h1></article>".to_string(),
             sections: vec![],
-            articles: vec![article_page(None).article],
+            articles: vec![article_page(None).article.into()],
         }
     }
 

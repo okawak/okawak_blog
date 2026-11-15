@@ -5,9 +5,9 @@ use std::{
 
 use async_trait::async_trait;
 use blog_domain::{
-    ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
-    HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, SiteLocalesDocument,
-    SiteMetadataDocument, Slug,
+    ArticleArtifactDocument, ArticleIndexDocument, Category, CategoryArtifactDocument,
+    ContentAssetName, HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey,
+    PublishableArticle, SiteLocalesDocument, SiteMetadataDocument, Slug,
 };
 
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, Result};
@@ -61,20 +61,20 @@ impl ArtifactSnapshot for LocalArtifactReader {
         Ok(Some(Arc::new(localized)))
     }
 
-    async fn read_locales(&self) -> Result<SiteLocalesDocument> {
+    async fn read_locales(&self) -> Result<Arc<SiteLocalesDocument>> {
         let mut root = self.clone();
         root.locale = Locale::Ja;
         match root.read_json::<SiteLocalesDocument>("locales.json").await {
             Ok(document) => {
                 document.validate()?;
-                Ok(document)
+                Ok(Arc::new(document))
             }
-            Err(error) if error.is_not_found() => Ok(SiteLocalesDocument::default()),
+            Err(error) if error.is_not_found() => Ok(Arc::new(SiteLocalesDocument::default())),
             Err(error) => Err(error),
         }
     }
 
-    async fn read_tag_labels(&self) -> Result<blog_domain::TagLabels> {
+    async fn read_tag_labels(&self) -> Result<Arc<blog_domain::TagLabels>> {
         match self.read_json("tags.json").await {
             Ok(labels) => Ok(labels),
             Err(error) if error.is_not_found() => Ok(Default::default()),
@@ -82,44 +82,49 @@ impl ArtifactSnapshot for LocalArtifactReader {
         }
     }
 
-    async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
+    async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<bytes::Bytes>> {
         match tokio::fs::read(self.site_root.join("content-assets").join(name.as_str())).await {
-            Ok(bytes) => Ok(Some(bytes)),
+            Ok(bytes) => Ok(Some(bytes.into())),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(error.into()),
         }
     }
 
-    async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
+    async fn read_article_index(&self) -> Result<Arc<ArticleIndexDocument>> {
         self.read_json("articles/index.json").await
     }
 
     async fn read_category_document(
         &self,
         category: &Category,
-    ) -> Result<CategoryArtifactDocument> {
+    ) -> Result<Arc<CategoryArtifactDocument>> {
         self.read_json(&format!("categories/{}.json", category.as_str()))
             .await
     }
 
-    async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
+    async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
         self.read_json("metadata/site.json").await
     }
 
-    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<String> {
-        Ok(tokio::fs::read_to_string(self.artifact_path(&format!(
-            "articles/{}/{}.html",
-            category.as_str(),
-            slug.as_str()
-        )))
-        .await?)
+    async fn read_article(
+        &self,
+        category: &Category,
+        slug: &Slug,
+    ) -> Result<Option<Arc<PublishableArticle>>> {
+        let path = format!("articles/{}/{}.json", category.as_str(), slug.as_str());
+        let article = match self.read_json::<ArticleArtifactDocument>(&path).await {
+            Ok(article) => article,
+            Err(error) if error.is_not_found() => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        Ok(Some(Arc::new(article.into_article(category, slug)?)))
     }
 
-    async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+    async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
         self.read_json("home.json").await
     }
 
-    async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
+    async fn read_page_document(&self, page: &PageKey) -> Result<Arc<PageArtifactDocument>> {
         self.read_json(&format!("pages/{}.json", page.as_str()))
             .await
     }
@@ -194,9 +199,15 @@ mod tests {
         )
         .unwrap();
         fs::create_dir_all(root.join("articles/tech")).unwrap();
+        let index: ArticleIndexDocument =
+            serde_json::from_slice(&fs::read(root.join("articles/index.json")).unwrap()).unwrap();
         fs::write(
-            root.join("articles/tech/intro00000001.html"),
-            "<h1>Intro</h1>",
+            root.join("articles/tech/intro00000001.json"),
+            serde_json::to_vec(&ArticleArtifactDocument {
+                summary: index.articles.into_iter().next().unwrap(),
+                html: "<h1>Intro</h1>".into(),
+            })
+            .unwrap(),
         )
         .unwrap();
         fs::write(
@@ -238,7 +249,7 @@ mod tests {
             .unwrap();
         let metadata = snapshot.read_site_metadata().await.unwrap();
         let html = snapshot
-            .read_article_html(
+            .read_article(
                 &Category::Tech,
                 &Slug::new("intro00000001".to_string()).unwrap(),
             )
@@ -256,7 +267,7 @@ mod tests {
         assert_eq!(category.title, "Tech");
         assert_eq!(category.html, "<article><h1>Tech</h1></article>");
         assert_eq!(metadata.total_articles, 1);
-        assert_eq!(html, "<h1>Intro</h1>");
+        assert_eq!(html.unwrap().body.as_str(), "<h1>Intro</h1>");
         assert_eq!(page.page.as_str(), "about");
         assert_eq!(page.title, "About");
         assert_eq!(home_fragment.title, "Home");

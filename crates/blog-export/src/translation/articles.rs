@@ -12,9 +12,9 @@ use crate::{
 use blog_domain::{Locale, Sha256Digest, Slug, TranslationProvenance};
 use std::{fs, path::Path};
 
-struct ArticlePlan<'a> {
+struct ArticlePlan {
     original: Document,
-    current: Option<&'a Document>,
+    current: Option<Document>,
     fragments: Fragments,
     request: TranslationRequest,
     input: Sha256Digest,
@@ -29,19 +29,19 @@ pub(crate) fn translate_stage(
 ) -> Result<TranslationReport<ProtectedContent>> {
     let mut report = TranslationReport::default();
     let originals = output::read_locale(stage, Locale::Ja)?;
-    let english = output::read_locale(stage, Locale::En)?;
     let tags = super::catalog::plan_catalog(&stage.join("tags.json"), settings)?;
     let mut plans = Vec::new();
     for original in originals {
         let fragments = Fragments::extract(&original);
         let request = article_request(fragments.texts.clone(), settings);
         let input = content_input(&request, &original)?;
-        let current = english.iter().find(|d| d.meta.id == original.meta.id);
-        let current_hash = current.map(text_hash).transpose()?;
+        let current = output::read_document(stage, Locale::En, &original.meta.id)?;
+        let current_hash = current.as_ref().map(text_hash).transpose()?;
         let decision = decide(
             input.as_str(),
             current_hash.as_ref().map(Sha256Digest::as_str),
             current
+                .as_ref()
                 .and_then(|d| d.meta.translation.as_ref())
                 .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
         );
@@ -117,7 +117,7 @@ pub(crate) fn translate_stage(
         let path = stage.join(format!("en/{}.md", original.meta.id));
         match update {
             UpdatePlan::Reuse => {
-                let mut preserved = current.unwrap().clone();
+                let mut preserved = current.unwrap();
                 preserved.refresh_translation_metadata(&original);
                 if let Some(provenance) = &mut preserved.meta.translation {
                     provenance.stale = false;
@@ -127,7 +127,7 @@ pub(crate) fn translate_stage(
             }
             UpdatePlan::Generate | UpdatePlan::GenerateCandidate | UpdatePlan::ReuseCandidate => {
                 if update.protects_current() {
-                    let mut preserved = current.unwrap().clone();
+                    let mut preserved = current.unwrap();
                     if let Some(p) = &mut preserved.meta.translation {
                         p.stale = true;
                     }

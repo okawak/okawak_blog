@@ -31,6 +31,10 @@ impl ArticleBody {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
 }
 
 /// Fully publishable article used by the artifact pipeline.
@@ -44,20 +48,6 @@ impl PublishableArticle {
     pub fn new(meta: ArticleMeta, body: ArticleBody) -> Self {
         Self { meta, body }
     }
-}
-
-/// Lightweight summary entry stored in the article index and category artifacts.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PublishedArticleSummary {
-    pub slug: Slug,
-    pub title: Title,
-    pub category: Category,
-    pub section_path: SectionPath,
-    pub description: Option<String>,
-    pub tags: Vec<TagId>,
-    pub priority: Option<i32>,
-    pub created_at: Timestamp,
-    pub updated_at: Timestamp,
 }
 
 /// Metadata for a rendered category landing page.
@@ -82,8 +72,8 @@ impl CategoryLandingBody {
         Ok(Self(html))
     }
 
-    pub fn as_str(&self) -> &str {
-        &self.0
+    pub fn into_string(self) -> String {
+        self.0
     }
 }
 
@@ -104,9 +94,9 @@ impl PublishableCategoryLanding {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CategoryIndex {
     pub category: Category,
-    /// Landing metadata used to construct the category artifact when available.
-    pub landing: Option<CategoryLandingMeta>,
-    pub articles: Vec<PublishedArticleSummary>,
+    /// Landing page used to construct the category artifact when available.
+    pub landing: Option<PublishableCategoryLanding>,
+    pub articles: Vec<ArticleMeta>,
 }
 
 /// Per-category metadata for the whole site.
@@ -123,27 +113,9 @@ pub struct SiteMetadata {
     pub categories: Vec<CategoryMetadata>,
 }
 
-/// Build a summary entry from article metadata.
-fn build_article_summary_from_meta(meta: &ArticleMeta) -> PublishedArticleSummary {
-    PublishedArticleSummary {
-        slug: meta.slug.clone(),
-        title: meta.title.clone(),
-        category: meta.category,
-        section_path: meta.section_path.clone(),
-        description: meta.description.clone(),
-        tags: meta.tags.clone(),
-        priority: meta.priority,
-        created_at: meta.created_at.clone(),
-        updated_at: meta.updated_at.clone(),
-    }
-}
-
 /// Build the site-wide article index.
-pub fn build_article_index(article_metas: &[ArticleMeta]) -> Vec<PublishedArticleSummary> {
-    let mut summaries: Vec<_> = article_metas
-        .iter()
-        .map(build_article_summary_from_meta)
-        .collect();
+pub fn build_article_index(article_metas: &[ArticleMeta]) -> Vec<ArticleMeta> {
+    let mut summaries = article_metas.to_vec();
     summaries.sort_by(compare_summaries);
     summaries
 }
@@ -151,21 +123,21 @@ pub fn build_article_index(article_metas: &[ArticleMeta]) -> Vec<PublishedArticl
 /// Build per-category indexes, including categories represented only by a landing page.
 pub fn build_category_indexes(
     article_metas: &[ArticleMeta],
-    category_landings: Vec<CategoryLandingMeta>,
+    category_landings: Vec<PublishableCategoryLanding>,
 ) -> Vec<CategoryIndex> {
     use std::collections::HashMap;
 
-    let mut grouped: HashMap<Category, Vec<PublishedArticleSummary>> = HashMap::new();
+    let mut grouped: HashMap<Category, Vec<ArticleMeta>> = HashMap::new();
     for article_meta in article_metas {
         grouped
             .entry(article_meta.category)
             .or_default()
-            .push(build_article_summary_from_meta(article_meta));
+            .push(article_meta.clone());
     }
 
     let mut landings_by_category: HashMap<_, _> = category_landings
         .into_iter()
-        .map(|landing| (landing.category, landing))
+        .map(|landing| (landing.meta.category, landing))
         .collect();
     for category in landings_by_category.keys() {
         grouped.entry(*category).or_default();
@@ -205,7 +177,7 @@ pub fn build_site_metadata(category_indexes: &[CategoryIndex]) -> SiteMetadata {
     }
 }
 
-fn compare_summaries(a: &PublishedArticleSummary, b: &PublishedArticleSummary) -> Ordering {
+fn compare_summaries(a: &ArticleMeta, b: &ArticleMeta) -> Ordering {
     b.priority
         .unwrap_or(i32::MIN)
         .cmp(&a.priority.unwrap_or(i32::MIN))
@@ -218,13 +190,16 @@ fn compare_summaries(a: &PublishedArticleSummary, b: &PublishedArticleSummary) -
 mod tests {
     use super::*;
 
-    fn build_category_landing(category: Category, title: &str) -> CategoryLandingMeta {
-        CategoryLandingMeta {
-            category,
-            title: Title::new(title.to_string()).unwrap(),
-            description: Some(format!("{title} landing")),
-            updated_at: Timestamp::new("2025-01-03T00:00:00+09:00".to_string()).unwrap(),
-        }
+    fn build_category_landing(category: Category, title: &str) -> PublishableCategoryLanding {
+        PublishableCategoryLanding::new(
+            CategoryLandingMeta {
+                category,
+                title: Title::new(title.to_string()).unwrap(),
+                description: Some(format!("{title} landing")),
+                updated_at: Timestamp::new("2025-01-03T00:00:00+09:00".to_string()).unwrap(),
+            },
+            CategoryLandingBody::new(format!("<p>{title}</p>")).unwrap(),
+        )
     }
 
     fn build_article(
@@ -254,7 +229,7 @@ mod tests {
         assert!(ArticleBody::new("   ".to_string()).is_err());
         let body = ArticleBody::new("<p>body</p>".to_string()).unwrap();
 
-        assert_eq!(body.as_str(), "<p>body</p>");
+        assert_eq!(body.into_string(), "<p>body</p>");
     }
 
     #[test]
@@ -262,7 +237,7 @@ mod tests {
         assert!(CategoryLandingBody::new("   ".to_string()).is_err());
         let body = CategoryLandingBody::new("<p>category</p>".to_string()).unwrap();
 
-        assert_eq!(body.as_str(), "<p>category</p>");
+        assert_eq!(body.into_string(), "<p>category</p>");
     }
 
     #[test]
@@ -324,13 +299,13 @@ mod tests {
         assert_eq!(indexes[1].category, Category::Physics);
         assert_eq!(indexes[1].articles.len(), 0);
         assert_eq!(
-            indexes[1].landing.as_ref().unwrap().title.as_str(),
+            indexes[1].landing.as_ref().unwrap().meta.title.as_str(),
             "Physics"
         );
         assert_eq!(indexes[2].category, Category::Tech);
         assert_eq!(indexes[2].articles.len(), 1);
         assert_eq!(
-            indexes[2].landing.as_ref().unwrap().title.as_str(),
+            indexes[2].landing.as_ref().unwrap().meta.title.as_str(),
             "Technology"
         );
     }

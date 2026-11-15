@@ -1,11 +1,12 @@
 //! Artifact-backed implementation of the storage-independent page loader contract.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use blog_domain::{
     ArticlePageDocument, Category, CategoryPageDocument, ContentAssetName, HomePageDocument,
     Locale, PageKey, Slug, StaticPageDocument, build_article_page_document,
     build_category_page_document, build_home_page_document, build_static_page_document,
-    find_article_summary,
 };
 use blog_infra::{DynArtifactReader, DynArtifactSnapshot};
 
@@ -59,7 +60,7 @@ impl ArtifactPageLoader {
 
 #[async_trait]
 impl PageLoader for ArtifactPageLoader {
-    async fn load_locales(&self) -> PageLoadResult<blog_domain::SiteLocalesDocument> {
+    async fn load_locales(&self) -> PageLoadResult<Arc<blog_domain::SiteLocalesDocument>> {
         self.snapshot()
             .await?
             .read_locales()
@@ -67,7 +68,7 @@ impl PageLoader for ArtifactPageLoader {
             .map_err(|error| error.to_string())
     }
 
-    async fn load_asset(&self, name: &ContentAssetName) -> PageLoadResult<Option<Vec<u8>>> {
+    async fn load_asset(&self, name: &ContentAssetName) -> PageLoadResult<Option<bytes::Bytes>> {
         self.snapshot()
             .await?
             .read_content_asset(name)
@@ -96,7 +97,7 @@ impl PageLoader for ArtifactPageLoader {
         .map_err(|error| error.to_string())?;
 
         let document =
-            build_home_page_document(&article_index, &site_metadata, home_fragment.as_ref())
+            build_home_page_document(&article_index, &site_metadata, home_fragment.as_deref())
                 .map_err(|error| error.to_string())?;
         presentation(document, &root, &snapshot).await.map(Some)
     }
@@ -110,21 +111,14 @@ impl PageLoader for ArtifactPageLoader {
         let Some((root, snapshot)) = self.for_locale(locale).await? else {
             return Ok(None);
         };
-        let article_index = snapshot
-            .read_article_index()
+        let Some(article) = snapshot
+            .read_article(category, slug)
             .await
-            .map_err(|error| error.to_string())?;
-        let Some(summary) = find_article_summary(&article_index, category, slug) else {
+            .map_err(|error| error.to_string())?
+        else {
             return Ok(None);
         };
-        let html = match snapshot.read_article_html(category, slug).await {
-            Ok(html) => html,
-            Err(error) if error.is_not_found() => return Ok(None),
-            Err(error) => return Err(error.to_string()),
-        };
-
-        let document =
-            build_article_page_document(summary, &html).map_err(|error| error.to_string())?;
+        let document = build_article_page_document(&article);
         presentation(document, &root, &snapshot).await.map(Some)
     }
 
@@ -205,30 +199,37 @@ mod tests {
 
     #[async_trait]
     impl ArtifactSnapshot for PendingHomeSnapshot {
-        async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
+        async fn read_article_index(&self) -> Result<Arc<ArticleIndexDocument>> {
             self.0.fetch_or(1, Ordering::SeqCst);
             pending().await
         }
 
-        async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
+        async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
             self.0.fetch_or(2, Ordering::SeqCst);
             pending().await
         }
 
-        async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+        async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
             self.0.fetch_or(4, Ordering::SeqCst);
             pending().await
         }
 
-        async fn read_category_document(&self, _: &Category) -> Result<CategoryArtifactDocument> {
+        async fn read_category_document(
+            &self,
+            _: &Category,
+        ) -> Result<Arc<CategoryArtifactDocument>> {
             panic!("home must not read a category document")
         }
 
-        async fn read_article_html(&self, _: &Category, _: &Slug) -> Result<String> {
+        async fn read_article(
+            &self,
+            _: &Category,
+            _: &Slug,
+        ) -> Result<Option<Arc<blog_domain::PublishableArticle>>> {
             panic!("home must not read article HTML")
         }
 
-        async fn read_page_document(&self, _: &PageKey) -> Result<PageArtifactDocument> {
+        async fn read_page_document(&self, _: &PageKey) -> Result<Arc<PageArtifactDocument>> {
             panic!("home must not read a static page")
         }
     }

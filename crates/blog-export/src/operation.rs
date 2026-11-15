@@ -6,6 +6,7 @@ use crate::{
 };
 use blog_domain::{Locale, Slug};
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -39,7 +40,15 @@ pub fn export_content(
     filesystem::transaction(output, |stage| {
         let previous = output::read_locale(stage, Locale::Ja)?;
         let documents = vault::prepare(&source, &previous)?;
-        output::reconcile(stage, &previous, &documents)?;
+        let mut previous_by_id = HashMap::with_capacity(previous.len());
+        for document in &previous {
+            previous_by_id.entry(&document.meta.id).or_insert(document);
+        }
+        let pairs: Vec<_> = documents
+            .iter()
+            .map(|document| (previous_by_id.get(&document.meta.id).copied(), document))
+            .collect();
+        output::reconcile(stage, &pairs)?;
         output::sync_tags(stage)?;
         translation::translate_stage(stage, output, translator, settings)
     })

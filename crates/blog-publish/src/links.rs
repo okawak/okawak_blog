@@ -26,12 +26,12 @@ impl Index {
     pub(crate) fn new(japanese: &[Document], localized: &[Document]) -> Self {
         let mut routes: HashMap<_, _> = japanese
             .iter()
-            .map(|d| (d.meta.id.to_string(), d.meta.path()))
+            .map(|d| (d.meta.id.to_string(), d.meta.path(d.meta.locale)))
             .collect();
         routes.extend(
             localized
                 .iter()
-                .map(|d| (d.meta.id.to_string(), d.meta.path())),
+                .map(|d| (d.meta.id.to_string(), d.meta.path(d.meta.locale))),
         );
         Self { routes }
     }

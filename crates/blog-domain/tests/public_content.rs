@@ -126,7 +126,8 @@ fn tags_and_sections_are_each_restricted_to_articles() {
 fn public_contract_checks_schema_kind_and_provenance() {
     let mut meta = metadata();
     meta.validate().unwrap();
-    assert_eq!(meta.path(), "/tech/legacy123456");
+    assert_eq!(meta.path(Locale::Ja), "/tech/legacy123456");
+    assert_eq!(meta.path(Locale::En), "/en/tech/legacy123456");
     meta.schema_version = 2;
     assert!(meta.validate().is_err());
     meta.schema_version = 1;

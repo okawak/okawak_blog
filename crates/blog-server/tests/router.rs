@@ -384,10 +384,18 @@ async fn manual_language_choice_is_saved_and_falls_back_to_the_published_home() 
         .await;
         assert_eq!(result.status, StatusCode::SEE_OTHER, "{path}");
         assert_eq!(result.headers[header::LOCATION], location);
+        let cookie =
+            topcoat::cookie::Cookie::parse(result.headers[header::SET_COOKIE].to_str().unwrap())
+                .unwrap();
+        assert_eq!(cookie.name(), "okawak_locale");
+        assert_eq!(cookie.value(), language);
+        assert_eq!(cookie.path(), Some("/"));
         assert_eq!(
-            result.headers[header::SET_COOKIE],
-            format!("okawak_locale={language}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax")
+            cookie.max_age(),
+            Some(topcoat::cookie::time::Duration::days(365))
         );
+        assert_eq!(cookie.http_only(), Some(true));
+        assert_eq!(cookie.same_site(), Some(topcoat::cookie::SameSite::Lax));
         assert_eq!(result.headers[header::CACHE_CONTROL], "no-store");
         assert!(!result.headers.contains_key(header::ETAG));
     }
@@ -701,16 +709,16 @@ impl ArtifactSnapshot for ValidatorSnapshot {
     async fn localized(&self, locale: blog_domain::Locale) -> Result<Option<DynArtifactSnapshot>> {
         self.inner.localized(locale).await
     }
-    async fn read_locales(&self) -> Result<blog_domain::SiteLocalesDocument> {
+    async fn read_locales(&self) -> Result<Arc<blog_domain::SiteLocalesDocument>> {
         self.inner.read_locales().await
     }
-    async fn read_tag_labels(&self) -> Result<blog_domain::TagLabels> {
+    async fn read_tag_labels(&self) -> Result<Arc<blog_domain::TagLabels>> {
         self.inner.read_tag_labels().await
     }
     async fn read_content_asset(
         &self,
         name: &blog_domain::ContentAssetName,
-    ) -> Result<Option<Vec<u8>>> {
+    ) -> Result<Option<bytes::Bytes>> {
         self.inner.read_content_asset(name).await
     }
 
@@ -722,30 +730,34 @@ impl ArtifactSnapshot for ValidatorSnapshot {
         self.inner.last_modified().or(Some(SystemTime::UNIX_EPOCH))
     }
 
-    async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
+    async fn read_article_index(&self) -> Result<Arc<ArticleIndexDocument>> {
         self.inner.read_article_index().await
     }
 
     async fn read_category_document(
         &self,
         category: &Category,
-    ) -> Result<CategoryArtifactDocument> {
+    ) -> Result<Arc<CategoryArtifactDocument>> {
         self.inner.read_category_document(category).await
     }
 
-    async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
+    async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
         self.inner.read_site_metadata().await
     }
 
-    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<String> {
-        self.inner.read_article_html(category, slug).await
+    async fn read_article(
+        &self,
+        category: &Category,
+        slug: &Slug,
+    ) -> Result<Option<Arc<blog_domain::PublishableArticle>>> {
+        self.inner.read_article(category, slug).await
     }
 
-    async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+    async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
         self.inner.read_home_fragment().await
     }
 
-    async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
+    async fn read_page_document(&self, page: &PageKey) -> Result<Arc<PageArtifactDocument>> {
         self.inner.read_page_document(page).await
     }
 }
@@ -1226,14 +1238,8 @@ async fn unavailable_language_choice_on_a_runtime_page_does_not_add_home_cache_h
 async fn article_read_failure_is_not_reported_as_not_found() {
     let root = tempdir().unwrap();
     std::fs::create_dir_all(root.path().join("articles/tech")).unwrap();
-    std::fs::copy(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../e2e/fixtures/site/articles/index.json"),
-        root.path().join("articles/index.json"),
-    )
-    .unwrap();
     // Invalid UTF-8 is an I/O failure that is portable even when tests run as root.
-    std::fs::write(root.path().join("articles/tech/e2e-article.html"), [0xff]).unwrap();
+    std::fs::write(root.path().join("articles/tech/e2e-article.json"), [0xff]).unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(root.path())), false);
     let result = response(
         &router,
@@ -1996,14 +2002,14 @@ async fn article_returns_internal_server_error_for_invalid_artifacts() {
     let temp_dir = tempdir().unwrap();
     std::fs::create_dir_all(temp_dir.path().join("articles/tech")).unwrap();
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site");
-    std::fs::copy(
-        fixture_root.join("articles/index.json"),
-        temp_dir.path().join("articles/index.json"),
+    let mut article: blog_domain::ArticleArtifactDocument = serde_json::from_slice(
+        &std::fs::read(fixture_root.join("articles/tech/e2e-article.json")).unwrap(),
     )
     .unwrap();
+    article.html = "   ".into();
     std::fs::write(
-        temp_dir.path().join("articles/tech/e2e-article.html"),
-        "   ",
+        temp_dir.path().join("articles/tech/e2e-article.json"),
+        serde_json::to_vec(&article).unwrap(),
     )
     .unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
@@ -2030,10 +2036,13 @@ async fn article_returns_internal_server_error_for_invalid_artifacts() {
             .body
             .contains("<meta property=\"og:type\" content=\"article\">")
     );
+}
 
+#[tokio::test]
+async fn missing_article_returns_not_found_without_an_index() {
     let empty_dir = tempdir().unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(empty_dir.path())), false);
-    let missing_index_response = response(
+    let missing_article_response = response(
         &router,
         Request::builder()
             .uri("/tech/e2e-article")
@@ -2042,14 +2051,11 @@ async fn article_returns_internal_server_error_for_invalid_artifacts() {
     )
     .await;
 
-    assert_eq!(
-        missing_index_response.status,
-        StatusCode::INTERNAL_SERVER_ERROR
-    );
+    assert_eq!(missing_article_response.status, StatusCode::NOT_FOUND);
     assert!(
-        missing_index_response
+        missing_article_response
             .body
-            .contains("記事の読み込みに失敗しました")
+            .contains("ページが見つかりませんでした。")
     );
 }
 

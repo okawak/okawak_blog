@@ -63,21 +63,20 @@ pub(crate) async fn render_category(
 #[component]
 async fn category_document(
     cx: &Cx,
-    presentation: crate::page_loader::Presentation<CategoryPageDocument>,
+    presentation: std::sync::Arc<crate::page_loader::Presentation<CategoryPageDocument>>,
     locale: Locale,
 ) -> Result<impl View> {
-    let crate::page_loader::Presentation {
-        document, locales, ..
-    } = presentation;
-    let title = build_category_page_title(&document, locale);
-    let description = build_category_page_description(&document, locale);
-    let canonical_path = locale.path(&build_category_page_canonical_path(&document));
+    let document = &presentation.document;
+    let locales = std::sync::Arc::clone(&presentation.locales);
+    let title = build_category_page_title(document, locale);
+    let description = build_category_page_description(document, locale);
+    let canonical_path = locale.path(&build_category_page_canonical_path(document));
     let category = document.category.to_string();
     let locale_arg = locale.to_string();
-    let page_title = document.title;
+    let page_title = document.title.clone();
     // The publish pipeline escapes raw Markdown HTML and neutralizes unsafe href schemes before
     // persisting this fragment. It is therefore the trusted HTML boundary for Topcoat as well.
-    let landing_html = Unescaped::new_unchecked(document.html);
+    let landing_html = Unescaped::new_unchecked(document.html.clone());
 
     Ok(view! {
         site_shell(

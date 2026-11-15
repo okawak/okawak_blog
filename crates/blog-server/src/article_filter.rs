@@ -48,6 +48,7 @@ mod tests {
                 "created_at": "2026-01-01T00:00:00+09:00",
                 "updated_at": "2026-01-01T00:00:00+09:00"
             }))
+            .map(std::sync::Arc::new)
             .unwrap()
         };
         vec![
@@ -95,7 +96,8 @@ mod tests {
     #[test]
     fn bounds_untrusted_query_by_unicode_characters() {
         let mut actual = sections();
-        actual[0].articles[0].tags = vec!["あ".repeat(MAX_QUERY_CHARS)];
+        std::sync::Arc::make_mut(&mut actual[0].articles[0]).tags =
+            vec!["あ".repeat(MAX_QUERY_CHARS)];
         filter_sections(
             &mut actual,
             &format!("{}ignored", "あ".repeat(MAX_QUERY_CHARS)),

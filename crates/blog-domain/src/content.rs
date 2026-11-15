@@ -144,8 +144,9 @@ impl PublicContentMeta {
         Ok(())
     }
 
+    /// Build the canonical route in a locale without copying the metadata.
     /// Call validate before routing a deserialized document.
-    pub fn path(&self) -> String {
+    pub fn path(&self, locale: Locale) -> String {
         let path = match self.kind {
             ContentKind::Article => format!(
                 "/{}/{}",
@@ -158,6 +159,6 @@ impl PublicContentMeta {
             ContentKind::Page => format!("/{}", self.page.as_ref().map_or_default(PageKey::as_str)),
             ContentKind::Home => "/".into(),
         };
-        self.locale.path(&path)
+        locale.path(&path)
     }
 }

@@ -127,7 +127,7 @@ fn extract(root: &Path, previous: &[Document]) -> Result<Vec<VaultNote>> {
             translation: None,
         };
         meta.validate()?;
-        if !routes.insert(meta.path()) {
+        if !routes.insert(meta.path(meta.locale)) {
             return Err(ExportError::invalid_input("duplicate public route"));
         }
         notes.push(VaultNote {

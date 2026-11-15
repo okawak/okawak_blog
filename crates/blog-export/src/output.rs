@@ -30,17 +30,41 @@ pub(crate) fn read_locale(root: &Path, locale: blog_domain::Locale) -> Result<Ve
         .collect()
 }
 
-pub(crate) fn reconcile(stage: &Path, previous: &[Document], documents: &[Document]) -> Result<()> {
-    let ids = documents.iter().map(|d| d.meta.id.clone()).collect();
-    fs::create_dir_all(stage.join("ja"))?;
-    archive_removed(stage, &ids)?;
-    sync_documents(stage, previous, documents)
+pub(crate) fn read_document(root: &Path, locale: Locale, id: &Slug) -> Result<Option<Document>> {
+    let path = root.join(locale.as_str()).join(format!("{id}.md"));
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => {
+            return Err(ExportError::invalid_input(
+                "public document must be a regular file",
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    }
+    let document = Document::parse(&fs::read_to_string(path)?)?;
+    if document.meta.locale != locale || document.meta.id != *id {
+        return Err(ExportError::invalid_input(
+            "public filename/locale must match its metadata",
+        ));
+    }
+    Ok(Some(document))
 }
 
-fn archive_removed(stage: &Path, ids: &HashSet<Slug>) -> Result<()> {
+pub(crate) fn reconcile(stage: &Path, documents: &[(Option<&Document>, &Document)]) -> Result<()> {
+    let ids = documents.iter().map(|(_, d)| d.meta.id.as_str()).collect();
+    fs::create_dir_all(stage.join("ja"))?;
+    archive_removed(stage, &ids)?;
+    for &(previous, document) in documents {
+        sync_document(stage, previous, document)?;
+    }
+    Ok(())
+}
+
+fn archive_removed(stage: &Path, ids: &HashSet<&str>) -> Result<()> {
     for locale in Locale::ALL {
         for old in read_locale(stage, locale)? {
-            if !ids.contains(&old.meta.id) {
+            if !ids.contains(old.meta.id.as_str()) {
                 let path = stage.join(format!("{locale}/{}.md", old.meta.id));
                 let archive = stage.join(".export-archive").join(format!(
                     "{locale}-{}-{}.md",
@@ -55,31 +79,22 @@ fn archive_removed(stage: &Path, ids: &HashSet<Slug>) -> Result<()> {
     Ok(())
 }
 
-fn sync_documents(stage: &Path, previous: &[Document], documents: &[Document]) -> Result<()> {
-    for document in documents {
-        let english_path = stage.join(format!("en/{}.md", document.meta.id));
-        if english_path.exists() {
-            let mut english = Document::parse(&fs::read_to_string(&english_path)?)?;
-            let mut provenance = english.meta.translation.take();
-            if previous
-                .iter()
-                .find(|d| d.meta.id == document.meta.id)
-                .map(crate::content::text_hash)
-                .transpose()?
-                != Some(crate::content::text_hash(document)?)
-                && let Some(provenance) = &mut provenance
-            {
-                provenance.stale = true;
-            }
-            english.meta.translation = provenance;
-            english.refresh_translation_metadata(document);
-            fs::write(english_path, english.encode()?)?;
+fn sync_document(stage: &Path, previous: Option<&Document>, document: &Document) -> Result<()> {
+    let english_path = stage.join(format!("en/{}.md", document.meta.id));
+    if let Some(mut english) = read_document(stage, Locale::En, &document.meta.id)? {
+        if previous.map(crate::content::text_hash).transpose()?
+            != Some(crate::content::text_hash(document)?)
+            && let Some(provenance) = &mut english.meta.translation
+        {
+            provenance.stale = true;
         }
-        fs::write(
-            stage.join(format!("ja/{}.md", document.meta.id)),
-            document.encode()?,
-        )?;
+        english.refresh_translation_metadata(document);
+        fs::write(english_path, english.encode()?)?;
     }
+    fs::write(
+        stage.join(format!("ja/{}.md", document.meta.id)),
+        document.encode()?,
+    )?;
     Ok(())
 }
 
@@ -191,6 +206,53 @@ mod tests {
     }
 
     #[test]
+    fn direct_document_read_distinguishes_missing_from_invalid_documents() {
+        let root = tempfile::tempdir().unwrap();
+        let id = "article".parse().unwrap();
+        assert!(
+            read_document(root.path(), Locale::Ja, &id)
+                .unwrap()
+                .is_none()
+        );
+        fs::create_dir(root.path().join("ja")).unwrap();
+        let path = root.path().join("ja/article.md");
+        let original = document();
+        fs::write(&path, original.encode().unwrap()).unwrap();
+        let actual = read_document(root.path(), Locale::Ja, &id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(actual.encode().unwrap(), original.encode().unwrap());
+        for content in ["invalid Markdown".as_bytes(), &[255]] {
+            fs::write(&path, content).unwrap();
+            assert!(read_document(root.path(), Locale::Ja, &id).is_err());
+        }
+        for (wrong_id, wrong_locale) in [("other", Locale::Ja), ("article", Locale::En)] {
+            let mut invalid = original.clone();
+            invalid.meta.id = wrong_id.parse().unwrap();
+            invalid.meta.locale = wrong_locale;
+            fs::write(&path, invalid.encode().unwrap()).unwrap();
+            assert!(read_document(root.path(), Locale::Ja, &id).is_err());
+        }
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(&path).unwrap();
+        assert!(read_document(root.path(), Locale::Ja, &id).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn direct_document_read_rejects_symlinks_including_broken_links() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("ja")).unwrap();
+        let target = root.path().join("target.md");
+        fs::write(&target, document().encode().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&target, root.path().join("ja/article.md")).unwrap();
+        let id = "article".parse().unwrap();
+        assert!(read_document(root.path(), Locale::Ja, &id).is_err());
+        fs::remove_file(target).unwrap();
+        assert!(read_document(root.path(), Locale::Ja, &id).is_err());
+    }
+
+    #[test]
     fn syncing_marks_only_changed_source_text_stale_and_preserves_english_prose() {
         for changed in [false, true] {
             let root = tempfile::tempdir().unwrap();
@@ -212,7 +274,7 @@ mod tests {
                 stale: false,
             });
             fs::write(root.path().join("en/article.md"), english.encode().unwrap()).unwrap();
-            sync_documents(root.path(), &[previous], &[current]).unwrap();
+            sync_document(root.path(), Some(&previous), &current).unwrap();
             let actual = read_locale(root.path(), Locale::En).unwrap().remove(0);
             assert_eq!(actual.meta.translation.unwrap().stale, changed);
             assert_eq!(actual.meta.summary, english.meta.summary);

@@ -1,6 +1,7 @@
 //! Conditional HTTP caching for artifact-backed responses.
 
 use blog_infra::{ArtifactSourceConfig, DynArtifactReader, DynArtifactSnapshot};
+use headers::{ETag, HeaderMapExt, IfNoneMatch};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
@@ -29,7 +30,7 @@ pub struct ArtifactHttpCacheState {
 }
 
 struct ArtifactValidators {
-    etag: String,
+    etag: ETag,
     last_modified: Option<SystemTime>,
 }
 
@@ -151,30 +152,21 @@ impl ArtifactConditionalGetDecision {
     }
 }
 
-fn build_weak_etag(process_tag: &str, snapshot_identity: &str, uri: &Uri) -> String {
+fn build_weak_etag(process_tag: &str, snapshot_identity: &str, uri: &Uri) -> ETag {
     let mut hasher = DefaultHasher::new();
     process_tag.hash(&mut hasher);
     snapshot_identity.hash(&mut hasher);
     uri.hash(&mut hasher);
     format!("W/\"{:016x}\"", hasher.finish())
+        .parse()
+        .expect("generated ETag is valid")
 }
 
-fn if_none_match_matches(headers: &HeaderMap, current_etag: &str) -> bool {
-    let current_opaque = weak_opaque_tag(current_etag);
-    headers
-        .get_all(header::IF_NONE_MATCH)
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .flat_map(|value| value.split(','))
-        .any(|candidate| {
-            let candidate = candidate.trim();
-            candidate != "*" && weak_opaque_tag(candidate) == current_opaque
-        })
-}
-
-fn weak_opaque_tag(etag: &str) -> Option<&str> {
-    let etag = etag.trim().trim_prefix("W/");
-    (etag.len() >= 2 && etag.starts_with('"') && etag.ends_with('"')).then_some(etag)
+fn if_none_match_matches(headers: &HeaderMap, etag: &ETag) -> bool {
+    headers.typed_get::<IfNoneMatch>().is_some_and(|condition| {
+        // A wildcard alone cannot establish that this route exists before rendering.
+        condition != IfNoneMatch::any() && !condition.precondition_passes(etag)
+    })
 }
 
 fn if_modified_since_not_modified(headers: &HeaderMap, last_modified: SystemTime) -> bool {
@@ -208,10 +200,7 @@ fn representation_last_modified(
 }
 
 fn insert_cache_headers(headers: &mut HeaderMap, validators: &ArtifactValidators) {
-    headers.insert(
-        header::ETAG,
-        HeaderValue::from_str(&validators.etag).expect("generated ETag is a valid header value"),
-    );
+    headers.typed_insert(validators.etag.clone());
     if let Some(last_modified) = validators.last_modified {
         headers.insert(
             header::LAST_MODIFIED,
@@ -272,13 +261,32 @@ mod tests {
     }
 
     #[test]
-    fn opaque_tags_require_both_quotes_and_at_least_two_characters() {
-        for invalid in ["", "\"", "W/\"", "\"open", "close\"", "unquoted"] {
-            assert_eq!(weak_opaque_tag(invalid), None, "{invalid:?}");
+    fn conditional_etags_use_weak_comparison_and_do_not_short_circuit_wildcards() {
+        for (value, expected) in [
+            ("\"tag\"", true),
+            ("W/\"tag\"", true),
+            ("\"other\", W/\"tag\"", true),
+            ("\"other\"", false),
+            ("*", false),
+            ("", false),
+            ("unquoted", false),
+            ("\"open", false),
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert(header::IF_NONE_MATCH, HeaderValue::from_static(value));
+            assert_eq!(
+                if_none_match_matches(&headers, &"W/\"tag\"".parse().unwrap()),
+                expected,
+                "{value}"
+            );
         }
-        for (value, expected) in [("\"\"", "\"\""), (" W/\"tag\" ", "\"tag\"")] {
-            assert_eq!(weak_opaque_tag(value), Some(expected));
-        }
+        let mut headers = HeaderMap::new();
+        headers.append(header::IF_NONE_MATCH, HeaderValue::from_static("\"other\""));
+        headers.append(header::IF_NONE_MATCH, HeaderValue::from_static("\"tag\""));
+        assert!(if_none_match_matches(
+            &headers,
+            &"W/\"tag\"".parse().unwrap()
+        ));
     }
 
     fn release_last_modified() -> SystemTime {
@@ -312,30 +320,34 @@ mod tests {
             self.last_modified
         }
 
-        async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
+        async fn read_article_index(&self) -> Result<Arc<ArticleIndexDocument>> {
             unreachable!()
         }
 
         async fn read_category_document(
             &self,
             _category: &Category,
-        ) -> Result<CategoryArtifactDocument> {
+        ) -> Result<Arc<CategoryArtifactDocument>> {
             unreachable!()
         }
 
-        async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
+        async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
             unreachable!()
         }
 
-        async fn read_article_html(&self, _category: &Category, _slug: &Slug) -> Result<String> {
+        async fn read_article(
+            &self,
+            _category: &Category,
+            _slug: &Slug,
+        ) -> Result<Option<Arc<blog_domain::PublishableArticle>>> {
             unreachable!()
         }
 
-        async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+        async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
             unreachable!()
         }
 
-        async fn read_page_document(&self, _page: &PageKey) -> Result<PageArtifactDocument> {
+        async fn read_page_document(&self, _page: &PageKey) -> Result<Arc<PageArtifactDocument>> {
             unreachable!()
         }
     }
@@ -386,18 +398,6 @@ mod tests {
             Some(newer_process)
         );
         assert_eq!(representation_last_modified(None, newer_process), None);
-    }
-
-    #[test]
-    fn if_none_match_uses_weak_comparison_and_ignores_wildcard() {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            header::IF_NONE_MATCH,
-            HeaderValue::from_static("\"other\", \"current\""),
-        );
-        assert!(if_none_match_matches(&headers, "W/\"current\""));
-        headers.insert(header::IF_NONE_MATCH, HeaderValue::from_static("*"));
-        assert!(!if_none_match_matches(&headers, "W/\"current\""));
     }
 
     #[test]

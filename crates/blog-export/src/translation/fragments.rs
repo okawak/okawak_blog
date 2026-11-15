@@ -64,27 +64,26 @@ impl Fragments {
         if !self.texts.keys().eq(result.keys()) {
             return Err(ExportError::invalid_translation("fragment keys changed"));
         }
-        let mut translated = source.clone();
-        translated.meta.title = result["title"].parse()?;
-        translated.meta.summary = result.get("summary").cloned();
-        for fragment in self.ranges.iter().rev() {
+        let mut meta = source.meta.clone();
+        meta.title = result["title"].parse()?;
+        meta.summary = result.get("summary").cloned();
+        let mut body = String::with_capacity(source.body.len());
+        let mut cursor = 0;
+        for fragment in &self.ranges {
             let value = &result[&fragment.key];
             if value.contains('\n') {
                 return Err(ExportError::invalid_translation(
                     "translated inline fragment contains a line break",
                 ));
             }
-            translated.body.replace_range(
-                fragment.range.clone(),
-                &format!(
-                    "{}{}{}",
-                    fragment.leading,
-                    escape(value.trim()),
-                    fragment.trailing
-                ),
-            );
+            body.push_str(&source.body[cursor..fragment.range.start]);
+            body.push_str(&fragment.leading);
+            escape_into(value.trim(), &mut body);
+            body.push_str(&fragment.trailing);
+            cursor = fragment.range.end;
         }
-        Ok(translated)
+        body.push_str(&source.body[cursor..]);
+        Ok(Document { meta, body })
     }
 }
 
@@ -131,13 +130,50 @@ fn track_inline_html(token: &str, elements: &mut Vec<String>) {
     }
 }
 
-fn escape(text: &str) -> String {
-    let mut result = String::new();
+fn escape_into(text: &str, result: &mut String) {
     for ch in text.chars() {
         if ch.is_ascii_punctuation() {
             result.push('\\');
         }
         result.push(ch);
     }
-    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reconstruction_preserves_unicode_offsets_and_opaque_markdown() {
+        let source = Document {
+            meta: serde_json::from_value(serde_json::json!({
+                "schema_version": 1, "id": "article", "locale": "ja", "kind": "article",
+                "title": "原文", "category": "tech", "tags": [],
+                "created": "2026-01-01T00:00:00Z", "updated": "2026-01-01T00:00:00Z",
+                "source_hash": "a".repeat(64)
+            })).unwrap(),
+            body: "前 **長い強調** `code()` [リンク](https://example.com) 後\n\n```rs\nlet x = 1;\n```\n".into(),
+        };
+        let fragments = Fragments::extract(&source);
+        let result = fragments
+            .texts
+            .iter()
+            .map(|(key, value)| {
+                let value = match value.as_str() {
+                    "前" => "  A much longer beginning!  ",
+                    "長い強調" => "短",
+                    "リンク" => "Link [text]",
+                    "後" => "末尾🙂",
+                    _ => "Title",
+                };
+                (key.clone(), value.to_owned())
+            })
+            .collect();
+        let translated = fragments.apply(&source, &result).unwrap();
+        assert_eq!(
+            translated.body,
+            "A much longer beginning\\! **短** `code()` [Link \\[text\\]](https://example.com) 末尾🙂\n\n```rs\nlet x = 1;\n```\n"
+        );
+        assert_eq!(source.meta.title.as_str(), "原文");
+    }
 }

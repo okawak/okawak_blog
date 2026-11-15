@@ -3,20 +3,25 @@ use super::{
     HomePageDocument, SiteArticleCard, SiteCategorySummary, StaticPageDocument,
 };
 use crate::{
-    ArticleIndexDocument, ArticleSummaryDocument, Category, CategoryArtifactDocument, DomainError,
-    HomeFragmentArtifactDocument, PageArtifactDocument, PublishedArticleSummary, Result,
-    SectionPath, SiteMetadataDocument, Slug,
+    ArticleIndexDocument, ArticleMeta, ArticleSummaryDocument, Category, CategoryArtifactDocument,
+    DomainError, HomeFragmentArtifactDocument, PageArtifactDocument, PublishableArticle, Result,
+    SectionPath, SiteMetadataDocument,
 };
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 impl TryFrom<&ArticleSummaryDocument> for SiteArticleCard {
     type Error = DomainError;
 
     fn try_from(document: &ArticleSummaryDocument) -> Result<Self> {
-        let summary = PublishedArticleSummary::try_from(document)?;
+        Ok(ArticleMeta::try_from(document.clone())?.into())
+    }
+}
+
+impl From<ArticleMeta> for SiteArticleCard {
+    fn from(summary: ArticleMeta) -> Self {
         let category = summary.category;
 
-        Ok(Self {
+        Self {
             slug: summary.slug,
             title: summary.title,
             category,
@@ -30,7 +35,7 @@ impl TryFrom<&ArticleSummaryDocument> for SiteArticleCard {
             priority: summary.priority,
             created_at: summary.created_at.to_string(),
             updated_at: summary.updated_at.to_string(),
-        })
+        }
     }
 }
 
@@ -79,18 +84,11 @@ fn build_home_fragment_document(
     })
 }
 
-pub fn build_article_page_document(
-    summary: &ArticleSummaryDocument,
-    html: &str,
-) -> Result<ArticlePageDocument> {
-    if html.trim().is_empty() {
-        return Err(DomainError::validation("html"));
+pub fn build_article_page_document(article: &PublishableArticle) -> ArticlePageDocument {
+    ArticlePageDocument {
+        article: article.meta.clone().into(),
+        html: article.body.as_str().to_owned(),
     }
-
-    Ok(ArticlePageDocument {
-        article: SiteArticleCard::try_from(summary)?,
-        html: html.to_string(),
-    })
 }
 
 pub fn build_category_page_document(
@@ -102,7 +100,7 @@ pub fn build_category_page_document(
     let articles = artifact
         .articles
         .iter()
-        .map(SiteArticleCard::try_from)
+        .map(|article| SiteArticleCard::try_from(article).map(Arc::new))
         .collect::<Result<Vec<_>>>()?;
     let sections = build_category_section_groups(&articles);
 
@@ -127,21 +125,10 @@ pub fn build_static_page_document(artifact: &PageArtifactDocument) -> Result<Sta
     })
 }
 
-pub fn find_article_summary<'a>(
-    article_index: &'a ArticleIndexDocument,
-    category: &Category,
-    slug: &Slug,
-) -> Option<&'a ArticleSummaryDocument> {
-    article_index
-        .articles
-        .iter()
-        .find(|article| article.slug == slug.as_str() && article.category == category.as_str())
-}
-
-fn build_category_section_groups(articles: &[SiteArticleCard]) -> Vec<CategorySectionGroup> {
+fn build_category_section_groups(articles: &[Arc<SiteArticleCard>]) -> Vec<CategorySectionGroup> {
     use std::collections::BTreeMap;
 
-    let mut grouped: BTreeMap<SectionPath, Vec<SiteArticleCard>> = BTreeMap::new();
+    let mut grouped: BTreeMap<SectionPath, Vec<Arc<SiteArticleCard>>> = BTreeMap::new();
     for article in articles {
         grouped
             .entry(article.section_path.clone())
@@ -254,19 +241,13 @@ mod tests {
 
     #[test]
     fn builds_article_page_document() {
-        let document =
-            build_article_page_document(&sample_summary(), "<article><h1>Intro</h1></article>")
-                .unwrap();
-
+        let article = PublishableArticle::new(
+            ArticleMeta::try_from(sample_summary()).unwrap(),
+            crate::ArticleBody::new("<article><h1>Intro</h1></article>".into()).unwrap(),
+        );
+        let document = build_article_page_document(&article);
         assert_eq!(document.article.slug.as_str(), "intro00000001");
         assert!(document.html.contains("<h1>Intro</h1>"));
-    }
-
-    #[test]
-    fn rejects_blank_article_html() {
-        let result = build_article_page_document(&sample_summary(), "   ");
-
-        assert_eq!(result, Err(DomainError::validation("html")));
     }
 
     #[test]
@@ -291,6 +272,10 @@ mod tests {
         assert_eq!(document.articles.len(), 1);
         assert_eq!(document.sections.len(), 1);
         assert_eq!(document.sections[0].heading, "block");
+        assert!(Arc::ptr_eq(
+            &document.articles[0],
+            &document.sections[0].articles[0]
+        ));
     }
 
     #[test]
@@ -320,42 +305,6 @@ mod tests {
         });
 
         assert_eq!(result, Err(DomainError::validation("html")));
-    }
-
-    #[test]
-    fn finds_article_summary_by_category_and_slug() {
-        let index = ArticleIndexDocument {
-            articles: vec![
-                ArticleSummaryDocument {
-                    category: "daily".into(),
-                    title: "Same slug in another category".into(),
-                    ..sample_summary()
-                },
-                ArticleSummaryDocument {
-                    slug: "other0000001".into(),
-                    title: "Different article in the same category".into(),
-                    ..sample_summary()
-                },
-                sample_summary(),
-            ],
-        };
-        let slug = Slug::new("intro00000001".to_string()).unwrap();
-
-        let article = find_article_summary(&index, &Category::Tech, &slug).unwrap();
-
-        assert_eq!(article.title, "Intro");
-        assert_eq!(
-            find_article_summary(&index, &Category::Physics, &slug),
-            None
-        );
-        assert_eq!(
-            find_article_summary(
-                &index,
-                &Category::Tech,
-                &Slug::new("missing00001".into()).unwrap(),
-            ),
-            None
-        );
     }
 
     #[test]

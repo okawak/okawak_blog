@@ -84,9 +84,9 @@ async fn release_snapshot_preserves_identity_localized_text_and_shared_binary_as
             r#"{"rust":"Rust articles"}"#,
         ),
         event(
-            "releases/one/site/en/articles/tech/intro.html",
+            "releases/one/site/en/articles/tech/intro.json",
             200,
-            "<p>English 日本</p>",
+            article_json("<p>English 日本</p>"),
         ),
         event(
             &format!("releases/one/site/content-assets/{}", name.as_str()),
@@ -111,19 +111,22 @@ async fn release_snapshot_preserves_identity_localized_text_and_shared_binary_as
     assert_eq!(english.cache_identity(), snapshot.cache_identity());
     assert_eq!(english.last_modified(), snapshot.last_modified());
     assert_eq!(
-        english.read_tag_labels().await.unwrap(),
+        *english.read_tag_labels().await.unwrap(),
         [("rust".into(), "Rust articles".into())].into()
     );
     assert_eq!(
         english
-            .read_article_html(&Category::Tech, &Slug::new("intro".into()).unwrap())
+            .read_article(&Category::Tech, &Slug::new("intro".into()).unwrap())
             .await
-            .unwrap(),
+            .unwrap()
+            .unwrap()
+            .body
+            .as_str(),
         "<p>English 日本</p>"
     );
     assert_eq!(
         english.read_content_asset(&name).await.unwrap(),
-        Some(vec![0, 255, 10])
+        Some(vec![0, 255, 10].into())
     );
     assert_eq!(english.read_locales().await.unwrap(), catalog);
     transport.assert_requests_match(&[]);
@@ -144,7 +147,7 @@ async fn missing_pointer_and_optional_objects_keep_legacy_japanese_behavior() {
     assert_eq!(snapshot.last_modified(), None);
     assert_eq!(
         snapshot.read_locales().await.unwrap(),
-        SiteLocalesDocument::default()
+        SiteLocalesDocument::default().into()
     );
     assert!(snapshot.read_tag_labels().await.unwrap().is_empty());
     assert_eq!(snapshot.read_content_asset(&name).await.unwrap(), None);
@@ -199,6 +202,59 @@ async fn optional_tags_propagate_decoding_errors(#[case] body: Vec<u8>) {
             .await
             .unwrap()
             .read_tag_labels()
+            .await
+            .is_err()
+    );
+    transport.assert_requests_match(&[]);
+}
+
+fn article_json(html: &str) -> String {
+    serde_json::json!({
+        "summary": {
+            "category": "tech", "slug": "intro", "title": "Intro", "section_path": [],
+            "description": null, "tags": [], "priority": null,
+            "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z"
+        }, "html": html
+    })
+    .to_string()
+}
+
+#[rstest]
+#[case::no_such_key("<Error><Code>NoSuchKey</Code><Message>missing</Message></Error>")]
+#[case::http_status_only("")]
+#[tokio::test]
+async fn missing_article_json_does_not_request_index_or_html(#[case] body: &str) {
+    let (reader, transport) = reader(vec![
+        missing("current.json"),
+        event("articles/tech/intro.json", 404, body),
+    ]);
+    let snapshot = reader.snapshot().await.unwrap();
+    assert!(
+        snapshot
+            .read_article(&Category::Tech, &"intro".parse().unwrap())
+            .await
+            .unwrap()
+            .is_none()
+    );
+    transport.assert_requests_match(&[]);
+}
+
+#[rstest]
+#[case::access_denied(403, "<Error><Code>AccessDenied</Code></Error>".into())]
+#[case::misleading_message(403, "<Error><Code>AccessDenied</Code><Message>not found: 404 NoSuchKey</Message></Error>".into())]
+#[case::malformed_json(200, "invalid json".into())]
+#[case::empty_html(200, article_json("  "))]
+#[case::wrong_identity(200, article_json("<p>Intro</p>").replace("intro", "other"))]
+#[tokio::test]
+async fn article_errors_are_propagated(#[case] status: u16, #[case] body: String) {
+    let (reader, transport) = reader(vec![
+        missing("current.json"),
+        event("articles/tech/intro.json", status, body),
+    ]);
+    let snapshot = reader.snapshot().await.unwrap();
+    assert!(
+        snapshot
+            .read_article(&Category::Tech, &"intro".parse().unwrap())
             .await
             .is_err()
     );

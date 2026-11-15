@@ -9,12 +9,33 @@ cp -R "$repo_root/e2e/fixtures/site" "$validation_tmp/valid"
 rm "$validation_tmp/valid/categories/physics.json"
 cp -R "$validation_tmp/valid" "$validation_tmp/site"
 bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/site"
-rm "$validation_tmp/site/en/articles/tech/e2e-article.html"
+# Both locales use article JSON.
+for article_mode in missing malformed mismatch; do
+  cp -R "$validation_tmp/valid" "$validation_tmp/article-$article_mode"
+  article_path="$validation_tmp/article-$article_mode/articles/tech/e2e-article.json"
+  case "$article_mode" in
+    missing)
+      # An HTML file cannot replace the required article JSON.
+      jq -r '.html' "$article_path" > "${article_path%.json}.html"
+      rm "$article_path"
+      ;;
+    malformed) printf '%s\n' 'invalid json' > "$article_path" ;;
+    mismatch)
+      jq '.summary.title = "Different title"' "$article_path" > "$validation_tmp/article.json"
+      mv "$validation_tmp/article.json" "$article_path"
+      ;;
+  esac
+  if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/article-$article_mode" >/dev/null 2>&1; then
+    echo "Invalid article JSON must stop publication: $article_mode" >&2
+    exit 1
+  fi
+done
+rm "$validation_tmp/site/en/articles/tech/e2e-article.json"
 if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/site" >/dev/null 2>&1; then
   echo "Missing English article must stop publication" >&2
   exit 1
 fi
-cp "$repo_root/e2e/fixtures/site/en/articles/tech/e2e-article.html" "$validation_tmp/site/en/articles/tech/"
+cp "$repo_root/e2e/fixtures/site/en/articles/tech/e2e-article.json" "$validation_tmp/site/en/articles/tech/"
 printf '%s\n' '{"total_articles":99}' > "$validation_tmp/site/en/metadata/site.json"
 if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/site" >/dev/null 2>&1; then
   echo "Inconsistent English count must stop publication" >&2

@@ -1,8 +1,8 @@
 //! CLI validation of completed artifacts using the same blog-domain builders as SSR.
 use anyhow::{Context, Result, ensure};
 use blog_domain::{
-    ArticleIndexDocument, CategoryArtifactDocument, HomeFragmentArtifactDocument,
-    PageArtifactDocument, SiteLocalesDocument, SiteMetadataDocument, build_article_page_document,
+    ArticleArtifactDocument, ArticleIndexDocument, CategoryArtifactDocument,
+    HomeFragmentArtifactDocument, PageArtifactDocument, SiteLocalesDocument, SiteMetadataDocument,
     build_category_page_document, build_home_page_document, build_static_page_document,
 };
 use serde::de::DeserializeOwned;
@@ -27,11 +27,16 @@ pub(crate) fn validate(root: &Path) -> Result<()> {
         build_home_page_document(&index, &metadata, home.as_ref())?;
         for article in &index.articles {
             let path = root.join(format!(
-                "articles/{}/{}.html",
+                "articles/{}/{}.json",
                 article.category, article.slug
             ));
-            let html = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
-            build_article_page_document(article, &html)?;
+            let document: ArticleArtifactDocument = read_json(&path)?;
+            ensure!(
+                document.summary == *article,
+                "article summary differs from index: {}",
+                path.display()
+            );
+            document.into_article(&article.category.parse()?, &article.slug.parse()?)?;
         }
         for path in json_files(&root.join("categories"))? {
             let category: CategoryArtifactDocument = read_json(&path)?;
