@@ -84,9 +84,9 @@ async fn release_snapshot_preserves_identity_localized_text_and_shared_binary_as
             r#"{"rust":"Rust articles"}"#,
         ),
         event(
-            "releases/one/site/en/articles/tech/intro.html",
+            "releases/one/site/en/articles/tech/intro.json",
             200,
-            "<p>English 日本</p>",
+            article_json("<p>English 日本</p>"),
         ),
         event(
             &format!("releases/one/site/content-assets/{}", name.as_str()),
@@ -116,10 +116,11 @@ async fn release_snapshot_preserves_identity_localized_text_and_shared_binary_as
     );
     assert_eq!(
         english
-            .read_article_html(&Category::Tech, &Slug::new("intro".into()).unwrap())
+            .read_article(&Category::Tech, &Slug::new("intro".into()).unwrap())
             .await
             .unwrap()
-            .as_str(),
+            .unwrap()
+            .html,
         "<p>English 日本</p>"
     );
     assert_eq!(
@@ -200,6 +201,67 @@ async fn optional_tags_propagate_decoding_errors(#[case] body: Vec<u8>) {
             .await
             .unwrap()
             .read_tag_labels()
+            .await
+            .is_err()
+    );
+    transport.assert_requests_match(&[]);
+}
+
+fn article_json(html: &str) -> String {
+    serde_json::json!({
+        "summary": {
+            "category": "tech", "slug": "intro", "title": "Intro", "section_path": [],
+            "description": null, "tags": [], "priority": null,
+            "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z"
+        }, "html": html
+    })
+    .to_string()
+}
+
+#[tokio::test]
+async fn missing_article_json_reads_legacy_index_and_html() {
+    let article: serde_json::Value = serde_json::from_str(&article_json("<p>Legacy</p>")).unwrap();
+    let (reader, transport) = reader(vec![
+        missing("current.json"),
+        missing("articles/tech/intro.json"),
+        event(
+            "articles/index.json",
+            200,
+            serde_json::json!({"articles": [article["summary"]]}).to_string(),
+        ),
+        event("articles/tech/intro.html", 200, "<p>Legacy</p>"),
+    ]);
+    let snapshot = reader.snapshot().await.unwrap();
+    assert_eq!(
+        snapshot
+            .read_article(&Category::Tech, &"intro".parse().unwrap())
+            .await
+            .unwrap()
+            .unwrap()
+            .html,
+        "<p>Legacy</p>"
+    );
+    transport.assert_requests_match(&[]);
+}
+
+#[rstest]
+#[case::access_denied(403, "<Error><Code>AccessDenied</Code></Error>".into())]
+#[case::malformed_json(200, "invalid json".into())]
+#[case::empty_html(200, article_json("  "))]
+#[case::wrong_identity(200, article_json("<p>Intro</p>").replace("intro", "other"))]
+#[tokio::test]
+async fn article_errors_do_not_fall_back_to_legacy_storage(
+    #[case] status: u16,
+    #[case] body: String,
+) {
+    let (reader, transport) = reader(vec![
+        missing("current.json"),
+        event("articles/tech/intro.json", status, body),
+    ]);
+    let snapshot = reader.snapshot().await.unwrap();
+    assert!(
+        snapshot
+            .read_article(&Category::Tech, &"intro".parse().unwrap())
             .await
             .is_err()
     );

@@ -3,7 +3,7 @@ mod path;
 
 pub use builder::{
     build_article_page_document, build_category_page_document, build_home_page_document,
-    build_static_page_document, find_article_summary,
+    build_static_page_document,
 };
 pub use path::{
     build_article_page_canonical_path, build_article_path, build_category_page_canonical_path,

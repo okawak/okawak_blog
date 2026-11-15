@@ -50,14 +50,14 @@ for locale in $(jq -r '.routes["/"][]' "$root/locales.json"); do
   done < <(jq -r '.categories[].category' "$locale_root/metadata/site.json")
   while IFS=$'\t' read -r category slug; do
     jq -e --arg route "/$category/$slug" --arg locale "$locale" '.routes[$route] | index($locale) != null' "$root/locales.json" >/dev/null
-    test -s "$locale_root/articles/$category/$slug.html"
+    test -s "$locale_root/articles/$category/$slug.json" || test -s "$locale_root/articles/$category/$slug.html"
   done < <(jq -r '.articles[] | [.category, .slug] | @tsv' "$locale_root/articles/index.json")
   while IFS= read -r route; do
     case "$route" in
       /) ;;
       /about) test -s "$locale_root/pages/about.json" ;;
       /*/*)
-        test -s "$locale_root/articles${route}.html"
+        test -s "$locale_root/articles${route}.json" || test -s "$locale_root/articles${route}.html"
         jq -e --arg route "$route" 'any(.articles[]; "/" + .category + "/" + .slug == $route)' "$locale_root/articles/index.json" >/dev/null
         ;;
       /*) test -s "$locale_root/categories${route}.json" ;;

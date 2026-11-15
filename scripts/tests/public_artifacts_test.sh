@@ -9,6 +9,23 @@ cp -R "$repo_root/e2e/fixtures/site" "$validation_tmp/valid"
 rm "$validation_tmp/valid/categories/physics.json"
 cp -R "$validation_tmp/valid" "$validation_tmp/site"
 bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/site"
+# Both the single-document format (Japanese) and legacy HTML (English) are checked.
+for article_mode in missing malformed mismatch; do
+  cp -R "$validation_tmp/valid" "$validation_tmp/article-$article_mode"
+  article_path="$validation_tmp/article-$article_mode/articles/tech/e2e-article.json"
+  case "$article_mode" in
+    missing) rm "$article_path" ;;
+    malformed) printf '%s\n' 'invalid json' > "$article_path" ;;
+    mismatch)
+      jq '.summary.title = "Different title"' "$article_path" > "$validation_tmp/article.json"
+      mv "$validation_tmp/article.json" "$article_path"
+      ;;
+  esac
+  if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/article-$article_mode" >/dev/null 2>&1; then
+    echo "Invalid article JSON must stop publication: $article_mode" >&2
+    exit 1
+  fi
+done
 rm "$validation_tmp/site/en/articles/tech/e2e-article.html"
 if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/site" >/dev/null 2>&1; then
   echo "Missing English article must stop publication" >&2

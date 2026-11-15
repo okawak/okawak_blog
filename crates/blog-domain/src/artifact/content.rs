@@ -4,6 +4,40 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+/// A single article can be read without loading the site-wide index.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ArticleArtifactDocument {
+    pub summary: ArticleSummaryDocument,
+    pub html: String,
+}
+
+impl ArticleArtifactDocument {
+    pub fn validate(&self, category: &Category, slug: &Slug) -> crate::Result<()> {
+        if self.summary.category != category.as_str() || self.summary.slug != slug.as_str() {
+            return Err(crate::DomainError::validation("article identity mismatch"));
+        }
+        PublishedArticleSummary::try_from(&self.summary)?;
+        validate_html(&self.html)
+    }
+}
+
+impl From<&crate::ArticleMeta> for ArticleSummaryDocument {
+    fn from(meta: &crate::ArticleMeta) -> Self {
+        Self {
+            slug: meta.slug.to_string(),
+            title: meta.title.to_string(),
+            category: meta.category.to_string(),
+            section_path: meta.section_path.clone(),
+            description: meta.description.clone(),
+            tags: meta.tags.iter().map(ToString::to_string).collect(),
+            priority: meta.priority,
+            created_at: meta.created_at.to_string(),
+            updated_at: meta.updated_at.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ArticleSummaryDocument {

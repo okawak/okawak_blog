@@ -5,9 +5,9 @@ use std::{
 
 use async_trait::async_trait;
 use blog_domain::{
-    ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
-    HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, SiteLocalesDocument,
-    SiteMetadataDocument, Slug,
+    ArticleArtifactDocument, ArticleIndexDocument, Category, CategoryArtifactDocument,
+    ContentAssetName, HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey,
+    SiteLocalesDocument, SiteMetadataDocument, Slug,
 };
 
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, Result};
@@ -106,14 +106,43 @@ impl ArtifactSnapshot for LocalArtifactReader {
         self.read_json("metadata/site.json").await
     }
 
-    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<Arc<String>> {
-        Ok(tokio::fs::read_to_string(self.artifact_path(&format!(
-            "articles/{}/{}.html",
-            category.as_str(),
-            slug.as_str()
-        )))
-        .await?
-        .into())
+    async fn read_article(
+        &self,
+        category: &Category,
+        slug: &Slug,
+    ) -> Result<Option<Arc<ArticleArtifactDocument>>> {
+        let path = format!("articles/{}/{}.json", category.as_str(), slug.as_str());
+        let article = match self.read_json::<ArticleArtifactDocument>(&path).await {
+            Ok(article) => article,
+            Err(error) if error.is_not_found() => {
+                // Legacy releases store metadata in the index and HTML separately.
+                let index = self.read_article_index().await?;
+                let Some(summary) = index.articles.iter().find(|article| {
+                    article.category == category.as_str() && article.slug == slug.as_str()
+                }) else {
+                    return Ok(None);
+                };
+                let html = match tokio::fs::read_to_string(self.artifact_path(&format!(
+                    "articles/{}/{}.html",
+                    category.as_str(),
+                    slug.as_str()
+                )))
+                .await
+                .map_err(crate::InfraError::from)
+                {
+                    Ok(html) => html,
+                    Err(error) if error.is_not_found() => return Ok(None),
+                    Err(error) => return Err(error),
+                };
+                ArticleArtifactDocument {
+                    summary: summary.clone(),
+                    html,
+                }
+            }
+            Err(error) => return Err(error),
+        };
+        article.validate(category, slug)?;
+        Ok(Some(Arc::new(article)))
     }
 
     async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
@@ -239,7 +268,7 @@ mod tests {
             .unwrap();
         let metadata = snapshot.read_site_metadata().await.unwrap();
         let html = snapshot
-            .read_article_html(
+            .read_article(
                 &Category::Tech,
                 &Slug::new("intro00000001".to_string()).unwrap(),
             )
@@ -257,7 +286,7 @@ mod tests {
         assert_eq!(category.title, "Tech");
         assert_eq!(category.html, "<article><h1>Tech</h1></article>");
         assert_eq!(metadata.total_articles, 1);
-        assert_eq!(html.as_str(), "<h1>Intro</h1>");
+        assert_eq!(html.unwrap().html, "<h1>Intro</h1>");
         assert_eq!(page.page.as_str(), "about");
         assert_eq!(page.title, "About");
         assert_eq!(home_fragment.title, "Home");

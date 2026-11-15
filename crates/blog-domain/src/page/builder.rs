@@ -3,9 +3,9 @@ use super::{
     HomePageDocument, SiteArticleCard, SiteCategorySummary, StaticPageDocument,
 };
 use crate::{
-    ArticleIndexDocument, ArticleSummaryDocument, Category, CategoryArtifactDocument, DomainError,
-    HomeFragmentArtifactDocument, PageArtifactDocument, PublishedArticleSummary, Result,
-    SectionPath, SiteMetadataDocument, Slug,
+    ArticleArtifactDocument, ArticleIndexDocument, ArticleSummaryDocument, Category,
+    CategoryArtifactDocument, DomainError, HomeFragmentArtifactDocument, PageArtifactDocument,
+    PublishedArticleSummary, Result, SectionPath, SiteMetadataDocument,
 };
 use std::{str::FromStr, sync::Arc};
 
@@ -80,16 +80,15 @@ fn build_home_fragment_document(
 }
 
 pub fn build_article_page_document(
-    summary: &ArticleSummaryDocument,
-    html: &str,
+    artifact: &ArticleArtifactDocument,
 ) -> Result<ArticlePageDocument> {
-    if html.trim().is_empty() {
+    if artifact.html.trim().is_empty() {
         return Err(DomainError::validation("html"));
     }
 
     Ok(ArticlePageDocument {
-        article: SiteArticleCard::try_from(summary)?,
-        html: html.to_string(),
+        article: SiteArticleCard::try_from(&artifact.summary)?,
+        html: artifact.html.clone(),
     })
 }
 
@@ -125,17 +124,6 @@ pub fn build_static_page_document(artifact: &PageArtifactDocument) -> Result<Sta
         description: artifact.description.clone(),
         html: artifact.html.clone(),
     })
-}
-
-pub fn find_article_summary<'a>(
-    article_index: &'a ArticleIndexDocument,
-    category: &Category,
-    slug: &Slug,
-) -> Option<&'a ArticleSummaryDocument> {
-    article_index
-        .articles
-        .iter()
-        .find(|article| article.slug == slug.as_str() && article.category == category.as_str())
 }
 
 fn build_category_section_groups(articles: &[Arc<SiteArticleCard>]) -> Vec<CategorySectionGroup> {
@@ -254,9 +242,11 @@ mod tests {
 
     #[test]
     fn builds_article_page_document() {
-        let document =
-            build_article_page_document(&sample_summary(), "<article><h1>Intro</h1></article>")
-                .unwrap();
+        let document = build_article_page_document(&ArticleArtifactDocument {
+            summary: sample_summary(),
+            html: "<article><h1>Intro</h1></article>".into(),
+        })
+        .unwrap();
 
         assert_eq!(document.article.slug.as_str(), "intro00000001");
         assert!(document.html.contains("<h1>Intro</h1>"));
@@ -264,7 +254,10 @@ mod tests {
 
     #[test]
     fn rejects_blank_article_html() {
-        let result = build_article_page_document(&sample_summary(), "   ");
+        let result = build_article_page_document(&ArticleArtifactDocument {
+            summary: sample_summary(),
+            html: "   ".into(),
+        });
 
         assert_eq!(result, Err(DomainError::validation("html")));
     }
@@ -324,42 +317,6 @@ mod tests {
         });
 
         assert_eq!(result, Err(DomainError::validation("html")));
-    }
-
-    #[test]
-    fn finds_article_summary_by_category_and_slug() {
-        let index = ArticleIndexDocument {
-            articles: vec![
-                ArticleSummaryDocument {
-                    category: "daily".into(),
-                    title: "Same slug in another category".into(),
-                    ..sample_summary()
-                },
-                ArticleSummaryDocument {
-                    slug: "other0000001".into(),
-                    title: "Different article in the same category".into(),
-                    ..sample_summary()
-                },
-                sample_summary(),
-            ],
-        };
-        let slug = Slug::new("intro00000001".to_string()).unwrap();
-
-        let article = find_article_summary(&index, &Category::Tech, &slug).unwrap();
-
-        assert_eq!(article.title, "Intro");
-        assert_eq!(
-            find_article_summary(&index, &Category::Physics, &slug),
-            None
-        );
-        assert_eq!(
-            find_article_summary(
-                &index,
-                &Category::Tech,
-                &Slug::new("missing00001".into()).unwrap(),
-            ),
-            None
-        );
     }
 
     #[test]

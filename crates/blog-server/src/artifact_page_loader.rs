@@ -111,21 +111,14 @@ impl PageLoader for ArtifactPageLoader {
         let Some((root, snapshot)) = self.for_locale(locale).await? else {
             return Ok(None);
         };
-        let summary = snapshot
-            .read_article_summary(category, slug)
+        let Some(article) = snapshot
+            .read_article(category, slug)
             .await
-            .map_err(|error| error.to_string())?;
-        let Some(summary) = summary else {
+            .map_err(|error| error.to_string())?
+        else {
             return Ok(None);
         };
-        let html = match snapshot.read_article_html(category, slug).await {
-            Ok(html) => html,
-            Err(error) if error.is_not_found() => return Ok(None),
-            Err(error) => return Err(error.to_string()),
-        };
-
-        let document =
-            build_article_page_document(&summary, &html).map_err(|error| error.to_string())?;
+        let document = build_article_page_document(&article).map_err(|error| error.to_string())?;
         presentation(document, &root, &snapshot).await.map(Some)
     }
 
@@ -228,7 +221,11 @@ mod tests {
             panic!("home must not read a category document")
         }
 
-        async fn read_article_html(&self, _: &Category, _: &Slug) -> Result<Arc<String>> {
+        async fn read_article(
+            &self,
+            _: &Category,
+            _: &Slug,
+        ) -> Result<Option<Arc<blog_domain::ArticleArtifactDocument>>> {
             panic!("home must not read article HTML")
         }
 

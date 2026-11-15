@@ -737,8 +737,12 @@ impl ArtifactSnapshot for ValidatorSnapshot {
         self.inner.read_site_metadata().await
     }
 
-    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<Arc<String>> {
-        self.inner.read_article_html(category, slug).await
+    async fn read_article(
+        &self,
+        category: &Category,
+        slug: &Slug,
+    ) -> Result<Option<Arc<blog_domain::ArticleArtifactDocument>>> {
+        self.inner.read_article(category, slug).await
     }
 
     async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {

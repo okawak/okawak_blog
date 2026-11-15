@@ -9,9 +9,10 @@ mod page;
 mod publication;
 
 pub use artifact::{
-    ARTIFACT_RELEASE_SCHEMA_VERSION, ArticleIndexDocument, ArticleSummaryDocument,
-    ArtifactReleasePointerDocument, CategoryArtifactDocument, CategoryMetadataDocument,
-    HomeFragmentArtifactDocument, PageArtifactDocument, SiteLocalesDocument, SiteMetadataDocument,
+    ARTIFACT_RELEASE_SCHEMA_VERSION, ArticleArtifactDocument, ArticleIndexDocument,
+    ArticleSummaryDocument, ArtifactReleasePointerDocument, CategoryArtifactDocument,
+    CategoryMetadataDocument, HomeFragmentArtifactDocument, PageArtifactDocument,
+    SiteLocalesDocument, SiteMetadataDocument,
 };
 pub use asset::ContentAssetName;
 pub use content::{
@@ -26,7 +27,7 @@ pub use page::{
     build_article_page_canonical_path, build_article_page_document, build_article_path,
     build_category_page_canonical_path, build_category_page_document, build_category_path,
     build_home_page_canonical_path, build_home_page_document, build_static_page_canonical_path,
-    build_static_page_document, find_article_summary,
+    build_static_page_document,
 };
 pub use publication::{
     ArticleBody, ArticleMeta, CategoryIndex, CategoryLandingBody, CategoryLandingMeta,

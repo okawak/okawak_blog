@@ -3,9 +3,9 @@ use std::{sync::Arc, time::SystemTime};
 use async_trait::async_trait;
 use aws_sdk_s3::Client;
 use blog_domain::{
-    ArticleIndexDocument, ArtifactReleasePointerDocument, Category, CategoryArtifactDocument,
-    ContentAssetName, HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey,
-    SiteLocalesDocument, SiteMetadataDocument, Slug,
+    ArticleArtifactDocument, ArticleIndexDocument, ArtifactReleasePointerDocument, Category,
+    CategoryArtifactDocument, ContentAssetName, HomeFragmentArtifactDocument, Locale,
+    PageArtifactDocument, PageKey, SiteLocalesDocument, SiteMetadataDocument, Slug,
 };
 
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, InfraError, Result};
@@ -244,14 +244,43 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
         self.read_json("metadata/site.json").await
     }
 
-    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<Arc<String>> {
-        self.read_text(&format!(
-            "articles/{}/{}.html",
-            category.as_str(),
-            slug.as_str()
-        ))
-        .await
-        .map(Arc::new)
+    async fn read_article(
+        &self,
+        category: &Category,
+        slug: &Slug,
+    ) -> Result<Option<Arc<ArticleArtifactDocument>>> {
+        let path = format!("articles/{}/{}.json", category.as_str(), slug.as_str());
+        let article = match self.read_json::<ArticleArtifactDocument>(&path).await {
+            Ok(article) => article,
+            Err(error) if error.is_not_found() => {
+                // Legacy releases store metadata in the index and HTML separately.
+                let index = self.read_article_index().await?;
+                let Some(summary) = index.articles.iter().find(|article| {
+                    article.category == category.as_str() && article.slug == slug.as_str()
+                }) else {
+                    return Ok(None);
+                };
+                let html = match self
+                    .read_text(&format!(
+                        "articles/{}/{}.html",
+                        category.as_str(),
+                        slug.as_str()
+                    ))
+                    .await
+                {
+                    Ok(html) => html,
+                    Err(error) if error.is_not_found() => return Ok(None),
+                    Err(error) => return Err(error),
+                };
+                ArticleArtifactDocument {
+                    summary: summary.clone(),
+                    html,
+                }
+            }
+            Err(error) => return Err(error),
+        };
+        article.validate(category, slug)?;
+        Ok(Some(Arc::new(article)))
     }
 
     async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {

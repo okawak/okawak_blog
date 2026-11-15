@@ -86,9 +86,9 @@ async fn test_publish_writes_article_index_and_metadata(#[case] padded_metadata:
         .unwrap();
 
     let site_root = fixture.site_root();
-    let html_files = collect_html_files(&site_root.join("articles"));
-    assert_eq!(html_files.len(), 1);
-    let html = fs::read_to_string(&html_files[0]).unwrap();
+    let article_files = collect_article_files(&site_root.join("articles"));
+    assert_eq!(article_files.len(), 1);
+    let html = read_json::<blog_domain::ArticleArtifactDocument>(&article_files[0]).html;
     assert!(html.contains("Required Article"));
     assert!(html.contains("This article makes the fixture deployable."));
 
@@ -135,10 +135,10 @@ async fn test_publish_resolves_links_to_all_content_kinds() {
         .await
         .unwrap();
 
-    let html_path = collect_html_files(&fixture.site_root().join("articles"))
+    let html_path = collect_article_files(&fixture.site_root().join("articles"))
         .pop()
         .unwrap();
-    let html = fs::read_to_string(html_path).unwrap();
+    let html = read_json::<blog_domain::ArticleArtifactDocument>(html_path).html;
     for expected in [
         r#"href="/about">About</a>"#,
         r#"href="/">Home</a>"#,
@@ -340,10 +340,10 @@ async fn test_publish_uses_injected_bookmark_enricher() {
     .await
     .unwrap();
 
-    let html_path = collect_html_files(&fixture.site_root().join("articles"))
+    let html_path = collect_article_files(&fixture.site_root().join("articles"))
         .pop()
         .unwrap();
-    let html = fs::read_to_string(html_path).unwrap();
+    let html = read_json::<blog_domain::ArticleArtifactDocument>(html_path).html;
     assert!(!html.contains("&lt;div class=&quot;bookmark&quot;&gt;"));
     assert!(html.contains(r#"class="bookmark-link""#));
     assert!(html.contains(r#"class="bookmark-domain""#));
@@ -395,12 +395,12 @@ async fn test_publish_processes_realistic_public_markdown() {
 
     let site_root = fixture.site_root();
     let articles_dir = site_root.join("articles");
-    let files = collect_html_files(&articles_dir);
+    let files = collect_article_files(&articles_dir);
     assert_eq!(files.len(), 3);
 
     let combined_html = files
         .iter()
-        .map(|path| fs::read_to_string(path).unwrap())
+        .map(|path| read_json::<blog_domain::ArticleArtifactDocument>(path).html)
         .collect::<String>();
     for expected in [
         "Rustでのパフォーマンス最適化",
@@ -437,7 +437,7 @@ async fn test_publish_processes_realistic_public_markdown() {
         assert!(
             articles_dir
                 .join(&article.category)
-                .join(format!("{}.html", article.slug))
+                .join(format!("{}.json", article.slug))
                 .is_file()
         );
     }
@@ -474,7 +474,7 @@ async fn test_publish_handles_many_articles() {
         .unwrap();
 
     assert_eq!(
-        collect_html_files(&fixture.site_root().join("articles")).len(),
+        collect_article_files(&fixture.site_root().join("articles")).len(),
         100
     );
 }
@@ -649,20 +649,22 @@ impl PublishFixture {
     }
 }
 
-fn collect_html_files(root: &Path) -> Vec<PathBuf> {
-    let mut html_files = Vec::new();
+fn collect_article_files(root: &Path) -> Vec<PathBuf> {
+    let mut article_files = Vec::new();
 
     for entry in fs::read_dir(root).unwrap() {
         let path = entry.unwrap().path();
         if path.is_dir() {
-            html_files.extend(collect_html_files(&path));
-        } else if path.extension().is_some_and(|ext| ext == "html") {
-            html_files.push(path);
+            article_files.extend(collect_article_files(&path));
+        } else if path.extension().is_some_and(|ext| ext == "json")
+            && path.file_name().is_some_and(|name| name != "index.json")
+        {
+            article_files.push(path);
         }
     }
 
-    html_files.sort();
-    html_files
+    article_files.sort();
+    article_files
 }
 
 fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> T {
@@ -718,7 +720,7 @@ async fn publishes_english_separately_and_removes_stale_output() {
     assert!(
         !fixture
             .site_root()
-            .join("en/articles/tech/tech-required-article.html")
+            .join("en/articles/tech/tech-required-article.json")
             .exists()
     );
     let ja_index: ArticleIndexDocument = read_json(fixture.site_root().join("articles/index.json"));
@@ -886,8 +888,10 @@ async fn publishes_shared_assets_referenced_from_markdown_images_links_and_table
             .count(),
         1
     );
-    let html =
-        fs::read_to_string(fixture.site_root().join("articles/tech/tech-asset.html")).unwrap();
+    let html = read_json::<blog_domain::ArticleArtifactDocument>(
+        fixture.site_root().join("articles/tech/tech-asset.json"),
+    )
+    .html;
     assert!(html.contains(&format!("src=\"/content-assets/{name}\"")));
     fs::remove_file(fixture.content_dir().join("assets").join(&name)).unwrap();
     fs::create_dir(fixture.content_dir().join("assets").join(&name)).unwrap();
@@ -1108,11 +1112,11 @@ async fn publishes_fetched_bookmark_metadata_and_falls_back_on_http_errors(
     publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
-    let html_path = collect_html_files(&fixture.site_root().join("articles"))
+    let html_path = collect_article_files(&fixture.site_root().join("articles"))
         .into_iter()
-        .find(|path| path.file_name().unwrap() == "tech-bookmark.html")
+        .find(|path| path.file_name().unwrap() == "tech-bookmark.json")
         .unwrap();
-    let html = fs::read_to_string(html_path).unwrap();
+    let html = read_json::<blog_domain::ArticleArtifactDocument>(html_path).html;
     assert!(html.contains("class=\"bookmark-link\""));
     assert!(html.contains(expected_title));
     assert_eq!(html.contains("Fetched title"), fetched);

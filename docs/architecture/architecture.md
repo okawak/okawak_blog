@@ -143,7 +143,7 @@ site/
 ├── content-assets/
 ├── articles/
 │   ├── index.json
-│   └── <category>/<slug>.html
+│   └── <category>/<slug>.json
 ├── categories/<category>.json
 ├── pages/<page>.json
 ├── home.json
@@ -159,6 +159,8 @@ site/
 ~~~
 
 locales.jsonは同じreleaseで実在するpathとlocaleの対応、content-assets/は言語間で共有するcontent hash付きassetを持つ。各言語のmetadataはその言語で配信する記事だけを集計する。
+
+記事のJSONは`ArticleArtifactDocument { summary, html }`であり、summaryは同じlocaleのarticles/index.jsonと一致する。publish前の検証で両者を照合する。local / S3 readerは指定category・slugと文書のidentityを検証する。旧releaseとの互換性のため、記事JSONが存在しない場合だけ従来のindex.jsonと記事HTMLを読む。JSONの破損・権限エラーはフォールバックせず失敗として返す。
 
 home.jsonはhome fragmentがある場合だけ生成する。en/ subtreeも配信可能な英語contentがある場合だけ生成する。
 
@@ -217,7 +219,7 @@ responsive menuはTopcoat UIのPopoverとブラウザー標準の開閉・focus�
 
 ArtifactReaderは1処理で使うArtifactSnapshotを取得し、snapshotは同じreleaseのindex、metadata、HTML、辞書、assetを読む。
 
-snapshotの文書・HTML・辞書は`Arc`、assetは`Bytes`で返し、cache hit時に本文や一覧全体を複製しない。S3のassetは取得した共有バイト列をHTTP応答まで保持する。記事単体の検索はsnapshotの`read_article_summary`を使い、cache付きsnapshotはカテゴリ・slugから記事位置への索引を一度構築する。索引と文書は同じsnapshotに属し、localeやreleaseをまたいで共有しない。
+snapshotの文書・HTML・辞書は`Arc`、assetは`Bytes`で返し、cache hit時に本文や一覧全体を複製しない。S3のassetは取得した共有バイト列をHTTP応答まで保持する。記事単体はsnapshotの`read_article(category, slug)`でメタデータと本文を一括取得し、一覧の読込・検索を行わない。記事とassetは取得成功した値だけを保持し、欠落・失敗・キャンセルした取得のcache entryは最後の待機者の終了時に除去する。cacheはlocale・releaseごとに分離する。
 
 PageLoaderのpresentationは辞書とlocale catalogの共有参照を保持する。カテゴリのpageとshardはrequest内でpresentationを共有し、絞り込み時はsectionの配列だけを複製する。カテゴリ一覧とsectionに属する同一記事カードも`Arc`で共有する。JSONの文書構造は共有参照の有無に依存しない。
 

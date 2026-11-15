@@ -2,7 +2,7 @@ use std::{sync::Arc, time::SystemTime};
 
 use async_trait::async_trait;
 use blog_domain::{
-    ArticleIndexDocument, ArticleSummaryDocument, Category, CategoryArtifactDocument,
+    ArticleArtifactDocument, ArticleIndexDocument, Category, CategoryArtifactDocument,
     ContentAssetName, HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey,
     SiteLocalesDocument, SiteMetadataDocument, Slug,
 };
@@ -19,17 +19,6 @@ pub trait ArtifactReader: Send + Sync {
 
 #[async_trait]
 pub trait ArtifactSnapshot: Send + Sync {
-    /// Returned artifacts are immutable and may share storage across requests.
-    /// Cached snapshots override this lookup with a release-local index.
-    async fn read_article_summary(
-        &self,
-        category: &Category,
-        slug: &Slug,
-    ) -> Result<Option<ArticleSummaryDocument>> {
-        let index = self.read_article_index().await?;
-        Ok(blog_domain::find_article_summary(&index, category, slug).cloned())
-    }
-
     /// Optional locale selection, within this exact release snapshot.
     async fn localized(&self, _locale: Locale) -> Result<Option<DynArtifactSnapshot>> {
         Ok(None)
@@ -63,7 +52,13 @@ pub trait ArtifactSnapshot: Send + Sync {
         category: &Category,
     ) -> Result<Arc<CategoryArtifactDocument>>;
     async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>>;
-    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<Arc<String>>;
+    /// Reads one immutable article by identity; missing articles return None.
+    /// Storage and validation failures remain errors, not missing content.
+    async fn read_article(
+        &self,
+        category: &Category,
+        slug: &Slug,
+    ) -> Result<Option<Arc<ArticleArtifactDocument>>>;
     async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>>;
     async fn read_page_document(&self, page: &PageKey) -> Result<Arc<PageArtifactDocument>>;
 }

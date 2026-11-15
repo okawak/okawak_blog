@@ -327,11 +327,11 @@ mod tests {
             unreachable!()
         }
 
-        async fn read_article_html(
+        async fn read_article(
             &self,
             _category: &Category,
             _slug: &Slug,
-        ) -> Result<Arc<String>> {
+        ) -> Result<Option<Arc<blog_domain::ArticleArtifactDocument>>> {
             unreachable!()
         }
 

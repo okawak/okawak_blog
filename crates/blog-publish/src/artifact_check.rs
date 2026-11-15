@@ -1,9 +1,10 @@
 //! CLI validation of completed artifacts using the same blog-domain builders as SSR.
 use anyhow::{Context, Result, ensure};
 use blog_domain::{
-    ArticleIndexDocument, CategoryArtifactDocument, HomeFragmentArtifactDocument,
-    PageArtifactDocument, SiteLocalesDocument, SiteMetadataDocument, build_article_page_document,
-    build_category_page_document, build_home_page_document, build_static_page_document,
+    ArticleArtifactDocument, ArticleIndexDocument, CategoryArtifactDocument,
+    HomeFragmentArtifactDocument, PageArtifactDocument, SiteLocalesDocument, SiteMetadataDocument,
+    build_article_page_document, build_category_page_document, build_home_page_document,
+    build_static_page_document,
 };
 use serde::de::DeserializeOwned;
 use std::{
@@ -27,11 +28,29 @@ pub(crate) fn validate(root: &Path) -> Result<()> {
         build_home_page_document(&index, &metadata, home.as_ref())?;
         for article in &index.articles {
             let path = root.join(format!(
-                "articles/{}/{}.html",
+                "articles/{}/{}.json",
                 article.category, article.slug
             ));
-            let html = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
-            build_article_page_document(article, &html)?;
+            let document: ArticleArtifactDocument = match fs::read(&path) {
+                Ok(bytes) => {
+                    serde_json::from_slice(&bytes).with_context(|| path.display().to_string())?
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    let legacy_path = path.with_extension("html");
+                    ArticleArtifactDocument {
+                        summary: article.clone(),
+                        html: fs::read_to_string(&legacy_path)
+                            .with_context(|| legacy_path.display().to_string())?,
+                    }
+                }
+                Err(error) => return Err(error.into()),
+            };
+            ensure!(
+                document.summary == *article,
+                "article summary differs from index: {}",
+                path.display()
+            );
+            build_article_page_document(&document)?;
         }
         for path in json_files(&root.join("categories"))? {
             let category: CategoryArtifactDocument = read_json(&path)?;

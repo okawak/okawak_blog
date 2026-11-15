@@ -27,7 +27,11 @@ impl ArtifactSnapshot for LegacySnapshot {
     async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
         unavailable()
     }
-    async fn read_article_html(&self, _: &Category, _: &Slug) -> Result<Arc<String>> {
+    async fn read_article(
+        &self,
+        _: &Category,
+        _: &Slug,
+    ) -> Result<Option<Arc<blog_domain::ArticleArtifactDocument>>> {
         unavailable()
     }
     async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {

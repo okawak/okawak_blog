@@ -12,28 +12,32 @@ fn summary(category: &str, slug: &str, title: &str) -> serde_json::Value {
     })
 }
 
+fn write_article(root: &std::path::Path, locale: &str, category: &str, slug: &str, title: &str) {
+    let path = root
+        .join(locale)
+        .join(format!("articles/{category}/{slug}.json"));
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        path,
+        serde_json::to_vec(&serde_json::json!({
+            "summary": summary(category, slug, title), "html": format!("<p>{title}</p>")
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+}
+
 #[tokio::test]
-async fn indexed_article_lookups_preserve_first_match_and_isolate_locales_and_categories() {
+async fn direct_article_reads_need_no_index_and_isolate_locales_and_categories() {
     let root = TempDir::new().unwrap();
-    for directory in ["articles", "en/articles"] {
-        fs::create_dir_all(root.path().join(directory)).unwrap();
-    }
     fs::write(
         root.path().join("locales.json"),
         r#"{"schema_version":1,"routes":{"/":["ja","en"]}}"#,
     )
     .unwrap();
-    fs::write(root.path().join("articles/index.json"), serde_json::to_vec(&serde_json::json!({
-        "articles": [summary("tech", "same", "First"), summary("daily", "same", "Daily"), summary("tech", "same", "Duplicate")]
-    })).unwrap()).unwrap();
-    fs::write(
-        root.path().join("en/articles/index.json"),
-        serde_json::to_vec(&serde_json::json!({
-            "articles": [summary("tech", "same", "English")]
-        }))
-        .unwrap(),
-    )
-    .unwrap();
+    write_article(root.path(), "", "tech", "same", "Japanese");
+    write_article(root.path(), "", "daily", "same", "Daily");
+    write_article(root.path(), "en", "tech", "same", "English");
     let reader = CachingArtifactReader::new(
         Arc::new(LocalArtifactReader::new(root.path())),
         Duration::from_secs(60),
@@ -46,45 +50,27 @@ async fn indexed_article_lookups_preserve_first_match_and_isolate_locales_and_ca
         .unwrap();
     let slug: Slug = "same".parse().unwrap();
     for (snapshot, category, expected) in [
-        (&ja, Category::Tech, "First"),
+        (&ja, Category::Tech, "Japanese"),
         (&ja, Category::Daily, "Daily"),
         (&en, Category::Tech, "English"),
     ] {
         let (first, second) = tokio::join!(
-            snapshot.read_article_summary(&category, &slug),
-            snapshot.read_article_summary(&category, &slug)
+            snapshot.read_article(&category, &slug),
+            snapshot.read_article(&category, &slug)
         );
-        assert_eq!(first.unwrap().unwrap().title, expected);
-        assert_eq!(second.unwrap().unwrap().title, expected);
+        let first = first.unwrap().unwrap();
+        let second = second.unwrap().unwrap();
+        assert_eq!(first.summary.title, expected);
+        assert_eq!(first.html, format!("<p>{expected}</p>"));
+        assert!(Arc::ptr_eq(&first, &second));
     }
-    assert!(
-        ja.read_article_summary(&Category::Physics, &slug)
-            .await
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        ja.read_article_summary(&Category::Tech, &"missing".parse().unwrap())
-            .await
-            .unwrap()
-            .is_none()
-    );
-    fs::remove_file(root.path().join("articles/index.json")).unwrap();
-    assert_eq!(
-        ja.read_article_summary(&Category::Tech, &slug)
-            .await
-            .unwrap()
-            .unwrap()
-            .title,
-        "First"
-    );
 }
 
 #[tokio::test]
-async fn failed_index_load_is_retried_before_building_the_lookup() {
+async fn failed_article_load_is_retried_without_caching_the_error() {
     let root = TempDir::new().unwrap();
-    fs::create_dir(root.path().join("articles")).unwrap();
-    let path = root.path().join("articles/index.json");
+    write_article(root.path(), "", "tech", "intro", "Initial");
+    let path = root.path().join("articles/tech/intro.json");
     fs::write(&path, "invalid").unwrap();
     let reader = CachingArtifactReader::new(
         Arc::new(LocalArtifactReader::new(root.path())),
@@ -92,45 +78,118 @@ async fn failed_index_load_is_retried_before_building_the_lookup() {
     );
     let snapshot = reader.snapshot().await.unwrap();
     let slug: Slug = "intro".parse().unwrap();
-    assert!(
-        snapshot
-            .read_article_summary(&Category::Tech, &slug)
-            .await
-            .is_err()
-    );
-    fs::write(
-        path,
-        serde_json::to_vec(
-            &serde_json::json!({"articles": [summary("tech", "intro", "Recovered")]}),
-        )
-        .unwrap(),
-    )
-    .unwrap();
+    assert!(snapshot.read_article(&Category::Tech, &slug).await.is_err());
+    write_article(root.path(), "", "tech", "intro", "Recovered");
     assert_eq!(
         snapshot
-            .read_article_summary(&Category::Tech, &slug)
+            .read_article(&Category::Tech, &slug)
             .await
             .unwrap()
             .unwrap()
+            .summary
             .title,
         "Recovered"
     );
 }
 
 #[tokio::test]
-async fn cached_html_labels_and_assets_share_their_storage() {
+async fn legacy_articles_preserve_first_match_and_missing_article_behavior() {
     let root = TempDir::new().unwrap();
-    for directory in ["articles/tech", "articles/daily", "content-assets"] {
-        fs::create_dir_all(root.path().join(directory)).unwrap();
-    }
-    for category in ["tech", "daily"] {
-        fs::write(
-            root.path().join(format!("articles/{category}/same.html")),
-            category,
-        )
+    fs::create_dir_all(root.path().join("articles/tech")).unwrap();
+    fs::write(
+        root.path().join("articles/index.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "articles": [summary("tech", "intro", "First"), summary("tech", "intro", "Duplicate")]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        root.path().join("articles/tech/intro.html"),
+        "<p>Legacy</p>",
+    )
+    .unwrap();
+    let reader = LocalArtifactReader::new(root.path());
+    let slug = "intro".parse().unwrap();
+    let article = reader
+        .read_article(&Category::Tech, &slug)
+        .await
+        .unwrap()
         .unwrap();
-    }
+    assert_eq!(article.summary.title, "First");
+    assert_eq!(article.html, "<p>Legacy</p>");
+    assert!(
+        reader
+            .read_article(&Category::Daily, &slug)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        reader
+            .read_article(&Category::Tech, &"missing".parse().unwrap())
+            .await
+            .unwrap()
+            .is_none()
+    );
+    fs::remove_file(root.path().join("articles/tech/intro.html")).unwrap();
+    assert!(
+        reader
+            .read_article(&Category::Tech, &slug)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[rstest]
+#[case::malformed_json(serde_json::json!(null))]
+#[case::wrong_category(serde_json::json!({"summary": summary("daily", "intro", "Other"), "html": "<p>Other</p>"}))]
+#[case::wrong_slug(serde_json::json!({"summary": summary("tech", "other", "Other"), "html": "<p>Other</p>"}))]
+#[case::blank_html(serde_json::json!({"summary": summary("tech", "intro", "Empty"), "html": "  "}))]
+#[case::invalid_metadata(serde_json::json!({"summary": summary("tech", "intro", ""), "html": "<p>Other</p>"}))]
+#[tokio::test]
+async fn invalid_article_does_not_fall_back_to_valid_legacy_data(
+    #[case] document: serde_json::Value,
+) {
+    let root = TempDir::new().unwrap();
+    fs::create_dir_all(root.path().join("articles/tech")).unwrap();
+    fs::write(
+        root.path().join("articles/index.json"),
+        serde_json::to_vec(&serde_json::json!({"articles": [summary("tech", "intro", "Legacy")]}))
+            .unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        root.path().join("articles/tech/intro.html"),
+        "<p>Legacy</p>",
+    )
+    .unwrap();
+    fs::write(
+        root.path().join("articles/tech/intro.json"),
+        serde_json::to_vec(&document).unwrap(),
+    )
+    .unwrap();
+    let reader = LocalArtifactReader::new(root.path());
+    assert!(
+        reader
+            .read_article(&Category::Tech, &"intro".parse().unwrap())
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn cached_articles_catalogs_labels_and_assets_share_their_storage() {
+    let root = TempDir::new().unwrap();
+    write_article(root.path(), "", "tech", "intro", "Intro");
+    fs::create_dir_all(root.path().join("content-assets")).unwrap();
     fs::write(root.path().join("tags.json"), r#"{"rust":"Rust"}"#).unwrap();
+    fs::write(
+        root.path().join("locales.json"),
+        r#"{"schema_version":1,"routes":{"/":["ja","en"]}}"#,
+    )
+    .unwrap();
     let name = blog_domain::ContentAssetName::new(format!("{}.png", "a".repeat(64))).unwrap();
     fs::write(
         root.path().join("content-assets").join(name.as_str()),
@@ -142,68 +201,32 @@ async fn cached_html_labels_and_assets_share_their_storage() {
         Duration::from_secs(60),
     );
     let snapshot = reader.snapshot().await.unwrap();
-    let slug: Slug = "same".parse().unwrap();
+    let slug: Slug = "intro".parse().unwrap();
     let first = snapshot
-        .read_article_html(&Category::Tech, &slug)
+        .read_article(&Category::Tech, &slug)
         .await
+        .unwrap()
         .unwrap();
+    let locales = snapshot.read_locales().await.unwrap();
+    fs::write(root.path().join("articles/tech/intro.json"), "changed").unwrap();
+    fs::write(root.path().join("locales.json"), "changed").unwrap();
     let second = snapshot
-        .read_article_html(&Category::Tech, &slug)
+        .read_article(&Category::Tech, &slug)
         .await
+        .unwrap()
         .unwrap();
     assert!(Arc::ptr_eq(&first, &second));
-    assert_eq!(
-        snapshot
-            .read_article_html(&Category::Daily, &slug)
-            .await
-            .unwrap()
-            .as_str(),
-        "daily"
-    );
+    assert!(Arc::ptr_eq(
+        &locales,
+        &snapshot.read_locales().await.unwrap()
+    ));
     assert!(Arc::ptr_eq(
         &snapshot.read_tag_labels().await.unwrap(),
         &snapshot.read_tag_labels().await.unwrap()
     ));
-    assert!(Arc::ptr_eq(
-        &snapshot.read_locales().await.unwrap(),
-        &snapshot.read_locales().await.unwrap()
-    ));
     let first = snapshot.read_content_asset(&name).await.unwrap().unwrap();
     let second = snapshot.read_content_asset(&name).await.unwrap().unwrap();
     assert_eq!(first.as_ptr(), second.as_ptr());
-}
-
-#[tokio::test]
-async fn caches_nonempty_locale_catalogs_and_article_html() {
-    let root = tempfile::tempdir().unwrap();
-    fs::create_dir_all(root.path().join("articles/tech")).unwrap();
-    let catalog = r#"{"schema_version":1,"routes":{"/":["ja","en"]}}"#;
-    fs::write(root.path().join("locales.json"), catalog).unwrap();
-    fs::write(root.path().join("articles/tech/intro.html"), "<p>Intro</p>").unwrap();
-    let reader = CachingArtifactReader::new(
-        Arc::new(LocalArtifactReader::new(root.path())),
-        Duration::from_secs(60),
-    );
-    let snapshot = reader.snapshot().await.unwrap();
-    let slug = Slug::new("intro".into()).unwrap();
-    for _ in 0..2 {
-        assert_eq!(
-            snapshot.read_locales().await.unwrap(),
-            serde_json::from_str::<SiteLocalesDocument>(catalog)
-                .unwrap()
-                .into()
-        );
-        assert_eq!(
-            snapshot
-                .read_article_html(&Category::Tech, &slug)
-                .await
-                .unwrap()
-                .as_str(),
-            "<p>Intro</p>"
-        );
-        fs::write(root.path().join("locales.json"), "corrupt after first read").unwrap();
-        fs::write(root.path().join("articles/tech/intro.html"), "changed").unwrap();
-    }
 }
 
 #[tokio::test]

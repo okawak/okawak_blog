@@ -1,9 +1,9 @@
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactReader, DynArtifactSnapshot, Result};
 use async_trait::async_trait;
 use blog_domain::{
-    ArticleIndexDocument, Category, CategoryArtifactDocument, ContentAssetName,
-    HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, SiteLocalesDocument,
-    SiteMetadataDocument, Slug,
+    ArticleArtifactDocument, ArticleIndexDocument, Category, CategoryArtifactDocument,
+    ContentAssetName, HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey,
+    SiteLocalesDocument, SiteMetadataDocument, Slug,
 };
 use std::{
     collections::HashMap,
@@ -111,14 +111,13 @@ struct CachingArtifactSnapshot {
     localized: KeyedCache<Option<DynArtifactSnapshot>>,
     locales: OnceCell<Arc<SiteLocalesDocument>>,
     tags: OnceCell<Arc<blog_domain::TagLabels>>,
-    content_assets: ContentAssetCache,
+    content_assets: OptionalCache<bytes::Bytes>,
     inner: DynArtifactSnapshot,
     article_index: OnceCell<Arc<ArticleIndexDocument>>,
-    article_positions: OnceCell<HashMap<String, HashMap<String, usize>>>,
     site_metadata: OnceCell<Arc<SiteMetadataDocument>>,
     home_fragment: OnceCell<Arc<HomeFragmentArtifactDocument>>,
     category_documents: KeyedCache<Arc<CategoryArtifactDocument>>,
-    article_html: HashMap<Category, KeyedCache<Arc<String>>>,
+    articles: HashMap<Category, OptionalCache<Arc<ArticleArtifactDocument>>>,
     page_documents: KeyedCache<Arc<PageArtifactDocument>>,
 }
 
@@ -128,21 +127,20 @@ impl CachingArtifactSnapshot {
             localized: KeyedCache::new(),
             locales: OnceCell::new(),
             tags: OnceCell::new(),
-            content_assets: ContentAssetCache::default(),
+            content_assets: OptionalCache::default(),
             inner,
             article_index: OnceCell::new(),
-            article_positions: OnceCell::new(),
             site_metadata: OnceCell::new(),
             home_fragment: OnceCell::new(),
             category_documents: KeyedCache::new(),
-            article_html: [
+            articles: [
                 Category::Tech,
                 Category::Daily,
                 Category::Statistics,
                 Category::Physics,
             ]
             .into_iter()
-            .map(|category| (category, KeyedCache::new()))
+            .map(|category| (category, OptionalCache::default()))
             .collect(),
             page_documents: KeyedCache::new(),
         }
@@ -196,32 +194,6 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
             .cloned()
     }
 
-    async fn read_article_summary(
-        &self,
-        category: &Category,
-        slug: &Slug,
-    ) -> Result<Option<blog_domain::ArticleSummaryDocument>> {
-        let index = self.read_article_index().await?;
-        let positions = self
-            .article_positions
-            .get_or_init(|| async {
-                let mut positions: HashMap<String, HashMap<String, usize>> = HashMap::new();
-                for (position, article) in index.articles.iter().enumerate() {
-                    positions
-                        .entry(article.category.clone())
-                        .or_default()
-                        .entry(article.slug.clone())
-                        .or_insert(position);
-                }
-                positions
-            })
-            .await;
-        Ok(positions
-            .get(category.as_str())
-            .and_then(|articles| articles.get(slug.as_str()))
-            .map(|&position| index.articles[position].clone()))
-    }
-
     async fn read_category_document(
         &self,
         category: &Category,
@@ -240,11 +212,13 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
             .cloned()
     }
 
-    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<Arc<String>> {
-        self.article_html[category]
-            .get_or_try_init(slug.as_str(), || {
-                self.inner.read_article_html(category, slug)
-            })
+    async fn read_article(
+        &self,
+        category: &Category,
+        slug: &Slug,
+    ) -> Result<Option<Arc<ArticleArtifactDocument>>> {
+        self.articles[category]
+            .get_or_try_init(slug.as_str(), || self.inner.read_article(category, slug))
             .await
     }
 
@@ -262,26 +236,41 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
     }
 }
 
-type ContentAssetResult = std::result::Result<Option<bytes::Bytes>, Arc<crate::InfraError>>;
-type ContentAssetCell = Arc<OnceCell<ContentAssetResult>>;
+type OptionalResult<T> = std::result::Result<Option<T>, Arc<crate::InfraError>>;
+type OptionalCell<T> = Arc<OnceCell<OptionalResult<T>>>;
 
-#[derive(Default)]
-struct ContentAssetEntry {
-    cell: ContentAssetCell,
+struct OptionalEntry<T> {
+    cell: OptionalCell<T>,
     readers: usize,
 }
 
-#[derive(Default)]
-struct ContentAssetCache {
-    // Only map access is synchronous; storage I/O happens outside this lock.
-    entries: std::sync::Mutex<HashMap<String, ContentAssetEntry>>,
+impl<T> Default for OptionalEntry<T> {
+    fn default() -> Self {
+        Self {
+            cell: Arc::new(OnceCell::new()),
+            readers: 0,
+        }
+    }
 }
 
-impl ContentAssetCache {
-    async fn get_or_try_init<F, Fut>(&self, key: &str, load: F) -> Result<Option<bytes::Bytes>>
+struct OptionalCache<T> {
+    // Only map access is synchronous; storage I/O happens outside this lock.
+    entries: std::sync::Mutex<HashMap<String, OptionalEntry<T>>>,
+}
+
+impl<T> Default for OptionalCache<T> {
+    fn default() -> Self {
+        Self {
+            entries: Default::default(),
+        }
+    }
+}
+
+impl<T: Clone> OptionalCache<T> {
+    async fn get_or_try_init<F, Fut>(&self, key: &str, load: F) -> Result<Option<T>>
     where
         F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<Option<bytes::Bytes>>>,
+        Fut: Future<Output = Result<Option<T>>>,
     {
         let cell = {
             let mut entries = self.entries.lock().unwrap();
@@ -292,7 +281,7 @@ impl ContentAssetCache {
             entry.readers += 1;
             Arc::clone(&entry.cell)
         };
-        let read = ContentAssetRead {
+        let read = OptionalRead {
             cache: self,
             key,
             cell,
@@ -305,21 +294,21 @@ impl ContentAssetCache {
     }
 }
 
-struct ContentAssetRead<'a> {
-    cache: &'a ContentAssetCache,
+struct OptionalRead<'a, T> {
+    cache: &'a OptionalCache<T>,
     key: &'a str,
-    cell: ContentAssetCell,
+    cell: OptionalCell<T>,
 }
 
-impl Drop for ContentAssetRead<'_> {
+impl<T> Drop for OptionalRead<'_, T> {
     fn drop(&mut self) {
         let mut entries = self.cache.entries.lock().unwrap();
         let entry = entries
             .get_mut(self.key)
-            .expect("active content asset read");
+            .expect("active optional artifact read");
         entry.readers -= 1;
         // Count completion while locked; Arc fields may be dropped later on another
-        // thread. Only successful bytes survive the final reader of this flight.
+        // thread. Only successful values survive the final reader of this flight.
         if entry.readers == 0 && !matches!(self.cell.get(), Some(Ok(Some(_)))) {
             entries.remove(self.key);
         }
@@ -489,8 +478,12 @@ mod tests {
             }))
         }
 
-        async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<Arc<String>> {
-            Ok(Arc::new(format!("{}/{}", category.as_str(), slug.as_str())))
+        async fn read_article(
+            &self,
+            _: &Category,
+            _: &Slug,
+        ) -> Result<Option<Arc<ArticleArtifactDocument>>> {
+            Ok(None)
         }
 
         async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
@@ -681,7 +674,7 @@ mod tests {
 
     #[tokio::test]
     async fn cancelled_content_asset_reads_release_in_flight_entries() {
-        let cache = ContentAssetCache::default();
+        let cache = OptionalCache::<bytes::Bytes>::default();
         let started = std::cell::Cell::new(false);
         {
             let mut reader = std::pin::pin!(cache.get_or_try_init("cancelled", || async {
@@ -699,8 +692,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn missing_articles_do_not_accumulate_cache_entries() {
+        let snapshot = CachingArtifactSnapshot::new(Arc::new(CountingSnapshot {
+            article_reads: Arc::new(AtomicUsize::new(0)),
+            fail_next_article_read: Arc::new(AtomicBool::new(false)),
+            cache_identity: Some("release-1"),
+            last_modified: None,
+        }));
+        for index in 0..32 {
+            let slug = format!("missing-{index}").parse().unwrap();
+            assert!(
+                snapshot
+                    .read_article(&Category::Tech, &slug)
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+        }
+        assert!(
+            snapshot.articles[&Category::Tech]
+                .entries
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
     async fn concurrent_asset_read_errors_are_shared_but_later_requests_retry() {
-        let cache = ContentAssetCache::default();
+        let cache = OptionalCache::<bytes::Bytes>::default();
         let reads = AtomicUsize::new(0);
         let fail = || async {
             reads.fetch_add(1, Ordering::SeqCst);
@@ -732,7 +752,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn simultaneous_reader_completion_does_not_retain_missing_assets() {
-        let cache = Arc::new(ContentAssetCache::default());
+        let cache = Arc::new(OptionalCache::<bytes::Bytes>::default());
         for _ in 0..1024 {
             let mut readers = tokio::task::JoinSet::new();
             for _ in 0..16 {

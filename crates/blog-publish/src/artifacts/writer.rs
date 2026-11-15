@@ -1,7 +1,7 @@
 use super::builder::SiteDocuments;
 use crate::error::Result;
 
-use blog_domain::{Category, Locale, Slug};
+use blog_domain::{ArticleMeta, ArticleSummaryDocument, Locale};
 use serde::Serialize;
 use std::{
     fs::{self, File},
@@ -22,9 +22,7 @@ impl SiteOutput {
     }
 
     pub(crate) fn prepare_locale(output_dir: &Path, locale: Locale) -> Result<Self> {
-        let root = output_dir
-            .join("site")
-            .join(if locale == Locale::En { "en" } else { "" });
+        let root = output_dir.join("site").join(locale.artifact_key(""));
         for directory in ["articles", "categories", "metadata", "pages"] {
             fs::create_dir_all(root.join(directory))?;
         }
@@ -35,14 +33,28 @@ impl SiteOutput {
 
 pub(crate) fn write_article_page(
     site_output: &SiteOutput,
-    category: Category,
-    slug: &Slug,
+    meta: &ArticleMeta,
     html: &str,
 ) -> Result<PathBuf> {
-    let article_dir = site_output.root.join("articles").join(category.as_str());
+    // Borrow the rendered body while serializing the ArticleArtifactDocument contract.
+    #[derive(Serialize)]
+    struct Article<'a> {
+        summary: ArticleSummaryDocument,
+        html: &'a str,
+    }
+    let article_dir = site_output
+        .root
+        .join("articles")
+        .join(meta.category.as_str());
     fs::create_dir_all(&article_dir)?;
-    let output_file_path = article_dir.join(format!("{}.html", slug.as_str()));
-    fs::write(&output_file_path, html)?;
+    let output_file_path = article_dir.join(format!("{}.json", meta.slug));
+    write_json(
+        &output_file_path,
+        &Article {
+            summary: meta.into(),
+            html,
+        },
+    )?;
     Ok(output_file_path)
 }
 
@@ -95,8 +107,8 @@ mod tests {
     use super::super::builder::build_site_documents;
     use super::*;
     use blog_domain::{
-        ArticleMeta, CategoryLandingMeta, HomeFragmentArtifactDocument, PageArtifactDocument,
-        PageKey, SectionPath, Timestamp, Title,
+        ArticleMeta, Category, CategoryLandingMeta, HomeFragmentArtifactDocument,
+        PageArtifactDocument, PageKey, SectionPath, Slug, Timestamp, Title,
     };
     use tempfile::TempDir;
 
@@ -150,14 +162,15 @@ mod tests {
         )
         .unwrap();
 
-        let article_path = write_article_page(
-            &output,
-            article.category,
-            &article.slug,
-            "<h1>Artifact Test</h1>",
-        )
-        .unwrap();
+        let article_path = write_article_page(&output, &article, "<h1>Artifact Test</h1>").unwrap();
         write_site_documents(&output, &documents).unwrap();
+
+        let stored: blog_domain::ArticleArtifactDocument =
+            serde_json::from_reader(File::open(&article_path).unwrap()).unwrap();
+        assert_eq!(stored.summary, documents.article_index.articles[0]);
+        assert_eq!(stored.html, "<h1>Artifact Test</h1>");
+        assert_eq!(article_path.extension().unwrap(), "json");
+        assert!(!article_path.with_extension("html").exists());
 
         for path in [
             article_path,
