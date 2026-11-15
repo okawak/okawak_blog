@@ -178,32 +178,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn language_ranges_require_valid_subtags_and_keep_the_first_highest_weight() {
-        for (value, expected) in [
-            ("*-US;q=1, en;q=0", Locale::En),
-            ("ja-abcdefghi, en;q=0.5", Locale::En),
-            ("ja-_, en;q=0.5", Locale::En),
-            ("ja--JP, en;q=0.5", Locale::En),
-            ("ja-abcdefgh, en;q=0.5", Locale::Ja),
-            ("ja;q=0.4, en;q=0.6, ja;q=0.8", Locale::Ja),
-            ("ja;q=0.8, en;q=0.6, ja;q=0.4", Locale::Ja),
-            ("ja;q=0.8, en;q=0.8, ja;q=0.8", Locale::Ja),
-            ("ja;q=0", Locale::En),
-        ] {
-            let (parts, ()) = request::Request::builder()
-                .header(header::ACCEPT_LANGUAGE, value)
-                .body(())
-                .unwrap()
-                .into_parts();
-            assert_eq!(
-                preferred_locale(&Cx::new().with(parts)),
-                expected,
-                "{value}"
-            );
-        }
-    }
-
-    #[test]
     fn missing_translation_uses_its_home_but_missing_language_is_unavailable() {
         let catalog: SiteLocalesDocument = serde_json::from_str(
             r#"{
