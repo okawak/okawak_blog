@@ -219,7 +219,7 @@ responsive menuはTopcoat UIのPopoverとブラウザー標準の開閉・focus�
 
 ArtifactReaderは1処理で使うArtifactSnapshotを取得し、snapshotは同じreleaseのindex、metadata、HTML、辞書、assetを読む。
 
-snapshotの文書・HTML・辞書は`Arc`、assetは`Bytes`で返し、cache hit時に本文や一覧全体を複製しない。S3のassetは取得した共有バイト列をHTTP応答まで保持する。記事単体はsnapshotの`read_article(category, slug)`でメタデータと本文を一括取得し、一覧の読込・検索を行わない。記事とassetは取得成功した値だけを保持し、欠落・失敗・キャンセルした取得のcache entryは最後の待機者の終了時に除去する。cacheはlocale・releaseごとに分離する。
+snapshotの文書・HTML・辞書は`Arc`、assetは`Bytes`で返し、cache hit時に本文や一覧全体を複製しない。S3のassetは取得した共有バイト列をHTTP応答まで保持する。記事単体はsnapshotの`read_article(category, slug)`でメタデータと本文を一括取得し、一覧の読込・検索を行わない。記事とassetは取得成功した値だけを保持し、欠落・失敗を保存しない。キー付きcacheの同時取得・エラー共有・キャンセル時の後片付けはMokaに委譲する。記事とassetのstorage結果（値・欠落・エラー）をMokaの成功・非保持へ対応付ける部分だけをinfraで補う。locale・カテゴリ・固定ページもMokaを使い、単一文書はTokio OnceCellを使う。cacheはlocale・releaseごとに分離し、release単位の寿命を維持するためMokaの容量・時間によるevictionは設定しない。
 
 PageLoaderのpresentationは辞書とlocale catalogの共有参照を保持する。カテゴリのpageとshardはrequest内でpresentationを共有し、絞り込み時はsectionの配列だけを複製する。カテゴリ一覧とsectionに属する同一記事カードも`Arc`で共有する。JSONの文書構造は共有参照の有無に依存しない。
 
@@ -227,7 +227,7 @@ PageLoaderのpresentationは辞書とlocale catalogの共有参照を保持す�
 - S3 readerはcurrent.jsonからrelease prefixを固定し、snapshotと取得済みartifactをmemory cacheする
 - current.jsonが初回から存在しない場合だけ旧bucket rootを日本語releaseとして読む
 
-S3 snapshot cacheは既定5秒のTTLを持つ。TTL後もrelease identityが同じならartifact cacheを維持し、identityが変わったときだけ新cacheへ切り替える。既存requestが保持するsnapshotはrequest完了まで有効である。同じartifactへのconcurrent missは1回のreadへまとめ、errorはcacheしない。
+release snapshotのTTL・identity比較・stale fallbackはinfraが判断する。S3 snapshot cacheは既定5秒のTTLを持つ。TTL後もrelease identityが同じならartifact cacheを維持し、identityが変わったときだけ新cacheへ切り替える。既存requestが保持するsnapshotはrequest完了まで有効である。同じartifactへのconcurrent missは1回のreadへまとめ、errorはcacheしない。
 
 snapshot更新に失敗した場合、cache済みの直前のimmutable releaseを配信し、次のTTLで再試行する。運用中にcurrent.jsonが消えてもlegacy rootへ戻らない。初回取得失敗、legacy root、TTL=0ではstale fallbackしない。未取得artifactのread失敗まで隠さず、そのrequestはerrorにする。
 
