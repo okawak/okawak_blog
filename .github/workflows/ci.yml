@@ -43,14 +43,11 @@ jobs:
         run: mise run test-service
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-rust-ci-${{ hashFiles('**/Cargo.lock') }}
+          # Share dependencies with browser-e2e; v2.9.3 omits the virtual workspace root manifest.
+          shared-key: rust-ci-${{ hashFiles('Cargo.toml') }}
+          cache-bin: "false"
 
       - name: Validate public artifact gate
         run: mise run test-public-artifacts
@@ -74,21 +71,16 @@ jobs:
           rustup update stable --no-self-update
           rustup show
 
-      - name: Cache Cargo dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-browser-e2e-${{ hashFiles('mise.toml', 'mise.lock', '**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-browser-e2e-
-            ${{ runner.os }}-rust-ci-${{ hashFiles('**/Cargo.lock') }}
-
       - name: Set up shared build tools
         uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: rust-ci-${{ hashFiles('Cargo.toml') }}
+          cache-bin: "false"
+          # verify owns the shared cache; this dependent job only restores it.
+          save-if: "false"
 
       - name: Run fixture browser E2E
         env:
