@@ -123,7 +123,7 @@ mod tests {
     fn changed_reviewed_candidates_block_both_generation_destinations() {
         for current in [Decision::Generate, Decision::Protect] {
             let error = plan_update(current, Some(Decision::Protect), "item").unwrap_err();
-            assert!(matches!(error, crate::ExportError::TranslationConflict(_)));
+            std::assert_matches!(error, crate::ExportError::TranslationConflict(_));
             assert!(error.to_string().contains("manually edited candidate item"));
         }
     }
@@ -131,7 +131,7 @@ mod tests {
     #[test]
     fn matching_candidates_require_acceptance_before_replacing_published_output() {
         let error = plan_update(Decision::Generate, Some(Decision::Reuse), "item").unwrap_err();
-        assert!(matches!(error, crate::ExportError::TranslationConflict(_)));
+        std::assert_matches!(error, crate::ExportError::TranslationConflict(_));
         assert!(error.to_string().contains("candidate item already matches"));
     }
 }

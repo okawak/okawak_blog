@@ -159,10 +159,10 @@ fn failed_reference_validation_does_not_change_existing_output() {
         true,
         "[[draft]]",
     );
-    assert!(matches!(
+    std::assert_matches!(
         run_export(source.path(), output.path()),
         Err(blog_export::ExportError::InvalidInput(_))
-    ));
+    );
     assert_eq!(outputs(output.path()), before);
 }
 
@@ -242,10 +242,10 @@ fn symlink_source_is_rejected(#[case] target: &str) {
     let output = TempDir::new().unwrap();
     note(private.path(), "tech/secret.md", "Secret", true, "SECRET");
     std::os::unix::fs::symlink(private.path().join(target), source.path().join("leak.md")).unwrap();
-    assert!(matches!(
+    std::assert_matches!(
         run_export(source.path(), output.path()),
         Err(blog_export::ExportError::InvalidInput(_))
-    ));
+    );
 }
 
 #[test]
@@ -259,10 +259,10 @@ fn symlink_output_root_is_rejected() {
     fs::write(target.join("keep.txt"), "Keep this").unwrap();
     std::os::unix::fs::symlink(&target, &output).unwrap();
 
-    assert!(matches!(
+    std::assert_matches!(
         run_export(&source, &output),
         Err(blog_export::ExportError::InvalidInput(_))
-    ));
+    );
     assert!(output.is_symlink());
     assert_eq!(
         fs::read_to_string(target.join("keep.txt")).unwrap(),
@@ -301,11 +301,11 @@ fn regular_file_source_is_rejected() {
     let source = tmp.path().join("source.md");
     fs::write(&source, "not a directory").unwrap();
 
-    assert!(matches!(
+    std::assert_matches!(
         run_export(&source, &tmp.path().join("content")),
         Err(blog_export::ExportError::Io(error))
             if error.kind() == std::io::ErrorKind::NotADirectory
-    ));
+    );
 }
 
 #[test]
@@ -358,10 +358,10 @@ fn failed_export_preserves_unrelated_files_and_rejects_output_inside_source() {
         true,
         "Public body",
     );
-    assert!(matches!(
+    std::assert_matches!(
         run_export(source.path(), &source.path().join("output")),
         Err(blog_export::ExportError::InvalidInput(_))
-    ));
+    );
 }
 
 #[test]
@@ -595,10 +595,10 @@ fn reference_definitions_are_rejected_without_changing_public_documents(#[case] 
             [ref]: https://images.example.invalid/photo.png \"Reference title\"
         "},
     );
-    assert!(matches!(
+    std::assert_matches!(
         run_export(source.path(), output.path()),
         Err(blog_export::ExportError::InvalidInput(message)) if message.contains("reference-style"),
-    ));
+    );
     assert_eq!(outputs(output.path()), before);
 }
 

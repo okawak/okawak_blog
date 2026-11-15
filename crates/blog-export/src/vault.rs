@@ -301,9 +301,9 @@ mod tests {
     ) {
         let mut fm = frontmatter();
         fm.category = category;
-        assert!(matches!(
+        std::assert_matches!(
             section_path(Path::new(path), &fm),
             Err(ExportError::InvalidInput(error)) if error == message,
-        ));
+        );
     }
 }

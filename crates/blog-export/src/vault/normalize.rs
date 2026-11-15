@@ -74,6 +74,7 @@ pub(super) fn normalize(notes: &mut [VaultNote]) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
 struct Note {
     id: String,
     title: String,
@@ -212,14 +213,12 @@ fn rewrite_link(
             "missing or ambiguous public heading reference",
         ));
     }
-    let anchor = anchor
-        .map(|a| {
-            format!(
-                "#section-{}",
-                &digest(a).as_str()[..GENERATED_ID_HASH_LENGTH]
-            )
-        })
-        .unwrap_or_default();
+    let anchor = anchor.map_or_default(|a| {
+        format!(
+            "#section-{}",
+            &digest(a).as_str()[..GENERATED_ID_HASH_LENGTH]
+        )
+    });
     let href = format!("content:{}{anchor}", note.id);
     let label = if wiki {
         let inner = raw
@@ -288,9 +287,7 @@ fn markdown_label(raw: &str) -> Result<&str> {
     let mut depth = 1;
     let mut escaped = false;
     for (index, ch) in raw.char_indices().skip(1) {
-        while opaque.peek().is_some_and(|range| range.end <= index) {
-            opaque.next();
-        }
+        while opaque.next_if(|range| range.end <= index).is_some() {}
         if opaque.peek().is_some_and(|range| range.contains(&index)) {
             continue;
         }
@@ -449,10 +446,10 @@ mod tests {
     fn wiki_resolution_rejects_multiple_candidates(#[case] keys: &[&str]) {
         let notes: Vec<_> = keys.iter().map(|key| note(key, "")).collect();
         let index = NoteIndex::new(&notes);
-        assert!(matches!(
+        std::assert_matches!(
             index.resolve("tech/source", "target", true),
             Err(ExportError::InvalidInput(message)) if message.contains("ambiguous note"),
-        ));
+        );
     }
 
     #[test]
@@ -486,10 +483,10 @@ mod tests {
             [[#同じ 見出し]]
         "},
         )];
-        assert!(matches!(
+        std::assert_matches!(
             normalize(&mut notes),
             Err(ExportError::InvalidInput(message)) if message.contains("ambiguous public heading"),
-        ));
+        );
     }
 
     #[test]
@@ -502,9 +499,9 @@ mod tests {
 
     #[test]
     fn overlapping_edits_are_rejected() {
-        assert!(matches!(
+        std::assert_matches!(
             apply_edits("body", vec![(0..3, "first".into()), (1..4, "second".into())]),
             Err(ExportError::InvalidInput(message)) if message.contains("nested links/images"),
-        ));
+        );
     }
 }

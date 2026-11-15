@@ -20,7 +20,7 @@ impl Default for CodexTranslator {
     fn default() -> Self {
         Self {
             executable: "codex".into(),
-            timeout: Duration::from_secs(300),
+            timeout: Duration::from_mins(5),
         }
     }
 }

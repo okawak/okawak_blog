@@ -173,7 +173,7 @@ fn if_none_match_matches(headers: &HeaderMap, current_etag: &str) -> bool {
 }
 
 fn weak_opaque_tag(etag: &str) -> Option<&str> {
-    let etag = etag.trim().strip_prefix("W/").unwrap_or(etag.trim());
+    let etag = etag.trim().trim_prefix("W/");
     (etag.len() >= 2 && etag.starts_with('"') && etag.ends_with('"')).then_some(etag)
 }
 

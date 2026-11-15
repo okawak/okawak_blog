@@ -53,7 +53,7 @@ pub async fn publish_with_bookmark_enricher(
     en_links.validate(&english)?;
     let parent = output_dir
         .parent()
-        .filter(|p| !p.as_os_str().is_empty())
+        .filter(|p| !p.is_empty())
         .unwrap_or(Path::new("."));
     std::fs::create_dir_all(parent)?;
     let stage = tempfile::Builder::new()

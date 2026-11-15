@@ -95,7 +95,7 @@ fn track_inline_html(token: &str, elements: &mut Vec<String>) {
         return;
     };
     let closing = tag.starts_with('/');
-    let tag = tag.strip_prefix('/').unwrap_or(tag);
+    let tag = tag.trim_prefix('/');
     if !tag.starts_with(|c: char| c.is_ascii_alphabetic()) {
         return; // Comments, declarations and processing instructions.
     }
