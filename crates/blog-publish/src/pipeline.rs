@@ -1,7 +1,7 @@
 use crate::artifacts::{
     SiteOutput, build_site_documents, write_article_page, write_site_documents,
 };
-use crate::classify::{ParsedArticleFile, ensure_category_landings};
+use crate::classify::{ParsedArticleFile, validate_japanese};
 use crate::error::{PublishError, Result};
 use crate::render::{
     BookmarkEnricher, render_article, render_category, render_home, render_page,
@@ -25,12 +25,9 @@ pub async fn publish_with_bookmark_enricher(
 ) -> Result<()> {
     let documents = input::read(content_dir)?;
     let tag_catalog = input::read_tag_catalog(content_dir)?;
-    let japanese = input::eligible(&documents, Locale::Ja);
-    let english = input::eligible(&documents, Locale::En);
-    let asset_names = links::assets(&japanese)?
-        .union(&links::assets(&english)?)
-        .cloned()
-        .collect::<Vec<_>>();
+    let [japanese, english] = input::eligible(documents);
+    let mut asset_names = links::assets(&japanese)?;
+    asset_names.extend(links::assets(&english)?);
     for name in &asset_names {
         let path = content_dir.join("assets").join(name);
         if !std::fs::symlink_metadata(path)?.file_type().is_file() {
@@ -39,15 +36,8 @@ pub async fn publish_with_bookmark_enricher(
             ));
         }
     }
-    let ja_files = classify::classify(japanese.clone());
-    if ja_files.articles.is_empty() {
-        return Err(PublishError::NoArticles);
-    }
-    if !ja_files.pages.iter().any(|p| p.page.as_str() == "about") {
-        return Err(PublishError::MissingAboutPage);
-    }
-    ensure_category_landings(&ja_files.articles, &ja_files.categories)?;
-    let ja_links = links::Index::new(&japanese, &japanese);
+    validate_japanese(&japanese)?;
+    let ja_links = links::Index::new(&japanese, &[]);
     let en_links = links::Index::new(&japanese, &english);
     ja_links.validate(&japanese)?;
     en_links.validate(&english)?;
@@ -69,9 +59,10 @@ pub async fn publish_with_bookmark_enricher(
         }
         locales.routes.entry("/".into()).or_default().push(locale);
         for doc in &docs {
-            let mut meta = doc.meta.clone();
-            meta.locale = Locale::Ja;
-            let available = locales.routes.entry(meta.path()).or_default();
+            let available = locales
+                .routes
+                .entry(doc.meta.path_in(Locale::Ja))
+                .or_default();
             if !available.contains(&locale) {
                 available.push(locale);
             }

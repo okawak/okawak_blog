@@ -312,30 +312,34 @@ mod tests {
             self.last_modified
         }
 
-        async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
+        async fn read_article_index(&self) -> Result<Arc<ArticleIndexDocument>> {
             unreachable!()
         }
 
         async fn read_category_document(
             &self,
             _category: &Category,
-        ) -> Result<CategoryArtifactDocument> {
+        ) -> Result<Arc<CategoryArtifactDocument>> {
             unreachable!()
         }
 
-        async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
+        async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
             unreachable!()
         }
 
-        async fn read_article_html(&self, _category: &Category, _slug: &Slug) -> Result<String> {
+        async fn read_article_html(
+            &self,
+            _category: &Category,
+            _slug: &Slug,
+        ) -> Result<Arc<String>> {
             unreachable!()
         }
 
-        async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+        async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
             unreachable!()
         }
 
-        async fn read_page_document(&self, _page: &PageKey) -> Result<PageArtifactDocument> {
+        async fn read_page_document(&self, _page: &PageKey) -> Result<Arc<PageArtifactDocument>> {
             unreachable!()
         }
     }

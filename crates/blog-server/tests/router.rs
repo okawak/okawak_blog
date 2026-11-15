@@ -701,16 +701,16 @@ impl ArtifactSnapshot for ValidatorSnapshot {
     async fn localized(&self, locale: blog_domain::Locale) -> Result<Option<DynArtifactSnapshot>> {
         self.inner.localized(locale).await
     }
-    async fn read_locales(&self) -> Result<blog_domain::SiteLocalesDocument> {
+    async fn read_locales(&self) -> Result<Arc<blog_domain::SiteLocalesDocument>> {
         self.inner.read_locales().await
     }
-    async fn read_tag_labels(&self) -> Result<blog_domain::TagLabels> {
+    async fn read_tag_labels(&self) -> Result<Arc<blog_domain::TagLabels>> {
         self.inner.read_tag_labels().await
     }
     async fn read_content_asset(
         &self,
         name: &blog_domain::ContentAssetName,
-    ) -> Result<Option<Vec<u8>>> {
+    ) -> Result<Option<bytes::Bytes>> {
         self.inner.read_content_asset(name).await
     }
 
@@ -722,30 +722,30 @@ impl ArtifactSnapshot for ValidatorSnapshot {
         self.inner.last_modified().or(Some(SystemTime::UNIX_EPOCH))
     }
 
-    async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
+    async fn read_article_index(&self) -> Result<Arc<ArticleIndexDocument>> {
         self.inner.read_article_index().await
     }
 
     async fn read_category_document(
         &self,
         category: &Category,
-    ) -> Result<CategoryArtifactDocument> {
+    ) -> Result<Arc<CategoryArtifactDocument>> {
         self.inner.read_category_document(category).await
     }
 
-    async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
+    async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
         self.inner.read_site_metadata().await
     }
 
-    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<String> {
+    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<Arc<String>> {
         self.inner.read_article_html(category, slug).await
     }
 
-    async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+    async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
         self.inner.read_home_fragment().await
     }
 
-    async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
+    async fn read_page_document(&self, page: &PageKey) -> Result<Arc<PageArtifactDocument>> {
         self.inner.read_page_document(page).await
     }
 }

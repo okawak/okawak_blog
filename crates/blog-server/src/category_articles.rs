@@ -42,17 +42,10 @@ pub(crate) async fn category_articles(
             topcoat::router::error::internal_server_error(std::io::Error::other(error))
         })?
         .ok_or_else(not_found)?;
-    let crate::page_loader::Presentation {
-        mut document,
-        labels,
-        ..
-    } = presentation;
-    filter_sections(&mut document.sections, query.read(), &labels);
-    let count: usize = document
-        .sections
-        .iter()
-        .map(|section| section.articles.len())
-        .sum();
+    let labels = std::sync::Arc::clone(&presentation.labels);
+    let mut sections = presentation.document.sections.clone();
+    filter_sections(&mut sections, query.read(), &labels);
+    let count: usize = sections.iter().map(|section| section.articles.len()).sum();
 
     Ok(view! {
         let query_id = element_id(cx);
@@ -94,7 +87,7 @@ pub(crate) async fn category_articles(
                 alert(alert_description((t(locale, Message::EmptyMatches))))
             }
             #[key(section.section_path.segments().join("/"))]
-            for section in &document.sections {
+            for section in &sections {
                 <section
                     id=(format!(
                         "category-section-{}",

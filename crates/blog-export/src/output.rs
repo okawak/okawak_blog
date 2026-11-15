@@ -1,8 +1,8 @@
 //! Public Markdown file adapter and reconciliation of export-managed output.
 use crate::{ExportError, Result, content::Document, filesystem};
-use blog_domain::{LabelCatalog, LabelEntry, Locale, Slug};
+use blog_domain::{LabelCatalog, LabelEntry, Locale};
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fs,
     io::Write,
     path::Path,
@@ -31,16 +31,16 @@ pub(crate) fn read_locale(root: &Path, locale: blog_domain::Locale) -> Result<Ve
 }
 
 pub(crate) fn reconcile(stage: &Path, previous: &[Document], documents: &[Document]) -> Result<()> {
-    let ids = documents.iter().map(|d| d.meta.id.clone()).collect();
+    let ids = documents.iter().map(|d| d.meta.id.as_str()).collect();
     fs::create_dir_all(stage.join("ja"))?;
     archive_removed(stage, &ids)?;
     sync_documents(stage, previous, documents)
 }
 
-fn archive_removed(stage: &Path, ids: &HashSet<Slug>) -> Result<()> {
+fn archive_removed(stage: &Path, ids: &HashSet<&str>) -> Result<()> {
     for locale in Locale::ALL {
         for old in read_locale(stage, locale)? {
-            if !ids.contains(&old.meta.id) {
+            if !ids.contains(old.meta.id.as_str()) {
                 let path = stage.join(format!("{locale}/{}.md", old.meta.id));
                 let archive = stage.join(".export-archive").join(format!(
                     "{locale}-{}-{}.md",
@@ -56,14 +56,18 @@ fn archive_removed(stage: &Path, ids: &HashSet<Slug>) -> Result<()> {
 }
 
 fn sync_documents(stage: &Path, previous: &[Document], documents: &[Document]) -> Result<()> {
+    let mut previous_by_id = HashMap::with_capacity(previous.len());
+    for document in previous {
+        previous_by_id.entry(&document.meta.id).or_insert(document);
+    }
     for document in documents {
         let english_path = stage.join(format!("en/{}.md", document.meta.id));
         if english_path.exists() {
             let mut english = Document::parse(&fs::read_to_string(&english_path)?)?;
             let mut provenance = english.meta.translation.take();
-            if previous
-                .iter()
-                .find(|d| d.meta.id == document.meta.id)
+            if previous_by_id
+                .get(&document.meta.id)
+                .copied()
                 .map(crate::content::text_hash)
                 .transpose()?
                 != Some(crate::content::text_hash(document)?)

@@ -81,6 +81,6 @@ async fn cache_reuses_each_locale_without_mixing_indexes_or_assets() {
     assert!(ja.read_article_index().await.is_ok());
     assert_eq!(
         en.read_content_asset(&name).await.unwrap(),
-        Some(vec![0, 255, 1])
+        Some(vec![0, 255, 1].into())
     );
 }

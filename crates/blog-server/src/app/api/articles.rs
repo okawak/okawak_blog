@@ -40,7 +40,7 @@ use blog_infra::DynArtifactReader;
             "The article index could not be read.",
         ))
 )]
-async fn articles(cx: &Cx) -> Result<Json<blog_domain::ArticleIndexDocument>> {
+async fn articles(cx: &Cx) -> Result<Json<std::sync::Arc<blog_domain::ArticleIndexDocument>>> {
     let artifact_reader = context::<DynArtifactReader>(cx);
     let document = match try_context::<DynArtifactSnapshot>(cx) {
         Some(snapshot) => snapshot.read_article_index().await,

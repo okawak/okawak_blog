@@ -116,10 +116,10 @@ impl S3ArtifactSnapshot {
     }
 
     async fn read_text(&self, relative: &str) -> Result<String> {
-        Ok(String::from_utf8(self.read_bytes(relative).await?)?)
+        Ok(String::from_utf8(self.read_bytes(relative).await?.into())?)
     }
 
-    async fn read_bytes(&self, relative: &str) -> Result<Vec<u8>> {
+    async fn read_bytes(&self, relative: &str) -> Result<bytes::Bytes> {
         let key = self.location.key_for(&self.locale.artifact_key(relative));
         let response = self
             .client
@@ -134,15 +134,15 @@ impl S3ArtifactSnapshot {
                 InfraError::s3_read(self.location.bucket(), key.clone(), source)
             })?;
 
-        Ok(bytes.into_bytes().to_vec())
+        Ok(bytes.into_bytes())
     }
 
     async fn read_json<T>(&self, relative: &str) -> Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
-        let content = self.read_text(relative).await?;
-        Ok(serde_json::from_str(&content)?)
+        let content = self.read_bytes(relative).await?;
+        Ok(serde_json::from_slice(&content)?)
     }
 }
 
@@ -194,28 +194,28 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
         Ok(Some(Arc::new(localized)))
     }
 
-    async fn read_locales(&self) -> Result<SiteLocalesDocument> {
+    async fn read_locales(&self) -> Result<Arc<SiteLocalesDocument>> {
         let mut root = self.clone();
         root.locale = Locale::Ja;
         match root.read_json::<SiteLocalesDocument>("locales.json").await {
             Ok(document) => {
                 document.validate()?;
-                Ok(document)
+                Ok(Arc::new(document))
             }
-            Err(error) if error.is_not_found() => Ok(SiteLocalesDocument::default()),
+            Err(error) if error.is_not_found() => Ok(Arc::new(SiteLocalesDocument::default())),
             Err(error) => Err(error),
         }
     }
 
-    async fn read_tag_labels(&self) -> Result<blog_domain::TagLabels> {
-        match self.read_text("tags.json").await {
-            Ok(text) => Ok(serde_json::from_str(&text)?),
+    async fn read_tag_labels(&self) -> Result<Arc<blog_domain::TagLabels>> {
+        match self.read_json("tags.json").await {
+            Ok(labels) => Ok(labels),
             Err(error) if error.is_not_found() => Ok(Default::default()),
             Err(error) => Err(error),
         }
     }
 
-    async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<Vec<u8>>> {
+    async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<bytes::Bytes>> {
         let mut root = self.clone();
         root.locale = Locale::Ja;
         match root
@@ -228,40 +228,39 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
         }
     }
 
-    async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
+    async fn read_article_index(&self) -> Result<Arc<ArticleIndexDocument>> {
         self.read_json("articles/index.json").await
     }
 
     async fn read_category_document(
         &self,
         category: &Category,
-    ) -> Result<CategoryArtifactDocument> {
+    ) -> Result<Arc<CategoryArtifactDocument>> {
         self.read_json(&format!("categories/{}.json", category.as_str()))
             .await
     }
 
-    async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
+    async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
         self.read_json("metadata/site.json").await
     }
 
-    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<String> {
+    async fn read_article_html(&self, category: &Category, slug: &Slug) -> Result<Arc<String>> {
         self.read_text(&format!(
             "articles/{}/{}.html",
             category.as_str(),
             slug.as_str()
         ))
         .await
+        .map(Arc::new)
     }
 
-    async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+    async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
         self.read_json("home.json").await
     }
 
-    async fn read_page_document(&self, page: &PageKey) -> Result<PageArtifactDocument> {
-        let text = self
-            .read_text(&format!("pages/{}.json", page.as_str()))
-            .await?;
-        Ok(serde_json::from_str(&text)?)
+    async fn read_page_document(&self, page: &PageKey) -> Result<Arc<PageArtifactDocument>> {
+        self.read_json(&format!("pages/{}.json", page.as_str()))
+            .await
     }
 }
 

@@ -68,14 +68,32 @@ pub(crate) fn classify(documents: Vec<Document>) -> ClassifiedFiles {
     files
 }
 
-pub(crate) fn ensure_category_landings(
-    articles: &[ParsedArticleFile],
-    categories: &[ParsedCategoryFile],
-) -> Result<()> {
-    let landings: HashSet<_> = categories.iter().map(|d| d.category).collect();
-    if let Some(article) = articles.iter().find(|d| !landings.contains(&d.category)) {
+pub(crate) fn validate_japanese(documents: &[Document]) -> Result<()> {
+    if !documents
+        .iter()
+        .any(|d| d.meta.kind == ContentKind::Article)
+    {
+        return Err(PublishError::NoArticles);
+    }
+    if !documents.iter().any(|d| {
+        d.meta
+            .page
+            .as_ref()
+            .is_some_and(|page| page.as_str() == "about")
+    }) {
+        return Err(PublishError::MissingAboutPage);
+    }
+    let landings: HashSet<_> = documents
+        .iter()
+        .filter(|d| d.meta.kind == ContentKind::Category)
+        .filter_map(|d| d.meta.category)
+        .collect();
+    if let Some(article) = documents.iter().find(|d| {
+        d.meta.kind == ContentKind::Article
+            && !landings.contains(&d.meta.category.expect("validated article category"))
+    }) {
         return Err(PublishError::MissingCategoryLanding {
-            category: article.category,
+            category: article.meta.category.expect("validated article category"),
         });
     }
     Ok(())

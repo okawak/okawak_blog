@@ -12,9 +12,9 @@ pub(crate) type PageLoadResult<T> = Result<T, String>;
 
 #[async_trait]
 pub(crate) trait PageLoader: Send + Sync {
-    async fn load_locales(&self) -> PageLoadResult<SiteLocalesDocument>;
+    async fn load_locales(&self) -> PageLoadResult<Arc<SiteLocalesDocument>>;
 
-    async fn load_asset(&self, name: &ContentAssetName) -> PageLoadResult<Option<Vec<u8>>>;
+    async fn load_asset(&self, name: &ContentAssetName) -> PageLoadResult<Option<bytes::Bytes>>;
 
     async fn load_home(
         &self,
@@ -44,8 +44,8 @@ pub(crate) trait PageLoader: Send + Sync {
 #[derive(Clone)]
 pub(crate) struct Presentation<T> {
     pub(crate) document: T,
-    pub(crate) labels: TagLabels,
-    pub(crate) locales: SiteLocalesDocument,
+    pub(crate) labels: Arc<TagLabels>,
+    pub(crate) locales: Arc<SiteLocalesDocument>,
 }
 
 pub(crate) type DynPageLoader = Arc<dyn PageLoader>;

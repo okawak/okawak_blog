@@ -7,7 +7,6 @@ use std::{
     path::Path,
 };
 
-#[derive(Clone)]
 pub(crate) struct Document {
     pub(crate) meta: PublicContentMeta,
     pub(crate) body: String,
@@ -123,30 +122,23 @@ fn public_directory_exists(path: &Path) -> Result<bool> {
     }
 }
 
-pub(crate) fn eligible(documents: &[Document], locale: Locale) -> Vec<Document> {
-    let candidates: Vec<_> = documents
-        .iter()
+pub(crate) fn eligible(documents: Vec<Document>) -> [Vec<Document>; 2] {
+    let (japanese, mut english): (Vec<_>, Vec<_>) = documents
+        .into_iter()
         .filter(|d| {
-            d.meta.locale == locale
-                && (locale == Locale::Ja || d.meta.translation.as_ref().is_some_and(|p| !p.stale))
+            d.meta.locale == Locale::Ja || d.meta.translation.as_ref().is_some_and(|p| !p.stale)
         })
-        .cloned()
-        .collect();
-    if locale == Locale::Ja {
-        return candidates;
-    }
-    let categories: HashSet<_> = candidates
+        .partition(|d| d.meta.locale == Locale::Ja);
+    let categories: HashSet<_> = english
         .iter()
         .filter(|d| d.meta.kind == ContentKind::Category)
         .filter_map(|d| d.meta.category)
         .collect();
-    candidates
-        .into_iter()
-        .filter(|d| {
-            d.meta.kind != ContentKind::Article
-                || d.meta.category.is_some_and(|c| categories.contains(&c))
-        })
-        .collect()
+    english.retain(|d| {
+        d.meta.kind != ContentKind::Article
+            || d.meta.category.is_some_and(|c| categories.contains(&c))
+    });
+    [japanese, english]
 }
 
 fn invalid(message: &str) -> PublishError {

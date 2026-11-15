@@ -10,7 +10,7 @@ use crate::{
     output,
 };
 use blog_domain::{Locale, Sha256Digest, Slug, TranslationProvenance};
-use std::{fs, path::Path};
+use std::{collections::HashMap, fs, path::Path};
 
 struct ArticlePlan<'a> {
     original: Document,
@@ -30,13 +30,17 @@ pub(crate) fn translate_stage(
     let mut report = TranslationReport::default();
     let originals = output::read_locale(stage, Locale::Ja)?;
     let english = output::read_locale(stage, Locale::En)?;
+    let mut english_by_id = HashMap::with_capacity(english.len());
+    for document in &english {
+        english_by_id.entry(&document.meta.id).or_insert(document);
+    }
     let tags = super::catalog::plan_catalog(&stage.join("tags.json"), settings)?;
     let mut plans = Vec::new();
     for original in originals {
         let fragments = Fragments::extract(&original);
         let request = article_request(fragments.texts.clone(), settings);
         let input = content_input(&request, &original)?;
-        let current = english.iter().find(|d| d.meta.id == original.meta.id);
+        let current = english_by_id.get(&original.meta.id).copied();
         let current_hash = current.map(text_hash).transpose()?;
         let decision = decide(
             input.as_str(),

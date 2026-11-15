@@ -7,7 +7,7 @@ use crate::{
     HomeFragmentArtifactDocument, PageArtifactDocument, PublishedArticleSummary, Result,
     SectionPath, SiteMetadataDocument, Slug,
 };
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 impl TryFrom<&ArticleSummaryDocument> for SiteArticleCard {
     type Error = DomainError;
@@ -102,7 +102,7 @@ pub fn build_category_page_document(
     let articles = artifact
         .articles
         .iter()
-        .map(SiteArticleCard::try_from)
+        .map(|article| SiteArticleCard::try_from(article).map(Arc::new))
         .collect::<Result<Vec<_>>>()?;
     let sections = build_category_section_groups(&articles);
 
@@ -138,10 +138,10 @@ pub fn find_article_summary<'a>(
         .find(|article| article.slug == slug.as_str() && article.category == category.as_str())
 }
 
-fn build_category_section_groups(articles: &[SiteArticleCard]) -> Vec<CategorySectionGroup> {
+fn build_category_section_groups(articles: &[Arc<SiteArticleCard>]) -> Vec<CategorySectionGroup> {
     use std::collections::BTreeMap;
 
-    let mut grouped: BTreeMap<SectionPath, Vec<SiteArticleCard>> = BTreeMap::new();
+    let mut grouped: BTreeMap<SectionPath, Vec<Arc<SiteArticleCard>>> = BTreeMap::new();
     for article in articles {
         grouped
             .entry(article.section_path.clone())
@@ -291,6 +291,10 @@ mod tests {
         assert_eq!(document.articles.len(), 1);
         assert_eq!(document.sections.len(), 1);
         assert_eq!(document.sections[0].heading, "block");
+        assert!(Arc::ptr_eq(
+            &document.articles[0],
+            &document.sections[0].articles[0]
+        ));
     }
 
     #[test]

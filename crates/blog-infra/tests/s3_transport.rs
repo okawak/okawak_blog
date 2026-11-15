@@ -111,19 +111,20 @@ async fn release_snapshot_preserves_identity_localized_text_and_shared_binary_as
     assert_eq!(english.cache_identity(), snapshot.cache_identity());
     assert_eq!(english.last_modified(), snapshot.last_modified());
     assert_eq!(
-        english.read_tag_labels().await.unwrap(),
+        *english.read_tag_labels().await.unwrap(),
         [("rust".into(), "Rust articles".into())].into()
     );
     assert_eq!(
         english
             .read_article_html(&Category::Tech, &Slug::new("intro".into()).unwrap())
             .await
-            .unwrap(),
+            .unwrap()
+            .as_str(),
         "<p>English 日本</p>"
     );
     assert_eq!(
         english.read_content_asset(&name).await.unwrap(),
-        Some(vec![0, 255, 10])
+        Some(vec![0, 255, 10].into())
     );
     assert_eq!(english.read_locales().await.unwrap(), catalog);
     transport.assert_requests_match(&[]);
@@ -144,7 +145,7 @@ async fn missing_pointer_and_optional_objects_keep_legacy_japanese_behavior() {
     assert_eq!(snapshot.last_modified(), None);
     assert_eq!(
         snapshot.read_locales().await.unwrap(),
-        SiteLocalesDocument::default()
+        SiteLocalesDocument::default().into()
     );
     assert!(snapshot.read_tag_labels().await.unwrap().is_empty());
     assert_eq!(snapshot.read_content_asset(&name).await.unwrap(), None);

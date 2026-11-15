@@ -5,6 +5,7 @@ use blog_domain::{
     SiteMetadataDocument, Slug,
 };
 use blog_infra::{ArtifactSnapshot, InfraError, Result};
+use std::sync::Arc;
 
 // A reader implementing only the original required contract remains Japanese-only.
 struct LegacySnapshot;
@@ -17,22 +18,22 @@ fn unavailable<T>() -> Result<T> {
 
 #[async_trait]
 impl ArtifactSnapshot for LegacySnapshot {
-    async fn read_article_index(&self) -> Result<ArticleIndexDocument> {
+    async fn read_article_index(&self) -> Result<Arc<ArticleIndexDocument>> {
         unavailable()
     }
-    async fn read_category_document(&self, _: &Category) -> Result<CategoryArtifactDocument> {
+    async fn read_category_document(&self, _: &Category) -> Result<Arc<CategoryArtifactDocument>> {
         unavailable()
     }
-    async fn read_site_metadata(&self) -> Result<SiteMetadataDocument> {
+    async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
         unavailable()
     }
-    async fn read_article_html(&self, _: &Category, _: &Slug) -> Result<String> {
+    async fn read_article_html(&self, _: &Category, _: &Slug) -> Result<Arc<String>> {
         unavailable()
     }
-    async fn read_home_fragment(&self) -> Result<HomeFragmentArtifactDocument> {
+    async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
         unavailable()
     }
-    async fn read_page_document(&self, _: &PageKey) -> Result<PageArtifactDocument> {
+    async fn read_page_document(&self, _: &PageKey) -> Result<Arc<PageArtifactDocument>> {
         unavailable()
     }
 }
@@ -45,7 +46,7 @@ async fn optional_contract_defaults_do_not_invent_assets_or_release_validators()
     assert_eq!(snapshot.last_modified(), None);
     assert_eq!(snapshot.read_content_asset(&name).await.unwrap(), None);
     assert_eq!(
-        snapshot.read_locales().await.unwrap(),
+        *snapshot.read_locales().await.unwrap(),
         SiteLocalesDocument::default()
     );
     assert!(snapshot.read_tag_labels().await.unwrap().is_empty());

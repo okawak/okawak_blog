@@ -217,6 +217,10 @@ responsive menuはTopcoat UIのPopoverとブラウザー標準の開閉・focus�
 
 ArtifactReaderは1処理で使うArtifactSnapshotを取得し、snapshotは同じreleaseのindex、metadata、HTML、辞書、assetを読む。
 
+snapshotの文書・HTML・辞書は`Arc`、assetは`Bytes`で返し、cache hit時に本文や一覧全体を複製しない。S3のassetは取得した共有バイト列をHTTP応答まで保持する。記事単体の検索はsnapshotの`read_article_summary`を使い、cache付きsnapshotはカテゴリ・slugから記事位置への索引を一度構築する。索引と文書は同じsnapshotに属し、localeやreleaseをまたいで共有しない。
+
+PageLoaderのpresentationは辞書とlocale catalogの共有参照を保持する。カテゴリのpageとshardはrequest内でpresentationを共有し、絞り込み時はsectionの配列だけを複製する。カテゴリ一覧とsectionに属する同一記事カードも`Arc`で共有する。JSONの文書構造は共有参照の有無に依存しない。
+
 - local readerはdev-localと固定fixtureでfilesystem treeを読み、memory cacheを適用しない
 - S3 readerはcurrent.jsonからrelease prefixを固定し、snapshotと取得済みartifactをmemory cacheする
 - current.jsonが初回から存在しない場合だけ旧bucket rootを日本語releaseとして読む

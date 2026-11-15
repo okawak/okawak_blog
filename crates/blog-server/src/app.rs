@@ -81,8 +81,11 @@ pub(crate) async fn load_category(
     cx: &Cx,
     category: Category,
     locale: Locale,
-) -> PageLoadResult<Option<crate::page_loader::Presentation<CategoryPageDocument>>> {
-    page_loader(cx).load_category(locale, &category).await
+) -> PageLoadResult<Option<Arc<crate::page_loader::Presentation<CategoryPageDocument>>>> {
+    page_loader(cx)
+        .load_category(locale, &category)
+        .await
+        .map(|presentation| presentation.map(Arc::new))
 }
 
 fn is_under_path(path: &str, prefix: &str) -> bool {
@@ -290,7 +293,7 @@ async fn home_page_content(
     cx: &Cx,
     document: HomePageDocument,
     locale: Locale,
-    labels: blog_domain::TagLabels,
+    labels: Arc<blog_domain::TagLabels>,
 ) -> Result<impl View> {
     let page_description = build_home_page_description(&document, locale);
 

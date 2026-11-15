@@ -127,7 +127,7 @@ pub(crate) async fn site_shell(
     metadata: Metadata,
     locale: Locale,
     canonical_path: String,
-    #[default] locales: SiteLocalesDocument,
+    #[default] locales: std::sync::Arc<SiteLocalesDocument>,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
     let available = locales.routes.get(japanese_path(&canonical_path));
