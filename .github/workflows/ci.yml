@@ -31,7 +31,7 @@ jobs:
           rustup show
 
       - name: Set up shared build tools
-        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5
 
       - name: Check tool version consistency
         run: mise run versions-check
@@ -72,7 +72,7 @@ jobs:
           rustup show
 
       - name: Set up shared build tools
-        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
