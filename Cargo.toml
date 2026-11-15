@@ -31,6 +31,7 @@ headers = "0.4"
 httpdate = "1"
 http = "1"
 indoc = "2"
+moka = { version = "0.12", default-features = false }
 pulldown-cmark = "0.13"
 percent-encoding = "2"
 regex = "1"

@@ -5,6 +5,7 @@ use blog_domain::{
     HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey, PublishableArticle,
     SiteLocalesDocument, SiteMetadataDocument, Slug,
 };
+use moka::future::Cache;
 use std::{
     collections::HashMap,
     future::Future,
@@ -108,7 +109,7 @@ impl ArtifactReader for CachingArtifactReader {
 }
 
 struct CachingArtifactSnapshot {
-    localized: KeyedCache<Option<DynArtifactSnapshot>>,
+    localized: Cache<Locale, Option<DynArtifactSnapshot>>,
     locales: OnceCell<Arc<SiteLocalesDocument>>,
     tags: OnceCell<Arc<blog_domain::TagLabels>>,
     content_assets: OptionalCache<bytes::Bytes>,
@@ -116,15 +117,15 @@ struct CachingArtifactSnapshot {
     article_index: OnceCell<Arc<ArticleIndexDocument>>,
     site_metadata: OnceCell<Arc<SiteMetadataDocument>>,
     home_fragment: OnceCell<Arc<HomeFragmentArtifactDocument>>,
-    category_documents: KeyedCache<Arc<CategoryArtifactDocument>>,
+    category_documents: Cache<Category, Arc<CategoryArtifactDocument>>,
     articles: HashMap<Category, OptionalCache<Arc<PublishableArticle>>>,
-    page_documents: KeyedCache<Arc<PageArtifactDocument>>,
+    page_documents: Cache<String, Arc<PageArtifactDocument>>,
 }
 
 impl CachingArtifactSnapshot {
     fn new(inner: DynArtifactSnapshot) -> Self {
         Self {
-            localized: KeyedCache::new(),
+            localized: Cache::builder().build(),
             locales: OnceCell::new(),
             tags: OnceCell::new(),
             content_assets: OptionalCache::default(),
@@ -132,7 +133,7 @@ impl CachingArtifactSnapshot {
             article_index: OnceCell::new(),
             site_metadata: OnceCell::new(),
             home_fragment: OnceCell::new(),
-            category_documents: KeyedCache::new(),
+            category_documents: Cache::builder().build(),
             articles: [
                 Category::Tech,
                 Category::Daily,
@@ -142,7 +143,7 @@ impl CachingArtifactSnapshot {
             .into_iter()
             .map(|category| (category, OptionalCache::default()))
             .collect(),
-            page_documents: KeyedCache::new(),
+            page_documents: Cache::builder().build(),
         }
     }
 }
@@ -159,12 +160,13 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
 
     async fn localized(&self, locale: Locale) -> Result<Option<DynArtifactSnapshot>> {
         self.localized
-            .get_or_try_init(locale.as_str(), || async {
+            .try_get_with(locale, async {
                 Ok(self.inner.localized(locale).await?.map(|snapshot| {
                     Arc::new(CachingArtifactSnapshot::new(snapshot)) as DynArtifactSnapshot
                 }))
             })
             .await
+            .map_err(crate::InfraError::Shared)
     }
 
     async fn read_locales(&self) -> Result<Arc<SiteLocalesDocument>> {
@@ -199,10 +201,11 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
         category: &Category,
     ) -> Result<Arc<CategoryArtifactDocument>> {
         self.category_documents
-            .get_or_try_init(category.as_str(), || {
-                self.inner.read_category_document(category)
+            .try_get_with(*category, async {
+                self.inner.read_category_document(category).await
             })
             .await
+            .map_err(crate::InfraError::Shared)
     }
 
     async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
@@ -231,122 +234,51 @@ impl ArtifactSnapshot for CachingArtifactSnapshot {
 
     async fn read_page_document(&self, page: &PageKey) -> Result<Arc<PageArtifactDocument>> {
         self.page_documents
-            .get_or_try_init(page.as_str(), || self.inner.read_page_document(page))
+            .try_get_with_by_ref(page.as_str(), async {
+                self.inner.read_page_document(page).await
+            })
             .await
+            .map_err(crate::InfraError::Shared)
     }
 }
 
-type OptionalResult<T> = std::result::Result<Option<T>, Arc<crate::InfraError>>;
-type OptionalCell<T> = Arc<OnceCell<OptionalResult<T>>>;
-
-struct OptionalEntry<T> {
-    cell: OptionalCell<T>,
-    readers: usize,
-}
-
-impl<T> Default for OptionalEntry<T> {
-    fn default() -> Self {
-        Self {
-            cell: Arc::new(OnceCell::new()),
-            readers: 0,
-        }
-    }
-}
-
+/// Bridges storage's three outcomes to Moka: only present values are cacheable.
 struct OptionalCache<T> {
-    // Only map access is synchronous; storage I/O happens outside this lock.
-    entries: std::sync::Mutex<HashMap<String, OptionalEntry<T>>>,
+    entries: Cache<String, T>,
 }
 
-impl<T> Default for OptionalCache<T> {
+impl<T: Clone + Send + Sync + 'static> Default for OptionalCache<T> {
     fn default() -> Self {
         Self {
-            entries: Default::default(),
+            entries: Cache::builder().build(),
         }
     }
 }
 
-impl<T: Clone> OptionalCache<T> {
+impl<T: Clone + Send + Sync + 'static> OptionalCache<T> {
     async fn get_or_try_init<F, Fut>(&self, key: &str, load: F) -> Result<Option<T>>
     where
         F: FnOnce() -> Fut,
         Fut: Future<Output = Result<Option<T>>>,
     {
-        let cell = {
-            let mut entries = self.entries.lock().unwrap();
-            let entry = match entries.get_mut(key) {
-                Some(entry) => entry,
-                None => entries.entry(key.to_owned()).or_default(),
-            };
-            entry.readers += 1;
-            Arc::clone(&entry.cell)
-        };
-        let read = OptionalRead {
-            cache: self,
-            key,
-            cell,
-        };
-        read.cell
-            .get_or_init(|| async { load().await.map_err(Arc::new) })
+        // None means missing; Some(error) keeps the original failure shared.
+        // Both travel through Moka's error path so neither becomes a cache entry.
+        match self
+            .entries
+            .try_get_with_by_ref(key, async {
+                load()
+                    .await
+                    .map_err(|error| Some(Arc::new(error)))?
+                    .ok_or(None)
+            })
             .await
-            .clone()
-            .map_err(crate::InfraError::Shared)
-    }
-}
-
-struct OptionalRead<'a, T> {
-    cache: &'a OptionalCache<T>,
-    key: &'a str,
-    cell: OptionalCell<T>,
-}
-
-impl<T> Drop for OptionalRead<'_, T> {
-    fn drop(&mut self) {
-        let mut entries = self.cache.entries.lock().unwrap();
-        let entry = entries
-            .get_mut(self.key)
-            .expect("active optional artifact read");
-        entry.readers -= 1;
-        // Count completion while locked; Arc fields may be dropped later on another
-        // thread. Only successful values survive the final reader of this flight.
-        if entry.readers == 0 && !matches!(self.cell.get(), Some(Ok(Some(_)))) {
-            entries.remove(self.key);
+        {
+            Ok(value) => Ok(Some(value)),
+            Err(outcome) => match outcome.as_ref() {
+                None => Ok(None),
+                Some(error) => Err(crate::InfraError::Shared(Arc::clone(error))),
+            },
         }
-    }
-}
-
-struct KeyedCache<T> {
-    entries: Mutex<HashMap<String, Arc<OnceCell<T>>>>,
-}
-
-impl<T> KeyedCache<T>
-where
-    T: Clone,
-{
-    fn new() -> Self {
-        Self {
-            entries: Mutex::new(HashMap::new()),
-        }
-    }
-
-    async fn get_or_try_init<F, Fut>(&self, key: &str, load: F) -> Result<T>
-    where
-        F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<T>>,
-    {
-        let cell = {
-            let mut entries = self.entries.lock().await;
-            match entries.get(key) {
-                Some(cell) => Arc::clone(cell),
-                None => {
-                    let cell = Arc::new(OnceCell::new());
-                    entries.insert(key.to_owned(), Arc::clone(&cell));
-                    cell
-                }
-            }
-        };
-
-        cell.get_or_try_init(load).await.cloned()
     }
 }
 
@@ -461,6 +393,8 @@ mod tests {
             &self,
             category: &Category,
         ) -> Result<Arc<CategoryArtifactDocument>> {
+            self.article_reads.fetch_add(1, Ordering::SeqCst);
+            tokio::task::yield_now().await;
             Ok(Arc::new(CategoryArtifactDocument {
                 category: category.as_str().to_string(),
                 title: category.as_str().to_string(),
@@ -646,7 +580,7 @@ mod tests {
         let failed = ContentAssetName::new(format!("{:064x}.png", 129)).unwrap();
         std::fs::create_dir(assets.join(failed.as_str())).unwrap();
         assert!(snapshot.read_content_asset(&failed).await.is_err());
-        assert_eq!(snapshot.content_assets.entries.lock().unwrap().len(), 1);
+        assert_eq!(snapshot.content_assets.entries.iter().count(), 1);
     }
 
     #[tokio::test]
@@ -669,7 +603,7 @@ mod tests {
             assert_eq!(second.unwrap().is_some(), present);
             assert_eq!(reads.load(Ordering::SeqCst), 1);
         }
-        assert_eq!(snapshot.content_assets.entries.lock().unwrap().len(), 1);
+        assert_eq!(snapshot.content_assets.entries.iter().count(), 1);
     }
 
     #[tokio::test]
@@ -686,9 +620,81 @@ mod tests {
                 std::future::poll_fn(|cx| std::task::Poll::Ready(reader.as_mut().poll(cx))).await;
             assert!(state.is_pending(), "read must remain in flight: {state:?}");
             assert!(started.get());
-            assert_eq!(cache.entries.lock().unwrap().len(), 1);
-        } // Dropping the pending future cancels the read and releases its entry.
-        assert!(cache.entries.lock().unwrap().is_empty());
+        } // Dropping the pending future must allow a fresh read of the same key.
+        assert!(cache.entries.iter().next().is_none());
+        let recovered = tokio::time::timeout(
+            Duration::from_secs(1),
+            cache.get_or_try_init("cancelled", || async {
+                Ok(Some(bytes::Bytes::from_static(b"recovered")))
+            }),
+        )
+        .await
+        .expect("cancelled initialization must not leave a blocked waiter")
+        .unwrap();
+        assert_eq!(recovered, Some(bytes::Bytes::from_static(b"recovered")));
+    }
+
+    #[tokio::test]
+    async fn cancelling_the_initializer_allows_a_waiting_reader_to_take_over() {
+        let cache = OptionalCache::<bytes::Bytes>::default();
+        let replacement_started = std::cell::Cell::new(false);
+        let mut replacement = std::pin::pin!(cache.get_or_try_init("same", || async {
+            replacement_started.set(true);
+            Ok(Some(bytes::Bytes::from_static(b"replacement")))
+        }));
+        {
+            let mut initializer =
+                std::pin::pin!(cache.get_or_try_init("same", std::future::pending));
+            let state =
+                std::future::poll_fn(|cx| std::task::Poll::Ready(initializer.as_mut().poll(cx)))
+                    .await;
+            assert!(state.is_pending());
+            let state =
+                std::future::poll_fn(|cx| std::task::Poll::Ready(replacement.as_mut().poll(cx)))
+                    .await;
+            assert!(state.is_pending());
+            assert!(!replacement_started.get());
+        }
+        let result = tokio::time::timeout(Duration::from_secs(1), replacement)
+            .await
+            .expect("waiting reader must recover after initializer cancellation")
+            .unwrap();
+        assert_eq!(result, Some(bytes::Bytes::from_static(b"replacement")));
+        assert!(replacement_started.get());
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_waiter_does_not_discard_the_initializers_value() {
+        let cache = OptionalCache::<bytes::Bytes>::default();
+        let release = tokio::sync::Notify::new();
+        let mut initializer = std::pin::pin!(cache.get_or_try_init("same", || async {
+            release.notified().await;
+            Ok(Some(bytes::Bytes::from_static(b"original")))
+        }));
+        let state =
+            std::future::poll_fn(|cx| std::task::Poll::Ready(initializer.as_mut().poll(cx))).await;
+        assert!(state.is_pending());
+        {
+            let mut waiter = std::pin::pin!(cache.get_or_try_init("same", || async {
+                panic!("waiter must share the active initialization")
+            }));
+            let state =
+                std::future::poll_fn(|cx| std::task::Poll::Ready(waiter.as_mut().poll(cx))).await;
+            assert!(state.is_pending());
+        }
+        release.notify_one();
+        let result = tokio::time::timeout(Duration::from_secs(1), initializer)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, Some(bytes::Bytes::from_static(b"original")));
+        let cached = cache
+            .get_or_try_init("same", || async {
+                panic!("successful value must remain cached")
+            })
+            .await
+            .unwrap();
+        assert_eq!(cached, result);
     }
 
     #[tokio::test]
@@ -712,9 +718,9 @@ mod tests {
         assert!(
             snapshot.articles[&Category::Tech]
                 .entries
-                .lock()
-                .unwrap()
-                .is_empty()
+                .iter()
+                .next()
+                .is_none()
         );
     }
 
@@ -736,7 +742,7 @@ mod tests {
             second.unwrap_err().to_string()
         );
         assert_eq!(reads.load(Ordering::SeqCst), 1);
-        assert!(cache.entries.lock().unwrap().is_empty());
+        assert!(cache.entries.iter().next().is_none());
         assert_eq!(
             cache
                 .get_or_try_init("same", || async {
@@ -770,30 +776,47 @@ mod tests {
             while let Some(reader) = readers.join_next().await {
                 assert!(reader.unwrap().is_none());
             }
-            assert!(cache.entries.lock().unwrap().is_empty());
+            assert!(cache.entries.iter().next().is_none());
         }
     }
 
     #[tokio::test]
-    async fn keyed_cache_single_flights_each_key_independently() {
-        let cache = KeyedCache::new();
-        let loads = AtomicUsize::new(0);
+    async fn failed_page_reads_do_not_accumulate_cache_entries() {
+        let root = tempfile::tempdir().unwrap();
+        let snapshot =
+            CachingArtifactSnapshot::new(Arc::new(crate::LocalArtifactReader::new(root.path())));
+        for index in 0..32 {
+            let page = format!("missing-{index}").parse().unwrap();
+            assert!(
+                snapshot
+                    .read_page_document(&page)
+                    .await
+                    .unwrap_err()
+                    .is_not_found()
+            );
+        }
+        assert!(snapshot.page_documents.iter().next().is_none());
+    }
 
-        let (first, second) = tokio::join!(
-            cache.get_or_try_init("same", || async {
-                loads.fetch_add(1, Ordering::SeqCst);
-                tokio::task::yield_now().await;
-                Ok("value".to_string())
-            }),
-            cache.get_or_try_init("same", || async {
-                loads.fetch_add(1, Ordering::SeqCst);
-                Ok("other".to_string())
-            })
+    #[tokio::test]
+    async fn category_cache_shares_concurrent_reads_and_keeps_keys_separate() {
+        let reads = Arc::new(AtomicUsize::new(0));
+        let snapshot = CachingArtifactSnapshot::new(Arc::new(CountingSnapshot {
+            article_reads: Arc::clone(&reads),
+            fail_next_article_read: Arc::new(AtomicBool::new(false)),
+            cache_identity: Some("release-1"),
+            last_modified: None,
+        }));
+        let (first, second, other) = tokio::join!(
+            snapshot.read_category_document(&Category::Tech),
+            snapshot.read_category_document(&Category::Tech),
+            snapshot.read_category_document(&Category::Daily),
         );
-
-        assert_eq!(first.unwrap(), "value");
-        assert_eq!(second.unwrap(), "value");
-        assert_eq!(loads.load(Ordering::SeqCst), 1);
+        let first = first.unwrap();
+        assert!(Arc::ptr_eq(&first, &second.unwrap()));
+        assert_eq!(first.category, "tech");
+        assert_eq!(other.unwrap().category, "daily");
+        assert_eq!(reads.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]
