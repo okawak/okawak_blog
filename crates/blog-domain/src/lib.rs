@@ -7,6 +7,7 @@ mod entities;
 mod error;
 mod page;
 mod publication;
+mod rfc3339;
 
 pub use artifact::{
     ARTIFACT_RELEASE_SCHEMA_VERSION, ArticleArtifactDocument, ArticleIndexDocument,
