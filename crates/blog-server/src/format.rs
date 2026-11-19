@@ -1,5 +1,5 @@
 use blog_domain::{Locale, Timestamp};
-use jiff::civil::{Date, DateTime};
+use jiff::civil::Date;
 use topcoat::l10n::{DateTime as LocalizedDateTime, DateTimeStyle, Number, locale};
 
 /// Keep framework locale formatting at the server boundary.
@@ -17,27 +17,18 @@ pub(crate) fn format_count(count: usize, locale: Locale) -> String {
 /// Formats an artifact date for human-readable presentation.
 pub(crate) fn format_display_date(value: &str, locale: Locale) -> String {
     let date = Timestamp::parse_calendar_date(value)
-        .or_else(|| Date::strptime("%Y-%m-%d", value).ok())
+        .or_else(|| Date::strptime("%F", value).ok())
+        .or_else(|| Date::strptime("%FT%R", value).ok())
         .or_else(|| {
-            DateTime::strptime("%Y-%m-%dT%H:%M", value)
-                .ok()
-                .map(|datetime| datetime.date())
-        })
-        .or_else(|| {
-            // Legacy artifacts can store a local datetime. Its fractional seconds
-            // can be omitted for display once the suffix has been validated.
-            let seconds = match value.split_once('.') {
-                Some((seconds, fraction))
-                    if !fraction.is_empty() && fraction.bytes().all(|b| b.is_ascii_digit()) =>
-                {
-                    seconds
-                }
-                Some(_) => return None,
-                None => value,
-            };
-            DateTime::strptime("%Y-%m-%dT%H:%M:%S", seconds)
-                .ok()
-                .map(|datetime| datetime.date())
+            // Ignore digits beyond Jiff's nanosecond precision in legacy artifacts.
+            let mut local = value;
+            if let Some((seconds, fraction)) = value.split_once('.')
+                && fraction.len() > 9
+                && fraction.bytes().all(|b| b.is_ascii_digit())
+            {
+                local = &value[..seconds.len() + 1 + 9];
+            }
+            Date::strptime("%FT%T%.f", local).ok()
         });
 
     match date {
@@ -107,6 +98,12 @@ mod tests {
 
     #[test]
     fn preserves_unknown_values() {
-        assert_eq!(format_display_date("unknown", Locale::Ja), "unknown");
+        for value in [
+            "unknown",
+            "2025-05-04T24:01",
+            "2025-05-04T16:50:30.123456789x",
+        ] {
+            assert_eq!(format_display_date(value, Locale::Ja), value);
+        }
     }
 }

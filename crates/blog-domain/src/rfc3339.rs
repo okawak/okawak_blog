@@ -2,66 +2,45 @@ use jiff::{civil::DateTime, fmt::temporal::Pieces, tz::Offset};
 use std::borrow::Cow;
 
 pub(crate) fn parse(value: &str) -> Option<(DateTime, Offset)> {
-    // Jiff's Temporal parser also accepts ISO 8601 dates, abbreviated times
-    // and RFC 9557 annotations. Keep the public RFC 3339 input shape.
-    let (datetime, tail) = value.split_at_checked(19)?;
-    if !matches!(
-        datetime.as_bytes(),
-        [
-            _,
-            _,
-            _,
-            _,
-            b'-',
-            _,
-            _,
-            b'-',
-            _,
-            _,
-            b'T' | b't' | b' ',
-            _,
-            _,
-            b':',
-            _,
-            _,
-            b':',
-            _,
-            _
-        ]
-    ) {
+    let (date, time) = value.split_once(['T', 't', ' '])?;
+    let (clock, tail) = time.split_at_checked(8)?;
+    // Pieces also accepts basic dates and abbreviated times.
+    if date.len() != 10
+        || date.as_bytes()[4] != b'-'
+        || clock.as_bytes()[2] != b':'
+        || clock.as_bytes()[5] != b':'
+    {
         return None;
     }
-    let (fraction, offset) = if let Some(digits) = tail.strip_prefix('.') {
-        let offset = digits.trim_start_matches(|c: char| c.is_ascii_digit());
-        let fraction_len = digits.len() - offset.len();
-        if fraction_len == 0 {
+
+    let offset = if let Some(fraction) = tail.strip_prefix('.') {
+        let offset = fraction.trim_start_matches(|c: char| c.is_ascii_digit());
+        if fraction.len() == offset.len() {
             return None;
         }
-        (&tail[..=fraction_len.min(9)], offset)
+        offset
     } else {
-        ("", tail)
+        tail
     };
+    // Restrict numeric offsets to ±HH:MM; Pieces validates the digits and ranges.
     if !matches!(offset, "Z" | "z") {
-        let digits = offset.strip_prefix(['+', '-', '−'])?;
-        if !matches!(
-            digits.as_bytes(),
-            [b'0'..=b'9', b'0'..=b'9', b':', b'0'..=b'5', b'0'..=b'9']
-        ) {
+        let hm = offset.strip_prefix(['+', '-', '−'])?;
+        if hm.len() != 5 || hm.as_bytes()[2] != b':' {
             return None;
         }
     }
-    // Preserve the previous nanosecond truncation and Unicode minus support.
-    let value = if let Some(digits) = offset.strip_prefix('−') {
-        Cow::Owned(format!("{datetime}{fraction}-{digits}"))
-    } else if datetime.len() + fraction.len() + offset.len() != value.len() {
-        Cow::Owned(format!("{datetime}{fraction}{offset}"))
+
+    // Older artifacts may use a Unicode minus or more than nine fractional digits.
+    const MAX_LOCAL_LEN: usize = "0000-00-00T00:00:00.000000000".len();
+    let local_len = value.len() - offset.len();
+    let normalized = if local_len > MAX_LOCAL_LEN || offset.starts_with('−') {
+        let local = &value[..local_len.min(MAX_LOCAL_LEN)];
+        Cow::Owned(format!("{local}{}", offset.replacen('−', "-", 1)))
     } else {
         Cow::Borrowed(value)
     };
-    let pieces = Pieces::parse(value.as_bytes()).ok()?;
+    let pieces = Pieces::parse(normalized.as_bytes()).ok()?;
     let offset = pieces.to_numeric_offset()?;
-    if offset.seconds().unsigned_abs() >= 24 * 60 * 60 {
-        return None;
-    }
-    Some((pieces.date().to_datetime(pieces.time()?), offset))
+    (offset.seconds().unsigned_abs() < 24 * 60 * 60)
+        .then_some((pieces.date().to_datetime(pieces.time()?), offset))
 }
