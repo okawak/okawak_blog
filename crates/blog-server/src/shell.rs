@@ -2,7 +2,6 @@
 
 use crate::i18n::{Message, japanese_path, locale_from_path, t};
 use blog_domain::{Locale, SiteLocalesDocument};
-use chrono::Datelike;
 use topcoat::{
     Result,
     context::{Cx, base_url},
@@ -144,7 +143,7 @@ pub(crate) async fn site_shell(
     } else {
         locales
     };
-    let year = chrono::Local::now().year();
+    let year = jiff::Zoned::now().year();
     let math_render_script = Unescaped::new_unchecked(
         r#"
 window.okawakRenderMath = function(root) {

@@ -1,5 +1,6 @@
+use jiff::tz::Offset;
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 pub const ARTIFACT_RELEASE_SCHEMA_VERSION: u32 = 1;
 
@@ -20,9 +21,18 @@ pub struct ArtifactReleasePointerDocument {
 
 impl ArtifactReleasePointerDocument {
     pub fn generated_at_time(&self) -> crate::Result<SystemTime> {
-        parse_rfc3339_utc(&self.generated_at)
-            .map(|timestamp| timestamp.to_utc().into())
-            .ok_or_else(|| crate::DomainError::validation("generated_at"))
+        let invalid = || crate::DomainError::validation("generated_at");
+        let (datetime, offset) = crate::rfc3339::parse(&self.generated_at)
+            .filter(|(_, offset)| *offset == Offset::UTC)
+            .ok_or_else(invalid)?;
+        let timestamp = offset.to_timestamp(datetime).map_err(|_| invalid())?;
+        let time = SystemTime::from(timestamp);
+        // Jiff clamps second 60 to 59. Preserve the legacy SystemTime for leap seconds.
+        if self.generated_at.as_bytes().get(17..19) == Some(b"60") {
+            Ok(time + Duration::from_secs(1))
+        } else {
+            Ok(time)
+        }
     }
 
     pub fn validate(&self) -> crate::Result<()> {
@@ -51,12 +61,6 @@ impl ArtifactReleasePointerDocument {
         self.generated_at_time()?;
         Ok(())
     }
-}
-
-fn parse_rfc3339_utc(value: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
-    chrono::DateTime::parse_from_rfc3339(value)
-        .ok()
-        .filter(|timestamp| timestamp.offset().local_minus_utc() == 0)
 }
 
 fn is_safe_path_segment(value: &str) -> bool {
@@ -150,6 +154,7 @@ mod tests {
             "not-a-timestamp",
             "2026-07-12T12:00:00",
             "2026-07-12T21:00:00+09:00",
+            "2026-07-12T12:00:00Z[UTC]",
         ] {
             let mut pointer = release_pointer("releases/release-123/site");
             pointer.generated_at = generated_at.to_string();
@@ -161,7 +166,17 @@ mod tests {
         }
 
         let mut pointer = release_pointer("releases/release-123/site");
-        pointer.generated_at = "2026-07-12T12:00:00+00:00".to_string();
-        assert!(pointer.validate().is_ok());
+        for offset in ["Z", "z", "+00:00", "-00:00"] {
+            pointer.generated_at = format!("1969-12-31T23:59:59.123456789123{offset}");
+            assert_eq!(
+                pointer.generated_at_time().unwrap(),
+                SystemTime::UNIX_EPOCH - std::time::Duration::from_nanos(876_543_211)
+            );
+        }
+        pointer.generated_at = "2016-12-31T23:59:60.5Z".to_string();
+        assert_eq!(
+            pointer.generated_at_time().unwrap(),
+            SystemTime::UNIX_EPOCH + std::time::Duration::new(1_483_228_800, 500_000_000)
+        );
     }
 }

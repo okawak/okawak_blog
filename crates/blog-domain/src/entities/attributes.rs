@@ -108,13 +108,16 @@ pub struct Timestamp(String);
 
 impl Timestamp {
     pub fn new(value: String) -> Result<Self> {
-        chrono::DateTime::parse_from_rfc3339(value.trim()).map_err(|_| {
-            DomainError::InvalidTimestamp {
-                value: value.to_string(),
-            }
-        })?;
+        if crate::rfc3339::parse(value.trim()).is_none() {
+            return Err(DomainError::InvalidTimestamp { value });
+        }
 
         Ok(Self(value))
+    }
+
+    /// Get the calendar date written in an RFC 3339 timestamp.
+    pub fn parse_calendar_date(value: &str) -> Option<jiff::civil::Date> {
+        crate::rfc3339::parse(value).map(|(datetime, _)| datetime.date())
     }
 
     pub fn as_str(&self) -> &str {
@@ -281,14 +284,34 @@ mod tests {
 
     #[test]
     fn test_timestamp_accepts_rfc3339_without_rewriting_valid_text() {
-        let timestamp = Timestamp::new("  2025-01-01T00:00:00+09:00  ".to_string()).unwrap();
-
-        assert_eq!(timestamp.as_str(), "  2025-01-01T00:00:00+09:00  ");
+        for value in [
+            "  2025-01-01T00:00:00+09:00  ",
+            "2025-01-01t00:00:00z",
+            "2025-01-01 00:00:00.123456789123−09:00",
+        ] {
+            assert_eq!(Timestamp::new(value.to_string()).unwrap().as_str(), value);
+        }
     }
 
     #[test]
     fn test_timestamp_rejects_invalid_values() {
-        for value in ["", "   ", "2025-01-01", "not-a-timestamp"] {
+        for value in [
+            "",
+            "   ",
+            "2025-01-01",
+            "not-a-timestamp",
+            "2025-01-01T00:00:00",
+            "2025-01-01T00:00Z",
+            "2025-01-01T00:00:00+0900",
+            "2025-01-01T00:00:00+09:00:00",
+            "2025-01-01T00:00:00+24:00",
+            "2025-01-01T00:00:00+01:60",
+            "20250101T00:00:00Z",
+            "2025-01-01T000000Z",
+            "2025-01-01T00:00:00.Z",
+            "2025-01-01T00:00:00Z[UTC]",
+            "2025-01-01T00:00:00,5Z",
+        ] {
             assert!(Timestamp::new(value.to_string()).is_err());
         }
     }

@@ -1,5 +1,5 @@
-use blog_domain::Locale;
-use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime};
+use blog_domain::{Locale, Timestamp};
+use jiff::civil::Date;
 use topcoat::l10n::{DateTime as LocalizedDateTime, DateTimeStyle, Number, locale};
 
 /// Keep framework locale formatting at the server boundary.
@@ -16,22 +16,26 @@ pub(crate) fn format_count(count: usize, locale: Locale) -> String {
 
 /// Formats an artifact date for human-readable presentation.
 pub(crate) fn format_display_date(value: &str, locale: Locale) -> String {
-    let date = DateTime::parse_from_rfc3339(value)
-        .map(|date_time| date_time.date_naive())
-        .or_else(|_| NaiveDate::parse_from_str(value, "%Y-%m-%d"))
-        .or_else(|_| {
-            NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M").map(|date_time| date_time.date())
-        })
-        .or_else(|_| {
-            NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f")
-                .map(|date_time| date_time.date())
+    let date = Timestamp::parse_calendar_date(value)
+        .or_else(|| Date::strptime("%F", value).ok())
+        .or_else(|| Date::strptime("%FT%R", value).ok())
+        .or_else(|| {
+            // Ignore digits beyond Jiff's nanosecond precision in legacy artifacts.
+            let mut local = value;
+            if let Some((seconds, fraction)) = value.split_once('.')
+                && fraction.len() > 9
+                && fraction.bytes().all(|b| b.is_ascii_digit())
+            {
+                local = &value[..seconds.len() + 1 + 9];
+            }
+            Date::strptime("%FT%T%.f", local).ok()
         });
 
     match date {
-        Ok(date) => {
+        Some(date) => {
             // Preserve the date in the artifact's offset; do not convert it to UTC.
-            LocalizedDateTime::date(date.year(), date.month() as u8, date.day() as u8)
-                .expect("chrono date is a valid ISO date")
+            LocalizedDateTime::date(date.year().into(), date.month() as u8, date.day() as u8)
+                .expect("jiff date is a valid ISO date")
                 .date_style(if locale == Locale::Ja {
                     DateTimeStyle::Long
                 } else {
@@ -39,7 +43,7 @@ pub(crate) fn format_display_date(value: &str, locale: Locale) -> String {
                 })
                 .resolve_in(&formatting_locale(locale))
         }
-        Err(_) => value.to_string(),
+        None => value.to_string(),
     }
 }
 
@@ -66,7 +70,12 @@ mod tests {
 
     #[test]
     fn formats_english_dates_and_keeps_the_artifact_calendar_day() {
-        for value in ["2026-01-02", "2026-01-02T00:30:00+09:00"] {
+        for value in [
+            "2026-01-02",
+            "2026-01-02T00:30:00+09:00",
+            "2026-01-02T23:30:00-09:00",
+            "2026-01-02T23:30:00Z",
+        ] {
             assert_eq!(format_display_date(value, Locale::En), "Jan 2, 2026");
         }
         assert_eq!(
@@ -78,13 +87,23 @@ mod tests {
 
     #[test]
     fn formats_local_datetime_values() {
-        for value in ["2025-05-04T16:50", "2025-05-04T16:50:30"] {
+        for value in [
+            "2025-05-04T16:50",
+            "2025-05-04T16:50:30",
+            "2025-05-04T16:50:30.123456789123",
+        ] {
             assert_eq!(format_display_date(value, Locale::Ja), "2025年5月4日");
         }
     }
 
     #[test]
     fn preserves_unknown_values() {
-        assert_eq!(format_display_date("unknown", Locale::Ja), "unknown");
+        for value in [
+            "unknown",
+            "2025-05-04T24:01",
+            "2025-05-04T16:50:30.123456789x",
+        ] {
+            assert_eq!(format_display_date(value, Locale::Ja), value);
+        }
     }
 }
