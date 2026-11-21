@@ -1,5 +1,5 @@
 [tools]
-bun = "1.4.4"
+bun = "1.4.5"
 "cargo:topcoat-cli" = "0.12.1"
 
 [env]
