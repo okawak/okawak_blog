@@ -26,10 +26,10 @@ impl ArtifactReleasePointerDocument {
             .filter(|(_, offset)| *offset == Offset::UTC)
             .ok_or_else(invalid)?;
         let timestamp = offset.to_timestamp(datetime).map_err(|_| invalid())?;
-        let time = SystemTime::from(timestamp);
+        let time = SystemTime::try_from(timestamp).map_err(|_| invalid())?;
         // Jiff clamps second 60 to 59. Preserve the legacy SystemTime for leap seconds.
         if self.generated_at.as_bytes().get(17..19) == Some(b"60") {
-            Ok(time + Duration::from_secs(1))
+            time.checked_add(Duration::from_secs(1)).ok_or_else(invalid)
         } else {
             Ok(time)
         }

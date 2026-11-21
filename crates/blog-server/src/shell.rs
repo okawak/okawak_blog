@@ -143,7 +143,7 @@ pub(crate) async fn site_shell(
     } else {
         locales
     };
-    let year = jiff::Zoned::now().year();
+    let year = jiff::ZonedDateTime::now().year();
     let math_render_script = Unescaped::new_unchecked(
         r#"
 window.okawakRenderMath = function(root) {
