@@ -48,7 +48,7 @@ okawak_blog/
 タスク定義は[mise.toml](./mise.toml)にあります。利用可能なtaskは`mise tasks ls`で確認できます。
 
 ```bash
-mise install
+mise install --locked
 
 # private原文をremote最新へ同期する
 mise run sync-obsidian

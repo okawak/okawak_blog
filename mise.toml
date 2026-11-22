@@ -1,9 +1,7 @@
 [tools]
 bun = "1.4.5"
 "cargo:topcoat-cli" = "0.12.1"
-
-[env]
-TOPCOAT_TAILWIND_VERSION = "4.3.3"
+"aqua:tailwindlabs/tailwindcss" = "4.3.3"
 
 [tasks.check-deps]
 description = "Check if the production Topcoat build tools are installed"
@@ -21,6 +19,21 @@ actual_topcoat_version="$(topcoat --version | awk '{print $2}')"
 [tasks.versions-check]
 description = "Check shared tool and build helper version consistency"
 run = "bash scripts/check_tool_versions.sh"
+
+[tasks.gitleaks]
+description = "Run the pinned secret scanner"
+tools = { gitleaks = "8.30.1" }
+run = "gitleaks"
+
+[tasks.audit-workflows]
+description = "Audit GitHub Actions workflow permissions and inputs"
+tools = { zizmor = "1.32.0" }
+run = "zizmor --offline --min-severity medium .github/workflows"
+
+[tasks.audit-release-policy]
+description = "Check immutable release policy and conditional writes"
+tools = { hcl2json = "0.6.9" }
+run = "bash scripts/tests/immutable_release_test.sh"
 
 [tasks.e2e-install]
 description = "Install root E2E dependencies with bun"

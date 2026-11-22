@@ -21,7 +21,7 @@ mise run dev-local
 
 `--validate-artifacts`は生成済みsiteを読み、SSRと同じblog-domainの記事model変換・page builderで全言語のhome・記事・カテゴリ・固定ページを検証し、記事JSONのsummaryと一覧の一致も確認する。生成処理・AI・uploadは実行しない。公開前の`scripts/validate_public_artifacts.sh`はこの検証とartifact間の集合・件数照合を行う。workflowでは生成に使用したrelease版publish binaryを再利用する。
 
-本文はpulldown-cmarkのevent pipelineでHTMLに変換し、URLとraw HTMLを安全化する。数式とコードは既存の描画を維持する。exportが作る空の見出しanchorと、従来のsimple bookmark構文だけをraw HTMLとして許可する。bookmarkは既存のOGP取得処理で拡張する。
+本文はpulldown-cmarkのevent pipelineでHTMLに変換し、URLとraw HTMLを安全化する。数式とコードは既存の描画を維持する。exportが作る空の見出しanchorと、従来のsimple bookmark構文だけをraw HTMLとして許可する。bookmarkは公開IPへのHTTP(S)通信だけで拡張する。転送は最大5回、応答本文は1 MiBまでとし、取得エラー時は元のリンクを表示する。参照画像はファイル名のSHA-256と内容が一致することを公開前に検証する。
 
 ```html
 <div class="bookmark">

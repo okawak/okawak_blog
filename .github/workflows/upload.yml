@@ -63,6 +63,7 @@ jobs:
       - name: Checkout reviewed public content
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          persist-credentials: false
           fetch-depth: 1
 
       - name: Update Rust stable toolchain
@@ -122,8 +123,13 @@ jobs:
           echo "ARTIFACT_PREFIX=$artifact_prefix" >> "$GITHUB_ENV"
 
       - name: Validate AWS secrets
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_ROLE_NAME: ${{ secrets.AWS_ROLE_NAME }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
         run: |
-          if [ -z "${{ secrets.AWS_REGION }}" ] || [ -z "${{ secrets.AWS_ACCOUNT_ID }}" ] || [ -z "${{ secrets.AWS_ROLE_NAME }}" ] || [ -z "${{ secrets.S3_BUCKET }}" ]; then
+          if [ -z "$AWS_REGION" ] || [ -z "$AWS_ACCOUNT_ID" ] || [ -z "$AWS_ROLE_NAME" ] || [ -z "$S3_BUCKET" ]; then
             echo "Error: Required AWS secrets are missing"
             echo "Required: AWS_REGION, AWS_ACCOUNT_ID, AWS_ROLE_NAME, S3_BUCKET"
             exit 1
@@ -137,12 +143,13 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
 
       - name: Upload and validate immutable release
+        env:
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
         run: |
           set -euo pipefail
-          release_uri="s3://${{ secrets.S3_BUCKET }}/${ARTIFACT_PREFIX}"
+          release_uri="s3://$S3_BUCKET/$ARTIFACT_PREFIX"
 
-          aws s3 sync "${{ env.UPLOAD_PATH }}" "$release_uri" \
-            --cache-control "public, max-age=31536000, immutable"
+          bash scripts/upload_immutable_release.sh "$UPLOAD_PATH" "$RUNNER_TEMP/release.json"
 
           local_html_count=$(find "${{ env.UPLOAD_PATH }}" -name "*.html" -type f | wc -l | tr -d ' ')
           remote_html_count=$(aws s3 ls "$release_uri/" --recursive | awk '/\.html$/ { count++ } END { print count + 0 }')
@@ -156,11 +163,6 @@ jobs:
           test "$remote_file_count" -eq "$local_file_count"
           aws s3 cp "$release_uri/locales.json" "$RUNNER_TEMP/remote-locales.json"
           cmp "$UPLOAD_PATH/locales.json" "$RUNNER_TEMP/remote-locales.json"
-
-          aws s3 cp "$RUNNER_TEMP/release.json" \
-            "s3://${{ secrets.S3_BUCKET }}/releases/${RELEASE_ID}/manifest.json" \
-            --content-type "application/json" \
-            --cache-control "public, max-age=31536000, immutable"
 
           echo "REMOTE_HTML_COUNT=$remote_html_count" >> "$GITHUB_ENV"
 
@@ -196,13 +198,15 @@ jobs:
           fi
 
       - name: Switch release pointer
+        env:
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
         run: |
           set -euo pipefail
 
           # current.json is updated last. Readers either see the previous complete
           # release or this complete release, never an in-place partial upload.
           aws s3 cp "$RUNNER_TEMP/release.json" \
-            "s3://${{ secrets.S3_BUCKET }}/current.json" \
+            "s3://$S3_BUCKET/current.json" \
             --content-type "application/json" \
             --cache-control "no-store"
 

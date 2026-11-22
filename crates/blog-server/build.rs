@@ -1,11 +1,11 @@
 fn main() {
-    println!("cargo::rerun-if-changed=src");
-    println!("cargo::rerun-if-changed=styles.css");
+    for path in ["src", "styles.css", "../../mise.toml", "../../mise.lock"] {
+        println!("cargo::rerun-if-changed={path}");
+    }
 
-    // `assets::STYLESHEET` registers the stylesheet rendered by this build integration.
     topcoat::tailwind::BuildConfig::new()
+        .executable("tailwindcss")
         .input("styles.css")
-        .version("4.3.3")
         .render()
         .expect("Topcoat should build the site Tailwind stylesheet");
 }
