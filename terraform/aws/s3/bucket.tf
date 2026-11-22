@@ -61,3 +61,36 @@ resource "aws_s3_bucket_lifecycle_configuration" "lifecycle" {
     }
   }
 }
+
+# Enforce create-only writes for release objects, including multipart completion.
+# current.json is deliberately outside this prefix.
+data "aws_iam_policy_document" "immutable_releases" {
+  statement {
+    sid       = "RequireConditionalReleaseCreation"
+    effect    = "Deny"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.myblog_bucket.arn}/releases/*"]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "Null"
+      variable = "s3:if-none-match"
+      values   = ["true"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "s3:ObjectCreationOperation"
+      values   = ["true"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "immutable_releases" {
+  bucket = aws_s3_bucket.myblog_bucket.id
+  policy = data.aws_iam_policy_document.immutable_releases.json
+}

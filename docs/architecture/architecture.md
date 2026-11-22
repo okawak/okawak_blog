@@ -125,6 +125,8 @@ scripts/tests/は運用スクリプト、service/tests/はsystemd unitを検証�
 
 ## コンテンツ境界
 
+exportはコード例以外の本文にObsidianコメントの区切りがあれば翻訳前に停止する。ブックマークのOGP取得は接続時の名前解決を公開IPに限定し、転送先にも同じ規則を適用する。本文の上限は1 MiBで、取得失敗時は元のリンクを使う。ハッシュ名の画像は公開前に実データのSHA-256を照合する。
+
 private Obsidianは執筆形式、content/はexportとpublish間の公開契約である。Obsidian固有frontmatter、WikiLink、embed、private pathをpublishへ渡さない。公開Markdownはschema version、安定ID、locale、kind、日時、元pathのdigestを持ち、英語版だけが翻訳追跡情報を持つ。正確なfieldと組合せは[公開Markdown契約](../content/public-markdown.md)を正本とする。
 
 content kindはarticle、category、page、homeの4種類である。articleはcategoryと同名の入力directoryに置き、categoryからの相対pathをsection_pathとして一覧のgroupingに使う。URLはsection_pathに依存しない。執筆例とdirectory規則は[Obsidian template](../content/obsidian-template.md)に置く。
@@ -186,6 +188,8 @@ current.jsonとmanifest.jsonは同じversion付きpointer schemaを使い、rele
 4. 対象commitがまだ最新mainであることを再確認する
 5. current.jsonを最後に切り替える
 
+S3のrelease配下はバケットポリシーで条件付き作成を強制する。公開ワークフローは本文とmanifestの各オブジェクトを新規作成し、検証完了後にcurrent.jsonを更新する。
+
 releaseは上書きせず、公開runをrepository単位で直列化する。失敗したrunは新releaseを残してもpointerを変更しない。この順序により、readerは不完全なuploadを選ばず、遅いrunが公開pointerを古いcommitへ戻すこともない。
 
 ## 公開URLと言語
@@ -219,7 +223,7 @@ responsive menuはTopcoat UIのPopoverとブラウザー標準の開閉・focus�
 
 ArtifactReaderは1処理で使うArtifactSnapshotを取得し、snapshotは同じreleaseのindex、metadata、HTML、辞書、assetを読む。
 
-snapshotの文書・HTML・辞書は`Arc`、assetは`Bytes`で返し、cache hit時に本文や一覧全体を複製しない。S3のassetは取得した共有バイト列をHTTP応答まで保持する。記事単体はsnapshotの`read_article(category, slug)`でメタデータと本文を一括取得し、一覧の読込・検索を行わない。記事とassetは取得成功した値だけを保持し、欠落・失敗を保存しない。キー付きcacheの同時取得・エラー共有・キャンセル時の後片付けはMokaに委譲する。記事とassetのstorage結果（値・欠落・エラー）をMokaの成功・非保持へ対応付ける部分だけをinfraで補う。locale・カテゴリ・固定ページもMokaを使い、単一文書はTokio OnceCellを使う。cacheはlocale・releaseごとに分離し、release単位の寿命を維持するためMokaの容量・時間によるevictionは設定しない。
+snapshotの文書・HTML・辞書は`Arc`、assetは`Bytes`で返し、cache hit時に本文や一覧全体を複製しない。S3のassetは取得した共有バイト列をHTTP応答まで保持する。記事単体は公開ルート一覧があるreleaseでは言語ごとの掲載を確認し、未掲載なら記事オブジェクトを取得せず404を返す。旧releaseは従来の直接読取を使う。掲載記事はsnapshotの`read_article(category, slug)`でメタデータと本文を一括取得し、一覧の読込・検索を行わない。記事とassetは取得成功した値だけを保持し、欠落・失敗を保存しない。キー付きcacheの同時取得・エラー共有・キャンセル時の後片付けはMokaに委譲する。記事とassetのstorage結果（値・欠落・エラー）をMokaの成功・非保持へ対応付ける部分だけをinfraで補う。locale・カテゴリ・固定ページもMokaを使い、単一文書はTokio OnceCellを使う。cacheはlocale・releaseごとに分離し、release単位の寿命を維持するためMokaの容量・時間によるevictionは設定しない。
 
 PageLoaderのpresentationは辞書とlocale catalogの共有参照を保持する。カテゴリのpageとshardはrequest内でpresentationを共有し、絞り込み時はsectionの配列だけを複製する。カテゴリ一覧とsectionに属する同一記事カードも`Arc`で共有する。JSONの文書構造は共有参照の有無に依存しない。
 

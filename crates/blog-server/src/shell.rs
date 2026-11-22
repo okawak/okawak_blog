@@ -288,14 +288,14 @@ window.okawakScheduleCodeHighlight = function(root) {
                 >
                 <link
                     rel="stylesheet"
-                    href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
-                    integrity="sha384-5TcZemv2l/9On385z///+d7MSYlvIEw9FuZTIdZ14vJLqWphw7e7ZPuOiCHJcFCP"
+                    href="https://cdn.jsdelivr.net/npm/katex@0.19.1/dist/katex.min.css"
+                    integrity="sha384-WwGtaC6ywCHxA5cstpj/3+xIZvTez8dq2IcBQaXRkenHZ7FVVq1ZROtURwfbtTlG"
                     crossorigin="anonymous"
                 >
                 <script
                     defer=""
-                    src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"
-                    integrity="sha384-cMkvdD8LoxVzGF/RPUKAcvmm49FQ0oxwDF3BGKtDXcEc+T1b2N+teh/OJfpU0jr6"
+                    src="https://cdn.jsdelivr.net/npm/katex@0.19.1/dist/katex.min.js"
+                    integrity="sha384-a1WQdjRj162i159OYq041X6I4K8NenkrI09LlPmiHg0YOb7CR+wJOraXwK9abpnE"
                     crossorigin="anonymous"
                     onload="window.okawakScheduleMathRender && window.okawakScheduleMathRender();"
                 ></script>
@@ -303,10 +303,14 @@ window.okawakScheduleCodeHighlight = function(root) {
                 <link
                     rel="stylesheet"
                     href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css"
+                    integrity="sha384-wH75j6z1lH97ZOpMOInqhgKzFkAInZPPSPlZpYKYTOqsaizPvhQZmAtLcPKXpLyH"
+                    crossorigin="anonymous"
                 >
                 <script
                     defer=""
                     src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"
+                    integrity="sha384-RH2xi4eIQ/gjtbs9fUXM68sLSi99C7ZWBRX1vDrVv6GQXRibxXLbwO2NGZB74MbU"
+                    crossorigin="anonymous"
                     onload="window.okawakScheduleCodeHighlight && window.okawakScheduleCodeHighlight();"
                 ></script>
                 <script>(code_highlight_script)</script>
