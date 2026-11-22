@@ -7,10 +7,15 @@ struct Fake(Cell<usize>);
 impl Translator for Fake {
     fn translate(&self, request: &TranslationRequest) -> blog_export::Result<Texts> {
         self.0.set(self.0.get() + 1);
+        let language = if request.target == Locale::En {
+            "EN"
+        } else {
+            request.target.as_str()
+        };
         Ok(request
             .texts
             .iter()
-            .map(|(k, v)| (k.clone(), format!("EN {v}")))
+            .map(|(k, v)| (k.clone(), format!("{language} {v}")))
             .collect())
     }
 }
@@ -25,6 +30,54 @@ fn settings() -> TranslationSettings {
 fn save(path: &std::path::Path, catalog: &LabelCatalog) {
     fs::write(path, serde_json::to_vec_pretty(catalog).unwrap()).unwrap();
 }
+#[test]
+fn adding_chinese_keeps_legacy_english_history_and_accepts_only_the_selected_candidate() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("ui.json");
+    // The English request fingerprint predates the target field.
+    let legacy = serde_json::json!({"schema_version": 1, "entries": {"label": {
+        "source": "原文", "context": "button", "translation": {
+            "value": "Reviewed English", "stale": false, "provenance": {
+                "input_hash": "dffa68cd405dde0f6906a24e3df7e09590d49fe9ac24b49347078cac36070dc7",
+                "generated_hash": "a".repeat(64)
+            }
+        }
+    }}});
+    fs::write(&path, legacy.to_string()).unwrap();
+    let targets = [
+        settings(),
+        TranslationSettings {
+            target: Locale::ZhHans,
+            ..settings()
+        },
+    ];
+    let fake = Fake(Cell::new(0));
+    let translate = || blog_export::translate_catalog_targets(&path, &fake, &targets).unwrap();
+    let read = || serde_json::from_slice::<LabelCatalog>(&fs::read(&path).unwrap()).unwrap();
+    let reports = translate();
+    assert_eq!(
+        (reports[0].reused, reports[1].generated, fake.0.get()),
+        (1, 1, 1)
+    );
+    let mut catalog = read();
+    let entry = catalog.entries.get_mut("label").unwrap();
+    assert_eq!(entry.value(Locale::En), "Reviewed English");
+    assert_eq!(entry.value(Locale::ZhHans), "zh-hans 原文");
+    entry.translations.get_mut(&Locale::ZhHans).unwrap().value = "手动译文".into();
+    entry.source = "更新".into();
+    save(&path, &catalog);
+    for report in translate() {
+        assert_eq!(report.protected, ["label"]);
+    }
+    blog_export::accept_catalog_candidate(&path, "label", &targets[1]).unwrap();
+    let entry = &read().entries["label"];
+    assert_eq!(entry.value(Locale::ZhHans), "zh-hans 更新");
+    assert_eq!(entry.translations[&Locale::En].value, "Reviewed English");
+    assert!(entry.translations[&Locale::En].stale);
+    blog_export::accept_catalog_candidate(&path, "label", &targets[0]).unwrap();
+    assert_eq!(read().entries["label"].value(Locale::En), "EN 更新");
+}
+
 #[test]
 fn catalogs_reuse_each_entry_and_protect_manual_edits_until_candidate_acceptance() {
     let tmp = tempfile::tempdir().unwrap();

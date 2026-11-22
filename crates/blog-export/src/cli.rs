@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use blog_domain::Slug;
+use blog_domain::{Locale, Slug};
 use blog_export::{ProtectedContent, TranslationReport, TranslationSettings};
 use clap::{Parser, Subcommand};
 use std::{fs, path::Path};
@@ -10,7 +10,7 @@ use std::{fs, path::Path};
 pub(super) struct Cli {
     /// Translate one language, or choose the language of a review candidate.
     #[arg(long, global = true)]
-    target: Option<blog_domain::Locale>,
+    target: Option<Locale>,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -43,11 +43,11 @@ impl Cli {
         let output = Path::new("content");
         let ui_catalog = Path::new("crates/blog-server/locales/ui.json");
         let mut settings = load_settings(Path::new("translation.json"))?;
-        settings.target = self.target.unwrap_or(blog_domain::Locale::En);
+        settings.target = self.target.unwrap_or(Locale::En);
         match self.command {
             None => {
                 let translator = blog_export::CodexTranslator::default();
-                let settings: Vec<_> = blog_domain::Locale::translations()
+                let settings: Vec<_> = Locale::translations()
                     .filter(|locale| self.target.is_none_or(|chosen| chosen == *locale))
                     .map(|target| TranslationSettings {
                         target,
@@ -92,8 +92,8 @@ fn load_settings(path: &Path) -> Result<TranslationSettings> {
     serde_json::from_slice(&bytes).with_context(|| format!("invalid settings {}", path.display()))
 }
 
-fn report_content(report: &TranslationReport<ProtectedContent>, target: blog_domain::Locale) {
-    report_summary("Content", report);
+fn report_content(report: &TranslationReport<ProtectedContent>, target: Locale) {
+    report_summary("Content", target, report);
     for item in &report.protected {
         let command = match item {
             ProtectedContent::Article(id) => {
@@ -105,17 +105,18 @@ fn report_content(report: &TranslationReport<ProtectedContent>, target: blog_dom
     }
 }
 
-fn report_ui(report: &TranslationReport<String>, target: blog_domain::Locale) {
-    report_summary("UI", report);
+fn report_ui(report: &TranslationReport<String>, target: Locale) {
+    report_summary("UI", target, report);
     for key in &report.protected {
         let command = acceptance_command("accept-ui", key, target);
         tracing::warn!(%command, "translation candidate needs review");
     }
 }
 
-fn report_summary<T>(scope: &'static str, report: &TranslationReport<T>) {
+fn report_summary<T>(scope: &'static str, target: Locale, report: &TranslationReport<T>) {
     tracing::info!(
         scope,
+        language = %target,
         generated = report.generated,
         reused = report.reused,
         protected = report.protected.len(),
@@ -123,10 +124,10 @@ fn report_summary<T>(scope: &'static str, report: &TranslationReport<T>) {
     );
 }
 
-fn acceptance_command(subcommand: &str, id: &str, target: blog_domain::Locale) -> String {
+fn acceptance_command(subcommand: &str, id: &str, target: Locale) -> String {
     let id = id.replace('\'', "'\"'\"'");
     let command = format!("cargo run -p blog-export -- {subcommand} '{id}'");
-    if target == blog_domain::Locale::En {
+    if target == Locale::En {
         command
     } else {
         format!("{command} --target {target}")
@@ -135,20 +136,20 @@ fn acceptance_command(subcommand: &str, id: &str, target: blog_domain::Locale) -
 
 #[cfg(test)]
 mod tests {
-    use super::acceptance_command;
+    use super::{Locale, acceptance_command};
 
     #[test]
     fn acceptance_commands_quote_shell_arguments() {
         assert_eq!(
-            acceptance_command("accept-article", "article-1", blog_domain::Locale::En),
+            acceptance_command("accept-article", "article-1", Locale::En),
             "cargo run -p blog-export -- accept-article 'article-1'"
         );
         assert_eq!(
-            acceptance_command("accept-tag", "author's note", blog_domain::Locale::En),
+            acceptance_command("accept-tag", "author's note", Locale::En),
             "cargo run -p blog-export -- accept-tag 'author'\"'\"'s note'"
         );
         assert_eq!(
-            acceptance_command("accept-ui", "greeting", blog_domain::Locale::En),
+            acceptance_command("accept-ui", "greeting", Locale::En),
             "cargo run -p blog-export -- accept-ui 'greeting'"
         );
     }
