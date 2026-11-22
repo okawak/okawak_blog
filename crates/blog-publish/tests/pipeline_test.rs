@@ -63,8 +63,8 @@ async fn test_publish_writes_article_index_and_metadata(#[case] padded_metadata:
     fixture.write_required_site();
     if padded_metadata {
         for (file, title) in [
-            ("tech-required-article.md", "Required Article"),
-            ("tech-category.md", "Tech"),
+            ("tech/tech-required-article.md", "Required Article"),
+            ("tech.md", "Tech"),
         ] {
             let path = fixture.content_dir().join("ja").join(file);
             let text = fs::read_to_string(&path)
@@ -201,7 +201,11 @@ async fn test_publish_rejects_duplicate_home_files() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
     fixture.write_home_fragment("home.md");
-    fixture.write_home_fragment("another-home.md");
+    fs::copy(
+        fixture.content_dir().join("ja/index.md"),
+        fixture.content_dir().join("ja/another-home.md"),
+    )
+    .unwrap();
 
     let result = publish(fixture.content_dir(), fixture.output_dir()).await;
 
@@ -546,11 +550,18 @@ impl PublishFixture {
             "0".repeat(64)
         );
         let content = content.replacen("---\n", &header, 1);
-        fs::write(
-            self.content_dir.join("ja").join(format!("{id}.md")),
-            content,
-        )
-        .unwrap();
+        let meta = content
+            .strip_prefix("---\n")
+            .and_then(|s| s.split_once("\n---"))
+            .and_then(|(header, _)| {
+                yaml_serde::from_str::<blog_domain::PublicContentMeta>(header).ok()
+            })
+            .filter(|m| m.validate().is_ok());
+        let path = meta
+            .map(|m| self.content_dir.join(m.markdown_path(m.locale)))
+            .unwrap_or_else(|| self.content_dir.join("ja").join(format!("{id}.md")));
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
     }
 
     fn write_article(&self, relative_path: &str, title: &str, category: &str, body: &str) {
@@ -670,13 +681,15 @@ fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> T {
 async fn publishes_english_separately_and_removes_stale_output() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
-    let article_path = fixture.content_dir().join("ja/tech-required-article.md");
+    let article_path = fixture
+        .content_dir()
+        .join("ja/tech/tech-required-article.md");
     let source = fs::read_to_string(&article_path)
         .unwrap()
         .replace("schema_version: 1", "schema_version: 1\ntags: [統計]");
     fs::write(article_path, source).unwrap();
     fs::write(fixture.content_dir().join("tags.json"), r#"{"schema_version":1,"entries":{"統計":{"source":"統計","context":"blog tag","translation":{"value":"Statistics","stale":false}}}}"#).unwrap();
-    write_english_copies(&fixture);
+    write_translation_copies(&fixture, "en");
     publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
@@ -698,7 +711,9 @@ async fn publishes_english_separately_and_removes_stale_output() {
         locales.path("/tech/tech-required-article", blog_domain::Locale::En),
         Some("/en/tech/tech-required-article".into())
     );
-    let article = fixture.content_dir().join("en/tech-required-article.md");
+    let article = fixture
+        .content_dir()
+        .join("en/tech/tech-required-article.md");
     fs::write(
         &article,
         fs::read_to_string(&article)
@@ -723,12 +738,22 @@ async fn publishes_english_separately_and_removes_stale_output() {
     assert_eq!(ja_index.articles.len(), 1);
 }
 
-fn write_english_copies(fixture: &PublishFixture) {
-    fs::create_dir_all(fixture.content_dir().join("en")).unwrap();
-    for entry in fs::read_dir(fixture.content_dir().join("ja")).unwrap() {
-        let path = entry.unwrap().path();
-        let source = fs::read_to_string(&path).unwrap();
-        let english = source.replace("locale: ja", "locale: en").replacen(
+fn write_translation_copies(fixture: &PublishFixture, locale: &str) {
+    fs::create_dir_all(fixture.content_dir().join(locale)).unwrap();
+    let ja = fixture.content_dir().join("ja");
+    for entry in walkdir::WalkDir::new(&ja) {
+        let entry = entry.unwrap();
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let path = entry.path();
+        let target = fixture
+            .content_dir()
+            .join(locale)
+            .join(path.strip_prefix(&ja).unwrap());
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        let source = fs::read_to_string(path).unwrap();
+        let translated = source.replace("locale: ja", &format!("locale: {locale}")).replacen(
             "---\n",
             &format!(
                 "---\ntranslation:\n  input_hash: '{}'\n  generated_hash: '{}'\n  stale: false\n",
@@ -737,14 +762,7 @@ fn write_english_copies(fixture: &PublishFixture) {
             ),
             1,
         );
-        fs::write(
-            fixture
-                .content_dir()
-                .join("en")
-                .join(path.file_name().unwrap()),
-            english,
-        )
-        .unwrap();
+        fs::write(target, translated).unwrap();
     }
 }
 
@@ -767,13 +785,15 @@ async fn rejects_divergent_english_management_metadata_without_replacing_release
 ) {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
-    write_english_copies(&fixture);
+    write_translation_copies(&fixture, "en");
     publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
     let index = fixture.site_root().join("en/_data/articles.json");
     let before = fs::read(&index).unwrap();
-    let article = fixture.content_dir().join("en/tech-required-article.md");
+    let article = fixture
+        .content_dir()
+        .join("en/tech/tech-required-article.md");
     let original = fs::read_to_string(&article).unwrap();
     let (yaml, body) = original
         .strip_prefix("---\n")
@@ -906,8 +926,8 @@ async fn publishes_shared_assets_referenced_from_markdown_images_links_and_table
 async fn english_articles_need_an_eligible_category_landing() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
-    write_english_copies(&fixture);
-    let landing = fixture.content_dir().join("en/tech-category.md");
+    write_translation_copies(&fixture, "en");
+    let landing = fixture.content_dir().join("en/tech.md");
     fs::write(
         &landing,
         fs::read_to_string(&landing)
@@ -929,7 +949,9 @@ async fn filename_and_locale_are_independently_checked() {
     for change in ["filename", "locale"] {
         let fixture = PublishFixture::new();
         fixture.write_required_site();
-        let path = fixture.content_dir().join("ja/tech-required-article.md");
+        let path = fixture
+            .content_dir()
+            .join("ja/tech/tech-required-article.md");
         if change == "filename" {
             fs::rename(&path, path.with_file_name("other.md")).unwrap();
         } else {

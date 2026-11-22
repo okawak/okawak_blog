@@ -15,7 +15,7 @@ CLIは`clap`で引数を検証する。候補の採用は`accept-article <id>`�
 
 `is_completed: true` のノートだけを処理する。未知のfrontmatterはコピーせず、公開Markdown契約に必要なフィールドだけを書き出す。非公開ノートや公開ディレクトリ外のノートは参照先として取り込まない。symlink入力は拒否する。
 
-`content/ja/<id>.md` に日本語を出力する。初回IDは従来のtitle／元path／createdによるslugを保持する。再実行では元pathのdigestで既存IDを探し、path変更時は削除された元pathと同じkind・createdを持つ候補が1つのときだけ引き継ぐ。曖昧なら原文へ `publish_id: <既存ID>` を指定する。category移動時にはcategoryを含むURLが変わるため、差分を確認する。
+`content/ja/<category>/<id>.md` に日本語を出力する。初回IDは従来のtitle／元path／createdによるslugを保持する。再実行では元pathのdigestで既存IDを探し、path変更時は削除された元pathと同じkind・createdを持つ候補が1つのときだけ引き継ぐ。曖昧なら原文へ `publish_id: <既存ID>` を指定する。category移動時にはcategoryを含むURLが変わるため、差分を確認する。
 
 WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する。通常Markdownの内部リンクは参照元からの相対pathで解決し、同名の別ファイルへfallbackしない。WikiLink・Wiki embedだけは公開rootやbasenameからも候補を探す。`![[note]]`によるnote embedは公開先へのリンクとして扱う。通常Markdownでノートを参照する場合は`[label](note.md)`を使う。単独の見出し参照も含め、参照先は公開ノート集合内で解決する。未解決・曖昧なノート／見出しはエラーとする。見出しには原文から決定するanchorを付ける。外部URLのbookmark HTMLは使用できる。raw HTML内のローカルノート参照はMarkdownリンクへ書き直す。
 
@@ -97,7 +97,7 @@ cargo run -p blog-export -- accept-ui filter.label
 
 | 対象 | 現在の訳文 | 候補ファイル | 候補で編集する箇所 |
 | --- | --- | --- | --- |
-| 記事 | `content/en/<id>.md` | `content/.export-candidates/<id>.md` | 英語のtitle・summary・本文 |
+| 記事 | `content/en/<category>/<id>.md` | `content/.export-candidates/<id>.md` | 英語のtitle・summary・本文 |
 | タグ | `content/tags.json`内の対象entry | `content/.export-candidates/catalog/<hash>.json` | `translation.value` |
 | UI辞書 | `crates/blog-server/locales/ui.json`内の対象entry | `crates/blog-server/locales/.export-candidates/catalog/<hash>.json` | `translation.value` |
 
@@ -109,13 +109,13 @@ cargo run -p blog-export -- accept-ui filter.label
 
 以下は記事IDが`article-1`の場合の例。実際のIDに置き換えて実行する。
 
-1. 初回の`mise run export`で、日本語の公開用Markdownと英訳が作られる。英訳は`content/en/article-1.md`に直接保存される。
+1. 初回の`mise run export`で、日本語の公開用Markdownと英訳が作られる。英訳は`content/en/tech/article-1.md`に直接保存される。
 2. 必要に応じて、この英訳のtitle・summary・本文を手作業で修正する。生成履歴は残しておく。
 3. 後日、Obsidian側の日本語を修正して`mise run export`する。exportは手修正した英訳を保持し、新しい原文に対応する英訳を`content/.export-candidates/article-1.md`へ保存する。ログには確認が必要な対象と採用コマンドが表示される。
 4. 現在の英訳と候補を比較する。例えば次のコマンドで差分を確認できる（差分がある場合の終了コード1は正常）。
 
    ```sh
-   git diff --no-index -- content/en/article-1.md content/.export-candidates/article-1.md
+   git diff --no-index -- content/en/tech/article-1.md content/.export-candidates/article-1.md
    ```
 
 5. 必要なら候補ファイルの訳文を修正する。残したい既存の手修正も候補側へ取り込む。候補を採用すると、その内容で現在の英訳を置き換えるため、既存の手修正が自動でマージされることはない。
@@ -125,13 +125,13 @@ cargo run -p blog-export -- accept-ui filter.label
    cargo run -p blog-export -- accept-article article-1
    ```
 
-7. 検証に成功すると、候補のtitle・summary・本文が`content/en/article-1.md`へ反映され、候補ファイルは削除される。`git diff`で公開用ファイルの変更を確認してからcommitする。
+7. 検証に成功すると、候補のtitle・summary・本文が`content/en/tech/article-1.md`へ反映され、候補ファイルは削除される。`git diff`で公開用ファイルの変更を確認してからcommitする。
 
 候補を採用するまでは、現在の英訳を保持する。候補を編集しただけでは正式な英訳に反映されない。タグ・UI辞書も、対象の候補JSONを確認・編集してから対応する`accept-*`を実行する。
 
 ### 採用時の検証と古い候補の扱い
 
-採用時には、対象のID・キー、生成履歴、候補が現在の翻訳入力に対応しているかを確認する。記事の比較対象は`content/ja/<id>.md`と現在の翻訳設定で、Obsidian側だけにある未exportの変更は検知しない。日本語をさらに変更していた場合は、その更新をexportし、更新後の原文に対応する候補を確認してから採用する。
+採用時には、対象のID・キー、生成履歴、候補が現在の翻訳入力に対応しているかを確認する。記事の比較対象は`content/ja/<category>/<id>.md`と現在の翻訳設定で、Obsidian側だけにある未exportの変更は検知しない。日本語をさらに変更していた場合は、その更新をexportし、更新後の原文に対応する候補を確認してから採用する。
 
 翻訳に関わる原文・設定が候補生成後に変わっていれば、古い候補の採用は拒否する。記事のカテゴリ・タグ・日時などの管理情報だけが変わった場合は、最新の公開日本語版からその情報を反映する。タグ・UIでは補間変数や必要な用語の保持なども検証する。これらは機械的な整合性確認であり、訳文の品質は人が確認する。
 

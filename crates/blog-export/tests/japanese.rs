@@ -41,9 +41,10 @@ fn note(root: &Path, path: &str, title: &str, completed: bool, body: &str) {
 }
 
 fn outputs(root: &Path) -> Vec<String> {
-    let mut paths: Vec<_> = fs::read_dir(root.join("ja"))
-        .unwrap()
-        .map(|e| e.unwrap().path())
+    let mut paths: Vec<_> = walkdir::WalkDir::new(root.join("ja"))
+        .into_iter()
+        .map(|e| e.unwrap().into_path())
+        .filter(|p| p.is_file())
         .collect();
     paths.sort();
     paths
@@ -93,7 +94,7 @@ fn exports_only_completed_notes_allowlists_metadata_and_preserves_legacy_slug(
         output
             .path()
             .join(format!(
-                "ja/{}.md",
+                "ja/tech/{}.md",
                 &digest[..blog_domain::GENERATED_ID_HASH_LENGTH]
             ))
             .exists()
@@ -178,7 +179,7 @@ fn rename_and_title_update_keep_id_and_unpublish_removes_managed_output() {
         "Public body",
     );
     run_export(source.path(), output.path()).unwrap();
-    let old_name = fs::read_dir(output.path().join("ja"))
+    let old_name = fs::read_dir(output.path().join("ja/tech"))
         .unwrap()
         .next()
         .unwrap()
@@ -193,7 +194,7 @@ fn rename_and_title_update_keep_id_and_unpublish_removes_managed_output() {
         "Public body",
     );
     run_export(source.path(), output.path()).unwrap();
-    assert!(output.path().join("ja").join(old_name).exists());
+    assert!(output.path().join("ja/tech").join(old_name).exists());
     fs::write(output.path().join("README.md"), "Keep this").unwrap();
     note(
         source.path(),
@@ -505,7 +506,7 @@ fn local_images_are_rejected_without_changing_public_documents(#[case] body: &st
     fs::write(source.path().join("tech/sub/my image.png"), b"other image").unwrap();
     run_export(source.path(), output.path()).unwrap();
     let before = outputs(output.path());
-    let english = fs::read_dir(output.path().join("en"))
+    let english = fs::read_dir(output.path().join("en/tech"))
         .unwrap()
         .next()
         .unwrap()

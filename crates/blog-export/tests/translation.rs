@@ -53,7 +53,7 @@ fn write_note(source: &Path, body: &str) {
     fs::write(source.join("tech/a.md"), format!("---\ntitle: 記事\ncategory: tech\nis_completed: true\ncreated: '2025-01-01T00:00:00+09:00'\nupdated: '2025-01-01T00:00:00+09:00'\n---\n{body}\n")).unwrap();
 }
 fn english(output: &Path) -> PathBuf {
-    fs::read_dir(output.join("en"))
+    fs::read_dir(output.join("en/tech"))
         .unwrap()
         .next()
         .unwrap()
@@ -73,7 +73,7 @@ fn external_image_urls_are_preserved_in_both_locales_without_exporting_assets() 
     );
     blog_export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
     let en = english(output.path());
-    let ja = output.path().join("ja").join(en.file_name().unwrap());
+    let ja = output.path().join("ja/tech").join(en.file_name().unwrap());
     for path in [ja, en] {
         assert!(
             fs::read_to_string(path)
@@ -175,7 +175,7 @@ fn invalid_vault_metadata_stops_before_translation_and_preserves_both_locales() 
     write_note(source.path(), "本文");
     blog_export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
     let en = english(output.path());
-    let ja = output.path().join("ja").join(en.file_name().unwrap());
+    let ja = output.path().join("ja/tech").join(en.file_name().unwrap());
     let before = (fs::read(&ja).unwrap(), fs::read(&en).unwrap());
     let source_path = source.path().join("tech/a.md");
     let original = fs::read_to_string(&source_path).unwrap();
@@ -330,7 +330,7 @@ fn all_article_candidates_are_checked_before_any_ai_call() {
     assert_eq!(fs::read_dir(&cache).unwrap().count(), cache_count);
     assert_eq!(fs::read(&path).unwrap(), before);
     assert_eq!(fs::read_to_string(&candidate).unwrap(), reviewed);
-    assert!(!output.path().join("en/000-first.md").exists());
+    assert!(!output.path().join("en/tech/000-first.md").exists());
 }
 
 #[test]
@@ -388,8 +388,17 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
         )
         .unwrap()
     }
+    let path = output
+        .path()
+        .join("en/daily")
+        .join(path.file_name().unwrap());
     let actual = meta(&path);
-    let mut expected = meta(&output.path().join("ja").join(path.file_name().unwrap()));
+    let mut expected = meta(
+        &output
+            .path()
+            .join("ja/daily")
+            .join(path.file_name().unwrap()),
+    );
     expected.locale = blog_domain::Locale::En;
     expected.title = "Reviewed candidate title".parse().unwrap();
     expected.translation = actual.translation.clone();
@@ -598,8 +607,8 @@ fn missing_provenance_is_protected() {
             .replacen("---\n", "---\npublish_id: authored\n", 1),
     )
     .unwrap();
-    fs::create_dir_all(output.path().join("en")).unwrap();
-    let path = output.path().join("en/authored.md");
+    fs::create_dir_all(output.path().join("en/tech")).unwrap();
+    let path = output.path().join("en/tech/authored.md");
     let authored = format!(
         "---\nschema_version: 1\nid: authored\nlocale: en\nkind: article\ntitle: Authored title\ncategory: tech\ncreated: '2025-01-01T00:00:00+09:00'\nupdated: '2025-01-01T00:00:00+09:00'\nsource_hash: '{}'\n---\nAuthored prose\n",
         "0".repeat(64)
@@ -640,7 +649,10 @@ fn failure_rolls_back_outputs_and_retry_reuses_completed_units() {
     let retry = Fake::new();
     blog_export::export_content(source.path(), output.path(), &retry, &settings()).unwrap();
     assert_eq!(retry.calls.get(), 1);
-    assert_eq!(fs::read_dir(output.path().join("en")).unwrap().count(), 2);
+    assert_eq!(
+        fs::read_dir(output.path().join("en/tech")).unwrap().count(),
+        2
+    );
 }
 
 #[test]
@@ -743,7 +755,7 @@ fn accepting_article_candidates_checks_each_identity_and_freshness_field(#[case]
     write_note(source.path(), "本文");
     blog_export::export_content(source.path(), output.path(), &Fake::new(), &settings()).unwrap();
     let en = english(output.path());
-    let ja = output.path().join("ja").join(en.file_name().unwrap());
+    let ja = output.path().join("ja/tech").join(en.file_name().unwrap());
     let candidate = output
         .path()
         .join(".export-candidates")

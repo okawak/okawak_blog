@@ -256,7 +256,7 @@ fn blocked_tag_candidates_stop_before_translating_any_article() {
     save(&path, &catalog);
     let before = fs::read(&path).unwrap();
     let candidate_before = fs::read(&candidate).unwrap();
-    let english = fs::read_dir(output.path().join("en"))
+    let english = fs::read_dir(output.path().join("en/tech"))
         .unwrap()
         .next()
         .unwrap()

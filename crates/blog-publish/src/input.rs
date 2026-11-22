@@ -39,9 +39,15 @@ pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
         if !public_directory_exists(&directory)? {
             continue;
         }
-        for entry in fs::read_dir(directory)? {
-            let entry = entry?;
-            if !entry.file_type()?.is_file() {
+        for entry in walkdir::WalkDir::new(directory)
+            .follow_root_links(false)
+            .min_depth(1)
+        {
+            let entry = entry.map_err(std::io::Error::from)?;
+            if entry.file_type().is_dir() {
+                continue;
+            }
+            if !entry.file_type().is_file() {
                 return Err(invalid(
                     "public locale input must contain regular files only",
                 ));
@@ -60,9 +66,7 @@ pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
                 yaml_serde::from_str(yaml).map_err(|_| invalid("invalid public frontmatter"))?;
             meta.validate()
                 .map_err(|_| invalid("public frontmatter validation failed"))?;
-            if meta.locale != locale
-                || entry.path().file_stem().and_then(|s| s.to_str()) != Some(meta.id.as_str())
-            {
+            if meta.locale != locale || entry.path() != root.join(meta.markdown_path(locale)) {
                 return Err(invalid("public filename/locale must match metadata"));
             }
             if body.trim().is_empty() {
