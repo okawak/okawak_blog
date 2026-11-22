@@ -24,29 +24,8 @@ pub struct LabelTranslation {
 pub struct LabelEntry {
     pub source: String,
     pub context: String,
-    #[serde(
-        default,
-        alias = "translation",
-        deserialize_with = "read_translations",
-        skip_serializing_if = "BTreeMap::is_empty"
-    )]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub translations: BTreeMap<Locale, LabelTranslation>,
-}
-
-// Read the original single English translation as well as the locale-keyed catalog.
-fn read_translations<'de, D: serde::Deserializer<'de>>(
-    reader: D,
-) -> std::result::Result<BTreeMap<Locale, LabelTranslation>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Stored {
-        Localized(BTreeMap<Locale, LabelTranslation>),
-        Legacy(Option<LabelTranslation>),
-    }
-    Ok(match Stored::deserialize(reader)? {
-        Stored::Localized(entries) => entries,
-        Stored::Legacy(entry) => entry.into_iter().map(|t| (Locale::En, t)).collect(),
-    })
 }
 
 impl LabelEntry {

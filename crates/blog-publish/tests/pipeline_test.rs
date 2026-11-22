@@ -709,7 +709,7 @@ async fn publishes_english_separately_and_removes_stale_output() {
         .unwrap()
         .replace("schema_version: 1", "schema_version: 1\ntags: [統計]");
     fs::write(article_path, source).unwrap();
-    fs::write(fixture.content_dir().join("tags.json"), r#"{"schema_version":1,"entries":{"統計":{"source":"統計","context":"blog tag","translation":{"value":"Statistics","stale":false}}}}"#).unwrap();
+    fs::write(fixture.content_dir().join("tags.json"), r#"{"schema_version":1,"entries":{"統計":{"source":"統計","context":"blog tag","translations":{"en":{"value":"Statistics","stale":false}}}}}"#).unwrap();
     write_translation_copies(&fixture, "en");
     publish(fixture.content_dir(), fixture.output_dir())
         .await
