@@ -23,17 +23,12 @@ pub(crate) struct Index {
 }
 
 impl Index {
-    pub(crate) fn new(japanese: &[Document], localized: &[Document]) -> Self {
-        let mut routes: HashMap<_, _> = japanese
-            .iter()
-            .map(|d| (d.meta.id.to_string(), d.meta.path(d.meta.locale)))
-            .collect();
-        routes.extend(
-            localized
-                .iter()
-                .map(|d| (d.meta.id.to_string(), d.meta.path(d.meta.locale))),
-        );
-        Self { routes }
+    pub(crate) fn new(japanese: &[Document], localized: &[Document]) -> Result<Self> {
+        let mut routes = HashMap::new();
+        for doc in japanese.iter().chain(localized) {
+            routes.insert(doc.meta.id.to_string(), doc.meta.path(doc.meta.locale)?);
+        }
+        Ok(Self { routes })
     }
 
     fn resolve(&self, target: &str) -> Option<String> {

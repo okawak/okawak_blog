@@ -37,8 +37,8 @@ pub async fn publish_with_bookmark_enricher(
         }
     }
     validate_japanese(&japanese)?;
-    let ja_links = links::Index::new(&japanese, &[]);
-    let en_links = links::Index::new(&japanese, &english);
+    let ja_links = links::Index::new(&japanese, &[])?;
+    let en_links = links::Index::new(&japanese, &english)?;
     ja_links.validate(&japanese)?;
     en_links.validate(&english)?;
     let parent = output_dir
@@ -59,7 +59,10 @@ pub async fn publish_with_bookmark_enricher(
         }
         locales.routes.entry("/".into()).or_default().push(locale);
         for doc in &docs {
-            let available = locales.routes.entry(doc.meta.path(Locale::Ja)).or_default();
+            let available = locales
+                .routes
+                .entry(doc.meta.path(Locale::Ja)?)
+                .or_default();
             if !available.contains(&locale) {
                 available.push(locale);
             }
