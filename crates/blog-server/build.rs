@@ -1,27 +1,11 @@
-use std::env::consts::{ARCH, OS};
-
-const VERSION: &str = "4.3.3";
-
 fn main() {
-    println!("cargo::rerun-if-changed=src");
-    println!("cargo::rerun-if-changed=styles.css");
+    for path in ["src", "styles.css", "../../mise.toml", "../../mise.lock"] {
+        println!("cargo::rerun-if-changed={path}");
+    }
 
     topcoat::tailwind::BuildConfig::new()
+        .executable("tailwindcss")
         .input("styles.css")
-        .version_checksum(VERSION, tailwind_checksum())
         .render()
         .expect("Topcoat should build the site Tailwind stylesheet");
-}
-
-// SHA-256 digests from the tailwindlabs/tailwindcss release for VERSION.
-#[rustfmt::skip]
-fn tailwind_checksum() -> &'static str {
-    match (OS, ARCH) {
-        ("linux", "x86_64") => "sha256:dc61b3ac6b8c9ca874c0cc4c57b2409791a64c5540404ca5f5367360babc313a",
-        ("linux", "aarch64") => "sha256:55fd0b241214eff3de1e8ee4f22796662f2d2e7a49bcfca7477cfd0bac398195",
-        ("macos", "x86_64") => "sha256:7922e0953f2110c05976e3bf58f14e643d90427575e766b7d433f5f80cbee7e1",
-        ("macos", "aarch64") => "sha256:cdf646702987a743464dff4d9c60fd4480d1c1e73dd819a9a67f1078815dce9d",
-        ("windows", "x86_64") => "sha256:e0e260ce048014e9268f6237ff18f8ccf02cef521cbd0ae04e82c2cdf7aa3955",
-        _ => panic!("missing Tailwind checksum for {OS}-{ARCH}"),
-    }
 }
