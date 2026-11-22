@@ -66,13 +66,13 @@ pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
                 yaml_serde::from_str(yaml).map_err(|_| invalid("invalid public frontmatter"))?;
             meta.validate()
                 .map_err(|_| invalid("public frontmatter validation failed"))?;
-            if meta.locale != locale || entry.path() != root.join(meta.markdown_path(locale)) {
+            if meta.locale != locale || entry.path() != root.join(meta.markdown_path(locale)?) {
                 return Err(invalid("public filename/locale must match metadata"));
             }
             if body.trim().is_empty() {
                 return Err(invalid("public body must not be empty"));
             }
-            if !identities.insert((locale, meta.id.clone())) || !routes.insert(meta.path(locale)) {
+            if !identities.insert((locale, meta.id.clone())) || !routes.insert(meta.path(locale)?) {
                 return Err(invalid("duplicate public identity or route"));
             }
             documents.push(Document {
