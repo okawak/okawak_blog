@@ -1,44 +1,23 @@
-use std::env::consts::{ARCH, OS};
-use toml::Table;
-use topcoat::tailwind::BuildConfig;
+use std::process::{Command, Stdio};
 
-fn main() {
-    println!("cargo::rerun-if-changed=src");
-    println!("cargo::rerun-if-changed=styles.css");
+const TAILWIND: &str = "aqua:tailwindlabs/tailwindcss";
 
-    pinned_tailwind()
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    for path in ["src", "styles.css", "../../mise.toml", "../../mise.lock"] {
+        println!("cargo::rerun-if-changed={path}");
+    }
+
+    let cli = Command::new("mise")
+        .args(["which", "--locked", "--tool", TAILWIND, "tailwindcss"])
+        .stderr(Stdio::inherit())
+        .output()?;
+    if !cli.status.success() {
+        return Err("Install the locked Tailwind CLI with `mise install --locked`".into());
+    }
+
+    topcoat::tailwind::BuildConfig::new()
+        .executable(std::str::from_utf8(&cli.stdout)?.trim_end())
         .input("styles.css")
-        .render()
-        .expect("Topcoat should build the site Tailwind stylesheet");
-}
-
-fn pinned_tailwind() -> BuildConfig {
-    const TOOL: &str = "aqua:tailwindlabs/tailwindcss";
-    let config: Table = include_str!("../../mise.toml")
-        .parse()
-        .expect("valid mise.toml");
-    let lock: Table = include_str!("../../mise.lock")
-        .parse()
-        .expect("valid mise.lock");
-    let version = config["tools"][TOOL]
-        .as_str()
-        .expect("exact Tailwind version in mise.toml");
-
-    let arch = match ARCH {
-        "x86_64" => "x64",
-        "aarch64" => "arm64",
-        _ => panic!("unsupported Tailwind build architecture: {ARCH}"),
-    };
-    let platform = format!("platforms.{OS}-{arch}");
-    let checksum = lock["tools"][TOOL]
-        .as_array()
-        .and_then(|entries| {
-            entries
-                .iter()
-                .find(|entry| entry["version"].as_str() == Some(version))
-        })
-        .and_then(|entry| entry.get(&platform)?.get("checksum")?.as_str())
-        .expect("missing Tailwind checksum: run mise lock aqua:tailwindlabs/tailwindcss");
-
-    BuildConfig::new().version_checksum(version, checksum)
+        .render()?;
+    Ok(())
 }

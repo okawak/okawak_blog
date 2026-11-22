@@ -52,7 +52,7 @@ repositoryの管理権限があるアカウントで、次を実施します。
 - `topcoat ui`のcomponentはrepositoryへ配置したsourceであり、Renovateは`components.toml`のhashを解釈しないため、更新有無を直接検出できません。Topcoatまたは互換範囲内の`topcoat-ui-registry`が更新されたら、`topcoat ui list --installed --package blog-server`で保存済みhashとregistry sourceを比較します。`update available`と表示されたcomponentだけ差分を確認し、必要なら`topcoat ui add --overwrite --package blog-server <component>`で再取得してsite固有の変更を反映し直します。
 - `topcoat-*` crateはTopcoat本体からversion範囲で参照されているため、週次lockfile更新だけで変わることがあります。`Cargo.lock`の該当差分もreviewします。
 - GitHub Actionsの更新追従とSHA固定はRenovateで管理し、PRでは対応versionのcommentと参照先を確認します。Actions参照のmajor・SHA・commentを独自scriptで検証する処理は設けません。`mise run versions-check`はBun・Topcoat・Tailwindの共通build toolの整合と、workflowにtool versionや個別installerを持ち込まないことを確認します。
-- `mise run versions-check` はTailwindのロックを対応する5環境で確認します。通常の `cargo build` でもTopcoatは `mise.toml` に指定された版とビルド環境に対応する `mise.lock` のSHA-256で初回取得を検証します。
+- `mise run versions-check` はTailwindのロックを対応する5環境で確認します。`mise install --locked` が初回取得時にビルド環境に対応するSHA-256を照合します。通常の `cargo build` でも、Topcoatは `mise which --locked` で選ばれたTailwind CLIでCSSを生成します。ビルド時は `mise` をPATHに含めてください。
 - 更新PRを手動修正してcommitする際も、署名設定を確認して署名付きcommitを作成します。
 
 ## Renovate設定の検証
