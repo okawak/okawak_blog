@@ -65,3 +65,7 @@ npm exec --yes --package renovate@44.103.3 -- renovate-config-validator --strict
 `--strict`は非推奨設定のmigrationも検出し、`--no-global`はrepository用の設定として検証します。[公式validatorの使い方](https://docs.renovatebot.com/config-validation/)
 
 App導入後はDependency Dashboardの警告も確認します。更新が週次スケジュール待ちの場合は、Dashboardのcheckboxから作成を要求できます。
+
+## セキュリティ検知
+
+Security auditは毎週・手動実行・PRで、Git追跡ファイルとPR内のコミットに含まれるシークレット（Gitleaks）、Actions定義（zizmor）、S3の上書き拒否ポリシーと公開処理の条件付き書き込み、E2E依存（bun audit）、ブラウザーが取得する固定CDN資産（SHA-384 / OSV）を検査する。定期・手動実行では既存のRustSec監査も行う。失敗は対応するActionsジョブのログで確認する。ローカルの監査ツールは `mise -E security install` で準備できる。CDNと勧告の照合には外部接続が必要になる。
