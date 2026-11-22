@@ -1,6 +1,6 @@
 //! Shared HTML shell, metadata, and error views.
 
-use crate::i18n::{Message, japanese_path, locale_from_path, t};
+use crate::i18n::{Message, locale_from_path, route_key, t};
 use blog_domain::{Locale, SiteLocalesDocument};
 use topcoat::{
     Result,
@@ -8,7 +8,7 @@ use topcoat::{
     icon::icon,
     metadata::{Metadata, OpenGraph, OpenGraphType},
     router::{StatusCode, request},
-    runtime::{PrefetchMode, link_attrs, prefetch_mode},
+    runtime::{link_attrs, prefetch_mode},
     view::{Attributes, Child, Unescaped, View, attributes, class, component, element_id, view},
 };
 
@@ -129,11 +129,13 @@ pub(crate) async fn site_shell(
     #[default] locales: std::sync::Arc<SiteLocalesDocument>,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
-    let available = locales.routes.get(japanese_path(&canonical_path));
-    let alternates = available
+    let route = route_key(&canonical_path);
+    let alternates = locales
+        .routes
+        .get(route)
         .into_iter()
         .flatten()
-        .map(|other| (*other, other.path(japanese_path(&canonical_path))))
+        .map(|other| (*other, other.path(route)))
         .collect::<Vec<_>>();
     let switch_locales = if status != StatusCode::OK {
         crate::app::page_loader(cx)
@@ -254,6 +256,11 @@ window.okawakScheduleCodeHighlight = function(root) {
             .open_graph(OpenGraph::new().site_name(t(locale, Message::SiteName))),
     );
 
+    let font_family = match locale {
+        Locale::En => "Noto+Sans",
+        Locale::Ja => "Noto+Sans+JP",
+        Locale::ZhHans => "Noto+Sans+SC",
+    };
     Ok(view! {
         (status)
         <!DOCTYPE html>
@@ -262,23 +269,25 @@ window.okawakScheduleCodeHighlight = function(root) {
                 topcoat::metadata::tags()
                 <meta
                     property="og:locale"
-                    content=(if locale == Locale::Ja { "ja_JP" } else { "en_US" })
+                    content=(match locale {
+                        Locale::Ja => "ja_JP",
+                        Locale::En => "en_US",
+                        Locale::ZhHans => "zh_CN",
+                    })
                 >
                 for (other, path) in &alternates {
                     <link
                         rel="alternate"
                         hreflang=(other.as_str())
-                        href=(if path == "/" {
-                            site_url.as_str().to_owned()
-                        } else {
-                            site_url.join(path)
-                        })
+                        href=(site_url.join(path))
                     >
                 }
                 <link rel="stylesheet" href=(STYLESHEET)>
                 <link
                     rel="stylesheet"
-                    href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400..700&display=swap"
+                    href=(format!(
+                        "https://fonts.googleapis.com/css2?family={font_family}:wght@400..700&display=swap",
+                    ))
                 >
                 <link
                     rel="icon"
@@ -367,16 +376,6 @@ async fn site_header(
     locales: &SiteLocalesDocument,
 ) -> Result<impl View> {
     let home_path = locale.path("/");
-    let home_href = if locale == Locale::Ja {
-        crate::language::choice_href(&home_path, locale)
-    } else {
-        home_path
-    };
-    let home_prefetch = if locale == Locale::Ja {
-        PrefetchMode::Never
-    } else {
-        prefetch_mode(cx)
-    };
     // A new page gets a new panel identity; open popovers must not survive navigation.
     let menu_cx = cx.keyed(request::uri(cx).path());
     let menu_id = element_id(&menu_cx);
@@ -388,7 +387,7 @@ async fn site_header(
                 class="relative mx-auto flex h-full max-w-[var(--site-content-width)] items-center justify-between gap-3 px-4 sm:px-6"
             >
                 <a
-                    (link_attrs(cx, home_href, home_prefetch))
+                    (link_attrs(cx, &home_path, prefetch_mode(cx)))
                     class="mr-auto min-w-0 text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                 >
                     <h1
@@ -466,17 +465,6 @@ async fn site_navigation(
     #[default] attrs: Attributes,
 ) -> Result<impl View> {
     let home_path = locale.path("/");
-    let home_href = if locale == Locale::Ja {
-        crate::language::choice_href(&home_path, locale)
-    } else {
-        home_path.clone()
-    };
-    // The Japanese home URL records an explicit choice; prefetch must not set its cookie.
-    let home_prefetch = if locale == Locale::Ja {
-        PrefetchMode::Never
-    } else {
-        prefetch_mode(cx)
-    };
     let about_href = locale.path("/about");
     let requested_path = request::uri(cx).path();
     let home_is_current = requested_path.trim_end_matches('/') == home_path.trim_end_matches('/');
@@ -493,7 +481,7 @@ async fn site_navigation(
             >
                 <li>
                     <a
-                        (link_attrs(cx, home_href, home_prefetch))
+                        (link_attrs(cx, &home_path, prefetch_mode(cx)))
                         aria-current=(home_is_current.then_some("page"))
                         class=(class!(
                             button_variants(ButtonVariant::Ghost, ButtonSize::Sm),

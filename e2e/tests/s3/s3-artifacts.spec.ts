@@ -51,11 +51,11 @@ test("S3 release artifacts pass readiness and render a published article", async
   await expect(page.locator("main")).toBeVisible();
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
-    baseURL,
+    `${baseURL}/ja`,
   );
 
   const article = articleIndex.articles[0];
-  const articlePath = `/${encodeURIComponent(article.category)}/${encodeURIComponent(article.slug)}`;
+  const articlePath = `/ja/${encodeURIComponent(article.category)}/${encodeURIComponent(article.slug)}`;
   const articleResponse = await page.goto(articlePath);
 
   expect(articleResponse?.status()).toBe(200);

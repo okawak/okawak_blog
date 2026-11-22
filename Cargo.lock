@@ -734,6 +734,7 @@ dependencies = [
  "headers",
  "httpdate",
  "jiff",
+ "percent-encoding",
  "serde",
  "serde_json",
  "tempfile",

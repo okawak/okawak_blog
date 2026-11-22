@@ -2,7 +2,7 @@ use crate::i18n::{Message, t};
 use crate::metadata::*;
 use blog_domain::Locale;
 
-use blog_domain::{ArticlePageDocument, Category, Slug, build_article_page_canonical_path};
+use blog_domain::{ArticlePageDocument, Slug, build_article_page_canonical_path};
 use topcoat::{
     Result,
     context::Cx,
@@ -15,8 +15,8 @@ use topcoat::{
     view::{Unescaped, View, ViewExt, component, view},
 };
 
-use super::super::page_loader;
 use super::category_name;
+use crate::app::page_loader;
 use crate::components::badge::{BadgeVariant, badge};
 use crate::shell::{article_internal_server_error_page, site_shell};
 
@@ -24,16 +24,9 @@ module_param!(article_slug);
 
 #[page]
 async fn article_page(cx: &Cx) -> Result<impl View> {
-    render_article(cx, Locale::Ja, *category_name(cx)?, article_slug(cx)).await
-}
-
-pub(crate) async fn render_article(
-    cx: &Cx,
-    locale: Locale,
-    category: Category,
-    slug_param: &str,
-) -> Result<impl View> {
-    let normalized_slug = normalize_article_slug_param(slug_param);
+    let locale = *super::super::language(cx)?;
+    let category = *category_name(cx)?;
+    let normalized_slug = article_slug(cx).trim_suffix(".html");
     let slug = Slug::new(normalized_slug.to_owned()).ok_or_not_found()?;
 
     match page_loader(cx).load_article(locale, &category, &slug).await {
@@ -166,8 +159,4 @@ async fn article_document(
             </article>
         )
     })
-}
-
-fn normalize_article_slug_param(slug: &str) -> &str {
-    slug.trim_suffix(".html")
 }

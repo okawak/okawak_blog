@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("native popover exposes its expanded state to assistive technology", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/tech");
+  await page.goto("/ja/tech");
   const session = await page.context().newCDPSession(page);
   try {
     for (const [step, expanded] of [false, true, false].entries()) {
@@ -25,7 +25,7 @@ test("native popover exposes its expanded state to assistive technology", async 
 
 test("mobile menu dismisses on Escape and outside click", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/tech");
+  await page.goto("/ja/tech");
   const trigger = page.getByRole("button", { name: "ナビゲーションメニューを開く" });
   const navigation = page.getByRole("navigation", { name: "メインナビゲーション" });
   await trigger.click();
@@ -42,7 +42,7 @@ test("mobile menu dismisses on Escape and outside click", async ({ page }) => {
 
 test("mobile popover closes across desktop and mobile layouts", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/tech");
+  await page.goto("/ja/tech");
   await page.getByRole("button", { name: "ナビゲーションメニューを開く" }).click();
   await page.setViewportSize({ width: 1280, height: 844 });
   await expect(page.getByRole("navigation", { name: "メインナビゲーション" })).toBeVisible();
@@ -61,7 +61,7 @@ test("mobile navigation works without JavaScript in both languages", async ({ br
   try {
     const page = await context.newPage();
     for (const [prefix, open, close] of [
-      ["", "ナビゲーションメニューを開く", "ナビゲーションメニューを閉じる"],
+      ["/ja", "ナビゲーションメニューを開く", "ナビゲーションメニューを閉じる"],
       ["/en", "Open navigation menu", "Close navigation menu"],
     ]) {
       await page.goto(`${prefix}/tech`);
@@ -74,7 +74,7 @@ test("mobile navigation works without JavaScript in both languages", async ({ br
       expect(bounds!.x).toBeGreaterThanOrEqual(0);
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320);
       await page.screenshot({
-        path: testInfo.outputPath(`menu-${prefix ? "en" : "ja"}.png`),
+        path: testInfo.outputPath(`menu-${prefix.slice(1)}.png`),
         animations: "disabled",
       });
       await page.getByRole("link", { name: "About", exact: true }).click();

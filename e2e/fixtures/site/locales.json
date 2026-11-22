@@ -3,7 +3,8 @@
   "routes": {
     "/": [
       "ja",
-      "en"
+      "en",
+      "zh-hans"
     ],
     "/about": [
       "ja",
@@ -11,11 +12,13 @@
     ],
     "/tech": [
       "ja",
-      "en"
+      "en",
+      "zh-hans"
     ],
     "/tech/e2e-article": [
       "ja",
-      "en"
+      "en",
+      "zh-hans"
     ]
   }
 }

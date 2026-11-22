@@ -10,7 +10,7 @@
 
 ## 設計と責務
 
-private Obsidianからローカルの`blog-export`が日英の公開Markdownを作り、`blog-publish`が配信用artifactへ変換してTopcoat SSRで配信する基盤。
+private Obsidianからローカルの`blog-export`が日本語・英語・簡体字中国語の公開Markdownを作り、`blog-publish`が配信用artifactへ変換してTopcoat SSRで配信する基盤。
 設計・module構成は[architecture](docs/architecture/architecture.md)に従う。参照優先順位は同文書 → GitHub Issue / PR → [README](README.md)。計画・進捗はIssue / PRに置き、恒久文書には現行の設計だけを書く。
 
 - 正本はprivate Obsidian repository。`blog-export`が抽出した公開用Markdownは通常ファイルとしてGit管理できる。非公開ノートやprivate入力を丸ごとcommitしない。入力のgit submoduleは必要時だけ初期化・更新する。

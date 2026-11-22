@@ -4,20 +4,20 @@
 
 schema versionは`blog_domain::PUBLIC_CONTENT_SCHEMA_VERSION`で定義し、exportの生成とblog-domainの検証で共有する。初回の自動生成IDと見出しアンカーのハッシュ部分は、SHA-256の16進表現の先頭`blog_domain::GENERATED_ID_HASH_LENGTH`文字（現在12文字）を使う。見出しアンカーには`section-`を前置し、同じ見出しの2回目以降には`-2`などの連番を付ける。この長さはハッシュ部分の生成規則であり、明示指定する`publish_id`を含む`Slug`全般の長さは制限しない。
 
-- `schema_version: 1`、`id`、`locale: ja | en`、`kind: article | category | page | home` を必須とする。
+- `schema_version: 1`、`id`、`locale: ja | en | zh-hans`、`kind: article | category | page | home` を必須とする。
 - `title`、`created`、`updated`、元pathのSHA-256である `source_hash` を持つ。元path自体は公開しない。
 - 記事・カテゴリは `category`、固定ページは `page: about` を持つ。homeはどちらも持たない。
 - 記事だけが `tags` と `section_path` を持つ。`summary` と `priority` は任意。
 - `id` はURLに使える安定識別子。consumerは公開Markdownのpathや翻訳タイトルから再計算しない。
-- 翻訳追跡情報 `translation` は英語版だけに置き、`input_hash`、`generated_hash`、`stale` を持つ。digestはSHA-256の16進文字列。
+- 翻訳追跡情報 `translation` は翻訳版だけに置き、`input_hash`、`generated_hash`、`stale` を持つ。digestはSHA-256の16進文字列。
 - 未知のキーはdeserializationで拒否する。タイトルは`Title`、日時は`Timestamp`（RFC 3339）、タグIDは`TagId`、digestは`Sha256Digest`、セクションは`SectionPath`が生成時・deserialization時に検証する。schema versionとフィールド間の組合せは`validate()`で検証する。
 
 値型の導入でYAML / JSONの形は変わらない。タイトル・日時・タグID・digestは文字列、`section_path`は文字列配列として保存する。検証は元の表記を保持し、タイトル・日時の前後空白、タグIDやdigestの大文字小文字を自動で書き換えない。既存ID、辞書参照、翻訳fingerprintを維持するためである。
 
-`Locale::path()` は既存の日本語pathを保持し、英語には `/en` を付ける。artifact keyも日本語を保持し、英語に `en/` を付ける。未対応localeのparseは失敗する。UI側のfallbackはserverの責務である。
+`Locale::path()` はページキーに `/ja`、`/en`、`/zh-hans` を付ける。MarkdownとJSONにはそのURLの相対パスを使う。例えば `/ja/tech/intro` は `content/ja/tech/intro.md` と `site/ja/tech/intro.json` に対応する。トップの `/ja` はそれぞれ `ja/index.md` と `ja/index.json` に対応する。exportとpublishはfrontmatterから導いたパスと実ファイルの位置を照合する。`locales.json`のキーは従来どおり言語セグメントを含まない。HTMLのlangとhreflangでは簡体字を `zh-hans` と表記する。
 
 ## タグ表示名
 
 `content/tags.json`は記事由来タグの表示名を管理するschema v1の`LabelCatalog`。記事frontmatterの`tags`は元の文字列を安定IDとして保持する。exportが公開対象だけからIDを集約し、共通翻訳処理でラベルを更新する。各項目は`source`、`context`、言語別の`translations.<locale>`（`value` / `stale` / `provenance`）を持つ。詳細は[exportの操作手順](../../crates/blog-export/README.md)を参照する。
 
-publishは各言語で使用するタグだけを`site/tags.json` / `site/en/tags.json`へ`ID → 表示名`として保存する。英語の欠落・更新待ちは日本語名、項目欠落はIDにfallbackする。記事の索引内ではタグIDを変更しない。辞書が存在する場合のschema・補間変数・生成履歴の不正はpublishを停止する。旧公開入力で辞書がない場合はIDを表示名として扱う。
+publishは各言語で使用するタグだけを各言語のartifactディレクトリ内の`_data/tags.json`へ`ID → 表示名`として保存する。翻訳の欠落・更新待ちは日本語名、項目欠落はIDにfallbackする。記事の索引内ではタグIDを変更しない。辞書が存在する場合のschema・補間変数・生成履歴の不正はpublishを停止する。旧公開入力で辞書がない場合はIDを表示名として扱う。

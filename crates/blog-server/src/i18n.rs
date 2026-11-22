@@ -188,20 +188,14 @@ pub(crate) fn category_name(locale: Locale, category: Category) -> &'static str 
     )
 }
 pub(crate) fn locale_from_path(path: &str) -> Locale {
-    if path == "/en" || path.starts_with("/en/") {
-        Locale::En
-    } else {
-        Locale::Ja
-    }
+    Locale::split_path(path)
+        .map(|(locale, _)| locale)
+        .unwrap_or_default()
 }
-pub(crate) fn japanese_path(path: &str) -> &str {
-    if path == "/en" || path == "/en/" {
-        "/"
-    } else {
-        path.strip_prefix("/en/")
-            .map(|_| &path[3..])
-            .unwrap_or(path)
-    }
+pub(crate) fn route_key(path: &str) -> &str {
+    Locale::split_path(path)
+        .map(|(_, route)| route)
+        .unwrap_or(path)
 }
 
 #[cfg(test)]
@@ -322,10 +316,8 @@ mod tests {
                 .get(key.key())
                 .unwrap_or_else(|| panic!("missing {}", key.key()));
             assert!(
-                entry
-                    .translations
-                    .get(&Locale::En)
-                    .is_some_and(|t| !t.stale),
+                Locale::translations()
+                    .all(|l| entry.translations.get(&l).is_some_and(|t| !t.stale)),
                 "missing or stale {}",
                 key.key()
             );
@@ -365,6 +357,6 @@ mod tests {
         );
         assert_eq!(locale_from_path("/english"), Locale::Ja);
         assert_eq!(locale_from_path("/en/tech"), Locale::En);
-        assert_eq!(japanese_path("/en/tech"), "/tech");
+        assert_eq!(route_key("/en/tech"), "/tech");
     }
 }

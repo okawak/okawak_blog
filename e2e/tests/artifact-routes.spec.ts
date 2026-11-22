@@ -141,7 +141,7 @@ test("OpenAPI describes the public APIs from the running router", async ({ reque
 });
 
 test("site declares and serves its favicon", async ({ page, request }) => {
-  await page.goto("/");
+  await page.goto("/ja");
 
   const iconLink = page.locator('link[rel~="icon"]');
   await expect(iconLink).toHaveCount(1);
@@ -166,7 +166,7 @@ test("GitHub icon stays accessible without an icon font", async ({ page }) => {
       iconFontRequests.push(request.url());
     }
   });
-  await page.goto("/");
+  await page.goto("/ja");
 
   const github = page.getByRole("link", { name: "okawakのGitHubプロフィールを開く" });
   await expect(github).toHaveAttribute("href", "https://github.com/okawak");
@@ -191,7 +191,7 @@ test("GitHub icon stays accessible without an icon font", async ({ page }) => {
 test("home uses runtime navigation and restores metadata and scroll through history", async ({ page }) => {
   const browserErrors = captureBrowserErrors(page);
 
-  const response = await page.goto("/");
+  const response = await page.goto("/ja");
 
   expect(response?.status()).toBe(200);
   expect(await page.evaluate(() => document.compatMode)).toBe("CSS1Compat");
@@ -207,7 +207,7 @@ test("home uses runtime navigation and restores metadata and scroll through hist
   await expectMetadata(
     page,
     SITE_NAME,
-    "",
+    "/ja",
     "1カテゴリで1件の記事を公開しています。",
   );
 
@@ -221,7 +221,7 @@ test("home uses runtime navigation and restores metadata and scroll through hist
   const articleRenderRequest = page.waitForRequest(request =>
     request.method() === "POST" &&
     request.headers()["x-topcoat-runtime"] === "true" &&
-    new URL(request.url()).pathname === "/tech/e2e-article",
+    new URL(request.url()).pathname === "/ja/tech/e2e-article",
   );
 
   await page.getByRole("link", { name: "E2E Article" }).click();
@@ -245,19 +245,19 @@ test("home uses runtime navigation and restores metadata and scroll through hist
   await expectMetadata(
     page,
     `E2E Article | ${SITE_NAME}`,
-    "/tech/e2e-article",
+    "/ja/tech/e2e-article",
     "Article fixture description",
     "article",
   );
 
   await page.goBack();
 
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/ja$/);
   await expect(page.getByText("Fixture home content")).toBeVisible();
   await expectMetadata(
     page,
     SITE_NAME,
-    "",
+    "/ja",
     "1カテゴリで1件の記事を公開しています。",
   );
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(homeScroll, 0);
@@ -269,14 +269,14 @@ test("home uses runtime navigation and restores metadata and scroll through hist
 });
 
 test("cross-page fragments use document navigation", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/ja");
   await page
     .locator("main")
     .evaluate((element) => element.setAttribute("data-document", "home"));
   const articleDocumentRequest = page.waitForRequest(
     (request) =>
       request.resourceType() === "document" &&
-      new URL(request.url()).pathname === "/tech/e2e-article",
+      new URL(request.url()).pathname === "/ja/tech/e2e-article",
   );
 
   await page.getByRole("link", { name: "Generated content section" }).click();
@@ -292,18 +292,18 @@ test("cross-page fragments use document navigation", async ({ page }) => {
 });
 
 test("generated text-fragment links use document navigation", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/ja");
   const aboutDocumentRequest = page.waitForRequest(
     (request) =>
       request.resourceType() === "document" &&
-      new URL(request.url()).pathname === "/about",
+      new URL(request.url()).pathname === "/ja/about",
   );
 
   const main = page.locator("main");
   await main.evaluate((element) => element.setAttribute("data-original", "true"));
   const aboutLink = page.getByRole("link", { name: "Generated content section", exact: true });
   await aboutLink.evaluate((element) =>
-    element.setAttribute("href", "/about#:~:text=About%20fixture%20body"),
+    element.setAttribute("href", "/ja/about#:~:text=About%20fixture%20body"),
   );
   await aboutLink.click();
   await aboutDocumentRequest;
@@ -315,7 +315,7 @@ test("generated text-fragment links use document navigation", async ({ page }) =
 });
 
 test("same-page fragments keep the current document", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/ja");
   let documentRequests = 0;
   page.on("request", (request) => {
     if (request.resourceType() === "document") documentRequests += 1;
@@ -325,7 +325,7 @@ test("same-page fragments keep the current document", async ({ page }) => {
 
   await page.getByRole("link", { name: "Home fragment section" }).click();
 
-  await expect(page).toHaveURL(/\/#home-fragment$/);
+  await expect(page).toHaveURL(/\/ja#home-fragment$/);
   await expect(main).toHaveAttribute("data-same-page", "true");
   await expect(page.getByRole("heading", { name: "Home fragment" })).toBeInViewport();
   expect(documentRequests).toBe(0);
@@ -340,14 +340,14 @@ test("server-rendered pages remain navigable without JavaScript", async ({ brows
   const page = await context.newPage();
 
   try {
-    const homeResponse = await page.goto("/");
+    const homeResponse = await page.goto("/ja");
 
     expect(homeResponse?.status()).toBe(200);
     await expect(page.getByText("Fixture home content")).toBeVisible();
     await expectMetadata(
       page,
       SITE_NAME,
-      "",
+      "/ja",
       "1カテゴリで1件の記事を公開しています。",
     );
 
@@ -359,7 +359,7 @@ test("server-rendered pages remain navigable without JavaScript", async ({ brows
     await expectMetadata(
       page,
       `E2E Article | ${SITE_NAME}`,
-      "/tech/e2e-article",
+      "/ja/tech/e2e-article",
       "Article fixture description",
       "article",
     );
@@ -369,7 +369,7 @@ test("server-rendered pages remain navigable without JavaScript", async ({ brows
 });
 
 test("site shell keeps the warm gradient background", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/ja");
 
   const backgroundImage = await page.evaluate(
     () => getComputedStyle(document.body).backgroundImage,
@@ -379,7 +379,7 @@ test("site shell keeps the warm gradient background", async ({ page }) => {
 
 test("mobile navigation stays in the viewport and exposes its state", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/ja");
 
   const header = page.locator("header");
   const logo = header.getByRole("link", { name: SITE_NAME });
@@ -417,7 +417,7 @@ test("mobile navigation stays in the viewport and exposes its state", async ({ p
 
 test("browser history reconstructs the closed mobile menu", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/ja");
   const menuButton = page.locator('button[popovertarget]');
   await menuButton.click();
   await page.getByRole("link", { name: "About", exact: true }).click();
@@ -427,7 +427,7 @@ test("browser history reconstructs the closed mobile menu", async ({ page }) => 
   await expect(menuButton).toMatchAriaSnapshot('- button "ナビゲーションメニューを閉じる"');
   await page.goBack();
 
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/ja$/);
   await expect(page.getByText("Fixture home content")).toBeVisible();
   await expect(menuButton).toMatchAriaSnapshot('- button "ナビゲーションメニューを開く"');
   await expect(page.locator("[data-mobile-navigation]")).toBeHidden();
@@ -437,7 +437,7 @@ test("home article cards keep the warm surface and stay within the mobile viewpo
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/ja");
 
   const articleCard = page.locator("main article").filter({ hasText: "E2E Article" });
   await expect(articleCard).toBeVisible();
@@ -464,7 +464,7 @@ test("home article cards keep the warm surface and stay within the mobile viewpo
 });
 
 test("about renders its page artifact", async ({ page }) => {
-  const response = await page.goto("/about");
+  const response = await page.goto("/ja/about");
 
   expect(response?.status()).toBe(200);
   await expect(page.getByRole("heading", { name: "Fixture About" })).toBeVisible();
@@ -473,14 +473,14 @@ test("about renders its page artifact", async ({ page }) => {
   await expectMetadata(
     page,
     `Fixture About | ${SITE_NAME}`,
-    "/about",
+    "/ja/about",
     "About fixture description",
   );
 });
 
 test("category renders landing content and grouped articles", async ({ page }) => {
   const browserErrors = captureBrowserErrors(page);
-  const response = await page.goto("/tech");
+  const response = await page.goto("/ja/tech");
 
   expect(response?.status()).toBe(200);
   await expect(page.getByText("Fixture Tech", { exact: true })).toBeVisible();
@@ -492,7 +492,7 @@ test("category renders landing content and grouped articles", async ({ page }) =
   await expectMetadata(
     page,
     `Fixture Tech | ${SITE_NAME}`,
-    "/tech",
+    "/ja/tech",
     "Category fixture description",
   );
   expect(browserErrors).toEqual([]);
@@ -500,7 +500,7 @@ test("category renders landing content and grouped articles", async ({ page }) =
 
 test("category landing content stays within the mobile viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/tech");
+  await page.goto("/ja/tech");
 
   const wideContent = page.getByTestId("wide-landing-content");
   await expect(wideContent).toBeVisible();
@@ -524,7 +524,7 @@ test("category landing content stays within the mobile viewport", async ({ page 
 test("category filtering morphs only the list and preserves browser state", async ({ page }) => {
   const browserErrors = captureBrowserErrors(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/tech");
+  await page.goto("/ja/tech");
   const menu = page.locator('button[popovertarget]');
   await menu.click();
   await page.locator("header").evaluate((element) => element.setAttribute("data-preserved", "true"));
@@ -580,7 +580,7 @@ test("category filtering morphs only the list and preserves browser state", asyn
 test("GitHub tooltip stays associated and within the viewport", async ({ page }) => {
   for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 844 });
-    await page.goto("/tech");
+    await page.goto("/ja/tech");
     if (width < 768) {
       await page.locator('button[popovertarget]').click();
     }
@@ -602,7 +602,7 @@ test("category articles remain available without JavaScript", async ({ browser }
   const context = await browser.newContext({ baseURL: BASE_URL, javaScriptEnabled: false });
   try {
     const page = await context.newPage();
-    await page.goto("/tech");
+    await page.goto("/ja/tech");
     await expect(page.getByRole("status")).toHaveText("1件の記事");
     await expect(page.getByRole("heading", { name: "rust / async" })).toBeVisible();
     await page.getByRole("link", { name: "E2E Article" }).click();
@@ -614,7 +614,7 @@ test("category articles remain available without JavaScript", async ({ browser }
 
 test("generated article content stays readable on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/tech/e2e-article");
+  await page.goto("/ja/tech/e2e-article");
 
   const prose = page.locator("main .content-prose");
   const wideImage = page.getByTestId("article-wide-image");
@@ -649,17 +649,17 @@ test("generated article content stays readable on mobile", async ({ page }) => {
 });
 
 test("missing content and unmatched paths return 404 pages", async ({ page }) => {
-  const articleResponse = await page.goto("/tech/missing-article");
+  const articleResponse = await page.goto("/ja/tech/missing-article");
 
   expect(articleResponse?.status()).toBe(404);
   await expect(page.getByText("ページが見つかりませんでした。")).toBeVisible();
-  await expectNotFoundMetadata(page, "/tech/missing-article");
+  await expectNotFoundMetadata(page, "/ja/tech/missing-article");
 
-  const categoryResponse = await page.goto("/statistics");
+  const categoryResponse = await page.goto("/ja/statistics");
 
   expect(categoryResponse?.status()).toBe(404);
   await expect(page.getByText("ページが見つかりませんでした。")).toBeVisible();
-  await expectNotFoundMetadata(page, "/statistics");
+  await expectNotFoundMetadata(page, "/ja/statistics");
 
   const unmatchedResponse = await page.goto("/unknown/nested/path");
 
@@ -669,7 +669,7 @@ test("missing content and unmatched paths return 404 pages", async ({ page }) =>
 });
 
 test("artifact read errors return 500 responses", async ({ request }) => {
-  const response = await request.get("/physics");
+  const response = await request.get("/ja/physics");
 
   expect(response.status()).toBe(500);
   expect(response.headers().etag).toBeUndefined();

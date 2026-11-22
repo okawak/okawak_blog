@@ -116,7 +116,7 @@ artifact upload workflowはGitHub OIDCで`oidc-gh-role`を引き受けます。r
 - `AWS_ROLE_NAME`: `oidc-gh-role`
 - `S3_BUCKET`
 
-公開workflowはGitに確定した公開Markdownだけを読み、private Obsidian submoduleをcheckoutしません。公開用途には`GH_APP_ID`・`GH_APP_PRIVATE_KEY`やAI認証は不要です。他用途で使うGitHub App・secretは個別に管理します。workflowは`main`から手動実行し、対象commitのCI成功を確認してから日英artifactを生成します。release配下には `If-None-Match: *` 付きで書き込む。バケットポリシー適用前に新しいworkflowを導入する。条件付き作成が失敗したrunの再試行には新しいrelease IDが使われる。immutable releaseの検証後、最新`main`を再確認して`current.json`を切り替えます。
+公開workflowはGitに確定した公開Markdownだけを読み、private Obsidian submoduleをcheckoutしません。公開用途には`GH_APP_ID`・`GH_APP_PRIVATE_KEY`やAI認証は不要です。他用途で使うGitHub App・secretは個別に管理します。workflowは`main`から手動実行し、対象commitのCI成功を確認してから各言語のartifactを生成します。release配下には `If-None-Match: *` 付きで書き込む。バケットポリシー適用前に新しいworkflowを導入する。条件付き作成が失敗したrunの再試行には新しいrelease IDが使われる。immutable releaseの検証後、最新`main`を再確認して`current.json`を切り替えます。
 
 ## Image uploader credential
 

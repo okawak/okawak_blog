@@ -8,6 +8,14 @@
         "en": {
           "value": "No description yet.",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "暂无简介。",
+          "provenance": {
+            "input_hash": "30037bf6977262e0acc5816e960d5cf5ce598699ce70619ac6a98e1acf3f0052",
+            "generated_hash": "e805d4608dc23e0240ddb194335d6b717aa4cbc49df7c1ebd35ec00dc8259245"
+          },
+          "stale": false
         }
       }
     },
@@ -17,6 +25,14 @@
       "translations": {
         "en": {
           "value": "Published ",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "发布于 ",
+          "provenance": {
+            "input_hash": "d31736aa5b119e108158460d83901ed12443c21928f604b7529b0b31f20dcf23",
+            "generated_hash": "f0a81d80ddaa159ec7ef0e8f1812a118c034e21ca3cbc385e8b8bff518a3cff2"
+          },
           "stale": false
         }
       }
@@ -28,6 +44,14 @@
         "en": {
           "value": "Tags",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "标签",
+          "provenance": {
+            "input_hash": "955735a0d466c1ae9595f397ac86b9afc893ae24ca3be284ee52d7680f18193e",
+            "generated_hash": "1d0fd5f9336d9103b3ed62c663b44b847af5d14203b2259ddf35507659de5908"
+          },
+          "stale": false
         }
       }
     },
@@ -37,6 +61,14 @@
       "translations": {
         "en": {
           "value": "Updated ",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "更新于 ",
+          "provenance": {
+            "input_hash": "d35d29c9796fe8d3ba1e8350a9d30b8e4275e941b673b0caafbf39082c423dcb",
+            "generated_hash": "0b65c79cc51f6ddd62c0b2208af95c6a0b688270f4e0fb854b3f237153395bbd"
+          },
           "stale": false
         }
       }
@@ -48,6 +80,14 @@
         "en": {
           "value": "Articles in this category",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "分类文章",
+          "provenance": {
+            "input_hash": "aa8501bf6e4882e1f7c815d75899e34542943e1219c1845e55973785b80e1a19",
+            "generated_hash": "2c5a9cb64684fdf804bd180034c7e983ef108e458dd0aab2996947339f9b283e"
+          },
+          "stale": false
         }
       }
     },
@@ -57,6 +97,14 @@
       "translations": {
         "en": {
           "value": "Daily",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "日常",
+          "provenance": {
+            "input_hash": "255f9426d5ee6038e58d8aa3346acebf49761f274e876c045cec6eef6c29685c",
+            "generated_hash": "f648d6712cf804d1769fac12b82eed246931fc47fa7602be12cb678bf932971c"
+          },
           "stale": false
         }
       }
@@ -68,6 +116,14 @@
         "en": {
           "value": "General",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "综合",
+          "provenance": {
+            "input_hash": "77ec5946cde0b6132428fcd6d1affe49de7a727e581bf6c923cfbe7928837bd2",
+            "generated_hash": "4a0d4edef9c7bfdd16e48b4f39e58118e03e165190c83ca0d16e16eb7d759845"
+          },
+          "stale": false
         }
       }
     },
@@ -77,6 +133,14 @@
       "translations": {
         "en": {
           "value": "Category",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "分类",
+          "provenance": {
+            "input_hash": "9714ada6d81ab547e1b1ca64b47034ac5b3be71155862f06bcba5aa67d096bac",
+            "generated_hash": "515559957fd3acbdd96991b2e6bc90e608ef779aa8177c97286bfc16f0ceb606"
+          },
           "stale": false
         }
       }
@@ -88,6 +152,14 @@
         "en": {
           "value": "Physics",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "物理",
+          "provenance": {
+            "input_hash": "daf21e66557918fd3c5eb0013dd1fb498cf34aee2f35e204b94824fc6065bd45",
+            "generated_hash": "a454f17872a14b8ae11e9a7f6ffd9b09075e748ae4fb27700dc99328be039e42"
+          },
+          "stale": false
         }
       }
     },
@@ -97,6 +169,14 @@
       "translations": {
         "en": {
           "value": "Statistics",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "统计",
+          "provenance": {
+            "input_hash": "5948340aeb85688f169343f1ca93d168af9d0f5aa90596d456839806ff2179b4",
+            "generated_hash": "89abe8c6ac1314648ce93219561e418b38b44f1fa16eb1a0f77d5f2267dc9933"
+          },
           "stale": false
         }
       }
@@ -108,6 +188,14 @@
         "en": {
           "value": "Technology",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "技术",
+          "provenance": {
+            "input_hash": "630e6b210ce78cd44722f55887873b8333d1587832389cf2c15df6b7d60d88da",
+            "generated_hash": "4aa1a3c6743f7d8e154a5a04920d03d6d0d9d6d5422fb02d39228da07e83ae1c"
+          },
+          "stale": false
         }
       }
     },
@@ -117,6 +205,14 @@
       "translations": {
         "en": {
           "value": "{count} articles",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "{count} 篇文章",
+          "provenance": {
+            "input_hash": "790b6517a9dd0e0c7936f8a2f388b689d6348ecec238e8f4bb2712d7f35f13ac",
+            "generated_hash": "5c98005077333be87f87b5945226e2f5f94b001cf646305e4880babc75f5d0d9"
+          },
           "stale": false
         }
       }
@@ -128,6 +224,14 @@
         "en": {
           "value": "{count} article",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "{count} 篇文章",
+          "provenance": {
+            "input_hash": "ae97c2f21944852918256b0fa872e8117aab53382fc7d641d28b1f3af7930303",
+            "generated_hash": "5c98005077333be87f87b5945226e2f5f94b001cf646305e4880babc75f5d0d9"
+          },
+          "stale": false
         }
       }
     },
@@ -137,6 +241,14 @@
       "translations": {
         "en": {
           "value": "{count} articles",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "{count} 篇文章",
+          "provenance": {
+            "input_hash": "62a99ace3e12ab3e6823f82fe452e2792d3634e20329e921a9d5442fe4ea6d0b",
+            "generated_hash": "5c98005077333be87f87b5945226e2f5f94b001cf646305e4880babc75f5d0d9"
+          },
           "stale": false
         }
       }
@@ -148,6 +260,14 @@
         "en": {
           "value": "{count} categories",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "{count} 个分类",
+          "provenance": {
+            "input_hash": "ae84ead383cabb22f66992d412406d51abd40f632ff14c64b912ec35db747a2e",
+            "generated_hash": "c1145cb61f278a9feb7714fd7535a06329033ef99a53b864fecd92e9d9ab4ee3"
+          },
+          "stale": false
         }
       }
     },
@@ -157,6 +277,14 @@
       "translations": {
         "en": {
           "value": "{count} category",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "{count} 个分类",
+          "provenance": {
+            "input_hash": "a34b8d5df89c4fc99589c5516c163fc99a289a7705c7d761aac45057686ebadb",
+            "generated_hash": "c1145cb61f278a9feb7714fd7535a06329033ef99a53b864fecd92e9d9ab4ee3"
+          },
           "stale": false
         }
       }
@@ -168,6 +296,14 @@
         "en": {
           "value": "{count} categories",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "{count} 个分类",
+          "provenance": {
+            "input_hash": "d71580d825e45b06836e8b7eadfa50e9aaf1ba1c3bac4d8c421df6f610a1f1ea",
+            "generated_hash": "c1145cb61f278a9feb7714fd7535a06329033ef99a53b864fecd92e9d9ab4ee3"
+          },
+          "stale": false
         }
       }
     },
@@ -177,6 +313,14 @@
       "translations": {
         "en": {
           "value": "No articles yet",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "暂无文章",
+          "provenance": {
+            "input_hash": "cb69ec2db86455c0fdcf373788c3fa78cf90b0d042144c50d5a04dd2b7937422",
+            "generated_hash": "efb160690088740f70b1a9d42382d6c3306acb7965f9dd26c3d50c4eec575451"
+          },
           "stale": false
         }
       }
@@ -188,6 +332,14 @@
         "en": {
           "value": "No matching articles.",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "没有找到匹配的文章。",
+          "provenance": {
+            "input_hash": "ded9955374b3fbd5f1b1dd1f3fdb897e9d2539d9ca8865566b1b79b19df209b4",
+            "generated_hash": "1842ee7a80ac55376dbe6525610ec1c61a309f1fd00cd646addedb34ab5dea09"
+          },
+          "stale": false
         }
       }
     },
@@ -197,6 +349,14 @@
       "translations": {
         "en": {
           "value": "Unable to load this article",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "文章加载失败",
+          "provenance": {
+            "input_hash": "0e34504dd49c827fd2ff15c8dd00351d307055bf87f6e0478c425b4c6b61a6cf",
+            "generated_hash": "2675556aa7eaf010f7763fffa544fb3936ed1d07612ad280e6f37ab587818457"
+          },
           "stale": false
         }
       }
@@ -208,6 +368,14 @@
         "en": {
           "value": "Unable to load this category",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "分类加载失败",
+          "provenance": {
+            "input_hash": "ee681ee90dc36b1885f31592fc010f3155531e691b96150073bd225d07860f20",
+            "generated_hash": "fc63769cae02eb1dbc1e6ff93d373a52801e331362d91ff160685cc6f7de48f9"
+          },
+          "stale": false
         }
       }
     },
@@ -217,6 +385,14 @@
       "translations": {
         "en": {
           "value": "Unable to load articles",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "文章加载失败",
+          "provenance": {
+            "input_hash": "60467926ebbc451d2e70e712d9e48f3ebf8a82fec10dfe1923a6204c8e0fdd3e",
+            "generated_hash": "2675556aa7eaf010f7763fffa544fb3936ed1d07612ad280e6f37ab587818457"
+          },
           "stale": false
         }
       }
@@ -228,6 +404,14 @@
         "en": {
           "value": "The page you requested could not be found.",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "找不到您要访问的页面。",
+          "provenance": {
+            "input_hash": "7b4b86a2cdd1eb3f89199236eee6b64a2b3677dc94925c41d903fb1826584988",
+            "generated_hash": "375c2fe8c1f357699d0b5d5e553c402b77e17c2d2641cca219c3d510c870c127"
+          },
+          "stale": false
         }
       }
     },
@@ -237,6 +421,14 @@
       "translations": {
         "en": {
           "value": "Page not found.",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "没有找到这个页面。",
+          "provenance": {
+            "input_hash": "ede1c2f27f2c7ae6475bad2a8da9a0f995418eae08e7a6ebb50a121017a818c6",
+            "generated_hash": "64eb72201a1d5755f6a6f52fa912ddc0ba8b940eaaaf9d0578878148953515c3"
+          },
           "stale": false
         }
       }
@@ -248,6 +440,14 @@
         "en": {
           "value": "Page not found",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "找不到页面",
+          "provenance": {
+            "input_hash": "539098751c164529b2136861a8c727e3a2b3f85a0cd9770b4330853b3811b01f",
+            "generated_hash": "ff77f2fdf4ce9a6eb9fad1398f5dc5258fd10372c9e720de0e054bc297f905e6"
+          },
+          "stale": false
         }
       }
     },
@@ -257,6 +457,14 @@
       "translations": {
         "en": {
           "value": "Unable to load this page",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "页面加载失败",
+          "provenance": {
+            "input_hash": "3e8628c8dfe30ea01cc15bc692458782fbf692104a8719082beae3e42a08e27a",
+            "generated_hash": "cfa50627748d611ea9fa19cca9d1e655bc3b2ca9151caaad2dafd7e47ece4d60"
+          },
           "stale": false
         }
       }
@@ -268,6 +476,14 @@
         "en": {
           "value": "Filter articles",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "筛选文章",
+          "provenance": {
+            "input_hash": "87cfc0537c6d47042391a4c41992cc6b902f682e175d95a8c233a090a414f21b",
+            "generated_hash": "f74d1fb303d200b4b8aab37042dafafec9ea0c9c2bbc60fd86866d1afe1ee83c"
+          },
+          "stale": false
         }
       }
     },
@@ -277,6 +493,14 @@
       "translations": {
         "en": {
           "value": "Title, description, or tags",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "标题、简介或标签",
+          "provenance": {
+            "input_hash": "fb76f656f0f04f0cc85d79bfb9ebc9d11206de6c6a5a00237f9f887b21d3728d",
+            "generated_hash": "647d953a66877a604bfcf50515eaceda6a732832b3c3b7f86bc8689bcfb2928e"
+          },
           "stale": false
         }
       }
@@ -288,6 +512,14 @@
         "en": {
           "value": "© {year} okawak. All Rights Reserved.",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "© {year} okawak. 保留所有权利。",
+          "provenance": {
+            "input_hash": "e5fddd8bca612414dc1a7e015b42d28a3dd27dcbad0f411ba8f95f38c6935bf2",
+            "generated_hash": "0ec16e020907f50d6899b3db5ac523f175a588d8f5d630b29f5bb5e653cc8bdd"
+          },
+          "stale": false
         }
       }
     },
@@ -297,6 +529,14 @@
       "translations": {
         "en": {
           "value": "Powered by ",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "技术支持：",
+          "provenance": {
+            "input_hash": "c6041250389070f7e9873c7c128b6e30c596f2fa0df92ff9aefb7b5cde1fcf16",
+            "generated_hash": "02ee23a5f9b6008729dffca44f30a45a7f102fc5242ab8cd0261cc38a718693a"
+          },
           "stale": false
         }
       }
@@ -308,6 +548,14 @@
         "en": {
           "value": "Browse published articles, newest first.",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "按发布时间从新到旧浏览文章。",
+          "provenance": {
+            "input_hash": "1267319cc9ec41008c5f9a3cb659748bdcbecdfc4c5915eae06d9e8922d3436b",
+            "generated_hash": "6aeffcd530ad66ef8e623c0b274d20d66b326dd423081aadb0f087dfd9c00269"
+          },
+          "stale": false
         }
       }
     },
@@ -317,6 +565,14 @@
       "translations": {
         "en": {
           "value": "Exploration Notes",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "探洞笔记",
+          "provenance": {
+            "input_hash": "ee30aca9d7ddd9bb5892c8d25eb0bfa5368e50cbe6cf615c79aadf40baf954f3",
+            "generated_hash": "e69ee3cdf2cc85719971e6d48d2ea288b472f22b022eef03d4bbc46ac8a1c2fc"
+          },
           "stale": false
         }
       }
@@ -328,6 +584,14 @@
         "en": {
           "value": "Explore recent articles and categories.",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "这里汇集了近期文章和分类。",
+          "provenance": {
+            "input_hash": "ed9b0f1eb0a0ac7d26f2da8e512673507f4f1fcffd02dea40ac98c7d012a0491",
+            "generated_hash": "cf16235d6c2f8e5ab9bf5bac40b0b2ab837fe7e5939886549ce8aeac16c38469"
+          },
+          "stale": false
         }
       }
     },
@@ -337,6 +601,14 @@
       "translations": {
         "en": {
           "value": "Notes on things that catch my curiosity.",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "这是一个记录我感兴趣的事物的博客。",
+          "provenance": {
+            "input_hash": "728aea2ae3b082d93c31bce8992d03f168b5527a396d10ebe9e85d1f58bcd7f7",
+            "generated_hash": "89f2b00ec2f369e6cdfc36e45f73193cd19a8c5f629c47d800382e788248a549"
+          },
           "stale": false
         }
       }
@@ -348,6 +620,14 @@
         "en": {
           "value": "Recent articles",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "近期文章",
+          "provenance": {
+            "input_hash": "2f2fc9a64aa51ee25fca2f5e49dbdfaf51e670569f9b32f10e902f5491dc6591",
+            "generated_hash": "ecdbb6ada95307e588f7dc201b7fafe71fe6675b457b4f9fd766eaf4515e10f6"
+          },
+          "stale": false
         }
       }
     },
@@ -357,6 +637,14 @@
       "translations": {
         "en": {
           "value": "An article in the {category} category.",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "这是一篇关于{category}的文章。",
+          "provenance": {
+            "input_hash": "ca2b008ec3463c2607373a19ec481f257674126d100751ab4873d0e0455787ee",
+            "generated_hash": "f11e20081a053687a82ede8898ed41f839174629b2d9bc1ea6ec625e65886d37"
+          },
           "stale": false
         }
       }
@@ -368,6 +656,14 @@
         "en": {
           "value": "{articles} in the {category} category.",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "{category}分类，共{articles}。",
+          "provenance": {
+            "input_hash": "17190d0addd4cae78ebdd5460eb393c6ca54d420ad7d12592fc9dffc16e51bee",
+            "generated_hash": "e61ae2b4f3c72699b259f8389f011360b69cff8cc65d1940b17cc12a6d3ca607"
+          },
+          "stale": false
         }
       }
     },
@@ -377,6 +673,14 @@
       "translations": {
         "en": {
           "value": "{articles} published across {categories}.",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "共发布{articles}，分属{categories}。",
+          "provenance": {
+            "input_hash": "f7b4cbbe48ac3c44e813ae65434d9545dfd7533a9c4af83f1c9490902b551eb5",
+            "generated_hash": "c3809fa11161b02d198af7906903de2b42a34fc9acab3fcabbe634b751b721e0"
+          },
           "stale": false
         }
       }
@@ -388,6 +692,14 @@
         "en": {
           "value": "The {title} page.",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "{title}页面。",
+          "provenance": {
+            "input_hash": "b4f7591338df3e12ceca74248f3233cb230ed4b653bd48da095423f1dc2a4714",
+            "generated_hash": "77ec6f92e61f12afb383570e8128717626927459fbd1fa98a15fd374efad51e1"
+          },
+          "stale": false
         }
       }
     },
@@ -397,6 +709,14 @@
       "translations": {
         "en": {
           "value": "About",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "关于",
+          "provenance": {
+            "input_hash": "1a475879a16ec82af45e28eba237a439181793327779e536820f34683b787016",
+            "generated_hash": "52d25a9e30ba94f1fd31be6b2c885f95566ace7516e4351333d96a9fa3d5689e"
+          },
           "stale": false
         }
       }
@@ -408,6 +728,14 @@
         "en": {
           "value": "Close navigation menu",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "关闭导航菜单",
+          "provenance": {
+            "input_hash": "ef6d037888e954734dd721b893498d85a2caaacae54482f6279ded2121b9ab6d",
+            "generated_hash": "46c75b2e0db72e4c17c91d764234d6779cc2adbf1439fafabb4eee02969e22c7"
+          },
+          "stale": false
         }
       }
     },
@@ -417,6 +745,14 @@
       "translations": {
         "en": {
           "value": "Open okawak GitHub profile",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "打开 okawak 的 GitHub 个人主页",
+          "provenance": {
+            "input_hash": "996e153f38202699dcb98b8db31c0a157f9869ee5978f5061967b5d88598c90d",
+            "generated_hash": "3276b6afc481bf7cd9966b16de8ebd50a65fc8ac0055ea3d4a6fc41f8d8c2e80"
+          },
           "stale": false
         }
       }
@@ -428,6 +764,14 @@
         "en": {
           "value": "Home",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "首页",
+          "provenance": {
+            "input_hash": "ecbe1781342b4eb544a459347b00e852e33ba834bd36e8c118b7b0c8c1b863b2",
+            "generated_hash": "203c08e0d44ac3753a3c5b96644a6e10403bc0cbc5770b55cd1f775745a0a978"
+          },
+          "stale": false
         }
       }
     },
@@ -437,6 +781,14 @@
       "translations": {
         "en": {
           "value": "Language",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "语言",
+          "provenance": {
+            "input_hash": "a7cdbc5680caf8d098a572dcfb53968ee53c2da1bb0b1438c0a9fce95338de16",
+            "generated_hash": "9f6fee1aba17a56586bf16a77b07b1a76d8c4e867430c6ee6abfa3128b55fa98"
+          },
           "stale": false
         }
       }
@@ -448,6 +800,14 @@
         "en": {
           "value": "Main navigation",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "主导航",
+          "provenance": {
+            "input_hash": "6e375a6f1248f06c616bd1d7c2e6e82a641a66a6d770f81b6f6b45d650389ad1",
+            "generated_hash": "9bae680405099fc82a22dd3d3e52f6862c77fd88e8163dc12442427d870df40b"
+          },
+          "stale": false
         }
       }
     },
@@ -457,6 +817,14 @@
       "translations": {
         "en": {
           "value": "Open navigation menu",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "打开导航菜单",
+          "provenance": {
+            "input_hash": "404dd04d661273f1650d19e44235aa74ed837481c6dc1274ce532d806e9f4c6d",
+            "generated_hash": "34f94202e6cdf7383778476b8bae4d1963aef82e31328e03213f0a2366a305e1"
+          },
           "stale": false
         }
       }
@@ -468,6 +836,14 @@
         "en": {
           "value": "Page",
           "stale": false
+        },
+        "zh-hans": {
+          "value": "页面",
+          "provenance": {
+            "input_hash": "622b12e164a74689d29da9a93d52d4f7691284189cd885594a70a0b1d4be90e5",
+            "generated_hash": "452c7b10d57a86a7b4960c44fb21521bd4b1b57bab2bc310f1595af9a2718011"
+          },
+          "stale": false
         }
       }
     },
@@ -477,6 +853,14 @@
       "translations": {
         "en": {
           "value": "Bukusen’s Exploration Notes",
+          "stale": false
+        },
+        "zh-hans": {
+          "value": "Bukusen 的探洞笔记",
+          "provenance": {
+            "input_hash": "ee91effc4cba915d72105a3712ee7f95aa199fc3fa34a695e2d52628030e9a5c",
+            "generated_hash": "f0f8c534852aa5d3654498feba41fd9bfb987194d061ba76c12745bf2befe9b1"
+          },
           "stale": false
         }
       }

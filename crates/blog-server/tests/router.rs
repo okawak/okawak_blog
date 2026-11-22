@@ -193,14 +193,14 @@ async fn metadata_uses_each_routers_base_url_and_preserves_canonical_paths() {
     });
     for (origin, router) in routers {
         for (path, canonical_path, japanese, english) in [
-            ("/?campaign=test", "", "", "/en"),
-            ("/en", "/en", "", "/en"),
-            ("/about", "/about", "/about", "/en/about"),
-            ("/en/tech", "/en/tech", "/tech", "/en/tech"),
+            ("/ja?campaign=test", "/ja", "/ja", "/en"),
+            ("/en", "/en", "/ja", "/en"),
+            ("/ja/about", "/ja/about", "/ja/about", "/en/about"),
+            ("/en/tech", "/en/tech", "/ja/tech", "/en/tech"),
             (
-                "/tech/e2e-article.html?campaign=test",
-                "/tech/e2e-article",
-                "/tech/e2e-article",
+                "/ja/tech/e2e-article.html?campaign=test",
+                "/ja/tech/e2e-article",
+                "/ja/tech/e2e-article",
                 "/en/tech/e2e-article",
             ),
         ] {
@@ -255,13 +255,13 @@ async fn not_found_metadata_keeps_repeated_leading_slashes_on_the_configured_sit
 async fn page_metadata_is_unique_and_includes_social_preview_defaults() {
     let router = create_router(fixture_reader(), false);
     for path in [
-        "/",
+        "/ja",
         "/en",
-        "/about",
+        "/ja/about",
         "/en/about",
-        "/tech",
+        "/ja/tech",
         "/en/tech",
-        "/tech/e2e-article",
+        "/ja/tech/e2e-article",
         "/en/tech/e2e-article",
         "/missing/page",
     ] {
@@ -322,6 +322,8 @@ async fn home_selects_browser_language_with_english_default_and_saved_preference
         (Some("ja-JP, en;q=0.8"), None, "ja"),
         (Some("ja;q=0.5, en-US;q=0.9"), None, "en"),
         (Some("fr-FR"), None, "en"),
+        (Some("zh-CN"), None, "zh-hans"),
+        (Some("zh-TW"), None, "en"),
         (Some("*;q=1, ja;q=0.5"), None, "ja"),
         (Some("en;q=0, *;q=1"), None, "en"),
         (Some("en"), Some("okawak_locale=ja"), "ja"),
@@ -336,19 +338,16 @@ async fn home_selects_browser_language_with_english_default_and_saved_preference
             request = request.header(header::COOKIE, cookie);
         }
         let result = response(&router, request.body(Body::empty()).unwrap()).await;
-        if expected == "en" {
-            assert_eq!(
-                result.status,
-                StatusCode::TEMPORARY_REDIRECT,
-                "{language:?} {cookie:?}"
-            );
-            assert_eq!(result.headers[header::LOCATION], "/en?from=entry%20link");
-            assert_eq!(result.headers[header::CACHE_CONTROL], "no-store");
-        } else {
-            assert_eq!(result.status, StatusCode::OK, "{language:?} {cookie:?}");
-            assert!(result.body.contains("<html lang=\"ja\">"));
-            assert_eq!(result.headers[header::CACHE_CONTROL], "private, no-cache");
-        }
+        assert_eq!(
+            result.status,
+            StatusCode::TEMPORARY_REDIRECT,
+            "{language:?} {cookie:?}"
+        );
+        assert_eq!(
+            result.headers[header::LOCATION],
+            format!("/{expected}?from=entry%20link")
+        );
+        assert_eq!(result.headers[header::CACHE_CONTROL], "no-store");
         assert_eq!(result.headers[header::VARY], "Accept-Language, Cookie");
         assert!(!result.headers.contains_key(header::SET_COOKIE));
     }
@@ -359,13 +358,13 @@ async fn manual_language_choice_is_saved_and_falls_back_to_the_published_home() 
     let router = create_router(validator_reader(fixture_reader()), true);
     for (path, language, location) in [
         (
-            "/tech/e2e-article?lang=en&from=menu%20link",
+            "/ja/tech/e2e-article?lang=en&from=menu%20link",
             "en",
             "/en/tech/e2e-article?from=menu%20link",
         ),
-        ("/daily?lang=en", "en", "/en"),
-        ("/?lang=ja", "ja", "/"),
-        ("/en/tech/e2e-article?lang=ja", "ja", "/tech/e2e-article"),
+        ("/ja/daily?lang=en", "en", "/en"),
+        ("/?lang=ja", "ja", "/ja"),
+        ("/en/tech/e2e-article?lang=ja", "ja", "/ja/tech/e2e-article"),
     ] {
         let result = response(
             &router,
@@ -407,7 +406,7 @@ async fn language_selection_precedes_conditional_get_and_shares_the_snapshot() {
     let first = response(
         &router,
         Request::builder()
-            .uri("/")
+            .uri("/ja")
             .header(header::ACCEPT_LANGUAGE, "ja")
             .body(Body::empty())
             .unwrap(),
@@ -418,7 +417,7 @@ async fn language_selection_precedes_conditional_get_and_shares_the_snapshot() {
     for (method, language, expected) in [
         (Method::GET, "en", StatusCode::TEMPORARY_REDIRECT),
         (Method::HEAD, "en", StatusCode::TEMPORARY_REDIRECT),
-        (Method::GET, "ja", StatusCode::NOT_MODIFIED),
+        (Method::GET, "ja", StatusCode::TEMPORARY_REDIRECT),
     ] {
         calls.store(0, Ordering::SeqCst);
         let result = response(
@@ -441,7 +440,11 @@ async fn language_selection_precedes_conditional_get_and_shares_the_snapshot() {
 #[tokio::test]
 async fn explicit_page_urls_and_legacy_japanese_releases_keep_their_language() {
     let router = create_router(fixture_reader(), false);
-    for (path, locale) in [("/en", "en"), ("/tech/e2e-article", "ja"), ("/about", "ja")] {
+    for (path, locale) in [
+        ("/en", "en"),
+        ("/ja/tech/e2e-article", "ja"),
+        ("/ja/about", "ja"),
+    ] {
         let result = response(
             &router,
             Request::builder()
@@ -461,13 +464,13 @@ async fn explicit_page_urls_and_legacy_japanese_releases_keep_their_language() {
         Request::builder().uri("/").body(Body::empty()).unwrap(),
     )
     .await;
-    assert_eq!(result.status, StatusCode::OK);
-    assert!(result.body.contains("<html lang=\"ja\">"));
+    assert_eq!(result.status, StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(result.headers[header::LOCATION], "/ja");
 }
 
 #[tokio::test]
 async fn language_negotiation_shares_a_snapshot_without_http_validators() {
-    for (uri, language) in [("/", "ja"), ("/", "en"), ("/about?lang=en", "ja")] {
+    for (uri, language) in [("/", "ja"), ("/", "en"), ("/ja/about?lang=en", "ja")] {
         let calls = Arc::new(AtomicUsize::new(0));
         let reader: DynArtifactReader = Arc::new(CountingReader {
             inner: fixture_reader(),
@@ -494,7 +497,7 @@ async fn language_choice_does_not_modify_api_or_post_responses() {
     for (uri, method) in [
         ("/api/articles?lang=en", Method::GET),
         ("/api/health?lang=ja", Method::GET),
-        ("/tech?lang=en", Method::POST),
+        ("/ja/tech?lang=en", Method::POST),
     ] {
         let result = response(
             &router,
@@ -510,6 +513,37 @@ async fn language_choice_does_not_modify_api_or_post_responses() {
     }
 }
 
+#[tokio::test]
+async fn old_japanese_urls_redirect_permanently_with_the_original_query() {
+    let router = create_router(fixture_reader(), false);
+    for (path, canonical) in [
+        ("/about", "/ja/about"),
+        ("/%61bout/", "/ja/about"),
+        ("/tech/e2e%2Darticle%2Ehtml", "/ja/tech/e2e-article"),
+        ("/tech", "/ja/tech"),
+        ("/T%45CH/e2e-article.html", "/ja/tech/e2e-article"),
+        ("/tech/e2e-article/", "/ja/tech/e2e-article"),
+    ] {
+        for method in [Method::GET, Method::HEAD] {
+            let result = response(
+                &router,
+                Request::builder()
+                    .method(method)
+                    .uri(format!("{path}?utm=a%20b&src=link"))
+                    .header(header::COOKIE, "okawak_locale=en")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(result.status, StatusCode::PERMANENT_REDIRECT);
+            assert_eq!(
+                result.headers[header::LOCATION],
+                format!("{canonical}?utm=a%20b&src=link")
+            );
+        }
+    }
+}
+
 struct TestResponse {
     status: StatusCode,
     headers: HeaderMap,
@@ -522,12 +556,12 @@ async fn language_choices_preserve_the_existing_trailing_slash_redirect() {
     let router = create_router(validator_reader(fixture_reader()), true);
     for (path, canonical, destination) in [
         (
-            "/about/?lang=en&from=nav%20link",
-            "/about?lang=en&from=nav%20link",
+            "/ja/about/?lang=en&from=nav%20link",
+            "/ja/about?lang=en&from=nav%20link",
             "/en/about?from=nav%20link",
         ),
-        ("/en/about/?lang=ja", "/en/about?lang=ja", "/about"),
-        ("/en/?lang=ja", "/en?lang=ja", "/"),
+        ("/en/about/?lang=ja", "/en/about?lang=ja", "/ja/about"),
+        ("/en/?lang=ja", "/en?lang=ja", "/ja"),
     ] {
         for method in [Method::GET, Method::HEAD] {
             let first = response(
@@ -623,9 +657,9 @@ fn assert_html_document(body: &str) {
 async fn trailing_slashes_redirect_to_canonical_routes_without_artifact_validators() {
     let router = create_router(validator_reader(fixture_reader()), true);
     for path in [
-        "/about",
-        "/tech",
-        "/tech/e2e-article",
+        "/ja/about",
+        "/ja/tech",
+        "/ja/tech/e2e-article",
         "/api/articles",
         "/api/health",
     ] {
@@ -807,7 +841,7 @@ async fn static_routes_take_precedence_over_dynamic_page_routes() {
     let about = response(
         &router,
         Request::builder()
-            .uri("/about")
+            .uri("/ja/about")
             .body(Body::empty())
             .expect("request should be valid"),
     )
@@ -838,7 +872,7 @@ async fn page_routes_reject_unsupported_methods() {
         &router,
         Request::builder()
             .method(Method::POST)
-            .uri("/about")
+            .uri("/ja/about")
             .body(Body::empty())
             .expect("request should be valid"),
     )
@@ -994,7 +1028,7 @@ async fn home_renders_the_published_summary_as_html() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/")
+            .uri("/ja")
             .header(header::ACCEPT_LANGUAGE, "ja")
             .body(Body::empty())
             .unwrap(),
@@ -1014,7 +1048,7 @@ async fn home_renders_the_published_summary_as_html() {
     assert!(
         response
             .body
-            .contains("<link rel=\"canonical\" href=\"https://www.okawak.net\">")
+            .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/ja\">")
     );
     assert!(
         response
@@ -1027,12 +1061,12 @@ async fn home_renders_the_published_summary_as_html() {
     assert!(
         response
             .body
-            .contains("<meta property=\"og:url\" content=\"https://www.okawak.net\">")
+            .contains("<meta property=\"og:url\" content=\"https://www.okawak.net/ja\">")
     );
     assert!(response.body.contains("<p>Fixture home content</p>"));
-    assert!(has_current_link(&response.body, "/?lang=ja"));
-    assert!(response.body.contains("href=\"/tech\""));
-    assert!(response.body.contains("href=\"/tech/e2e-article\""));
+    assert!(has_current_link(&response.body, "/ja"));
+    assert!(response.body.contains("href=\"/ja/tech\""));
+    assert!(response.body.contains("href=\"/ja/tech/e2e-article\""));
     assert!(response.body.contains(">E2E Article</h3>"));
     assert!(response.body.contains("Article fixture description"));
     assert!(response.body.contains("#rust"));
@@ -1053,10 +1087,10 @@ fn has_current_link(body: &str, href: &str) -> bool {
 async fn navigation_marks_only_the_current_destination_including_query_urls() {
     let router = create_router(fixture_reader(), false);
     for (path, expected) in [
-        ("/?utm_source=test", Some("/")),
-        ("/about?utm_source=test", Some("/about")),
-        ("/tech", None),
-        ("/tech/e2e-article.html", None),
+        ("/ja?utm_source=test", Some("/ja")),
+        ("/ja/about?utm_source=test", Some("/ja/about")),
+        ("/ja/tech", None),
+        ("/ja/tech/e2e-article.html", None),
         ("/unknown/nested/path?utm_source=test", None),
     ] {
         let response = response(
@@ -1068,12 +1102,8 @@ async fn navigation_marks_only_the_current_destination_including_query_urls() {
                 .unwrap(),
         )
         .await;
-        for destination in ["/", "/about"] {
-            let href = if destination == "/" {
-                "/?lang=ja"
-            } else {
-                destination
-            };
+        for destination in ["/ja", "/ja/about"] {
+            let href = destination;
             assert_eq!(
                 has_current_link(&response.body, href),
                 expected == Some(destination),
@@ -1086,8 +1116,8 @@ async fn navigation_marks_only_the_current_destination_including_query_urls() {
 #[tokio::test]
 async fn error_pages_keep_navigation_tied_to_the_requested_url() {
     let router = create_router(Arc::new(FailingSnapshotReader), false);
-    for path in ["/", "/about"] {
-        let href = if path == "/" { "/?lang=ja" } else { path };
+    for path in ["/ja", "/ja/about"] {
+        let href = path;
         let response = response(
             &router,
             Request::builder()
@@ -1115,13 +1145,13 @@ async fn internal_links_enable_navigation_without_prefetching_language_choices()
     let page = response(
         &router,
         Request::builder()
-            .uri("/")
+            .uri("/ja")
             .header(header::ACCEPT_LANGUAGE, "ja")
             .body(Body::empty())
             .unwrap(),
     )
     .await;
-    for href in ["/tech", "/tech/e2e-article", "/about"] {
+    for href in ["/ja/tech", "/ja/tech/e2e-article", "/ja/about"] {
         let anchor = page
             .body
             .split("<a ")
@@ -1144,7 +1174,7 @@ async fn internal_links_enable_navigation_without_prefetching_language_choices()
 async fn site_title_links_preserve_the_page_locale_and_prefetch_policy() {
     let router = create_router(fixture_reader(), false);
     for (path, href, prefetch) in [
-        ("/about", "/?lang=ja", "never"),
+        ("/ja/about", "/ja", "intent"),
         ("/en/about", "/en", "intent"),
     ] {
         let result = response(
@@ -1173,7 +1203,7 @@ async fn site_title_links_preserve_the_page_locale_and_prefetch_policy() {
 #[tokio::test]
 async fn runtime_home_response_varies_by_language_but_other_pages_do_not() {
     let router = create_router(fixture_reader(), false);
-    for path in ["/", "/about"] {
+    for path in ["/", "/ja/about"] {
         let result = response(
             &router,
             Request::builder()
@@ -1186,11 +1216,13 @@ async fn runtime_home_response_varies_by_language_but_other_pages_do_not() {
                 .unwrap(),
         )
         .await;
-        assert_eq!(result.status, StatusCode::OK);
+
         if path == "/" {
+            assert_eq!(result.status, StatusCode::TEMPORARY_REDIRECT);
             assert_eq!(result.headers[header::VARY], "Accept-Language, Cookie");
-            assert_eq!(result.headers[header::CACHE_CONTROL], "private, no-cache");
+            assert_eq!(result.headers[header::CACHE_CONTROL], "no-store");
         } else {
+            assert_eq!(result.status, StatusCode::OK);
             assert!(!result.headers.contains_key(header::CACHE_CONTROL));
         }
     }
@@ -1210,7 +1242,7 @@ async fn unavailable_language_choice_on_a_runtime_page_does_not_add_home_cache_h
         &router,
         Request::builder()
             .method(Method::POST)
-            .uri("/about?lang=en")
+            .uri("/ja/about?lang=en")
             .header(&topcoat::runtime::RUNTIME_HEADER, "true")
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(r#"{"signals":{}}"#))
@@ -1239,7 +1271,7 @@ async fn article_read_failure_is_not_reported_as_not_found() {
     let result = response(
         &router,
         Request::builder()
-            .uri("/tech/e2e-article")
+            .uri("/ja/tech/e2e-article")
             .body(Body::empty())
             .unwrap(),
     )
@@ -1254,7 +1286,7 @@ async fn home_shell_exposes_topcoat_mobile_navigation_contract() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/")
+            .uri("/ja")
             .header(header::ACCEPT_LANGUAGE, "ja")
             .body(Body::empty())
             .unwrap(),
@@ -1311,7 +1343,7 @@ async fn home_renders_empty_state_without_treating_it_as_an_error() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/")
+            .uri("/ja")
             .header(header::ACCEPT_LANGUAGE, "ja")
             .body(Body::empty())
             .unwrap(),
@@ -1346,7 +1378,7 @@ async fn home_uses_fallback_copy_when_optional_fragment_is_missing() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/")
+            .uri("/ja")
             .header(header::ACCEPT_LANGUAGE, "ja")
             .body(Body::empty())
             .unwrap(),
@@ -1375,7 +1407,7 @@ async fn home_returns_internal_server_error_for_invalid_optional_fragment() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/")
+            .uri("/ja")
             .header(header::ACCEPT_LANGUAGE, "ja")
             .body(Body::empty())
             .unwrap(),
@@ -1393,7 +1425,7 @@ async fn home_returns_internal_server_error_when_required_artifact_is_missing() 
     let response = response(
         &router,
         Request::builder()
-            .uri("/")
+            .uri("/ja")
             .header(header::ACCEPT_LANGUAGE, "ja")
             .body(Body::empty())
             .unwrap(),
@@ -1410,7 +1442,7 @@ async fn home_returns_internal_server_error_page_when_snapshot_fails() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/")
+            .uri("/ja")
             .header(header::ACCEPT_LANGUAGE, "ja")
             .body(Body::empty())
             .unwrap(),
@@ -1423,7 +1455,7 @@ async fn home_returns_internal_server_error_page_when_snapshot_fails() {
 
 #[tokio::test]
 async fn pages_share_one_snapshot_per_request_and_support_conditional_get() {
-    for path in ["/", "/tech", "/tech/e2e-article", "/about"] {
+    for path in ["/ja", "/ja/tech", "/ja/tech/e2e-article", "/ja/about"] {
         let snapshot_calls = Arc::new(AtomicUsize::new(0));
         let reader = Arc::new(CountingReader {
             inner: fixture_reader(),
@@ -1465,7 +1497,10 @@ async fn category_renders_the_published_landing_and_articles_as_html() {
     let router = create_router(fixture_reader(), false);
     let response = response(
         &router,
-        Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/ja/tech")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
 
@@ -1488,7 +1523,7 @@ async fn category_renders_the_published_landing_and_articles_as_html() {
     assert!(
         response
             .body
-            .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/tech\">")
+            .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/ja/tech\">")
     );
     assert!(
         response
@@ -1503,11 +1538,11 @@ async fn category_renders_the_published_landing_and_articles_as_html() {
     assert!(
         response
             .body
-            .contains("<meta property=\"og:url\" content=\"https://www.okawak.net/tech\">")
+            .contains("<meta property=\"og:url\" content=\"https://www.okawak.net/ja/tech\">")
     );
     assert!(response.body.contains("<h2>Tech landing</h2>"));
     assert!(response.body.contains("rust / async"));
-    assert!(response.body.contains("href=\"/tech/e2e-article\""));
+    assert!(response.body.contains("href=\"/ja/tech/e2e-article\""));
     assert!(response.body.contains(">E2E Article</h3>"));
     assert!(response.body.contains("Article fixture description"));
     assert!(response.body.contains("#rust"));
@@ -1529,11 +1564,11 @@ async fn article_and_category_not_found_pages_share_the_conditional_get_snapshot
         "/unknown/article",
         "/en/unknown",
         "/en/unknown/article",
-        "/daily",
+        "/ja/daily",
         "/en/daily",
-        "/tech/missing-article.html",
+        "/ja/tech/missing-article.html",
         "/en/tech/missing-article.html",
-        "/tech/not%20a%20slug.html",
+        "/ja/tech/not%20a%20slug.html",
         "/en/tech/not%20a%20slug.html",
     ] {
         calls.store(0, Ordering::SeqCst);
@@ -1570,7 +1605,7 @@ async fn article_and_category_not_found_pages_share_the_conditional_get_snapshot
 #[tokio::test]
 async fn category_parameters_preserve_localized_errors_and_decoded_values() {
     let router = create_router(fixture_reader(), false);
-    for prefix in ["", "/en"] {
+    for prefix in ["/ja", "/en"] {
         for suffix in ["/unknown", "/unknown/e2e-article", "/not%20a%20category"] {
             let path = format!("{prefix}{suffix}");
             let result = response(
@@ -1580,7 +1615,7 @@ async fn category_parameters_preserve_localized_errors_and_decoded_values() {
             .await;
             assert_eq!(result.status, StatusCode::NOT_FOUND, "{path}");
             assert!(
-                result.body.contains(if prefix.is_empty() {
+                result.body.contains(if prefix == "/ja" {
                     "<html lang=\"ja\">"
                 } else {
                     "<html lang=\"en\">"
@@ -1609,7 +1644,7 @@ async fn category_parameters_preserve_localized_errors_and_decoded_values() {
     let result = response(
         &router,
         Request::builder()
-            .uri("/T%45CH")
+            .uri("/ja/T%45CH")
             .body(Body::empty())
             .unwrap(),
     )
@@ -1626,7 +1661,7 @@ async fn category_parameters_preserve_localized_errors_and_decoded_values() {
 async fn category_returns_not_found_for_invalid_or_missing_categories() {
     let router = create_router(fixture_reader(), false);
 
-    for path in ["/unknown", "/daily", "/not%20a%20category"] {
+    for path in ["/unknown", "/ja/daily", "/not%20a%20category"] {
         let response = response(
             &router,
             Request::builder().uri(path).body(Body::empty()).unwrap(),
@@ -1647,7 +1682,7 @@ async fn category_returns_internal_server_error_for_invalid_artifact() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/physics")
+            .uri("/ja/physics")
             .body(Body::empty())
             .unwrap(),
     )
@@ -1658,7 +1693,7 @@ async fn category_returns_internal_server_error_for_invalid_artifact() {
     assert!(
         response
             .body
-            .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/physics\">")
+            .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/ja/physics\">")
     );
 }
 
@@ -1667,7 +1702,10 @@ async fn category_returns_internal_server_error_page_when_snapshot_fails() {
     let router = create_router(Arc::new(FailingSnapshotReader), false);
     let response = response(
         &router,
-        Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/ja/tech")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
 
@@ -1687,7 +1725,10 @@ async fn category_and_inline_shard_share_one_snapshot_without_validators() {
     );
     let response = response(
         &router,
-        Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/ja/tech")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
     assert_eq!(response.status, StatusCode::OK);
@@ -1701,7 +1742,10 @@ async fn category_shard_validates_browser_arguments_and_keeps_errors_out_of_the_
     let router = create_router(validator_reader(fixture_reader()), true);
     let page = response(
         &router,
-        Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/ja/tech")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
     let (_, marker) = page
@@ -1745,7 +1789,7 @@ async fn runtime_language_choice_sets_cookie_and_redirects_without_get_validator
         &router,
         Request::builder()
             .method(Method::POST)
-            .uri("/tech/e2e-article?lang=ja")
+            .uri("/ja/tech/e2e-article?lang=ja")
             .header(&topcoat::runtime::RUNTIME_HEADER, "true")
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(r#"{"signals":{}}"#))
@@ -1753,7 +1797,7 @@ async fn runtime_language_choice_sets_cookie_and_redirects_without_get_validator
     )
     .await;
     assert_eq!(choice.status, StatusCode::SEE_OTHER);
-    assert_eq!(choice.headers[header::LOCATION], "/tech/e2e-article");
+    assert_eq!(choice.headers[header::LOCATION], "/ja/tech/e2e-article");
     assert!(
         choice.headers[header::SET_COOKIE]
             .to_str()
@@ -1770,14 +1814,17 @@ async fn page_rerun_does_not_reuse_the_unfiltered_get_validator_after_rewrite() 
     let router = create_router(validator_reader(fixture_reader()), true);
     let page = response(
         &router,
-        Request::builder().uri("/tech").body(Body::empty()).unwrap(),
+        Request::builder()
+            .uri("/ja/tech")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
     let rerun = response(
         &router,
         Request::builder()
             .method(Method::POST)
-            .uri("/tech")
+            .uri("/ja/tech")
             .header(&topcoat::runtime::RUNTIME_HEADER, "true")
             .header(header::CONTENT_TYPE, "application/json")
             .header(header::IF_NONE_MATCH, &page.headers[header::ETAG])
@@ -1798,7 +1845,7 @@ async fn article_renders_the_published_document_as_html() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/tech/e2e-article")
+            .uri("/ja/tech/e2e-article")
             .body(Body::empty())
             .unwrap(),
     )
@@ -1821,9 +1868,9 @@ async fn article_renders_the_published_document_as_html() {
             .contains("<meta name=\"description\" content=\"Article fixture description\">")
     );
     assert!(
-        response
-            .body
-            .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/tech/e2e-article\">")
+        response.body.contains(
+            "<link rel=\"canonical\" href=\"https://www.okawak.net/ja/tech/e2e-article\">"
+        )
     );
     assert!(
         response
@@ -1836,7 +1883,7 @@ async fn article_renders_the_published_document_as_html() {
             .contains("<meta property=\"og:description\" content=\"Article fixture description\">")
     );
     assert!(response.body.contains(
-        "<meta property=\"og:url\" content=\"https://www.okawak.net/tech/e2e-article\">"
+        "<meta property=\"og:url\" content=\"https://www.okawak.net/ja/tech/e2e-article\">"
     ));
     assert!(
         response
@@ -1862,7 +1909,7 @@ async fn article_accepts_html_suffix_and_uses_the_normalized_canonical_url() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/tech/e2e-article.html")
+            .uri("/ja/tech/e2e-article.html")
             .body(Body::empty())
             .unwrap(),
     )
@@ -1870,12 +1917,12 @@ async fn article_accepts_html_suffix_and_uses_the_normalized_canonical_url() {
 
     assert_eq!(response.status, StatusCode::OK);
     assert!(
-        response
-            .body
-            .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/tech/e2e-article\">")
+        response.body.contains(
+            "<link rel=\"canonical\" href=\"https://www.okawak.net/ja/tech/e2e-article\">"
+        )
     );
     assert!(!response.body.contains(
-        "<link rel=\"canonical\" href=\"https://www.okawak.net/tech/e2e-article.html\">"
+        "<link rel=\"canonical\" href=\"https://www.okawak.net/ja/tech/e2e-article.html\">"
     ));
 }
 
@@ -1885,8 +1932,8 @@ async fn article_returns_not_found_for_invalid_or_missing_documents() {
 
     for path in [
         "/unknown/e2e-article",
-        "/tech/not%20a%20slug",
-        "/tech/missing-article",
+        "/ja/tech/not%20a%20slug",
+        "/ja/tech/missing-article",
     ] {
         let response = response(
             &router,
@@ -1913,7 +1960,7 @@ async fn article_returns_not_found_for_invalid_or_missing_documents() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/tech/e2e-article")
+            .uri("/ja/tech/e2e-article")
             .body(Body::empty())
             .unwrap(),
     )
@@ -1942,7 +1989,7 @@ async fn article_returns_internal_server_error_for_invalid_artifacts() {
     let blank_html_response = response(
         &router,
         Request::builder()
-            .uri("/tech/e2e-article")
+            .uri("/ja/tech/e2e-article")
             .body(Body::empty())
             .unwrap(),
     )
@@ -1978,7 +2025,7 @@ async fn unlisted_article_is_rejected_before_reading_its_object() {
     let result = response(
         &router,
         Request::builder()
-            .uri("/tech/unlisted")
+            .uri("/ja/tech/unlisted")
             .body(Body::empty())
             .unwrap(),
     )
@@ -1993,7 +2040,7 @@ async fn missing_article_returns_not_found_without_an_index() {
     let missing_article_response = response(
         &router,
         Request::builder()
-            .uri("/tech/e2e-article")
+            .uri("/ja/tech/e2e-article")
             .body(Body::empty())
             .unwrap(),
     )
@@ -2013,7 +2060,7 @@ async fn article_returns_internal_server_error_page_when_snapshot_fails() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/tech/e2e-article")
+            .uri("/ja/tech/e2e-article")
             .body(Body::empty())
             .unwrap(),
     )
@@ -2029,7 +2076,7 @@ async fn about_renders_the_published_page_as_html() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/about")
+            .uri("/ja/about")
             .body(Body::empty())
             .unwrap(),
     )
@@ -2055,7 +2102,7 @@ async fn about_renders_the_published_page_as_html() {
     assert!(
         response
             .body
-            .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/about\">")
+            .contains("<link rel=\"canonical\" href=\"https://www.okawak.net/ja/about\">")
     );
     assert!(
         response.body.contains(
@@ -2070,7 +2117,7 @@ async fn about_renders_the_published_page_as_html() {
     assert!(
         response
             .body
-            .contains("<meta property=\"og:url\" content=\"https://www.okawak.net/about\">")
+            .contains("<meta property=\"og:url\" content=\"https://www.okawak.net/ja/about\">")
     );
     assert!(
         response
@@ -2100,7 +2147,7 @@ async fn about_shell_initializes_content_enhancements() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/about")
+            .uri("/ja/about")
             .body(Body::empty())
             .unwrap(),
     )
@@ -2141,7 +2188,7 @@ async fn home_and_about_not_found_pages_share_the_snapshot_and_keep_their_locale
     });
     let router = create_router(validator_reader(reader), true);
     for (path, locale, message) in [
-        ("/about", "ja", "ページが見つかりませんでした。"),
+        ("/ja/about", "ja", "ページが見つかりませんでした。"),
         ("/en/about", "en", "Page not found."),
         ("/en", "en", "Page not found."),
     ] {
@@ -2185,7 +2232,7 @@ async fn about_returns_internal_server_error_page_for_invalid_artifact() {
     let response = response(
         &router,
         Request::builder()
-            .uri("/about")
+            .uri("/ja/about")
             .body(Body::empty())
             .unwrap(),
     )
@@ -2351,7 +2398,7 @@ async fn english_routes_render_matching_metadata_links_and_release_validators() 
     let ja = response(
         &router,
         Request::builder()
-            .uri("/tech/e2e-article")
+            .uri("/ja/tech/e2e-article")
             .body(Body::empty())
             .unwrap(),
     )
@@ -2525,7 +2572,7 @@ async fn ordinary_post_is_not_a_page_rerun() {
     for runtime_header in [None, Some("false")] {
         let mut request = Request::builder()
             .method(Method::POST)
-            .uri("/tech")
+            .uri("/ja/tech")
             .header(header::CONTENT_TYPE, "application/json");
         if let Some(value) = runtime_header {
             request = request.header(&topcoat::runtime::RUNTIME_HEADER, value);

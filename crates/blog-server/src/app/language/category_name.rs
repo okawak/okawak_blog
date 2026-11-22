@@ -12,7 +12,7 @@ use topcoat::{
     view::{Unescaped, View, ViewExt, component, view},
 };
 
-use super::load_category;
+use crate::app::load_category;
 use crate::{
     category_articles::category_articles,
     shell::{internal_server_error_page, site_shell},
@@ -22,14 +22,8 @@ module_param!(category_name: Category else not_found);
 
 #[page]
 async fn category_page(cx: &Cx) -> Result<impl View> {
-    render_category(cx, Locale::Ja, *category_name(cx)?).await
-}
-
-pub(crate) async fn render_category(
-    cx: &Cx,
-    locale: Locale,
-    category: Category,
-) -> Result<impl View> {
+    let locale = *super::language(cx)?;
+    let category = *category_name(cx)?;
     match load_category(cx, category, locale).await.clone() {
         Ok(Some(presentation)) => {
             Ok(view! { category_document(presentation: presentation, locale: locale) }.boxed())

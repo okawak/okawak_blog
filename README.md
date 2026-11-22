@@ -4,14 +4,14 @@
 
 https://www.okawak.net
 
-Obsidianで執筆したMarkdownを日英の公開コンテンツへ変換し、Topcoat SSRで配信する個人ブログ基盤です。公開処理はビルド時に完了させ、VPSのserverはS3上のartifactを読んでrouting、metadata、UIを組み立てます。
+Obsidianで執筆したMarkdownを日本語・英語・簡体字中国語の公開コンテンツへ変換し、Topcoat SSRで配信する個人ブログ基盤です。公開処理はビルド時に完了させ、VPSのserverはS3上のartifactを読んでrouting、metadata、UIを組み立てます。
 
 ## データフロー
 
 ```text
 private Obsidian（obsidian/ submodule）
   -> export: 公開対象の抽出・正規化・翻訳
-  -> content/: review済みの日英Markdownとタグ辞書
+  -> content/: review済みの多言語Markdownとタグ辞書
   -> publish: HTML・JSON artifactの生成
   -> GitHub Actions: immutable S3 releaseの検証と公開
   -> Topcoat SSR server
@@ -60,7 +60,7 @@ mise run export
 mise run dev-local
 ```
 
-`dev-local`はartifact生成後にTopcoatのホットリロードを起動します。Rust・styleの変更を自動反映し、対応する検索入力やメニューの状態を保ちます。公開Markdownの変更後はtaskを再起動してください。固定fixtureでUIだけを確認する場合は`mise run dev-fixture`（`http://127.0.0.1:8009/tech`）を使えます。
+`dev-local`はartifact生成後にTopcoatのホットリロードを起動します。Rust・styleの変更を自動反映し、対応する検索入力やメニューの状態を保ちます。公開Markdownの変更後はtaskを再起動してください。固定fixtureでUIだけを確認する場合は`mise run dev-fixture`（`http://127.0.0.1:8009/ja/tech`）を使えます。
 
 `sync-obsidian`は現在または移動前のsubmoduleに未処理の作業がある可能性を検出すると停止します。翻訳候補の確認・手動修正・採用方法は[export README](./crates/blog-export/README.md)を参照してください。
 

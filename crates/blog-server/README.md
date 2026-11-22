@@ -23,10 +23,11 @@ SSR page・asset・内部runtime route・OpenAPI文書自身には`Operation`を
 
 ## UIとassetの境界
 
-- `src/app.rs`: `/`のhome pageとpage loader contextの共有
-- `src/app/about.rs`: `/about`の固定page
-- `src/app/category_name.rs`: `/{category_name}`のcategory page
-- `src/app/category_name/article_slug.rs`: `/{category_name}/{article_slug}`のarticle page
+- `src/app.rs`: 入口での言語選択とpage loader contextの共有
+- `src/app/language.rs`: `/{language}`のトップ
+- `src/app/language/about.rs`: `/{language}/about`の固定page
+- `src/app/language/category_name.rs`: `/{language}/{category_name}`のcategory page
+- `src/app/language/category_name/article_slug.rs`: `/{language}/{category_name}/{article_slug}`のarticle page
 - `src/article_card.rs`: 一覧routeが共有する記事card
 - `src/category_articles.rs`: signalをサーバー側で読み、カテゴリ記事一覧だけを再描画するshard
 - `src/article_filter.rs`: タイトル・説明・タグによる記事絞り込みの純粋ロジック
@@ -39,7 +40,7 @@ SSR page・asset・内部runtime route・OpenAPI文書自身には`Operation`を
 - `styles.css`: Topcoat UI theme token、site chrome、`.content-prose`配下の生成HTML用styleをまとめたTailwind CSS入力
 - `build.rs`: `styles.css`をTopcoatのstylesheet assetへ変換するbuild integration
 
-routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`module_param!()`で宣言し、`category_name(cx)`など宣言名のaccessorで値を取得します。カテゴリは`module_param!(category_name: Category else not_found)`で解析します。不正なカテゴリ・slugとpageの欠落はTopcoatの`NotFoundError`を返し、共通layerで日英の404を描画します。描画もconditional GET layerが設定したsnapshotの内側で行います。content assetも`RouterErrorExt`で404へ変換しますが、siteのHTML shellは描画しません。記事slugの`.html`正規化とstorage errorの500表示はserverが管理します。route moduleに`mod.rs`は使いません。
+routeはTopcoatのmodule-derived pathを使い、Rustのmodule treeを公開URL構造へ対応させます。dynamic segmentは`module_param!()`で宣言し、`category_name(cx)`など宣言名のaccessorで値を取得します。カテゴリは`module_param!(category_name: Category else not_found)`で解析します。不正なカテゴリ・slugとpageの欠落はTopcoatの`NotFoundError`を返し、共通layerで各言語の404を描画します。描画もconditional GET layerが設定したsnapshotの内側で行います。content assetも`RouterErrorExt`で404へ変換しますが、siteのHTML shellは描画しません。記事slugの`.html`正規化とstorage errorの500表示はserverが管理します。route moduleに`mod.rs`は使いません。
 
 Topcoat frameworkとCLIはworkspaceで同じversionに揃え、shardは明示したendpointを`.route(category_articles)`で登録します。applicationのglobal layerを先に追加し、最後に`.layer(RuntimeLayer::new())`を登録して、application layerより前に再描画POSTをGETへrewriteします。`TrailingSlash::Redirect`により、末尾スラッシュ付きの公開URLはqueryを維持した308で宣言済みのURLへリダイレクトします。
 
@@ -51,17 +52,17 @@ runtimeのpage再描画はpage自身のURLに`X-Topcoat-Runtime: true`を付け�
 
 カテゴリの記事絞り込みはshard内の`signal(cx, String::new)`とtracked readで構成します。タイトル・説明・タグを大文字小文字を区別せず部分一致で検索し、入力はサーバー側でも先頭100文字に制限します。`/_topcoat/shards/category-articles`へ渡すカテゴリ・言語引数も再描画時に検証します。固定の引数は通常の値で渡します。ページと初期shardは`#[memoize]`で同じpage documentを共有し、再描画では`PageLoader`から再取得します。記事・section・タグのloopには`#[key(...)]`で安定したidentityを与えます。DOMにも記事・sectionの安定したIDを付け、DOM morphにより、入力フォーカスとshard外の状態を維持します。JavaScript無効時も初期HTMLの全記事とリンクを利用できます。
 
-各pageは読み込み済みpresentationからTopcoatの`Metadata`を直接組み立て、shellへ渡します。shellは言語・公開path・公開locale情報を別の引数で受け取り、canonicalとサイト名を補って`cx.with(...)`へ登録し、`topcoat::metadata::tags()`をhead先頭に描画します。title、description、canonical、Open Graph、Xのsummary cardを一括出力し、`og:site_name`も日英のUI辞書に合わせます。Open Graphのtitle・description・URLはpage metadataのfallbackを使い、article / websiteは`OpenGraphType`で区別します。`og:locale`と、公開済み翻訳に限ったhreflangはshellで補います。metadataのための追加読込は行わず、本文と同じpresentationを使います。
+各pageは読み込み済みpresentationからTopcoatの`Metadata`を直接組み立て、shellへ渡します。shellは言語・公開path・公開locale情報を別の引数で受け取り、canonicalとサイト名を補って`cx.with(...)`へ登録し、`topcoat::metadata::tags()`をhead先頭に描画します。title、description、canonical、Open Graph、Xのsummary cardを一括出力し、`og:site_name`も各言語のUI辞書に合わせます。Open Graphのtitle・description・URLはpage metadataのfallbackを使い、article / websiteは`OpenGraphType`で区別します。`og:locale`と、公開済み翻訳に限ったhreflangはshellで補います。metadataのための追加読込は行わず、本文と同じpresentationを使います。
 
 productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone Tailwind integrationで生成します。Tailwind CSS、Topcoat runtime、faviconはTopcoat asset bundleからcontent-hash付きlocal URLで配信します。
 
 記事card・カテゴリ・header・言語切替のlinkは`runtime::link_attrs`により、SSR結果でdocument・title・metadataを更新するruntime navigationを使います。既定の`PrefetchMode::Intent`でhover・focus・touch時に先読みし、cookieを保存する言語切替と日本語homeの`?lang=ja` linkは`Never`にします。言語選択はruntime POSTがrewriteされたGETにも適用し、validatorの判定だけはoriginal methodを使います。言語切替の表示はTopcoat UIの`toggle_group`を使います。生成Markdown内のanchor（text fragmentを含む）と外部linkはブラウザ標準のnavigationを維持します。JavaScript無効時はすべて通常のanchorとして利用できます。
 
-検索fieldは`field` / `field_label` / `field_description` / `input`を使い、`element_id(cx)`で再描画後も安定したIDを生成し、labelと入力、検索対象の説明を関連付けます。category・tag・countは`badge`、記事一覧は`card`、状態表示は`alert`で構成します。headerの操作とnavigation linkは`button`のstyleを共有し、GitHub linkは`tooltip`で補足します。tooltipも生成IDで`aria-describedby`を関連付け、`floating`のCSS anchor positioningと配置fallbackで画面端を避けます。mobile menuは公式`popover` / `popover_trigger` / `popover_content`を使い、`element_id`でtriggerとpanelを関連付けます。開閉、外側クリック、Escape、focus復帰と支援技術へのexpanded状態はブラウザーのPopover APIが担当し、JavaScriptなしでも操作できます。日英の開閉ラベルとアイコンは`:popover-open`に連動します。desktopとmobileは同じnavigation componentからリンクを生成します。`src/navigation.js`をshellへ埋め込み、リンク選択・履歴移動・desktop幅への切替でpanelを閉じます。panelのIDはrequest pathで分けます。履歴移動とscrollの復元はTopcoat runtimeが担当します。
+検索fieldは`field` / `field_label` / `field_description` / `input`を使い、`element_id(cx)`で再描画後も安定したIDを生成し、labelと入力、検索対象の説明を関連付けます。category・tag・countは`badge`、記事一覧は`card`、状態表示は`alert`で構成します。headerの操作とnavigation linkは`button`のstyleを共有し、GitHub linkは`tooltip`で補足します。tooltipも生成IDで`aria-describedby`を関連付け、`floating`のCSS anchor positioningと配置fallbackで画面端を避けます。mobile menuは公式`popover` / `popover_trigger` / `popover_content`を使い、`element_id`でtriggerとpanelを関連付けます。開閉、外側クリック、Escape、focus復帰と支援技術へのexpanded状態はブラウザーのPopover APIが担当し、JavaScriptなしでも操作できます。各言語の開閉ラベルとアイコンは`:popover-open`に連動します。desktopとmobileは同じnavigation componentからリンクを生成します。`src/navigation.js`をshellへ埋め込み、リンク選択・履歴移動・desktop幅への切替でpanelを閉じます。panelのIDはrequest pathで分けます。履歴移動とscrollの復元はTopcoat runtimeが担当します。
 
-件数と記事の日付はTopcoatの`l10n-number` / `l10n-datetime`で明示的な日英localeへ整形します。件数は桁区切りを付け、日付はartifactのoffsetにおける日を維持して時刻を表示しません。server内でblog-domainの`Locale`をTopcoatのlocaleへ変換し、共有modelにはframework依存を持ち込みません。UI辞書は引き続き`locales/ui.json`を使い、翻訳追跡と日本語fallbackを維持します。
+件数と記事の日付はTopcoatの`l10n-number` / `l10n-datetime`で各言語のlocaleへ整形します。件数は桁区切りを付け、日付はartifactのoffsetにおける日を維持して時刻を表示しません。server内でblog-domainの`Locale`をTopcoatのlocaleへ変換し、共有modelにはframework依存を持ち込みません。UI辞書は引き続き`locales/ui.json`を使い、翻訳追跡と日本語fallbackを維持します。
 
-GitHubアイコンはTopcoatのicon componentでinline SVGを描画し、icon fontや外部icon setの取得は行いません。リンクにaccessible nameを付け、装飾のSVGは支援技術から隠します。端末間の字体を揃えるNoto Sans JPはGoogle Fontsの可変ウェイト範囲`400..700`でCSSの重複を抑え、HTML headから直接参照します。`display=swap`でフォント取得中も本文を表示します。
+GitHubアイコンはTopcoatのicon componentでinline SVGを描画し、icon fontや外部icon setの取得は行いません。リンクにaccessible nameを付け、装飾のSVGは支援技術から隠します。本文と見出しには、英語でNoto Sans、日本語でNoto Sans JP、簡体字中国語でNoto Sans SCを使います。HTMLのheadで、そのページの言語に対応する1書体をGoogle Fontsから可変ウェイト`400..700`で読み込みます。`display=swap`でフォント取得中も本文を表示します。
 
 KaTeX、highlight.jsはversion固定のCDN資産として維持し、KaTeXにはSRIを付与します。数式・syntax highlight・fontは段階的な装飾であり、SSR本文とnavigationの基本機能は外部CDNの成功に依存しません。runtime navigationはscriptを再実行しないため、document rootのMutationObserverでDOM更新を検出して数式・codeを再装飾します。装飾中はobserverを停止し、自身のDOM変更で更新が循環しないようにします。
 

@@ -12,7 +12,7 @@ fn metadata() -> PublicContentMeta {
 }
 
 #[test]
-fn locale_preserves_japanese_routes_and_separates_english_keys() {
+fn locale_prefix_is_shared_by_urls_and_page_files() {
     for (locale, code) in [
         (Locale::Ja, "ja"),
         (Locale::En, "en"),
@@ -24,6 +24,10 @@ fn locale_preserves_japanese_routes_and_separates_english_keys() {
             ("/tech", "tech"),
             ("/tech/intro", "tech/intro"),
         ] {
+            assert_eq!(
+                locale.path(route),
+                format!("/{code}{}", route.trim_end_matches('/'))
+            );
             for ext in ["md", "json"] {
                 assert_eq!(
                     locale.page_file(route, ext),
@@ -35,15 +39,18 @@ fn locale_preserves_japanese_routes_and_separates_english_keys() {
         assert_eq!(locale.to_string(), code);
         assert_eq!(code.parse::<Locale>().unwrap(), locale);
     }
-    assert_eq!(Locale::Ja.path("/tech/legacy123456"), "/tech/legacy123456");
+    assert_eq!(
+        Locale::Ja.path("/tech/legacy123456"),
+        "/ja/tech/legacy123456"
+    );
     assert_eq!(
         Locale::En.path("/tech/legacy123456"),
         "/en/tech/legacy123456"
     );
     assert_eq!(Locale::En.path("/"), "/en");
     assert_eq!(
-        Locale::En.artifact_key("articles/index.json"),
-        "en/articles/index.json"
+        Locale::En.data_key("articles.json"),
+        "en/_data/articles.json"
     );
     assert!("fr".parse::<Locale>().is_err());
 }
@@ -146,7 +153,7 @@ fn tags_and_sections_are_each_restricted_to_articles() {
 fn public_contract_checks_schema_kind_and_provenance() {
     let mut meta = metadata();
     meta.validate().unwrap();
-    assert_eq!(meta.path(Locale::Ja).unwrap(), "/tech/legacy123456");
+    assert_eq!(meta.path(Locale::Ja).unwrap(), "/ja/tech/legacy123456");
     assert_eq!(meta.path(Locale::En).unwrap(), "/en/tech/legacy123456");
     meta.schema_version = 2;
     assert!(meta.validate().is_err());

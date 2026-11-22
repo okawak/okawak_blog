@@ -1,18 +1,18 @@
 import { expect, test } from "@playwright/test";
 
 test("intent prefetch is reused without a document reload", async ({ page }) => {
-  await page.goto("/tech");
+  await page.goto("/ja/tech");
   let renders = 0;
   let documents = 0;
   page.on("request", request => {
-    if (new URL(request.url()).pathname !== "/tech/e2e-article") return;
+    if (new URL(request.url()).pathname !== "/ja/tech/e2e-article") return;
     if (request.method() === "POST") renders += 1;
     if (request.resourceType() === "document") documents += 1;
   });
   const article = page.getByRole("link", { name: "E2E Article", exact: true });
   const prefetched = page.waitForResponse(response =>
     response.request().method() === "POST" &&
-    new URL(response.url()).pathname === "/tech/e2e-article",
+    new URL(response.url()).pathname === "/ja/tech/e2e-article",
   );
   await article.hover();
   expect((await prefetched).ok()).toBe(true);
@@ -23,14 +23,14 @@ test("intent prefetch is reused without a document reload", async ({ page }) => 
 });
 
 test("language choices never prefetch or change cookies before a click", async ({ page, context }) => {
-  await page.goto("/tech/e2e-article");
+  await page.goto("/ja/tech/e2e-article");
   const english = page.locator("header").getByRole("link", { name: "English", exact: true });
-  const home = page.locator("#site-header-nav").getByRole("link", { name: "ホーム", exact: true });
+  const chinese = page.locator("header").getByRole("link", { name: "简体中文", exact: true });
   const choices: string[] = [];
   page.on("request", request => {
     if (new URL(request.url()).searchParams.has("lang")) choices.push(request.url());
   });
-  for (const link of [english, home]) {
+  for (const link of [english, chinese]) {
     await expect(link).toHaveAttribute("data-topcoat-link", "never");
     await link.hover();
     await link.focus();
@@ -48,7 +48,7 @@ test("language choices never prefetch or change cookies before a click", async (
 test("article enhancements run after runtime navigation and again after history", async ({ page }) => {
   // Model already-loaded CDN APIs so this regression does not depend on a CDN.
   await page.route(/cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com/, route => route.abort());
-  await page.goto("/");
+  await page.goto("/ja");
   await page.evaluate(() => {
     (window as any).__enhancementDocument = true;
     (window as any).katex = {
@@ -78,9 +78,9 @@ test("article enhancements run after runtime navigation and again after history"
 });
 
 test("category search still rerenders its shard after runtime navigation", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/ja");
   await page.evaluate(() => { (window as any).__categoryDocument = true; });
-  await page.locator('main a[href="/tech"]').click();
+  await page.locator('main a[href="/ja/tech"]').click();
   await expect(page).toHaveURL(/\/tech$/);
   const query = page.getByRole("searchbox", { name: "記事を絞り込む" });
   await query.fill("missing article");
