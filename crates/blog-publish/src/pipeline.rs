@@ -32,7 +32,7 @@ pub async fn publish_with_bookmark_enricher(
         .unwrap_or_default();
     validate_japanese(japanese)?;
     let mut japanese_links = links::Index::default();
-    japanese_links.add_documents(japanese);
+    japanese_links.add_documents(japanese)?;
     let mut publications = Vec::new();
     let mut asset_names = std::collections::BTreeSet::new();
     for (locale, docs) in groups {
@@ -41,7 +41,7 @@ pub async fn publish_with_bookmark_enricher(
         }
         let mut index = japanese_links.clone();
         if locale != Locale::Ja {
-            index.add_documents(&docs);
+            index.add_documents(&docs)?;
         }
         index.validate(&docs)?;
         asset_names.extend(links::assets(&docs)?);
@@ -67,7 +67,7 @@ pub async fn publish_with_bookmark_enricher(
     for (locale, docs, index) in publications {
         locales.routes.entry("/".into()).or_default().push(locale);
         for doc in &docs {
-            let available = locales.routes.entry(doc.meta.route_key()).or_default();
+            let available = locales.routes.entry(doc.meta.route_key()?).or_default();
             if !available.contains(&locale) {
                 available.push(locale);
             }

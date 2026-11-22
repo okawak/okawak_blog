@@ -23,11 +23,12 @@ pub(crate) struct Index {
 }
 
 impl Index {
-    pub(crate) fn add_documents(&mut self, docs: &[Document]) {
-        self.routes.extend(
-            docs.iter()
-                .map(|doc| (doc.meta.id.to_string(), doc.meta.path(doc.meta.locale))),
-        );
+    pub(crate) fn add_documents(&mut self, docs: &[Document]) -> Result<()> {
+        for doc in docs {
+            self.routes
+                .insert(doc.meta.id.to_string(), doc.meta.path(doc.meta.locale)?);
+        }
+        Ok(())
     }
 
     fn resolve(&self, target: &str) -> Option<String> {

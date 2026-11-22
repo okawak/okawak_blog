@@ -133,20 +133,7 @@ impl PublicContentMeta {
                 "unsupported public Markdown schema",
             ));
         }
-        let valid_kind = match self.kind {
-            ContentKind::Article | ContentKind::Category => {
-                self.category.is_some() && self.page.is_none()
-            }
-            ContentKind::Page => {
-                self.category.is_none() && self.page.as_ref().is_some_and(|p| p.as_str() == "about")
-            }
-            ContentKind::Home => self.category.is_none() && self.page.is_none(),
-        };
-        if !valid_kind {
-            return Err(DomainError::validation(
-                "invalid kind/category/page combination",
-            ));
-        }
+        self.route_key()?;
         if self.kind != ContentKind::Article
             && (!self.tags.is_empty() || !self.section_path.is_empty())
         {
@@ -161,27 +148,29 @@ impl PublicContentMeta {
     }
 
     /// Build the canonical route in a locale without copying the metadata.
-    /// Call validate before routing a deserialized document.
-    pub fn path(&self, locale: Locale) -> String {
-        locale.path(&self.route_key())
+    pub fn path(&self, locale: Locale) -> Result<String> {
+        Ok(locale.path(&self.route_key()?))
     }
 
-    pub fn route_key(&self) -> String {
-        match self.kind {
-            ContentKind::Article => {
-                crate::build_article_path(&self.category.expect("validated article"), &self.id)
+    pub fn route_key(&self) -> Result<String> {
+        match (self.kind, &self.category, &self.page) {
+            (ContentKind::Article, Some(category), None) => {
+                Ok(crate::build_article_path(category, &self.id))
             }
-            ContentKind::Category => {
-                crate::build_category_path(&self.category.expect("validated category"))
+            (ContentKind::Category, Some(category), None) => {
+                Ok(crate::build_category_path(category))
             }
-            ContentKind::Page => {
-                crate::build_static_page_path(self.page.as_ref().expect("validated page"))
+            (ContentKind::Page, None, Some(page)) if page.as_str() == "about" => {
+                Ok(crate::build_static_page_path(page))
             }
-            ContentKind::Home => crate::build_home_page_canonical_path().into(),
+            (ContentKind::Home, None, None) => Ok(crate::build_home_page_canonical_path().into()),
+            _ => Err(DomainError::validation(
+                "invalid kind/category/page combination",
+            )),
         }
     }
 
-    pub fn markdown_path(&self, locale: Locale) -> String {
-        locale.page_file(&self.route_key(), "md")
+    pub fn markdown_path(&self, locale: Locale) -> Result<String> {
+        Ok(locale.page_file(&self.route_key()?, "md"))
     }
 }
