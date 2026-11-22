@@ -9,11 +9,11 @@ cargo run -p blog-publish -- --validate-artifacts crates/blog-publish/dist/site
 mise run dev-local
 ```
 
-入力は `content/ja/<id>.md`、任意の `content/en/<id>.md` と参照asset。正確なfrontmatterは [公開Markdown契約](../../docs/content/public-markdown.md) を参照する。執筆用Markdownは先に [export](../blog-export/README.md) で抽出する。`is_completed`やWikiLinkを含むObsidian形式は直接受け付けない。
+入力は `content/<locale>/` 配下の公開Markdownと参照asset。正確なfrontmatterは [公開Markdown契約](../../docs/content/public-markdown.md) を参照する。執筆用Markdownは先に [export](../blog-export/README.md) で抽出する。`is_completed`やWikiLinkを含むObsidian形式は直接受け付けない。
 
-ページJSONは `site/<locale>/` 配下に保存する。トップは `index.json`、記事は `<category>/<id>.json`、索引とタグ辞書は `_data/` に配置する。各言語の集計は、その言語で公開する記事の件数である。`site/locales.json` は配信可能なpathの言語対応表であり、参照画像だけを `site/content-assets/` に配置する。
+全言語でページのMarkdownとJSONは同じ相対パスを使う。例えば `content/en/tech/intro.md` は `site/en/tech/intro.json` になり、トップは `index.md` と `index.json` が対応する。記事索引・サイト集計・タグ辞書は `site/<locale>/_data/` に置く。各言語の集計は、その言語で公開する記事の件数である。`site/locales.json` は配信可能なpathの言語対応表であり、参照画像だけを `site/content-assets/` に配置する。
 
-日本語は記事1件以上・About・記事カテゴリのlandingを必須にする。英語は翻訳履歴があり更新待ちでない版だけを採用し、未翻訳landingのカテゴリの記事は掲載しない。英語Aboutは任意。`content:<id>#<anchor>` は英訳が配信対象なら `/en/...`、そうでなければ日本語URLへ解決する。未解決ID、未知のschema、identity不整合、未正規化参照はエラーにする。
+日本語は記事1件以上・About・記事カテゴリのlandingを必須にする。翻訳は言語ごとに翻訳履歴があり更新待ちでない版だけを採用し、未翻訳landingのカテゴリの記事は掲載しない。翻訳版のAboutは任意。`content:<id>#<anchor>` は対象言語で配信中ならその言語のURL、それ以外は日本語の `/ja/...`へ解決する。未解決ID、未知のschema、identity不整合、未正規化参照はエラーにする。
 
 全言語を一時ディレクトリで生成・検証してからsiteを入れ替える。失敗時は既存siteを保持し、成功時は削除された記事のartifactも消える。中断で `dist/.site-backup` が残った場合は、新旧siteを比較して復旧してから再実行する。
 

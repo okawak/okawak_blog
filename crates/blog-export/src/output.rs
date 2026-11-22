@@ -161,7 +161,7 @@ pub(crate) fn sync_tags(stage: &Path) -> Result<()> {
                     "Do not change technical proper nouns."
                 )
                 .into(),
-                translation: None,
+                translations: Default::default(),
             });
     }
     catalog.validate()?;
@@ -177,11 +177,12 @@ pub(crate) fn read_catalog(path: &Path) -> Result<LabelCatalog> {
     // A source edit may change interpolation variables. Preserve the old text for
     // the normal update decision, but never expose an incompatible active value.
     for entry in catalog.entries.values_mut() {
-        if let Some(translation) = &mut entry.translation
-            && blog_domain::placeholders(&entry.source)
+        for translation in entry.translations.values_mut() {
+            if blog_domain::placeholders(&entry.source)
                 != blog_domain::placeholders(&translation.value)
-        {
-            translation.stale = true;
+            {
+                translation.stale = true;
+            }
         }
     }
     Ok(catalog)

@@ -927,6 +927,7 @@ async fn english_articles_need_an_eligible_category_landing() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
     write_translation_copies(&fixture, "en");
+    write_translation_copies(&fixture, "zh-hans");
     let landing = fixture.content_dir().join("en/tech.md");
     fs::write(
         &landing,
@@ -942,6 +943,18 @@ async fn english_articles_need_an_eligible_category_landing() {
     assert!(index.articles.is_empty());
     assert!(!fixture.site_root().join("en/tech.json").exists());
     assert!(fixture.site_root().join("en/about.json").exists());
+    let locales: blog_domain::SiteLocalesDocument =
+        read_json(fixture.site_root().join("locales.json"));
+    assert_eq!(
+        locales.routes["/tech/tech-required-article"],
+        [blog_domain::Locale::Ja, blog_domain::Locale::ZhHans]
+    );
+    assert!(
+        fixture
+            .site_root()
+            .join("zh-hans/tech/tech-required-article.json")
+            .is_file()
+    );
 }
 
 #[tokio::test]

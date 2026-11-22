@@ -24,16 +24,37 @@ pub struct LabelTranslation {
 pub struct LabelEntry {
     pub source: String,
     pub context: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub translation: Option<LabelTranslation>,
+    #[serde(
+        default,
+        alias = "translation",
+        deserialize_with = "read_translations",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub translations: BTreeMap<Locale, LabelTranslation>,
+}
+
+// Read the original single English translation as well as the locale-keyed catalog.
+fn read_translations<'de, D: serde::Deserializer<'de>>(
+    reader: D,
+) -> std::result::Result<BTreeMap<Locale, LabelTranslation>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Localized(BTreeMap<Locale, LabelTranslation>),
+        Legacy(Option<LabelTranslation>),
+    }
+    Ok(match Stored::deserialize(reader)? {
+        Stored::Localized(entries) => entries,
+        Stored::Legacy(entry) => entry.into_iter().map(|t| (Locale::En, t)).collect(),
+    })
 }
 
 impl LabelEntry {
     pub fn value(&self, locale: Locale) -> &str {
-        match (&self.translation, locale) {
-            (Some(t), Locale::En) if !t.stale => &t.value,
-            _ => &self.source,
-        }
+        self.translations
+            .get(&locale)
+            .filter(|t| !t.stale)
+            .map_or(&self.source, |t| &t.value)
     }
 }
 
@@ -57,9 +78,10 @@ impl LabelCatalog {
     pub fn validate(&self) -> Result<()> {
         self.validate_structure()?;
         for entry in self.entries.values() {
-            if let Some(translation) = &entry.translation
-                && !translation.stale
-                && placeholders(&entry.source) != placeholders(&translation.value)
+            if entry
+                .translations
+                .values()
+                .any(|t| !t.stale && placeholders(&entry.source) != placeholders(&t.value))
             {
                 return Err(DomainError::validation("label translation placeholders"));
             }
@@ -82,8 +104,11 @@ impl LabelCatalog {
             {
                 return Err(DomainError::validation("label entry"));
             }
-            if let Some(t) = &entry.translation
-                && (t.value.trim().is_empty() || t.value.contains(['\0', '\r']))
+            if entry.translations.contains_key(&Locale::Ja)
+                || entry
+                    .translations
+                    .values()
+                    .any(|t| t.value.trim().is_empty() || t.value.contains(['\0', '\r']))
             {
                 return Err(DomainError::validation("label translation"));
             }
@@ -120,11 +145,15 @@ mod tests {
         LabelEntry {
             source: "{count}件".into(),
             context: "article count".into(),
-            translation: Some(LabelTranslation {
-                value: "{count} articles".into(),
-                provenance: None,
-                stale: false,
-            }),
+            translations: [(
+                Locale::En,
+                LabelTranslation {
+                    value: "{count} articles".into(),
+                    provenance: None,
+                    stale: false,
+                },
+            )]
+            .into(),
         }
     }
 
@@ -146,7 +175,7 @@ mod tests {
                     LabelEntry {
                         source: source.into(),
                         context: context.into(),
-                        translation: None,
+                        translations: Default::default(),
                     },
                 )]
                 .into(),
@@ -165,7 +194,7 @@ mod tests {
         for value in [" \n ", "articles\0", "articles\r"] {
             for stale in [false, true] {
                 let mut entry = entry();
-                let translation = entry.translation.as_mut().unwrap();
+                let translation = entry.translations.get_mut(&Locale::En).unwrap();
                 translation.value = value.into();
                 translation.stale = stale;
                 let catalog = LabelCatalog {
@@ -188,11 +217,15 @@ mod tests {
                 "count".into(),
                 LabelEntry {
                     source: "記事\n{count}件".into(),
-                    translation: Some(LabelTranslation {
-                        value: "Articles\n{count} items".into(),
-                        provenance: None,
-                        stale: false,
-                    }),
+                    translations: [(
+                        Locale::En,
+                        LabelTranslation {
+                            value: "Articles\n{count} items".into(),
+                            provenance: None,
+                            stale: false,
+                        },
+                    )]
+                    .into(),
                     ..entry()
                 },
             )]
@@ -223,15 +256,15 @@ mod tests {
     #[test]
     fn label_translation_requires_explicit_freshness() {
         let mut value = serde_json::to_value(entry()).unwrap();
-        value["translation"]
+        value["translations"]["en"]
             .as_object_mut()
             .unwrap()
             .remove("stale");
         assert!(serde_json::from_value::<LabelEntry>(value.clone()).is_err());
         for stale in [true, false] {
-            value["translation"]["stale"] = stale.into();
+            value["translations"]["en"]["stale"] = stale.into();
             let entry = serde_json::from_value::<LabelEntry>(value.clone()).unwrap();
-            assert_eq!(entry.translation.unwrap().stale, stale);
+            assert_eq!(entry.translations[&Locale::En].stale, stale);
         }
     }
 
@@ -250,9 +283,9 @@ mod tests {
     fn explicit_fallback_and_interpolation_validation() {
         let mut entry = entry();
         assert_eq!(entry.value(Locale::En), "{count} articles");
-        entry.translation.as_mut().unwrap().stale = true;
+        entry.translations.get_mut(&Locale::En).unwrap().stale = true;
         assert_eq!(entry.value(Locale::En), "{count}件");
-        entry.translation.as_mut().unwrap().value = "lost variable".into();
+        entry.translations.get_mut(&Locale::En).unwrap().value = "lost variable".into();
         let mut catalog = LabelCatalog {
             entries: [("count".into(), entry)].into(),
             ..Default::default()
@@ -263,8 +296,8 @@ mod tests {
             .entries
             .get_mut("count")
             .unwrap()
-            .translation
-            .as_mut()
+            .translations
+            .get_mut(&Locale::En)
             .unwrap()
             .stale = false;
         assert!(catalog.validate_structure().is_ok());

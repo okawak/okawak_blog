@@ -2,7 +2,7 @@
 use crate::{PublishError, Result};
 use blog_domain::{ContentKind, LabelCatalog, Locale, PublicContentMeta};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fs,
     path::Path,
 };
@@ -90,23 +90,27 @@ pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
         .filter(|d| d.meta.locale == Locale::Ja)
         .map(|d| (&d.meta.id, &d.meta))
         .collect();
-    for en in documents.iter().filter(|d| d.meta.locale == Locale::En) {
-        let Some(ja) = japanese.get(&en.meta.id) else {
-            return Err(invalid("English content has no Japanese source"));
+    for translated in documents.iter().filter(|d| d.meta.locale != Locale::Ja) {
+        let Some(ja) = japanese.get(&translated.meta.id) else {
+            return Err(invalid("Translated content has no Japanese source"));
         };
-        if en.meta.translation.as_ref().is_some_and(|p| !p.stale)
-            && (ja.kind != en.meta.kind
-                || ja.category != en.meta.category
-                || ja.page != en.meta.page
-                || ja.tags != en.meta.tags
-                || ja.section_path != en.meta.section_path
-                || ja.priority != en.meta.priority
-                || ja.updated != en.meta.updated
-                || ja.source_hash != en.meta.source_hash
-                || ja.created != en.meta.created)
+        if translated
+            .meta
+            .translation
+            .as_ref()
+            .is_some_and(|p| !p.stale)
+            && (ja.kind != translated.meta.kind
+                || ja.category != translated.meta.category
+                || ja.page != translated.meta.page
+                || ja.tags != translated.meta.tags
+                || ja.section_path != translated.meta.section_path
+                || ja.priority != translated.meta.priority
+                || ja.updated != translated.meta.updated
+                || ja.source_hash != translated.meta.source_hash
+                || ja.created != translated.meta.created)
         {
             return Err(invalid(
-                "English identity metadata differs from Japanese source",
+                "Translated identity metadata differs from Japanese source",
             ));
         }
     }
@@ -126,23 +130,29 @@ fn public_directory_exists(path: &Path) -> Result<bool> {
     }
 }
 
-pub(crate) fn eligible(documents: Vec<Document>) -> [Vec<Document>; 2] {
-    let (japanese, mut english): (Vec<_>, Vec<_>) = documents
-        .into_iter()
-        .filter(|d| {
-            d.meta.locale == Locale::Ja || d.meta.translation.as_ref().is_some_and(|p| !p.stale)
-        })
-        .partition(|d| d.meta.locale == Locale::Ja);
-    let categories: HashSet<_> = english
-        .iter()
-        .filter(|d| d.meta.kind == ContentKind::Category)
-        .filter_map(|d| d.meta.category)
-        .collect();
-    english.retain(|d| {
-        d.meta.kind != ContentKind::Article
-            || d.meta.category.is_some_and(|c| categories.contains(&c))
-    });
-    [japanese, english]
+pub(crate) fn eligible(documents: Vec<Document>) -> BTreeMap<Locale, Vec<Document>> {
+    let mut groups = BTreeMap::<Locale, Vec<Document>>::new();
+    for doc in documents {
+        if doc.meta.locale == Locale::Ja || doc.meta.translation.as_ref().is_some_and(|p| !p.stale)
+        {
+            groups.entry(doc.meta.locale).or_default().push(doc);
+        }
+    }
+    for (locale, docs) in &mut groups {
+        if *locale == Locale::Ja {
+            continue;
+        }
+        let categories: HashSet<_> = docs
+            .iter()
+            .filter(|d| d.meta.kind == ContentKind::Category)
+            .filter_map(|d| d.meta.category)
+            .collect();
+        docs.retain(|d| {
+            d.meta.kind != ContentKind::Article
+                || d.meta.category.is_some_and(|c| categories.contains(&c))
+        });
+    }
+    groups
 }
 
 fn invalid(message: &str) -> PublishError {

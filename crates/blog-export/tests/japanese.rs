@@ -13,6 +13,7 @@ fn run_export(source: &Path, output: &Path) -> blog_export::Result<()> {
         }
     }
     let settings = blog_export::TranslationSettings {
+        target: blog_domain::Locale::En,
         model: "fake".into(),
         instruction: "test".into(),
         glossary: blog_export::Texts::new(),

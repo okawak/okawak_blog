@@ -43,7 +43,7 @@ fn response_cache_path(request: &TranslationRequest, root: &Path) -> Result<Path
         .join(format!("{}.json", request.fingerprint()?)))
 }
 
-pub(super) fn copy_cache(root: &Path, stage: &Path) -> Result<()> {
+pub(crate) fn copy_cache(root: &Path, stage: &Path) -> Result<()> {
     use std::fs;
     let cache = root.join(".export-candidates/cache");
     if cache.exists() {
@@ -109,6 +109,7 @@ mod tests {
             Texts::from([("text".into(), "文章".into())]),
             "test".into(),
             &TranslationSettings {
+                target: blog_domain::Locale::En,
                 model: "test".into(),
                 instruction: "translate".into(),
                 glossary: Texts::new(),
