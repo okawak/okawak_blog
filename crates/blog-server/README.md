@@ -62,7 +62,7 @@ productionはpackage直下の`build.rs`から`styles.css`をTopcoatのstandalone
 
 件数と記事の日付はTopcoatの`l10n-number` / `l10n-datetime`で各言語のlocaleへ整形します。件数は桁区切りを付け、日付はartifactのoffsetにおける日を維持して時刻を表示しません。server内でblog-domainの`Locale`をTopcoatのlocaleへ変換し、共有modelにはframework依存を持ち込みません。UI辞書は引き続き`locales/ui.json`を使い、翻訳追跡と日本語fallbackを維持します。
 
-GitHubアイコンはTopcoatのicon componentでinline SVGを描画し、icon fontや外部icon setの取得は行いません。リンクにaccessible nameを付け、装飾のSVGは支援技術から隠します。端末間の字体を揃えるNoto Sans JPはGoogle Fontsの可変ウェイト範囲`400..700`でCSSの重複を抑え、HTML headから直接参照します。`display=swap`でフォント取得中も本文を表示します。
+GitHubアイコンはTopcoatのicon componentでinline SVGを描画し、icon fontや外部icon setの取得は行いません。リンクにaccessible nameを付け、装飾のSVGは支援技術から隠します。本文と見出しには、英語でNoto Sans、日本語でNoto Sans JP、簡体字中国語でNoto Sans SCを使います。HTMLのheadで、そのページの言語に対応する1書体をGoogle Fontsから可変ウェイト`400..700`で読み込みます。`display=swap`でフォント取得中も本文を表示します。
 
 KaTeX、highlight.jsはversion固定のCDN資産として維持し、KaTeXにはSRIを付与します。数式・syntax highlight・fontは段階的な装飾であり、SSR本文とnavigationの基本機能は外部CDNの成功に依存しません。runtime navigationはscriptを再実行しないため、document rootのMutationObserverでDOM更新を検出して数式・codeを再装飾します。装飾中はobserverを停止し、自身のDOM変更で更新が循環しないようにします。
 

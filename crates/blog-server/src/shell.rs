@@ -256,6 +256,11 @@ window.okawakScheduleCodeHighlight = function(root) {
             .open_graph(OpenGraph::new().site_name(t(locale, Message::SiteName))),
     );
 
+    let font_family = match locale {
+        Locale::En => "Noto+Sans",
+        Locale::Ja => "Noto+Sans+JP",
+        Locale::ZhHans => "Noto+Sans+SC",
+    };
     Ok(view! {
         (status)
         <!DOCTYPE html>
@@ -280,11 +285,9 @@ window.okawakScheduleCodeHighlight = function(root) {
                 <link rel="stylesheet" href=(STYLESHEET)>
                 <link
                     rel="stylesheet"
-                    href=(if locale == Locale::ZhHans {
-                        "https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400..700&display=swap"
-                    } else {
-                        "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400..700&display=swap"
-                    })
+                    href=(format!(
+                        "https://fonts.googleapis.com/css2?family={font_family}:wght@400..700&display=swap",
+                    ))
                 >
                 <link
                     rel="icon"

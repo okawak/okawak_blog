@@ -16,6 +16,19 @@ test("home follows the browser locale and uses English for unsupported languages
   }
 });
 
+test("switching languages applies the page font to text and headings", async ({ page }) => {
+  await page.goto("/ja");
+  for (const [name, family] of [["日本語", "Noto Sans JP"], ["English", "Noto Sans"], ["简体中文", "Noto Sans SC"]]) {
+    await page.locator("header").getByRole("link", { name, exact: true }).click();
+    const font = new RegExp(`^"${family}",`);
+    await expect(page.locator("body")).toHaveCSS("font-family", font);
+    await expect(page.getByRole("heading").first()).toHaveCSS("font-family", font);
+    await expect(page.locator('link[href^="https://fonts.googleapis.com/css2"]')).toHaveAttribute(
+      "href", `https://fonts.googleapis.com/css2?family=${family.replaceAll(" ", "+")}:wght@400..700&display=swap`,
+    );
+  }
+});
+
 test("header language choices persist and direct article URLs keep their locale", async ({ browser }, testInfo) => {
   const context = await browser.newContext({ locale: "en-US" });
   try {
