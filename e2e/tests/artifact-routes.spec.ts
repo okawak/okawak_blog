@@ -76,6 +76,23 @@ async function expectFormattedFixtureDates(page: Page) {
   ).toHaveText("2026年1月2日");
 }
 
+test("external executable assets have browser-enforced integrity metadata", async ({ page }) => {
+  await page.goto("/about", { waitUntil: "domcontentloaded" });
+  const assets = await page.locator('script[src], link[rel="stylesheet"]').evaluateAll(elements =>
+    elements.flatMap(element => {
+      const script = element instanceof HTMLScriptElement;
+      const url = new URL(script ? element.src : (element as HTMLLinkElement).href);
+      if (url.origin === location.origin) return [];
+      if (!script && url.origin === "https://fonts.googleapis.com" && url.pathname === "/css2") return [];
+      return [{ url: url.href, hash: element.getAttribute("integrity"), cors: element.getAttribute("crossorigin") }];
+    })
+  );
+  for (const asset of assets) {
+    expect(asset.hash, asset.url).toMatch(/^sha384-[A-Za-z0-9+/]{64}$/);
+    expect(asset.cors, asset.url).toBe("anonymous");
+  }
+});
+
 test("runtime probes distinguish liveness and artifact readiness", async ({ request }) => {
   const healthResponse = await request.get("/api/health");
   expect(healthResponse.status()).toBe(200);

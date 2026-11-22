@@ -4,9 +4,14 @@ on:
   schedule:
     - cron: "0 11 * * 5" # every Friday at 20:00 JST
   workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   security_audit:
+    if: github.event_name != 'pull_request'
     permissions:
       contents: read
       issues: write
@@ -14,6 +19,49 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Audit Rust Dependencies
         uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1
+
+  repository_audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MISE_LOCKED: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up mise
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5
+
+      - name: Check tracked files for secrets
+        run: |
+          scan_root="$(mktemp -d)"
+          trap 'rm -rf "$scan_root"' EXIT
+          git checkout-index --all --prefix="$scan_root/"
+          mise run gitleaks -- dir --redact --no-banner "$scan_root"
+
+      - name: Check commits introduced by the PR for secrets
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: mise run gitleaks -- git --redact --no-banner --log-opts="$BASE_SHA..$HEAD_SHA"
+
+      - name: Audit workflow permissions and untrusted inputs
+        run: mise run audit-workflows
+
+      - name: Verify release policy and conditional writes
+        run: mise run audit-release-policy
+
+      - name: Check E2E package advisories
+        run: bun audit --cwd e2e
+
+      - name: Verify browser asset integrity and advisories
+        run: bun scripts/audit_browser_assets.ts

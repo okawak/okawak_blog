@@ -1,7 +1,10 @@
-use crate::error::Result;
+use crate::error::{PublishError, Result};
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
 use scraper::{ElementRef, Html, Selector};
 use std::{
+    io,
+    net::IpAddr,
     sync::{Arc, LazyLock},
     time::Duration,
 };
@@ -10,6 +13,7 @@ use url::Url;
 
 const CONCURRENT_REQUEST_LIMIT: usize = 8;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_HTML_BYTES: usize = 1024 * 1024;
 const USER_AGENT: &str = "publish-bookmark/1.0 (+https://github.com/okawak/okawak_blog)";
 
 static TITLE_SELECTORS: LazyLock<[Selector; 2]> = LazyLock::new(|| {
@@ -34,6 +38,56 @@ fn parse_selector(selector: &str) -> Selector {
     Selector::parse(selector).expect("metadata selector must be valid")
 }
 
+// Permit ordinary Internet unicast destinations. Transition and special-use
+// ranges can represent destinations on a different network than the visible IP.
+fn public_address(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let [a, b, c, _] = ip.octets();
+            !ip.is_private()
+                && !ip.is_loopback()
+                && !ip.is_link_local()
+                && !ip.is_documentation()
+                && a != 0
+                && a < 224
+                && !(a == 100 && (64..128).contains(&b))
+                && !matches!((a, b, c), (192, 0, 0) | (192, 88, 99) | (198, 18..=19, _))
+        }
+        IpAddr::V6(ip) => {
+            let [a, b, ..] = ip.segments();
+            (0x2000..0x4000).contains(&a)
+                && !(a == 0x2001 && (b < 0x0200 || b == 0x0db8))
+                && a != 0x2002
+                && !(a == 0x3fff && b < 0x1000)
+        }
+    }
+}
+
+fn public_url(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https")
+        && match url.host() {
+            Some(url::Host::Domain(_)) => true, // The connector resolves and checks this name.
+            Some(url::Host::Ipv4(ip)) => public_address(ip.into()),
+            Some(url::Host::Ipv6(ip)) => public_address(ip.into()),
+            None => false,
+        }
+}
+
+struct PublicResolver;
+
+impl Resolve for PublicResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        Box::pin(async move {
+            let addresses: Vec<_> = tokio::net::lookup_host((name.as_str(), 0)).await?.collect();
+            if addresses.is_empty() || addresses.iter().any(|addr| !public_address(addr.ip())) {
+                return Err(io::Error::other("bookmark address is not public").into());
+            }
+            // Return exactly the checked addresses to the socket connector.
+            Ok(Box::new(addresses.into_iter()) as Addrs)
+        })
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct Fetcher {
     client: reqwest::Client,
@@ -43,6 +97,15 @@ pub(super) struct Fetcher {
 impl Fetcher {
     pub(super) fn new() -> Result<Self> {
         let client = reqwest::Client::builder()
+            .no_proxy()
+            .dns_resolver(Arc::new(PublicResolver))
+            .redirect(reqwest::redirect::Policy::custom(|hop| {
+                if hop.previous().len() >= 5 || !public_url(hop.url()) {
+                    hop.error("bookmark redirect rejected")
+                } else {
+                    hop.follow()
+                }
+            }))
             .user_agent(USER_AGENT)
             .timeout(REQUEST_TIMEOUT)
             .build()?;
@@ -55,23 +118,42 @@ impl Fetcher {
 
     /// Fetches bookmark metadata while bounding requests across all rendered documents.
     pub(super) async fn fetch(&self, url: &str) -> Result<Metadata> {
-        let html_content = {
-            let _permit = self
-                .permits
-                .acquire()
-                .await
-                .expect("bookmark request semaphore must remain open");
-            self.client
-                .get(url)
-                .send()
-                .await?
-                .error_for_status()?
-                .text()
-                .await?
-        };
-
-        Ok(parse_metadata(url, &html_content))
+        let url = Url::parse(url)
+            .ok()
+            .filter(public_url)
+            .ok_or_else(|| PublishError::Parse("invalid public bookmark URL".into()))?;
+        let _permit = self
+            .permits
+            .acquire()
+            .await
+            .expect("bookmark semaphore stays open");
+        read_metadata(self.client.get(url).send().await?).await
     }
+}
+
+async fn read_metadata(response: reqwest::Response) -> Result<Metadata> {
+    let mut response = response.error_for_status()?;
+    let url = response.url().clone();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        append_html(&mut bytes, &chunk)?;
+    }
+    // Keep reqwest's Content-Type charset and byte-order-mark handling.
+    let response: http::Response<reqwest::Body> = response.into();
+    let text = reqwest::Response::from(response.map(|_| bytes))
+        .text()
+        .await?;
+    Ok(parse_metadata(url.as_str(), &text))
+}
+
+fn append_html(bytes: &mut Vec<u8>, chunk: &[u8]) -> Result<()> {
+    if chunk.len() > MAX_HTML_BYTES - bytes.len() {
+        return Err(PublishError::Parse(
+            "bookmark response exceeds size limit".into(),
+        ));
+    }
+    bytes.extend_from_slice(chunk);
+    Ok(())
 }
 
 #[derive(Debug, Default)]
@@ -148,6 +230,55 @@ mod tests {
     use super::*;
     use indoc::indoc;
     use rstest::rstest;
+
+    #[test]
+    fn checks_special_use_and_public_addresses() {
+        for ip in [
+            "127.0.0.1",
+            "10.1.2.3",
+            "169.254.1.1",
+            "100.64.0.1",
+            "198.18.0.1",
+            "224.0.0.1",
+            "::1",
+            "::ffff:127.0.0.1",
+            "64:ff9b::1",
+            "2002::1",
+            "fc00::1",
+            "fe80::1",
+        ] {
+            assert!(!public_address(ip.parse().unwrap()), "{ip}");
+        }
+        for ip in ["1.1.1.1", "2606:4700:4700::1111"] {
+            assert!(public_address(ip.parse().unwrap()));
+        }
+        assert!(!public_url(&Url::parse("http://[::1]/").unwrap()));
+    }
+
+    #[tokio::test]
+    async fn reads_metadata_with_declared_charset_and_rejects_http_errors() {
+        let page = http::Response::builder()
+            .header("content-type", "text/html; charset=windows-1252")
+            .body(b"<title>Caf\xe9</title>".to_vec())
+            .unwrap();
+        assert_eq!(
+            read_metadata(page.into()).await.unwrap().title.as_deref(),
+            Some("Café")
+        );
+        let forbidden = http::Response::builder()
+            .status(403)
+            .body("denied")
+            .unwrap();
+        assert!(read_metadata(forbidden.into()).await.is_err());
+    }
+
+    #[test]
+    fn enforces_size_across_chunks() {
+        let mut bytes = vec![0; MAX_HTML_BYTES - 1];
+        append_html(&mut bytes, &[0]).unwrap();
+        assert!(append_html(&mut bytes, &[0]).is_err());
+        assert_eq!(bytes.len(), MAX_HTML_BYTES);
+    }
 
     #[test]
     fn test_parse_metadata_prefers_open_graph_values() {

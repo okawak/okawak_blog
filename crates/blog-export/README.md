@@ -13,7 +13,7 @@ mise run export
 
 CLIは`clap`で引数を検証する。候補の採用は`accept-article <id>`、`accept-tag <id>`、`accept-ui <key>`で行う。pathを変更するオプションは設けず、通常実行と候補採用で同じ固定pathを使う。`--help`で対象ごとの使い方を確認できる。
 
-`is_completed: true` のノートだけを処理する。未知のfrontmatterはコピーせず、公開Markdown契約に必要なフィールドだけを書き出す。非公開ノートや公開ディレクトリ外のノートは参照先として取り込まない。symlink入力は拒否する。
+`is_completed: true` のノートだけを処理する。未知のfrontmatterはコピーせず、公開Markdown契約に必要なフィールドだけを書き出す。非公開ノートや公開ディレクトリ外のノートは参照先として取り込まない。symlink入力は拒否する。本文にObsidianのコメント区切り（`%%`）がある場合は翻訳前に停止する。記法を例示するときはコードスパンまたはコードブロックで囲む。
 
 `content/ja/<category>/<id>.md` に日本語を出力する。初回IDは従来のtitle／元path／createdによるslugを保持する。再実行では元pathのdigestで既存IDを探し、path変更時は削除された元pathと同じkind・createdを持つ候補が1つのときだけ引き継ぐ。曖昧なら原文へ `publish_id: <既存ID>` を指定する。category移動時にはcategoryを含むURLが変わるため、差分を確認する。
 

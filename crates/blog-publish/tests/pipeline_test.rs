@@ -902,7 +902,11 @@ async fn rejects_linked_tag_catalog_without_replacing_existing_release() {
 async fn publishes_shared_assets_referenced_from_markdown_images_links_and_tables() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
-    let name = format!("{}.png", "a".repeat(64));
+    use sha2::{Digest, Sha256};
+    let name = format!(
+        "{}.png",
+        blog_domain::Sha256Digest::from_bytes(Sha256::digest([0, 255, 17]).into())
+    );
     fs::create_dir(fixture.content_dir().join("assets")).unwrap();
     fs::write(
         fixture.content_dir().join("assets").join(&name),
@@ -929,6 +933,14 @@ async fn publishes_shared_assets_referenced_from_markdown_images_links_and_table
     )
     .html;
     assert!(html.contains(&format!("src=\"/content-assets/{name}\"")));
+    fs::write(fixture.content_dir().join("assets").join(&name), b"changed").unwrap();
+    assert!(
+        publish(fixture.content_dir(), fixture.output_dir())
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("digest mismatch")
+    );
     fs::remove_file(fixture.content_dir().join("assets").join(&name)).unwrap();
     fs::create_dir(fixture.content_dir().join("assets").join(&name)).unwrap();
     assert!(
@@ -1100,45 +1112,9 @@ async fn staging_stays_beside_the_destination_for_atomic_release_replacement() {
     }));
 }
 
-#[rstest]
-#[case::success("200 OK", "Fetched title", true)]
-#[case::forbidden("403 Forbidden", "Fallback Bookmark", false)]
 #[tokio::test]
-async fn publishes_fetched_bookmark_metadata_and_falls_back_on_http_errors(
-    #[case] status: &'static str,
-    #[case] expected_title: &str,
-    #[case] fetched: bool,
-) {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}/article", listener.local_addr().unwrap());
-    let server = tokio::spawn(async move {
-        let (mut stream, _) = listener.accept().await.unwrap();
-        let mut request = Vec::new();
-        while !request.windows(4).any(|part| part == b"\r\n\r\n") {
-            assert_ne!(stream.read_buf(&mut request).await.unwrap(), 0);
-        }
-        let request = String::from_utf8(request).unwrap();
-        assert!(request.starts_with("GET /article HTTP/1.1"));
-        assert!(request.contains("publish-bookmark/1.0 (+https://github.com/okawak/okawak_blog)"));
-        let body = indoc! {r#"
-            <meta property="og:title" content="Fetched title">
-            <meta name="description" content="Fetched description">
-        "#};
-        let headers = formatdoc! {"
-            HTTP/1.1 {status}
-            Content-Type: text/html
-            Content-Length: {length}
-            Connection: close
-
-            ", length = body.len()
-        };
-        stream
-            .write_all(headers.replace('\n', "\r\n").as_bytes())
-            .await
-            .unwrap();
-        stream.write_all(body.as_bytes()).await.unwrap();
-    });
+async fn publishes_fallback_bookmark_when_destination_is_not_public() {
+    let url = "http://127.0.0.1/article";
     let fixture = PublishFixture::new();
     fixture.write_required_site();
     fixture.write_article(
@@ -1160,11 +1136,6 @@ async fn publishes_fetched_bookmark_metadata_and_falls_back_on_http_errors(
         .unwrap();
     let html = read_json::<blog_domain::ArticleArtifactDocument>(html_path).html;
     assert!(html.contains("class=\"bookmark-link\""));
-    assert!(html.contains(expected_title));
-    assert_eq!(html.contains("Fetched title"), fetched);
-    assert_eq!(html.contains("Fetched description"), fetched);
-    tokio::time::timeout(std::time::Duration::from_secs(5), server)
-        .await
-        .unwrap()
-        .unwrap();
+    assert!(html.contains("Fallback Bookmark"));
+    assert!(html.contains(url));
 }
