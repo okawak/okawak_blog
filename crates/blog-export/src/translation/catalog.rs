@@ -90,16 +90,10 @@ impl CatalogPlan {
             "UI"
         };
         let total = entries.len();
-        let ai_requests = entries.iter().try_fold(0, |count, entry| {
-            Ok::<_, ExportError>(
-                count
-                    + usize::from(cache::will_call_translator(
-                        entry.update,
-                        &entry.request,
-                        cache_root,
-                    )?),
-            )
-        })?;
+        let ai_requests = cache::pending_request_count(
+            cache_root,
+            entries.iter().map(|plan| (plan.update, &plan.request)),
+        )?;
         tracing::info!(scope, total, ai_requests, "translation phase started");
         for (
             index,

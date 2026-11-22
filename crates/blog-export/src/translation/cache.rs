@@ -3,12 +3,17 @@ use super::{Texts, TranslationRequest, Translator, plan::UpdatePlan};
 use crate::Result;
 use std::path::{Path, PathBuf};
 
-pub(super) fn will_call_translator(
-    plan: UpdatePlan,
-    request: &TranslationRequest,
+pub(super) fn pending_request_count<'a>(
     root: &Path,
-) -> Result<bool> {
-    Ok(plan.requires_response() && !response_cache_path(request, root)?.exists())
+    plans: impl IntoIterator<Item = (UpdatePlan, &'a TranslationRequest)>,
+) -> Result<usize> {
+    let mut count = 0;
+    for (update, request) in plans {
+        if update.requires_response() && !response_cache_path(request, root)?.exists() {
+            count += 1;
+        }
+    }
+    Ok(count)
 }
 
 pub(super) fn cached_response(
@@ -115,12 +120,15 @@ mod tests {
                 glossary: Texts::new(),
             },
         );
-        assert!(!will_call_translator(UpdatePlan::Reuse, &request, root.path()).unwrap());
-        assert!(will_call_translator(UpdatePlan::Generate, &request, root.path()).unwrap());
+        let plans = [
+            (UpdatePlan::Reuse, &request),
+            (UpdatePlan::Generate, &request),
+        ];
+        assert_eq!(pending_request_count(root.path(), plans).unwrap(), 1);
 
         let cache = response_cache_path(&request, root.path()).unwrap();
         std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
         std::fs::write(cache, "{}").unwrap();
-        assert!(!will_call_translator(UpdatePlan::Generate, &request, root.path()).unwrap());
+        assert_eq!(pending_request_count(root.path(), plans).unwrap(), 0);
     }
 }
