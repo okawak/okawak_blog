@@ -1,9 +1,7 @@
 [tools]
 bun = "1.4.5"
 "cargo:topcoat-cli" = "0.12.1"
-
-[env]
-TOPCOAT_TAILWIND_VERSION = "4.3.3"
+"aqua:tailwindlabs/tailwindcss" = "4.3.3"
 
 [tasks.check-deps]
 description = "Check if the production Topcoat build tools are installed"

@@ -1,38 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:best-practices"],
-  "enabledManagers": ["cargo", "bun", "mise", "github-actions", "custom.regex"],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["crates/blog-server/tailwind.pins"],
-      "matchStrings": [
-        "(?<host>[a-z]+-[a-z0-9_]+) (?<currentValue>v\\d+\\.\\d+\\.\\d+) sha256:(?<currentDigest>[a-f0-9]{64})"
-      ],
-      "depNameTemplate": "tailwindcss-{{{host}}}",
-      "packageNameTemplate": "tailwindlabs/tailwindcss",
-      "datasourceTemplate": "github-release-attachments",
-      "versioningTemplate": "semver"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["mise.toml"],
-      "matchStrings": [
-        "TOPCOAT_TAILWIND_VERSION = \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
-      ],
-      "depNameTemplate": "tailwindlabs/tailwindcss",
-      "datasourceTemplate": "github-releases",
-      "versioningTemplate": "semver",
-      "extractVersionTemplate": "^v(?<version>.+)$"
-    }
-  ],
-  "packageRules": [
-    {
-      "matchManagers": ["custom.regex"],
-      "matchPackageNames": ["tailwindlabs/tailwindcss"],
-      "groupName": "Tailwind CSS"
-    }
-  ],
+  "enabledManagers": ["cargo", "bun", "mise", "github-actions"],
   "ignoreDeps": ["topcoat", "cargo:topcoat-cli"],
   "ignorePaths": ["terraform/**", "obsidian/**"],
   "timezone": "Asia/Tokyo",

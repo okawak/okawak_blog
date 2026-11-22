@@ -736,6 +736,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "toml",
  "topcoat",
  "tracing",
  "tracing-subscriber",

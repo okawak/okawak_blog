@@ -9,7 +9,7 @@
 | Rust crate（Topcoat本体を除く） | `cargo` | root / 各crateの`Cargo.toml`、`Cargo.lock` |
 | E2EのBun package | `bun` | `e2e/package.json`、`e2e/bun.lock` |
 | Bun本体 | `mise` | `mise.toml`の`[tools].bun`、`mise.lock` |
-| Tailwind CLI | `custom.regex` | `mise.toml`、`crates/blog-server/tailwind.pins` |
+| Tailwind CLI | `mise` | `mise.toml` の `[tools]."aqua:tailwindlabs/tailwindcss"`、`mise.lock` |
 | GitHub Actions | `github-actions` | `.github/workflows/*.yml` |
 
 Rust toolchainは`rust-toolchain.toml`で`stable`を指定し、Renovateの更新対象から除外します。`minimal` profileに`clippy`・`rustfmt`を追加し、新規インストール時の容量を抑えます。ローカルでは`rustup update stable`で更新します。Rust CIの各jobと公開用workflowでは、共通build toolのセットアップ前に`rustup update stable --no-self-update`を実行します。更新によるClippy・formatの変更はCIで確認します。コンパイラのversionは固定されないため、過去のcommitを同じコンパイラで再ビルドする再現性は保証しません。
@@ -23,7 +23,7 @@ Rust toolchainは`rust-toolchain.toml`で`stable`を指定し、Renovateの更�
 - `terraform/`とprivate Obsidian submoduleを更新対象から除外します。`git-submodules` managerも有効にしません。
 - Topcoat本体とCLIは`ignoreDeps: ["topcoat", "cargo:topcoat-cli"]`でRenovateの更新対象から除外します。`Cargo.toml`の完全固定（`=version`）を維持し、破壊的変更を確認して手動で更新します。Topcoatの脆弱性が通知された場合も手動で対応します。
 - Bun本体は`mise` managerで更新を検知し、`mise.toml`と`mise.lock`を更新します。`bun` managerはE2Eのpackage依存を扱うため、Bun本体には別途`mise` managerが必要です。[mise managerの対応範囲](https://docs.renovatebot.com/modules/manager/mise/)
-- Tailwind CLIの更新では、Renovateが公式リリースの `sha256sums.txt` を参照し、5つのビルド環境のタグとSHA-256、`mise.toml` のバージョンを同じPRで更新します。Topcoatはビルド環境に対応する値を使い、初回ダウンロード時に照合します。[Renovateのリリース添付ファイル対応](https://docs.renovatebot.com/modules/datasource/github-release-attachments/)
+- Tailwind CLIのバージョンは `mise.toml` の `[tools]."aqua:tailwindlabs/tailwindcss"` で指定します。バージョン指定とロックは `mise lock aqua:tailwindlabs/tailwindcss@<version>` で一緒に更新できます。`mise.toml` を手で編集した場合は `mise lock aqua:tailwindlabs/tailwindcss` で各環境のURLとSHA-256を再生成し、両ファイルをコミットします。Renovateの `mise` managerも同じ単位で更新します。[miseのロックファイル](https://mise.jdx.dev/dev-tools/mise-lock.html)
 
 ## GitHubで行う初期設定
 
@@ -52,7 +52,7 @@ repositoryの管理権限があるアカウントで、次を実施します。
 - `topcoat ui`のcomponentはrepositoryへ配置したsourceであり、Renovateは`components.toml`のhashを解釈しないため、更新有無を直接検出できません。Topcoatまたは互換範囲内の`topcoat-ui-registry`が更新されたら、`topcoat ui list --installed --package blog-server`で保存済みhashとregistry sourceを比較します。`update available`と表示されたcomponentだけ差分を確認し、必要なら`topcoat ui add --overwrite --package blog-server <component>`で再取得してsite固有の変更を反映し直します。
 - `topcoat-*` crateはTopcoat本体からversion範囲で参照されているため、週次lockfile更新だけで変わることがあります。`Cargo.lock`の該当差分もreviewします。
 - GitHub Actionsの更新追従とSHA固定はRenovateで管理し、PRでは対応versionのcommentと参照先を確認します。Actions参照のmajor・SHA・commentを独自scriptで検証する処理は設けません。`mise run versions-check`はBun・Topcoat・Tailwindの共通build toolの整合と、workflowにtool versionや個別installerを持ち込まないことを確認します。
-- Tailwindの更新PRでは `mise run versions-check` が5環境のタグと `mise.toml` の一致、各SHA-256の形式を確認します。
+- `mise run versions-check` はTailwindのロックを対応する5環境で確認します。通常の `cargo build` でもTopcoatは `mise.toml` に指定された版とビルド環境に対応する `mise.lock` のSHA-256で初回取得を検証します。
 - 更新PRを手動修正してcommitする際も、署名設定を確認して署名付きcommitを作成します。
 
 ## Renovate設定の検証
