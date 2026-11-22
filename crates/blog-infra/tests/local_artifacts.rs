@@ -13,9 +13,7 @@ fn summary(category: &str, slug: &str, title: &str) -> serde_json::Value {
 }
 
 fn write_article(root: &std::path::Path, locale: &str, category: &str, slug: &str, title: &str) {
-    let path = root
-        .join(locale)
-        .join(format!("articles/{category}/{slug}.json"));
+    let path = root.join(locale).join(format!("{category}/{slug}.json"));
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(
         path,
@@ -35,8 +33,8 @@ async fn direct_article_reads_need_no_index_and_isolate_locales_and_categories()
         r#"{"schema_version":1,"routes":{"/":["ja","en"]}}"#,
     )
     .unwrap();
-    write_article(root.path(), "", "tech", "same", "Japanese");
-    write_article(root.path(), "", "daily", "same", "Daily");
+    write_article(root.path(), "ja", "tech", "same", "Japanese");
+    write_article(root.path(), "ja", "daily", "same", "Daily");
     write_article(root.path(), "en", "tech", "same", "English");
     let reader = CachingArtifactReader::new(
         Arc::new(LocalArtifactReader::new(root.path())),
@@ -69,8 +67,8 @@ async fn direct_article_reads_need_no_index_and_isolate_locales_and_categories()
 #[tokio::test]
 async fn failed_article_load_is_retried_without_caching_the_error() {
     let root = TempDir::new().unwrap();
-    write_article(root.path(), "", "tech", "intro", "Initial");
-    let path = root.path().join("articles/tech/intro.json");
+    write_article(root.path(), "ja", "tech", "intro", "Initial");
+    let path = root.path().join("ja/tech/intro.json");
     fs::write(&path, "invalid").unwrap();
     let reader = CachingArtifactReader::new(
         Arc::new(LocalArtifactReader::new(root.path())),
@@ -79,7 +77,7 @@ async fn failed_article_load_is_retried_without_caching_the_error() {
     let snapshot = reader.snapshot().await.unwrap();
     let slug: Slug = "intro".parse().unwrap();
     assert!(snapshot.read_article(&Category::Tech, &slug).await.is_err());
-    write_article(root.path(), "", "tech", "intro", "Recovered");
+    write_article(root.path(), "ja", "tech", "intro", "Recovered");
     assert_eq!(
         snapshot
             .read_article(&Category::Tech, &slug)
@@ -105,9 +103,10 @@ async fn missing_article_json_returns_none_without_reading_index_or_html() {
             .unwrap()
             .is_none()
     );
-    fs::create_dir_all(root.path().join("articles/tech")).unwrap();
+    fs::create_dir_all(root.path().join("ja/tech")).unwrap();
+    fs::create_dir_all(root.path().join("ja/_data")).unwrap();
     fs::write(
-        root.path().join("articles/index.json"),
+        root.path().join("ja/_data/articles.json"),
         serde_json::to_vec(&serde_json::json!({
             "articles": [summary("tech", "intro", "Intro")]
         }))
@@ -115,7 +114,7 @@ async fn missing_article_json_returns_none_without_reading_index_or_html() {
     )
     .unwrap();
     fs::write(
-        root.path().join("articles/tech/intro.html"),
+        root.path().join("ja/tech/intro.html"),
         "<p>Unsupported format</p>",
     )
     .unwrap();
@@ -137,9 +136,9 @@ async fn missing_article_json_returns_none_without_reading_index_or_html() {
 #[tokio::test]
 async fn invalid_article_json_is_an_error(#[case] document: serde_json::Value) {
     let root = TempDir::new().unwrap();
-    fs::create_dir_all(root.path().join("articles/tech")).unwrap();
+    fs::create_dir_all(root.path().join("ja/tech")).unwrap();
     fs::write(
-        root.path().join("articles/tech/intro.json"),
+        root.path().join("ja/tech/intro.json"),
         serde_json::to_vec(&document).unwrap(),
     )
     .unwrap();
@@ -155,9 +154,10 @@ async fn invalid_article_json_is_an_error(#[case] document: serde_json::Value) {
 #[tokio::test]
 async fn cached_articles_catalogs_labels_and_assets_share_their_storage() {
     let root = TempDir::new().unwrap();
-    write_article(root.path(), "", "tech", "intro", "Intro");
+    write_article(root.path(), "ja", "tech", "intro", "Intro");
     fs::create_dir_all(root.path().join("content-assets")).unwrap();
-    fs::write(root.path().join("tags.json"), r#"{"rust":"Rust"}"#).unwrap();
+    fs::create_dir_all(root.path().join("ja/_data")).unwrap();
+    fs::write(root.path().join("ja/_data/tags.json"), r#"{"rust":"Rust"}"#).unwrap();
     fs::write(
         root.path().join("locales.json"),
         r#"{"schema_version":1,"routes":{"/":["ja","en"]}}"#,
@@ -181,7 +181,7 @@ async fn cached_articles_catalogs_labels_and_assets_share_their_storage() {
         .unwrap()
         .unwrap();
     let locales = snapshot.read_locales().await.unwrap();
-    fs::write(root.path().join("articles/tech/intro.json"), "changed").unwrap();
+    fs::write(root.path().join("ja/tech/intro.json"), "changed").unwrap();
     fs::write(root.path().join("locales.json"), "changed").unwrap();
     let second = snapshot
         .read_article(&Category::Tech, &slug)
@@ -211,7 +211,12 @@ async fn optional_catalogs_default_only_when_missing() {
         SiteLocalesDocument::default().into()
     );
     assert!(reader.read_tag_labels().await.unwrap().is_empty());
-    fs::write(root.path().join("tags.json"), r#"{"rust":"Rust articles"}"#).unwrap();
+    fs::create_dir_all(root.path().join("ja/_data")).unwrap();
+    fs::write(
+        root.path().join("ja/_data/tags.json"),
+        r#"{"rust":"Rust articles"}"#,
+    )
+    .unwrap();
     assert_eq!(
         reader
             .read_tag_labels()
@@ -231,7 +236,8 @@ async fn optional_catalogs_reject_invalid_content(#[case] content: &[u8]) {
     let root = TempDir::new().unwrap();
     let reader = LocalArtifactReader::new(root.path());
     fs::write(root.path().join("locales.json"), content).unwrap();
-    fs::write(root.path().join("tags.json"), content).unwrap();
+    fs::create_dir_all(root.path().join("ja/_data")).unwrap();
+    fs::write(root.path().join("ja/_data/tags.json"), content).unwrap();
     assert!(reader.read_locales().await.is_err());
     assert!(reader.read_tag_labels().await.is_err());
 }

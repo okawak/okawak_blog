@@ -6,7 +6,7 @@ use blog_domain::{
     ArticleArtifactDocument, ArticleIndexDocument, ArtifactReleasePointerDocument, Category,
     CategoryArtifactDocument, ContentAssetName, HomeFragmentArtifactDocument, Locale,
     PageArtifactDocument, PageKey, PublishableArticle, SiteLocalesDocument, SiteMetadataDocument,
-    Slug,
+    Slug, build_article_path, build_category_path, build_static_page_path,
 };
 
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, InfraError, Result};
@@ -117,7 +117,7 @@ impl S3ArtifactSnapshot {
     }
 
     async fn read_bytes(&self, relative: &str) -> Result<bytes::Bytes> {
-        let key = self.location.key_for(&self.locale.artifact_key(relative));
+        let key = self.location.key_for(relative);
         let response = self
             .client
             .get_object()
@@ -183,7 +183,7 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
     }
 
     async fn localized(&self, locale: Locale) -> Result<Option<DynArtifactSnapshot>> {
-        if locale == Locale::En && self.read_locales().await?.path("/", locale).is_none() {
+        if locale != Locale::Ja && self.read_locales().await?.path("/", locale).is_none() {
             return Ok(None);
         }
         let mut localized = self.clone();
@@ -192,9 +192,7 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
     }
 
     async fn read_locales(&self) -> Result<Arc<SiteLocalesDocument>> {
-        let mut root = self.clone();
-        root.locale = Locale::Ja;
-        match root.read_json::<SiteLocalesDocument>("locales.json").await {
+        match self.read_json::<SiteLocalesDocument>("locales.json").await {
             Ok(document) => {
                 document.validate()?;
                 Ok(Arc::new(document))
@@ -205,7 +203,7 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
     }
 
     async fn read_tag_labels(&self) -> Result<Arc<blog_domain::TagLabels>> {
-        match self.read_json("tags.json").await {
+        match self.read_json(&self.locale.data_key("tags.json")).await {
             Ok(labels) => Ok(labels),
             Err(error) if error.is_not_found() => Ok(Default::default()),
             Err(error) => Err(error),
@@ -213,9 +211,7 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
     }
 
     async fn read_content_asset(&self, name: &ContentAssetName) -> Result<Option<bytes::Bytes>> {
-        let mut root = self.clone();
-        root.locale = Locale::Ja;
-        match root
+        match self
             .read_bytes(&format!("content-assets/{}", name.as_str()))
             .await
         {
@@ -226,19 +222,23 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
     }
 
     async fn read_article_index(&self) -> Result<Arc<ArticleIndexDocument>> {
-        self.read_json("articles/index.json").await
+        self.read_json(&self.locale.data_key("articles.json")).await
     }
 
     async fn read_category_document(
         &self,
         category: &Category,
     ) -> Result<Arc<CategoryArtifactDocument>> {
-        self.read_json(&format!("categories/{}.json", category.as_str()))
-            .await
+        self.read_json(
+            &self
+                .locale
+                .page_file(&build_category_path(category), "json"),
+        )
+        .await
     }
 
     async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
-        self.read_json("metadata/site.json").await
+        self.read_json(&self.locale.data_key("site.json")).await
     }
 
     async fn read_article(
@@ -246,7 +246,9 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
         category: &Category,
         slug: &Slug,
     ) -> Result<Option<Arc<PublishableArticle>>> {
-        let path = format!("articles/{}/{}.json", category.as_str(), slug.as_str());
+        let path = self
+            .locale
+            .page_file(&build_article_path(category, slug), "json");
         let article = match self.read_json::<ArticleArtifactDocument>(&path).await {
             Ok(article) => article,
             Err(error) if error.is_not_found() => return Ok(None),
@@ -256,11 +258,11 @@ impl ArtifactSnapshot for S3ArtifactSnapshot {
     }
 
     async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
-        self.read_json("home.json").await
+        self.read_json(&self.locale.page_file("/", "json")).await
     }
 
     async fn read_page_document(&self, page: &PageKey) -> Result<Arc<PageArtifactDocument>> {
-        self.read_json(&format!("pages/{}.json", page.as_str()))
+        self.read_json(&self.locale.page_file(&build_static_page_path(page), "json"))
             .await
     }
 }
@@ -277,12 +279,12 @@ mod tests {
 
         assert_eq!(location.bucket(), "blog-bucket");
         assert_eq!(
-            location.key_for("articles/index.json"),
-            "site/articles/index.json"
+            location.key_for("ja/_data/articles.json"),
+            "site/ja/_data/articles.json"
         );
         assert_eq!(
-            location.key_for("/metadata/site.json"),
-            "site/metadata/site.json"
+            location.key_for("/ja/_data/site.json"),
+            "site/ja/_data/site.json"
         );
     }
 
@@ -292,8 +294,8 @@ mod tests {
         let release = location.with_relative_prefix("releases/release-123/site");
 
         assert_eq!(
-            release.key_for("articles/index.json"),
-            "public/releases/release-123/site/articles/index.json"
+            release.key_for("ja/_data/articles.json"),
+            "public/releases/release-123/site/ja/_data/articles.json"
         );
     }
 
@@ -306,7 +308,7 @@ mod tests {
             artifact_prefix: "releases/release-123/site".to_string(),
             publisher_commit: "publisher-sha".to_string(),
             source_commit: "source-sha".to_string(),
-            content_commit: None,
+            content_commit: "a".repeat(40),
             generated_at: "2026-07-12T12:00:00Z".to_string(),
         };
         let expected_last_modified = pointer.generated_at_time().unwrap();
@@ -316,8 +318,8 @@ mod tests {
         assert_eq!(release.cache_identity, "releases/release-123/site");
         assert_eq!(release.last_modified, expected_last_modified);
         assert_eq!(
-            release.location.key_for("articles/index.json"),
-            "public/releases/release-123/site/articles/index.json"
+            release.location.key_for("ja/_data/articles.json"),
+            "public/releases/release-123/site/ja/_data/articles.json"
         );
     }
 }

@@ -11,11 +11,9 @@ pub struct ArtifactReleasePointerDocument {
     pub release_id: String,
     pub artifact_prefix: String,
     pub publisher_commit: String,
-    /// Legacy source revision (private vault in old releases, public repository in new ones).
     pub source_commit: String,
-    /// Public repository revision containing the reviewed Markdown; absent in old v1 releases.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub content_commit: Option<String>,
+    /// Public repository revision containing the reviewed Markdown.
+    pub content_commit: String,
     pub generated_at: String,
 }
 
@@ -53,8 +51,8 @@ impl ArtifactReleasePointerDocument {
                 return Err(crate::DomainError::validation(field));
             }
         }
-        if let Some(commit) = &self.content_commit
-            && (commit.len() != 40 || !commit.bytes().all(|b| b.is_ascii_hexdigit()))
+        if self.content_commit.len() != 40
+            || !self.content_commit.bytes().all(|b| b.is_ascii_hexdigit())
         {
             return Err(crate::DomainError::validation("content_commit"));
         }
@@ -90,27 +88,20 @@ mod tests {
             artifact_prefix: prefix.to_string(),
             publisher_commit: "publisher-sha".to_string(),
             source_commit: "source-sha".to_string(),
-            content_commit: None,
+            content_commit: "a".repeat(40),
             generated_at: "2026-07-12T12:00:00Z".to_string(),
         }
     }
 
     #[test]
-    fn release_provenance_adds_public_revision_without_breaking_old_v1() {
-        let old = release_pointer("releases/old/site");
-        let old_json = serde_json::to_value(&old).unwrap();
-        assert!(old_json.get("content_commit").is_none());
-        let read: ArtifactReleasePointerDocument = serde_json::from_value(old_json).unwrap();
-        assert_eq!(read.content_commit, None);
-        assert!(read.validate().is_ok());
-        let mut current = old;
-        current.content_commit = Some("a".repeat(40));
+    fn release_requires_a_valid_public_content_revision() {
+        let mut current = release_pointer("releases/one/site");
         assert!(current.validate().is_ok());
         let encoded = serde_json::to_value(&current).unwrap();
         assert_eq!(encoded["source_commit"], "source-sha");
         // Length and hexadecimal content are independent requirements.
         for invalid in ["a".repeat(39), "a".repeat(41), "g".repeat(40)] {
-            current.content_commit = Some(invalid);
+            current.content_commit = invalid;
             assert_eq!(
                 current.validate(),
                 Err(crate::DomainError::validation("content_commit"))

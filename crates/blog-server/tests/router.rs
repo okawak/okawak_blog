@@ -1199,10 +1199,10 @@ async fn runtime_home_response_varies_by_language_but_other_pages_do_not() {
 #[tokio::test]
 async fn unavailable_language_choice_on_a_runtime_page_does_not_add_home_cache_headers() {
     let root = tempdir().unwrap();
-    std::fs::create_dir(root.path().join("pages")).unwrap();
+    std::fs::create_dir(root.path().join("ja")).unwrap();
     std::fs::copy(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site/pages/about.json"),
-        root.path().join("pages/about.json"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site/ja/about.json"),
+        root.path().join("ja/about.json"),
     )
     .unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(root.path())), false);
@@ -1232,9 +1232,9 @@ async fn unavailable_language_choice_on_a_runtime_page_does_not_add_home_cache_h
 #[tokio::test]
 async fn article_read_failure_is_not_reported_as_not_found() {
     let root = tempdir().unwrap();
-    std::fs::create_dir_all(root.path().join("articles/tech")).unwrap();
+    std::fs::create_dir_all(root.path().join("ja/tech")).unwrap();
     // Invalid UTF-8 is an I/O failure that is portable even when tests run as root.
-    std::fs::write(root.path().join("articles/tech/e2e-article.json"), [0xff]).unwrap();
+    std::fs::write(root.path().join("ja/tech/e2e-article.json"), [0xff]).unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(root.path())), false);
     let result = response(
         &router,
@@ -1329,17 +1329,16 @@ async fn home_renders_empty_state_without_treating_it_as_an_error() {
 #[tokio::test]
 async fn home_uses_fallback_copy_when_optional_fragment_is_missing() {
     let temp_dir = tempdir().unwrap();
-    std::fs::create_dir_all(temp_dir.path().join("articles")).unwrap();
-    std::fs::create_dir_all(temp_dir.path().join("metadata")).unwrap();
+    std::fs::create_dir_all(temp_dir.path().join("ja/_data")).unwrap();
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site");
     std::fs::copy(
-        fixture_root.join("articles/index.json"),
-        temp_dir.path().join("articles/index.json"),
+        fixture_root.join("ja/_data/articles.json"),
+        temp_dir.path().join("ja/_data/articles.json"),
     )
     .unwrap();
     std::fs::copy(
-        fixture_root.join("metadata/site.json"),
-        temp_dir.path().join("metadata/site.json"),
+        fixture_root.join("ja/_data/site.json"),
+        temp_dir.path().join("ja/_data/site.json"),
     )
     .unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
@@ -1366,12 +1365,12 @@ async fn home_uses_fallback_copy_when_optional_fragment_is_missing() {
 async fn home_returns_internal_server_error_for_invalid_optional_fragment() {
     let temp_dir = tempdir().unwrap();
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site");
-    for relative_path in ["articles/index.json", "metadata/site.json"] {
+    for relative_path in ["ja/_data/articles.json", "ja/_data/site.json"] {
         let destination = temp_dir.path().join(relative_path);
         std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
         std::fs::copy(fixture_root.join(relative_path), destination).unwrap();
     }
-    std::fs::write(temp_dir.path().join("home.json"), "invalid JSON").unwrap();
+    std::fs::write(temp_dir.path().join("ja/index.json"), "invalid JSON").unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
     let response = response(
         &router,
@@ -1903,11 +1902,11 @@ async fn article_returns_not_found_for_invalid_or_missing_documents() {
     }
 
     let temp_dir = tempdir().unwrap();
-    std::fs::create_dir_all(temp_dir.path().join("articles")).unwrap();
+    std::fs::create_dir_all(temp_dir.path().join("ja/_data")).unwrap();
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site");
     std::fs::copy(
-        fixture_root.join("articles/index.json"),
-        temp_dir.path().join("articles/index.json"),
+        fixture_root.join("ja/_data/articles.json"),
+        temp_dir.path().join("ja/_data/articles.json"),
     )
     .unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
@@ -1927,15 +1926,15 @@ async fn article_returns_not_found_for_invalid_or_missing_documents() {
 #[tokio::test]
 async fn article_returns_internal_server_error_for_invalid_artifacts() {
     let temp_dir = tempdir().unwrap();
-    std::fs::create_dir_all(temp_dir.path().join("articles/tech")).unwrap();
+    std::fs::create_dir_all(temp_dir.path().join("ja/tech")).unwrap();
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../e2e/fixtures/site");
     let mut article: blog_domain::ArticleArtifactDocument = serde_json::from_slice(
-        &std::fs::read(fixture_root.join("articles/tech/e2e-article.json")).unwrap(),
+        &std::fs::read(fixture_root.join("ja/tech/e2e-article.json")).unwrap(),
     )
     .unwrap();
     article.html = "   ".into();
     std::fs::write(
-        temp_dir.path().join("articles/tech/e2e-article.json"),
+        temp_dir.path().join("ja/tech/e2e-article.json"),
         serde_json::to_vec(&article).unwrap(),
     )
     .unwrap();
@@ -2158,8 +2157,8 @@ async fn home_and_about_not_found_pages_share_the_snapshot_and_keep_their_locale
 #[tokio::test]
 async fn about_returns_internal_server_error_page_for_invalid_artifact() {
     let temp_dir = tempdir().unwrap();
-    std::fs::create_dir_all(temp_dir.path().join("pages")).unwrap();
-    std::fs::write(temp_dir.path().join("pages/about.json"), "not json").unwrap();
+    std::fs::create_dir_all(temp_dir.path().join("ja")).unwrap();
+    std::fs::write(temp_dir.path().join("ja/about.json"), "not json").unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(temp_dir.path())), false);
     let response = response(
         &router,

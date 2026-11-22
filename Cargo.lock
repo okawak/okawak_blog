@@ -716,6 +716,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "walkdir",
  "yaml_serde",
 ]
 

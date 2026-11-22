@@ -125,7 +125,7 @@ updated: "2026-04-12T10:00:00+09:00"
 - ファイル名は固定しない
 - 同じカテゴリ配下で `kind=category` を持つ Markdown を、そのカテゴリの landing page として扱う
 - 記事が存在するカテゴリでは landing page を必須とする
-- 対応する artifact は `site/categories/<category>.json`
+- 対応する artifact は `site/<locale>/<category>.json`
 
 ## 3. 固定ページ
 
@@ -159,7 +159,7 @@ updated: "2026-04-12T10:00:00+09:00"
 
 - `page` は固定ページ key
 - 現在の主要用途は `about`
-- 対応する artifact は `site/pages/about.json`
+- 対応する artifact は `site/<locale>/about.json`
 
 ## 4. Home fragment
 
@@ -189,7 +189,7 @@ updated: "2026-04-12T10:00:00+09:00"
 メモ:
 
 - home 全体を Markdown に置き換えるのではなく、intro 部分の fragment として扱う
-- 対応する artifact は `site/home.json`
+- 対応する artifact は `site/<locale>/index.json`
 
 ## 必須フィールドの目安
 

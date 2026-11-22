@@ -1,7 +1,10 @@
 use super::builder::SiteDocuments;
 use crate::error::Result;
 
-use blog_domain::{ArticleArtifactDocument, Locale};
+use blog_domain::{
+    ArticleArtifactDocument, Locale, build_article_path, build_category_path,
+    build_static_page_path,
+};
 use serde::Serialize;
 use std::{
     fs::{self, File},
@@ -13,6 +16,7 @@ use std::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SiteOutput {
     root: PathBuf,
+    locale: Locale,
 }
 
 impl SiteOutput {
@@ -22,12 +26,17 @@ impl SiteOutput {
     }
 
     pub(crate) fn prepare_locale(output_dir: &Path, locale: Locale) -> Result<Self> {
-        let root = output_dir.join("site").join(locale.artifact_key(""));
-        for directory in ["articles", "categories", "metadata", "pages"] {
-            fs::create_dir_all(root.join(directory))?;
-        }
+        let root = output_dir.join("site");
+        fs::create_dir_all(root.join(locale.as_str()))?;
+        Ok(Self { root, locale })
+    }
 
-        Ok(Self { root })
+    fn page(&self, route: &str) -> PathBuf {
+        self.root.join(self.locale.page_file(route, "json"))
+    }
+
+    fn data(&self, filename: &str) -> PathBuf {
+        self.root.join(self.locale.data_key(filename))
     }
 }
 
@@ -35,12 +44,11 @@ pub(crate) fn write_article_page(
     site_output: &SiteOutput,
     article: &ArticleArtifactDocument,
 ) -> Result<PathBuf> {
-    let article_dir = site_output
-        .root
-        .join("articles")
-        .join(&article.summary.category);
-    fs::create_dir_all(&article_dir)?;
-    let output_file_path = article_dir.join(format!("{}.json", article.summary.slug));
+    let route = build_article_path(
+        &article.summary.category.parse()?,
+        &article.summary.slug.parse()?,
+    );
+    let output_file_path = site_output.page(&route);
     write_json(&output_file_path, article)?;
     Ok(output_file_path)
 }
@@ -50,31 +58,27 @@ pub(crate) fn write_site_documents(
     site_documents: &SiteDocuments,
 ) -> Result<()> {
     write_json(
-        &site_output.root.join("articles/index.json"),
+        &site_output.data("articles.json"),
         &site_documents.article_index,
     )?;
     for category_document in &site_documents.category_documents {
         write_json(
-            &site_output
-                .root
-                .join(format!("categories/{}.json", category_document.category)),
+            &site_output.page(&build_category_path(&category_document.category.parse()?)),
             category_document,
         )?;
     }
     for page_document in &site_documents.page_documents {
         write_json(
-            &site_output
-                .root
-                .join(format!("pages/{}.json", page_document.page)),
+            &site_output.page(&build_static_page_path(&page_document.page)),
             page_document,
         )?;
     }
     if let Some(home_fragment) = &site_documents.home_fragment {
-        write_json(&site_output.root.join("home.json"), home_fragment)?;
+        write_json(&site_output.page("/"), home_fragment)?;
     }
 
     write_json(
-        &site_output.root.join("metadata/site.json"),
+        &site_output.data("site.json"),
         &site_documents.site_metadata,
     )?;
 
@@ -82,6 +86,7 @@ pub(crate) fn write_site_documents(
 }
 
 fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
+    fs::create_dir_all(path.parent().expect("artifact directory"))?;
     let file = File::create(path)?;
     let mut writer = BufWriter::new(file);
     serde_json::to_writer(&mut writer, value)?;
@@ -168,16 +173,16 @@ mod tests {
 
         for path in [
             article_path,
-            output.root.join("articles/index.json"),
-            output.root.join("categories/tech.json"),
-            output.root.join("pages/about.json"),
-            output.root.join("home.json"),
-            output.root.join("metadata/site.json"),
+            output.root.join("ja/_data/articles.json"),
+            output.root.join("ja/tech.json"),
+            output.root.join("ja/about.json"),
+            output.root.join("ja/index.json"),
+            output.root.join("ja/_data/site.json"),
         ] {
             assert!(path.exists(), "{} should exist", path.display());
         }
 
-        let article_index = fs::read_to_string(output.root.join("articles/index.json")).unwrap();
+        let article_index = fs::read_to_string(output.root.join("ja/_data/articles.json")).unwrap();
         assert!(article_index.starts_with("{\"articles\":["));
     }
 }

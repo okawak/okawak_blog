@@ -18,20 +18,19 @@ fn validate(root: &Path) -> ExitStatus {
 #[fixture]
 fn minimal_site() -> tempfile::TempDir {
     let root = tempfile::tempdir().unwrap();
-    fs::create_dir(root.path().join("articles")).unwrap();
-    fs::create_dir(root.path().join("metadata")).unwrap();
+    fs::create_dir_all(root.path().join("ja/_data")).unwrap();
     fs::write(
         root.path().join("locales.json"),
         r#"{"schema_version":1,"routes":{"/":["ja"]}}"#,
     )
     .unwrap();
     fs::write(
-        root.path().join("articles/index.json"),
+        root.path().join("ja/_data/articles.json"),
         r#"{"articles":[]}"#,
     )
     .unwrap();
     fs::write(
-        root.path().join("metadata/site.json"),
+        root.path().join("ja/_data/site.json"),
         r#"{"total_articles":0,"categories":[]}"#,
     )
     .unwrap();
@@ -44,7 +43,7 @@ fn optional_home_may_be_absent_but_must_be_readable_and_valid_when_present(
 ) {
     let root = minimal_site;
     assert!(validate(root.path()).success());
-    let home = root.path().join("home.json");
+    let home = root.path().join("ja/index.json");
     fs::write(
         &home,
         indoc! {r#"
@@ -65,7 +64,7 @@ fn optional_home_may_be_absent_but_must_be_readable_and_valid_when_present(
 }
 
 #[rstest]
-#[case::category("categories", "tech", indoc! {r#"
+#[case::category("tech", indoc! {r#"
     {
         "category": "tech",
         "title": "Tech",
@@ -74,7 +73,7 @@ fn optional_home_may_be_absent_but_must_be_readable_and_valid_when_present(
         "articles": []
     }
 "#})]
-#[case::static_page("pages", "about", indoc! {r#"
+#[case::static_page("about", indoc! {r#"
     {
         "page": "about",
         "title": "About",
@@ -84,13 +83,11 @@ fn optional_home_may_be_absent_but_must_be_readable_and_valid_when_present(
 "#})]
 fn category_and_page_artifacts_are_validated_and_checked_against_their_filenames(
     minimal_site: tempfile::TempDir,
-    #[case] directory: &str,
     #[case] filename: &str,
     #[case] document: &str,
 ) {
     let root = minimal_site;
-    let directory = root.path().join(directory);
-    fs::create_dir(&directory).unwrap();
+    let directory = root.path().join("ja");
     let path = directory.join(format!("{filename}.json"));
     fs::write(&path, document).unwrap();
     fs::write(directory.join("ignored.txt"), "not json").unwrap();

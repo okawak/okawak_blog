@@ -132,9 +132,9 @@ curl --fail http://127.0.0.1:8008/api/ready
 - TTL内は同じrelease snapshotを再利用するため、新しい`current.json`の反映には最大でTTL分の遅延が生じる
 - TTL経過時にrelease identityが同じなら、取得済みartifactは引き続きcacheする
 - snapshot更新に失敗した場合は、直前のimmutable releaseを期限なく配信し、次のTTLで更新を再確認する
-- 運用中に`current.json`が消えた場合もlegacy rootへ戻さず、直前のimmutable releaseを維持する
+- 運用中に`current.json`が消えた場合も直接指定したprefixへ戻さず、直前のimmutable releaseを維持する
 - `0`を指定するとsnapshotとartifactのcacheを無効化する
-- 初回起動時、legacy root、TTLが`0`の場合はstale fallbackしない
+- 初回起動時、直接指定したprefix、TTLが`0`の場合はstale fallbackしない
 - artifactは必要時にcacheするため、未取得objectのS3 readまで失敗したrequestにはfallbackしない
 - load errorはcacheしない
 - local readerにはcacheを適用しない

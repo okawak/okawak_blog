@@ -86,13 +86,13 @@ async fn test_publish_writes_article_index_and_metadata(#[case] padded_metadata:
         .unwrap();
 
     let site_root = fixture.site_root();
-    let article_files = collect_article_files(&site_root.join("articles"));
+    let article_files = collect_article_files(&site_root.join("ja"));
     assert_eq!(article_files.len(), 1);
     let html = read_json::<blog_domain::ArticleArtifactDocument>(&article_files[0]).html;
     assert!(html.contains("Required Article"));
     assert!(html.contains("This article makes the fixture deployable."));
 
-    let article_index: ArticleIndexDocument = read_json(site_root.join("articles/index.json"));
+    let article_index: ArticleIndexDocument = read_json(site_root.join("ja/_data/articles.json"));
     assert_eq!(article_index.articles.len(), 1);
     assert_eq!(article_index.articles[0].category, "tech");
     assert_eq!(article_index.articles[0].title, "Required Article");
@@ -104,11 +104,11 @@ async fn test_publish_writes_article_index_and_metadata(#[case] padded_metadata:
         article_index.articles[0].updated_at,
         "2025-01-01T00:00:00+09:00"
     );
-    let category: CategoryArtifactDocument = read_json(site_root.join("categories/tech.json"));
+    let category: CategoryArtifactDocument = read_json(site_root.join("ja/tech.json"));
     assert_eq!(category.title, "Tech");
     assert_eq!(category.updated_at, "2025-01-01T00:00:00+09:00");
 
-    let site_metadata: SiteMetadataDocument = read_json(site_root.join("metadata/site.json"));
+    let site_metadata: SiteMetadataDocument = read_json(site_root.join("ja/_data/site.json"));
     assert_eq!(site_metadata.total_articles, 1);
     assert!(!site_root.join("en").exists());
 }
@@ -135,7 +135,7 @@ async fn test_publish_resolves_links_to_all_content_kinds() {
         .await
         .unwrap();
 
-    let html_path = collect_article_files(&fixture.site_root().join("articles"))
+    let html_path = collect_article_files(&fixture.site_root().join("ja"))
         .pop()
         .unwrap();
     let html = read_json::<blog_domain::ArticleArtifactDocument>(html_path).html;
@@ -171,7 +171,7 @@ async fn test_publish_writes_static_page() {
         .await
         .unwrap();
 
-    let page: PageArtifactDocument = read_json(fixture.site_root().join("pages/about.json"));
+    let page: PageArtifactDocument = read_json(fixture.site_root().join("ja/about.json"));
     assert_eq!(page.page.as_str(), "about");
     assert_eq!(page.title, "About");
     assert!(page.html.contains("This page is required for deployment."));
@@ -187,13 +187,13 @@ async fn test_publish_writes_home_fragment_separately_from_pages() {
         .await
         .unwrap();
 
-    let home: HomeFragmentArtifactDocument = read_json(fixture.site_root().join("home.json"));
+    let home: HomeFragmentArtifactDocument = read_json(fixture.site_root().join("ja/index.json"));
     assert_eq!(home.title, "Home");
     assert!(
         home.html
             .contains("This fragment is generated from markdown.")
     );
-    assert!(!fixture.site_root().join("pages/home.json").exists());
+    assert!(!fixture.site_root().join("ja/home.json").exists());
 }
 
 #[tokio::test]
@@ -236,8 +236,7 @@ async fn test_publish_writes_category_landing() {
         .await
         .unwrap();
 
-    let category: CategoryArtifactDocument =
-        read_json(fixture.site_root().join("categories/tech.json"));
+    let category: CategoryArtifactDocument = read_json(fixture.site_root().join("ja/tech.json"));
     assert_eq!(category.category, "tech");
     assert_eq!(category.title, "Tech");
     assert_eq!(
@@ -340,7 +339,7 @@ async fn test_publish_uses_injected_bookmark_enricher() {
     .await
     .unwrap();
 
-    let html_path = collect_article_files(&fixture.site_root().join("articles"))
+    let html_path = collect_article_files(&fixture.site_root().join("ja"))
         .pop()
         .unwrap();
     let html = read_json::<blog_domain::ArticleArtifactDocument>(html_path).html;
@@ -394,7 +393,7 @@ async fn test_publish_processes_realistic_public_markdown() {
         .unwrap();
 
     let site_root = fixture.site_root();
-    let articles_dir = site_root.join("articles");
+    let articles_dir = site_root.join("ja");
     let files = collect_article_files(&articles_dir);
     assert_eq!(files.len(), 3);
 
@@ -413,7 +412,7 @@ async fn test_publish_processes_realistic_public_markdown() {
     }
     assert!(!combined_html.contains("開発日記: ブログシステムを作ってみた"));
 
-    let article_index: ArticleIndexDocument = read_json(articles_dir.join("index.json"));
+    let article_index: ArticleIndexDocument = read_json(articles_dir.join("_data/articles.json"));
     for expected_title in [
         "Rustでのパフォーマンス最適化",
         "基本的なRust概念",
@@ -442,11 +441,11 @@ async fn test_publish_processes_realistic_public_markdown() {
         );
     }
 
-    let tech_category: CategoryArtifactDocument = read_json(site_root.join("categories/tech.json"));
+    let tech_category: CategoryArtifactDocument = read_json(site_root.join("ja/tech.json"));
     assert_eq!(tech_category.category, "tech");
     assert_eq!(tech_category.articles.len(), 3);
 
-    let site_metadata: SiteMetadataDocument = read_json(site_root.join("metadata/site.json"));
+    let site_metadata: SiteMetadataDocument = read_json(site_root.join("ja/_data/site.json"));
     assert_eq!(site_metadata.total_articles, 3);
 }
 
@@ -474,7 +473,7 @@ async fn test_publish_handles_many_articles() {
         .unwrap();
 
     assert_eq!(
-        collect_article_files(&fixture.site_root().join("articles")).len(),
+        collect_article_files(&fixture.site_root().join("ja")).len(),
         100
     );
 }
@@ -650,21 +649,17 @@ impl PublishFixture {
 }
 
 fn collect_article_files(root: &Path) -> Vec<PathBuf> {
-    let mut article_files = Vec::new();
-
-    for entry in fs::read_dir(root).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_dir() {
-            article_files.extend(collect_article_files(&path));
-        } else if path.extension().is_some_and(|ext| ext == "json")
-            && path.file_name().is_some_and(|name| name != "index.json")
-        {
-            article_files.push(path);
-        }
-    }
-
-    article_files.sort();
-    article_files
+    walkdir::WalkDir::new(root)
+        .min_depth(2)
+        .max_depth(2)
+        .sort_by_file_name()
+        .into_iter()
+        .map(|e| e.unwrap().into_path())
+        .filter(|p| {
+            p.parent().unwrap().file_name().unwrap() != "_data"
+                && p.extension().is_some_and(|e| e == "json")
+        })
+        .collect()
 }
 
 fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> T {
@@ -686,16 +681,16 @@ async fn publishes_english_separately_and_removes_stale_output() {
         .await
         .unwrap();
     let en_index: ArticleIndexDocument =
-        read_json(fixture.site_root().join("en/articles/index.json"));
+        read_json(fixture.site_root().join("en/_data/articles.json"));
     assert_eq!(en_index.articles.len(), 1);
     assert_eq!(
         en_index.articles[0].tags,
         ["統計"],
         "article linkage retains stable tag IDs"
     );
-    let labels: blog_domain::TagLabels = read_json(fixture.site_root().join("en/tags.json"));
+    let labels: blog_domain::TagLabels = read_json(fixture.site_root().join("en/_data/tags.json"));
     assert_eq!(labels["統計"], "Statistics");
-    let labels: blog_domain::TagLabels = read_json(fixture.site_root().join("tags.json"));
+    let labels: blog_domain::TagLabels = read_json(fixture.site_root().join("ja/_data/tags.json"));
     assert_eq!(labels["統計"], "統計");
     let locales: blog_domain::SiteLocalesDocument =
         read_json(fixture.site_root().join("locales.json"));
@@ -715,15 +710,16 @@ async fn publishes_english_separately_and_removes_stale_output() {
         .await
         .unwrap();
     let en_index: ArticleIndexDocument =
-        read_json(fixture.site_root().join("en/articles/index.json"));
+        read_json(fixture.site_root().join("en/_data/articles.json"));
     assert!(en_index.articles.is_empty());
     assert!(
         !fixture
             .site_root()
-            .join("en/articles/tech/tech-required-article.json")
+            .join("en/tech/tech-required-article.json")
             .exists()
     );
-    let ja_index: ArticleIndexDocument = read_json(fixture.site_root().join("articles/index.json"));
+    let ja_index: ArticleIndexDocument =
+        read_json(fixture.site_root().join("ja/_data/articles.json"));
     assert_eq!(ja_index.articles.len(), 1);
 }
 
@@ -775,7 +771,7 @@ async fn rejects_divergent_english_management_metadata_without_replacing_release
     publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
-    let index = fixture.site_root().join("en/articles/index.json");
+    let index = fixture.site_root().join("en/_data/articles.json");
     let before = fs::read(&index).unwrap();
     let article = fixture.content_dir().join("en/tech-required-article.md");
     let original = fs::read_to_string(&article).unwrap();
@@ -810,7 +806,7 @@ async fn rejects_unresolved_public_reference_without_replacing_existing_release(
     publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
-    let before = fs::read(fixture.site_root().join("articles/index.json")).unwrap();
+    let before = fs::read(fixture.site_root().join("ja/_data/articles.json")).unwrap();
     fixture.write_article(
         "tech/broken.md",
         "Broken",
@@ -823,7 +819,7 @@ async fn rejects_unresolved_public_reference_without_replacing_existing_release(
             .is_err()
     );
     assert_eq!(
-        fs::read(fixture.site_root().join("articles/index.json")).unwrap(),
+        fs::read(fixture.site_root().join("ja/_data/articles.json")).unwrap(),
         before
     );
 }
@@ -836,7 +832,7 @@ async fn rejects_linked_tag_catalog_without_replacing_existing_release() {
     publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
-    let before = fs::read(fixture.site_root().join("tags.json")).unwrap();
+    let before = fs::read(fixture.site_root().join("ja/_data/tags.json")).unwrap();
     let external = tempfile::tempdir().unwrap();
     let target = external.path().join("tags.json");
     fs::write(
@@ -856,7 +852,7 @@ async fn rejects_linked_tag_catalog_without_replacing_existing_release() {
                 .is_err()
         );
         assert_eq!(
-            fs::read(fixture.site_root().join("tags.json")).unwrap(),
+            fs::read(fixture.site_root().join("ja/_data/tags.json")).unwrap(),
             before
         );
     }
@@ -889,7 +885,7 @@ async fn publishes_shared_assets_referenced_from_markdown_images_links_and_table
         1
     );
     let html = read_json::<blog_domain::ArticleArtifactDocument>(
-        fixture.site_root().join("articles/tech/tech-asset.json"),
+        fixture.site_root().join("ja/tech/tech-asset.json"),
     )
     .html;
     assert!(html.contains(&format!("src=\"/content-assets/{name}\"")));
@@ -922,10 +918,10 @@ async fn english_articles_need_an_eligible_category_landing() {
     publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
-    let index: ArticleIndexDocument = read_json(fixture.site_root().join("en/articles/index.json"));
+    let index: ArticleIndexDocument = read_json(fixture.site_root().join("en/_data/articles.json"));
     assert!(index.articles.is_empty());
-    assert!(!fixture.site_root().join("en/categories/tech.json").exists());
-    assert!(fixture.site_root().join("en/pages/about.json").exists());
+    assert!(!fixture.site_root().join("en/tech.json").exists());
+    assert!(fixture.site_root().join("en/about.json").exists());
 }
 
 #[tokio::test]
@@ -998,7 +994,7 @@ fn cli_honors_input_output_and_artifact_validation() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(fixture.site_root().join("articles/index.json").is_file());
+    assert!(fixture.site_root().join("ja/_data/articles.json").is_file());
     assert!(
         run(&[
             "--validate-artifacts".as_ref(),
@@ -1007,7 +1003,11 @@ fn cli_honors_input_output_and_artifact_validation() {
         .status
         .success()
     );
-    fs::write(fixture.site_root().join("articles/index.json"), "invalid").unwrap();
+    fs::write(
+        fixture.site_root().join("ja/_data/articles.json"),
+        "invalid",
+    )
+    .unwrap();
     assert!(
         !run(&[
             "--validate-artifacts".as_ref(),
@@ -1112,7 +1112,7 @@ async fn publishes_fetched_bookmark_metadata_and_falls_back_on_http_errors(
     publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
-    let html_path = collect_article_files(&fixture.site_root().join("articles"))
+    let html_path = collect_article_files(&fixture.site_root().join("ja"))
         .into_iter()
         .find(|path| path.file_name().unwrap() == "tech-bookmark.json")
         .unwrap();
