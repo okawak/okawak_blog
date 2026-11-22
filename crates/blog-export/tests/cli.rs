@@ -222,6 +222,7 @@ fn default_export_translates_every_scope_and_reuses_unchanged_results() {
             "{summary}"
         );
         assert!(summary.contains("reused=0"), "{summary}");
+        assert!(summary.contains("language=en"), "{summary}");
     }
     assert!(
         !logs.contains("こんにちは"),
