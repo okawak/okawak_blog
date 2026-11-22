@@ -17,18 +17,18 @@ pub(crate) fn assets(documents: &[Document]) -> Result<BTreeSet<String>> {
     Ok(names)
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct Index {
     routes: HashMap<String, String>,
 }
 
 impl Index {
-    pub(crate) fn new(japanese: &[Document], localized: &[Document]) -> Result<Self> {
-        let mut routes = HashMap::new();
-        for doc in japanese.iter().chain(localized) {
-            routes.insert(doc.meta.id.to_string(), doc.meta.path(doc.meta.locale)?);
+    pub(crate) fn add_documents(&mut self, docs: &[Document]) -> Result<()> {
+        for doc in docs {
+            self.routes
+                .insert(doc.meta.id.to_string(), doc.meta.path(doc.meta.locale)?);
         }
-        Ok(Self { routes })
+        Ok(())
     }
 
     fn resolve(&self, target: &str) -> Option<String> {

@@ -20,8 +20,8 @@ struct Candidate {
 }
 
 pub(crate) struct CatalogPlan {
+    target: blog_domain::Locale,
     path: PathBuf,
-    catalog: LabelCatalog,
     entries: Vec<EntryPlan>,
 }
 
@@ -32,23 +32,17 @@ struct EntryPlan {
     update: UpdatePlan,
 }
 
-pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Result<CatalogPlan> {
-    let catalog = output::read_catalog(path)?;
+pub(crate) fn plan_catalog(
+    path: &Path,
+    catalog: &LabelCatalog,
+    settings: &TranslationSettings,
+) -> Result<CatalogPlan> {
     let mut entries = Vec::new();
     for (key, entry) in &catalog.entries {
         let request = request(entry, settings);
         let input = request.fingerprint()?;
-        let current = entry.translation.as_ref().map(|t| digest(&t.value));
-        let decision = decide(
-            input.as_str(),
-            current.as_ref().map(Sha256Digest::as_str),
-            entry
-                .translation
-                .as_ref()
-                .and_then(|t| t.provenance.as_ref())
-                .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
-        );
-        let existing_candidate_path = candidate_path(path, key);
+        let decision = label_decision(&input, entry.translations.get(&settings.target));
+        let existing_candidate_path = candidate_path(path, key, settings.target);
         let candidate_decision = if decision != Decision::Reuse && existing_candidate_path.exists()
         {
             let candidate: Candidate =
@@ -58,15 +52,7 @@ pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Resul
                     "catalog candidate identity changed",
                 ));
             }
-            Some(decide(
-                input.as_str(),
-                Some(digest(&candidate.translation.value).as_str()),
-                candidate
-                    .translation
-                    .provenance
-                    .as_ref()
-                    .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
-            ))
+            Some(label_decision(&input, Some(&candidate.translation)))
         } else {
             None
         };
@@ -79,8 +65,8 @@ pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Resul
         });
     }
     Ok(CatalogPlan {
+        target: settings.target,
         path: path.to_owned(),
-        catalog,
         entries,
     })
 }
@@ -88,12 +74,13 @@ pub(crate) fn plan_catalog(path: &Path, settings: &TranslationSettings) -> Resul
 impl CatalogPlan {
     pub(crate) fn apply(
         self,
+        catalog: &mut LabelCatalog,
         cache_root: &Path,
         translator: &dyn Translator,
     ) -> Result<TranslationReport<String>> {
         let Self {
+            target,
             path,
-            mut catalog,
             entries,
         } = self;
         let mut report = TranslationReport::default();
@@ -103,16 +90,10 @@ impl CatalogPlan {
             "UI"
         };
         let total = entries.len();
-        let ai_requests = entries.iter().try_fold(0, |count, entry| {
-            Ok::<_, ExportError>(
-                count
-                    + usize::from(cache::will_call_translator(
-                        entry.update,
-                        &entry.request,
-                        cache_root,
-                    )?),
-            )
-        })?;
+        let ai_requests = cache::pending_request_count(
+            cache_root,
+            entries.iter().map(|plan| (plan.update, &plan.request)),
+        )?;
         tracing::info!(scope, total, ai_requests, "translation phase started");
         for (
             index,
@@ -138,15 +119,16 @@ impl CatalogPlan {
                 .expect("planned catalog entry");
             match update {
                 UpdatePlan::Reuse => {
-                    entry.translation.as_mut().unwrap().stale = false;
+                    entry.translations.get_mut(&target).unwrap().stale = false;
                     report.reused += 1;
                 }
                 UpdatePlan::Generate
                 | UpdatePlan::GenerateCandidate
                 | UpdatePlan::ReuseCandidate => {
                     if update.protects_current() {
-                        if entry.translation.as_ref().unwrap().provenance.is_some() {
-                            entry.translation.as_mut().unwrap().stale = true;
+                        let translation = entry.translations.get_mut(&target).unwrap();
+                        if translation.provenance.is_some() {
+                            translation.stale = true;
                         }
                         report.protected.push(key.clone());
                         if update == UpdatePlan::ReuseCandidate {
@@ -165,7 +147,7 @@ impl CatalogPlan {
                         stale: false,
                     };
                     if update.protects_current() {
-                        let candidate = candidate_path(&path, &key);
+                        let candidate = candidate_path(&path, &key, target);
                         fs::create_dir_all(candidate.parent().unwrap())?;
                         output::write_json(
                             &candidate,
@@ -177,14 +159,12 @@ impl CatalogPlan {
                             },
                         )?;
                     } else {
-                        entry.translation = Some(translation);
+                        entry.translations.insert(target, translation);
                     }
                     report.generated += 1;
                 }
             }
         }
-        catalog.validate()?;
-        output::write_json(&path, &catalog)?;
         tracing::info!(scope, total, "translation phase completed");
         Ok(report)
     }
@@ -200,7 +180,7 @@ pub(crate) fn accept_catalog_candidate(
         .entries
         .get_mut(key)
         .ok_or_else(|| ExportError::invalid_input("unknown catalog key"))?;
-    let candidate_path = candidate_path(path, key);
+    let candidate_path = candidate_path(path, key, settings.target);
     let candidate: Candidate = serde_json::from_slice(&fs::read(&candidate_path)?)?;
     if candidate.key != key
         || candidate.source != entry.source
@@ -225,11 +205,22 @@ pub(crate) fn accept_catalog_candidate(
         ));
     }
     request.validate(&[("value".into(), candidate.value.clone())].into())?;
-    entry.translation = Some(candidate);
+    entry.translations.insert(settings.target, candidate);
     catalog.validate()?;
     output::write_json(path, &catalog)?;
     fs::remove_file(candidate_path)?;
     Ok(())
+}
+
+fn label_decision(input: &Sha256Digest, translation: Option<&LabelTranslation>) -> Decision {
+    let hash = translation.map(|t| digest(&t.value));
+    decide(
+        input.as_str(),
+        hash.as_ref().map(Sha256Digest::as_str),
+        translation
+            .and_then(|t| t.provenance.as_ref())
+            .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
+    )
 }
 
 fn request(entry: &blog_domain::LabelEntry, settings: &TranslationSettings) -> TranslationRequest {
@@ -239,9 +230,9 @@ fn request(entry: &blog_domain::LabelEntry, settings: &TranslationSettings) -> T
         settings,
     )
 }
-fn candidate_path(path: &Path, key: &str) -> PathBuf {
+fn candidate_path(path: &Path, key: &str, target: blog_domain::Locale) -> PathBuf {
     let identity = format!("{}:{key}", path.file_name().unwrap().to_string_lossy());
-    filesystem::parent(path)
-        .join(".export-candidates/catalog")
+    super::candidate_dir(filesystem::parent(path), target)
+        .join("catalog")
         .join(format!("{}.json", digest(identity)))
 }

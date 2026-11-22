@@ -15,15 +15,15 @@ CLIは`clap`で引数を検証する。候補の採用は`accept-article <id>`�
 
 `is_completed: true` のノートだけを処理する。未知のfrontmatterはコピーせず、公開Markdown契約に必要なフィールドだけを書き出す。非公開ノートや公開ディレクトリ外のノートは参照先として取り込まない。symlink入力は拒否する。本文にObsidianのコメント区切り（`%%`）がある場合は翻訳前に停止する。記法を例示するときはコードスパンまたはコードブロックで囲む。
 
-`content/ja/<category>/<id>.md` に日本語を出力する。初回IDは従来のtitle／元path／createdによるslugを保持する。再実行では元pathのdigestで既存IDを探し、path変更時は削除された元pathと同じkind・createdを持つ候補が1つのときだけ引き継ぐ。曖昧なら原文へ `publish_id: <既存ID>` を指定する。category移動時にはcategoryを含むURLが変わるため、差分を確認する。
+日本語は `content/ja/` 配下に、公開ルートに沿って出力する。記事は `<category>/<id>.md`、カテゴリは `<category>.md`、固定ページは `about.md`、トップは `index.md` を使う。初回IDは従来のtitle／元path／createdによるslugを保持する。再実行では元pathのdigestで既存IDを探し、path変更時は削除された元pathと同じkind・createdを持つ候補が1つのときだけ引き継ぐ。曖昧なら原文へ `publish_id: <既存ID>` を指定する。category移動時にはcategoryを含むURLが変わるため、差分を確認する。
 
 WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する。通常Markdownの内部リンクは参照元からの相対pathで解決し、同名の別ファイルへfallbackしない。WikiLink・Wiki embedだけは公開rootやbasenameからも候補を探す。`![[note]]`によるnote embedは公開先へのリンクとして扱う。通常Markdownでノートを参照する場合は`[label](note.md)`を使う。単独の見出し参照も含め、参照先は公開ノート集合内で解決する。未解決・曖昧なノート／見出しはエラーとする。見出しには原文から決定するanchorを付ける。外部URLのbookmark HTMLは使用できる。raw HTML内のローカルノート参照はMarkdownリンクへ書き直す。
 
 参照形式のリンク・画像（`[説明][ref]`、`[説明][]`、定義付きの`[説明]`、`![説明][ref]`）は使わず、`[説明](URL)`・`![説明](URL)`を使う。未使用のものも含め、`[ref]: URL`のような参照定義がある場合はexportをエラーにする。コードブロック内の記法例や、脚注の`[^note]: ...`はこの制限の対象外とする。
 
-画像の圧縮・アップロードはObsidianのS3 Image Uploaderに任せ、記事の配信用artifactとは別のS3 bucketに保存してCloudFrontから配信する。Markdownの画像記法`![説明](...)`はHTTP(S)画像専用とし、`![説明](https://...)`のように配信URLを記載する。exportは日英とも画像URLを保持し、画像の取得・圧縮・コピー・同期は行わない。画像ファイルはGit管理しない。`![[image.png]]`や`![説明](image.png)`などのローカル画像参照はエラーになるため、アップロード済みURLへ置き換える。`![説明](note.md)`によるノート参照も受け付けない。
+画像の圧縮・アップロードはObsidianのS3 Image Uploaderに任せ、記事の配信用artifactとは別のS3 bucketに保存してCloudFrontから配信する。Markdownの画像記法`![説明](...)`はHTTP(S)画像専用とし、`![説明](https://...)`のように配信URLを記載する。exportは各言語で画像URLを保持し、画像の取得・圧縮・コピー・同期は行わない。画像ファイルはGit管理しない。`![[image.png]]`や`![説明](image.png)`などのローカル画像参照はエラーになるため、アップロード済みURLへ置き換える。`![説明](note.md)`によるノート参照も受け付けない。
 
-出力は同じfilesystemの一時ディレクトリで組み立て、検証成功後に入れ替える。同時exportはlockで拒否する。差分がなければ既存ファイルのmtimeも変えない。削除・非公開化された日英Markdownは `content/.export-archive/`（Git対象外）へ退避する。任意のREADME・隠しファイルは保持する。`ja/`、`en/` のMarkdownはexport管理領域である。
+出力は同じfilesystemの一時ディレクトリで組み立て、検証成功後に入れ替える。同時exportはlockで拒否する。差分がなければ既存ファイルのmtimeも変えない。削除・非公開化された公開Markdownは `content/.export-archive/`（Git対象外）へ退避する。任意のREADME・隠しファイルは保持する。`ja/`、`en/`、`zh-hans/` のMarkdownはexport管理領域である。
 
 コピーと差分確認は`walkdir`でディレクトリ内を名前順に走査し、全体のパス一覧を作らずに進める。空ディレクトリも保持し、内容比較は固定長バッファで行う。翻訳後は新しく生成された応答cacheだけを追加する。既存出力全体のコピーと内容比較は行うため、処理時間はファイル数と合計容量に応じて増える。ソート用のメモリは走査中のディレクトリのエントリ数に依存するが、ファイル内容は丸ごとメモリへ読み込まない。
 
@@ -32,6 +32,8 @@ WikiLink・通常の内部Markdownリンクは `content:<id>` に正規化する
 公開Markdownはpush時点で公開されるため、commit前に差分を確認する。日本語の正本はObsidianであり、通常は公開版を直接編集しない。`blog-publish`と`dev-local`は公開Markdownだけを入力にする。
 
 ## 翻訳
+
+通常のexportは、日本語を原文として英語と簡体字中国語を生成する。翻訳先を絞るには `cargo run -p blog-export -- --target zh-hans` を使う。記事・タグ・UIの訳文と履歴を言語単位で管理する。下の英語の操作例は既存の候補やcacheと互換性を持つ。簡体字の記事・辞書候補は各 `.export-candidates/zh-hans/` の下に置き、採用時にも `--target zh-hans` を付ける。
 
 ```sh
 codex login
@@ -143,7 +145,7 @@ cargo run -p blog-export -- accept-ui filter.label
 
 AIが訳文を生成した時点で、実際の出力から`generated_hash`を計算して記録する。次回は現在の訳文からhashを計算し、その記録と比較する。一致すれば生成時のまま、異なれば生成後に編集されたものとして扱う。AIにもう一度翻訳させて比較する仕組みではないため、AI出力の揺れは手修正判定に影響しない。人の編集だけでなく、別ツールによる変更も検出対象になる。
 
-記事の`generated_hash`はtitle・summary・本文が対象で、日時・タグなどの管理情報は含まない。翻訳入力を記録する`input_hash`とともに、英語版frontmatterの`translation`に保存する。タグ・UIでは訳文の`value`を対象にし、各entryの`translation.provenance`に記録する。
+記事の`generated_hash`はtitle・summary・本文が対象で、日時・タグなどの管理情報は含まない。翻訳入力を記録する`input_hash`とともに、翻訳版frontmatterの`translation`に保存する。タグ・UIでは訳文の`value`を対象にし、各entryの`translations.<locale>.provenance`に記録する。
 
 候補を手修正して採用した場合も、hashを手修正後の内容で書き換えず、AI生成時の記録を保持する。そのため、同じ翻訳入力では採用した訳文が再利用され、次に原文などが変わった際にも手修正として保護される。
 
@@ -161,7 +163,7 @@ AI入力はpublic Markdownのtitle・summaryと、parserで抽出した文章fra
 
 `mise run export`は記事とタグを抽出・翻訳した後、`crates/blog-server/locales/ui.json`も更新する。いずれも未変更の翻訳・候補を再利用し、手動訳を保持したまま必要な更新候補を自動生成する。UI辞書の形式・初期値・採用操作は[serverの説明](../blog-server/locales/README.md)を参照する。
 
-記事由来のタグは`content/tags.json`へ集約する。元のタグ文字列をキーにして、各項目に日本語の表示名`source`、用途`context`、英語の`translation.value`と生成履歴を保存する。同じタグを複数記事が使っても翻訳は一項目だけ。タグの対応はAIに渡さず、記事の`tags`は元のIDを保つ。不要になった項目は履歴を`.export-archive`へ退避して公開辞書から外す。
+記事由来のタグは`content/tags.json`へ集約する。元のタグ文字列をキーにして、各項目に日本語の表示名`source`、用途`context`、言語別の`translations.<locale>.value`と生成履歴を保存する。同じタグを複数記事が使っても翻訳は一項目だけ。タグの対応はAIに渡さず、記事の`tags`は元のIDを保つ。不要になった項目は履歴を`.export-archive`へ退避して公開辞書から外す。
 
 辞書の原文で補間変数を追加・削除・改名した場合も差分翻訳できる。生成後に未編集の訳は更新し、手動編集・履歴不明の訳は保持して`stale`にする。更新待ちの古い補間変数を持つ訳は表示に使わず原文へfallbackし、生成・候補採用・公開時には有効な訳の補間変数の一致を検証する。
 
@@ -170,7 +172,7 @@ mise run export
 cargo run -p blog-export -- accept-tag '統計'
 ```
 
-タグ候補は`content/.export-candidates/catalog/`にキー・原文・用途付きで保存する。履歴付き訳文を手で修正し、その原文・用途・関連用語集・翻訳設定が変わると上書きを保護し`stale`にする。入力が同じなら手動訳を保持してAIを呼ばない。履歴がない値は自動生成とみなさず、保持して保護対象として報告する。欠落・更新待ちの英語タグは日本語表示名、辞書項目がなければ元のタグIDを使う。
+タグ候補は`content/.export-candidates/catalog/`にキー・原文・用途付きで保存する。履歴付き訳文を手で修正し、その原文・用途・関連用語集・翻訳設定が変わると上書きを保護し`stale`にする。入力が同じなら手動訳を保持してAIを呼ばない。履歴がない値は自動生成とみなさず、保持して保護対象として報告する。欠落・更新待ちの翻訳タグは日本語表示名、辞書項目がなければ元のタグIDを使う。
 
 UI・タグの候補自体にも同じ手動編集保護を適用する。同じ入力での再実行では候補を保持し、入力変更後に手動編集済み候補が残っていれば停止する。候補をGit対象外の別pathへ退避してから再生成する。
 

@@ -27,9 +27,28 @@ pub async fn publish_with_bookmark_enricher(
 ) -> Result<()> {
     let documents = input::read(content_dir)?;
     let tag_catalog = input::read_tag_catalog(content_dir)?;
-    let [japanese, english] = input::eligible(documents);
-    let mut asset_names = links::assets(&japanese)?;
-    asset_names.extend(links::assets(&english)?);
+    let groups = input::eligible(documents);
+    let japanese = groups
+        .get(&Locale::Ja)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    validate_japanese(japanese)?;
+    let mut japanese_links = links::Index::default();
+    japanese_links.add_documents(japanese)?;
+    let mut publications = Vec::new();
+    let mut asset_names = std::collections::BTreeSet::new();
+    for (locale, docs) in groups {
+        if docs.is_empty() {
+            continue;
+        }
+        let mut index = japanese_links.clone();
+        if locale != Locale::Ja {
+            index.add_documents(&docs)?;
+        }
+        index.validate(&docs)?;
+        asset_names.extend(links::assets(&docs)?);
+        publications.push((locale, docs, index));
+    }
     for name in &asset_names {
         let path = content_dir.join("assets").join(name);
         if !std::fs::symlink_metadata(path)?.file_type().is_file() {
@@ -38,11 +57,6 @@ pub async fn publish_with_bookmark_enricher(
             ));
         }
     }
-    validate_japanese(&japanese)?;
-    let ja_links = links::Index::new(&japanese, &[])?;
-    let en_links = links::Index::new(&japanese, &english)?;
-    ja_links.validate(&japanese)?;
-    en_links.validate(&english)?;
     let parent = output_dir
         .parent()
         .filter(|p| !p.is_empty())
@@ -52,19 +66,10 @@ pub async fn publish_with_bookmark_enricher(
         .prefix(".publish-stage-")
         .tempdir_in(parent)?;
     let mut locales = SiteLocalesDocument::default();
-    for (locale, docs, index) in [
-        (Locale::Ja, japanese, ja_links),
-        (Locale::En, english, en_links),
-    ] {
-        if locale == Locale::En && docs.is_empty() {
-            continue;
-        }
+    for (locale, docs, index) in publications {
         locales.routes.entry("/".into()).or_default().push(locale);
         for doc in &docs {
-            let available = locales
-                .routes
-                .entry(doc.meta.path(Locale::Ja)?)
-                .or_default();
+            let available = locales.routes.entry(doc.meta.route_key()?).or_default();
             if !available.contains(&locale) {
                 available.push(locale);
             }

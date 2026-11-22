@@ -6,7 +6,8 @@ mod codex;
 mod fragments;
 mod plan;
 
-pub(crate) use articles::{accept_article_candidate, translate_stage};
+pub(crate) use articles::{accept_article_candidate, plan_content};
+pub(crate) use cache::copy_cache;
 pub(crate) use catalog::{accept_catalog_candidate, plan_catalog};
 pub use codex::CodexTranslator;
 
@@ -20,19 +21,51 @@ pub type Texts = BTreeMap<String, String>;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TranslationSettings {
+    #[serde(skip, default = "english")]
+    pub target: blog_domain::Locale,
     pub model: String,
     pub instruction: String,
     #[serde(default)]
     pub glossary: Texts,
 }
 
+impl TranslationSettings {
+    pub(crate) fn validate_target(&self) -> Result<()> {
+        if self.target == blog_domain::Locale::Ja {
+            return Err(ExportError::invalid_input(
+                "Japanese is the translation source",
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct TranslationRequest {
+    // Existing English cache keys and provenance predate explicit targets.
+    #[serde(skip_serializing_if = "is_english")]
+    pub target: blog_domain::Locale,
     pub texts: Texts,
     pub context: String,
     pub model: String,
     pub instruction: String,
     pub glossary: Texts,
+}
+
+fn english() -> blog_domain::Locale {
+    blog_domain::Locale::En
+}
+fn is_english(locale: &blog_domain::Locale) -> bool {
+    *locale == english()
+}
+
+fn candidate_dir(root: &std::path::Path, target: blog_domain::Locale) -> std::path::PathBuf {
+    let base = root.join(".export-candidates");
+    if is_english(&target) {
+        base
+    } else {
+        base.join(target.as_str())
+    }
 }
 
 pub trait Translator {
@@ -50,6 +83,7 @@ impl TranslationRequest {
             .map(|(a, b)| (a.clone(), b.clone()))
             .collect();
         Self {
+            target: settings.target,
             texts,
             context,
             model: settings.model.clone(),
@@ -131,6 +165,7 @@ mod tests {
 
     fn settings(glossary: Texts) -> TranslationSettings {
         TranslationSettings {
+            target: blog_domain::Locale::En,
             model: "test".into(),
             instruction: "translate".into(),
             glossary,

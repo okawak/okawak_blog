@@ -123,8 +123,8 @@ fn lookup<'a>(catalog: &'a LabelCatalog, locale: Locale, key: &'a str) -> &'a st
         tracing::error!(key, "missing UI message key");
         return key;
     };
-    if locale == Locale::En && entry.translation.as_ref().is_none_or(|t| t.stale) {
-        tracing::warn!(key, "English UI message unavailable; using Japanese");
+    if locale != Locale::Ja && entry.translations.get(&locale).is_none_or(|t| t.stale) {
+        tracing::warn!(key, %locale, "Translated UI message unavailable; using Japanese");
     }
     entry.value(locale)
 }
@@ -221,13 +221,15 @@ mod tests {
                 Ok(())
             }
         }
-        for locale in Locale::ALL {
+        for locale in [Locale::Ja, Locale::En] {
             for state in ["fresh", "stale", "missing"] {
                 let mut catalog = CATALOG.clone();
                 let entry = catalog.entries.get_mut("nav.home").unwrap();
                 match state {
-                    "stale" => entry.translation.as_mut().unwrap().stale = true,
-                    "missing" => entry.translation = None,
+                    "stale" => entry.translations.get_mut(&Locale::En).unwrap().stale = true,
+                    "missing" => {
+                        entry.translations.remove(&Locale::En);
+                    }
                     _ => {}
                 }
                 let output = Buffer(Default::default());
@@ -243,7 +245,7 @@ mod tests {
                 });
                 let log = String::from_utf8(output.0.lock().unwrap().clone()).unwrap();
                 assert_eq!(
-                    log.contains("English UI message unavailable"),
+                    log.contains("Translated UI message unavailable"),
                     locale == Locale::En && state != "fresh"
                 );
                 assert_eq!(
@@ -320,7 +322,10 @@ mod tests {
                 .get(key.key())
                 .unwrap_or_else(|| panic!("missing {}", key.key()));
             assert!(
-                entry.translation.as_ref().is_some_and(|t| !t.stale),
+                entry
+                    .translations
+                    .get(&Locale::En)
+                    .is_some_and(|t| !t.stale),
                 "missing or stale {}",
                 key.key()
             );
@@ -343,7 +348,12 @@ mod tests {
             "missing"
         );
         let mut catalog = CATALOG.clone();
-        catalog.entries.get_mut("nav.home").unwrap().translation = None;
+        catalog
+            .entries
+            .get_mut("nav.home")
+            .unwrap()
+            .translations
+            .remove(&Locale::En);
         assert_eq!(lookup(&catalog, Locale::En, "nav.home"), "ホーム");
         assert_eq!(
             interpolate(

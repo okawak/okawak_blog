@@ -5,8 +5,8 @@ fn shipped_ui_catalog_has_both_languages_and_valid_interpolation() {
     catalog.validate().unwrap();
     for (key, entry) in &catalog.entries {
         let translation = entry
-            .translation
-            .as_ref()
+            .translations
+            .get(&blog_domain::Locale::En)
             .unwrap_or_else(|| panic!("missing English key: {key}"));
         assert!(!translation.stale, "stale English key: {key}");
     }

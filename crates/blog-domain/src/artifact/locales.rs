@@ -2,7 +2,7 @@ use crate::{DomainError, Locale, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// Available public paths in one immutable release. Keys use Japanese paths.
+/// Available public paths in one immutable release. Keys are routes without a language prefix.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SiteLocalesDocument {
@@ -28,8 +28,10 @@ impl SiteLocalesDocument {
                     || path.contains(['\\', '?', '#'])
                     || path.split('/').any(|p| p == "." || p == "..")
                     || locales.is_empty()
-                    || locales.len() > 2
-                    || (locales.len() == 2 && locales[0] == locales[1])
+                    || locales
+                        .iter()
+                        .enumerate()
+                        .any(|(i, locale)| locales[..i].contains(locale))
             })
         {
             return Err(DomainError::validation("invalid site locale routes"));
@@ -37,11 +39,11 @@ impl SiteLocalesDocument {
         Ok(())
     }
 
-    pub fn path(&self, japanese_path: &str, locale: Locale) -> Option<String> {
+    pub fn path(&self, route_key: &str, locale: Locale) -> Option<String> {
         self.routes
-            .get(japanese_path)
+            .get(route_key)
             .filter(|locales| locales.contains(&locale))
-            .map(|_| locale.path(japanese_path))
+            .map(|_| locale.path(route_key))
     }
 }
 
@@ -72,13 +74,14 @@ mod tests {
     }
 
     #[test]
-    fn accepts_absolute_public_paths_with_one_or_two_distinct_locales() {
+    fn accepts_absolute_public_paths_with_distinct_locales() {
         for path in ["/", "/about", "/tech/article", "/tech/dot.name"] {
             for locales in [
                 vec![Locale::Ja],
                 vec![Locale::En],
                 vec![Locale::Ja, Locale::En],
                 vec![Locale::En, Locale::Ja],
+                Locale::ALL.to_vec(),
             ] {
                 document(path, locales).validate().unwrap();
             }

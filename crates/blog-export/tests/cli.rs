@@ -74,6 +74,7 @@ exec "$FAKE_CODEX_TEST" --exact fake_codex_process --nocapture
     fn invoke(&self, args: &[&str]) -> Output {
         Command::new(env!("CARGO_BIN_EXE_blog-export"))
             .current_dir(self.0.path())
+            .args(["--target", "en"])
             .args(args)
             .env("PATH", self.path("bin"))
             .env("RUST_LOG", "info")
@@ -115,15 +116,15 @@ exec "$FAKE_CODEX_TEST" --exact fake_codex_process --nocapture
         self.write_note("更新した本文");
 
         let mut tags = self.read_json("content/tags.json");
-        tags["entries"]["Rust"]["translation"]["value"] = json!("Hand edited tag");
-        tags["entries"]["Rust"]["translation"]
+        tags["entries"]["Rust"]["translations"]["en"]["value"] = json!("Hand edited tag");
+        tags["entries"]["Rust"]["translations"]["en"]
             .as_object_mut()
             .unwrap()
             .remove("provenance");
         self.write_json("content/tags.json", tags);
 
         let mut ui = self.read_json("crates/blog-server/locales/ui.json");
-        ui["entries"]["greeting"]["translation"]["value"] = json!("Hand edited greeting");
+        ui["entries"]["greeting"]["translations"]["en"]["value"] = json!("Hand edited greeting");
         ui["entries"]["greeting"]["source"] = json!("新しい挨拶");
         self.write_json("crates/blog-server/locales/ui.json", ui);
 
@@ -221,6 +222,7 @@ fn default_export_translates_every_scope_and_reuses_unchanged_results() {
             "{summary}"
         );
         assert!(summary.contains("reused=0"), "{summary}");
+        assert!(summary.contains("language=en"), "{summary}");
     }
     assert!(
         !logs.contains("こんにちは"),
@@ -238,12 +240,12 @@ fn default_export_translates_every_scope_and_reuses_unchanged_results() {
         "article, tag, and UI are translated by default"
     );
     assert_eq!(
-        project.read_json("content/tags.json")["entries"]["Rust"]["translation"]["value"],
+        project.read_json("content/tags.json")["entries"]["Rust"]["translations"]["en"]["value"],
         "English Rust"
     );
     assert_eq!(
-        project.read_json("crates/blog-server/locales/ui.json")["entries"]["greeting"]["translation"]
-            ["value"],
+        project.read_json("crates/blog-server/locales/ui.json")["entries"]["greeting"]["translations"]
+            ["en"]["value"],
         "English こんにちは"
     );
 
@@ -298,12 +300,12 @@ fn manual_edits_are_preserved_and_matching_candidates_are_reused() {
             .contains("Hand edited prose")
     );
     assert_eq!(
-        project.read_json("content/tags.json")["entries"]["Rust"]["translation"]["value"],
+        project.read_json("content/tags.json")["entries"]["Rust"]["translations"]["en"]["value"],
         "Hand edited tag"
     );
     assert_eq!(
-        project.read_json("crates/blog-server/locales/ui.json")["entries"]["greeting"]["translation"]
-            ["value"],
+        project.read_json("crates/blog-server/locales/ui.json")["entries"]["greeting"]["translations"]
+            ["en"]["value"],
         "Hand edited greeting"
     );
     let candidate = project.path(&format!("content/.export-candidates/{ARTICLE}.md"));
@@ -344,13 +346,13 @@ fn accepting_candidates_needs_neither_private_input_nor_ai() {
     );
     project.run(&["accept-tag", "Rust"]);
     assert_eq!(
-        project.read_json("content/tags.json")["entries"]["Rust"]["translation"]["value"],
+        project.read_json("content/tags.json")["entries"]["Rust"]["translations"]["en"]["value"],
         "English Rust"
     );
     project.run(&["accept-ui", "greeting"]);
     assert_eq!(
-        project.read_json("crates/blog-server/locales/ui.json")["entries"]["greeting"]["translation"]
-            ["value"],
+        project.read_json("crates/blog-server/locales/ui.json")["entries"]["greeting"]["translations"]
+            ["en"]["value"],
         "English 新しい挨拶"
     );
     assert_eq!(project.calls(), calls);

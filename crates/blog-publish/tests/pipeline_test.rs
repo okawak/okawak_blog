@@ -694,6 +694,7 @@ async fn a_chinese_translation_never_creates_an_english_release() {
     publish(fixture.content_dir(), fixture.output_dir())
         .await
         .unwrap();
+    assert!(fixture.site_root().join("zh-hans/about.json").is_file());
     assert!(!fixture.site_root().join("en").exists());
 }
 
@@ -708,7 +709,7 @@ async fn publishes_english_separately_and_removes_stale_output() {
         .unwrap()
         .replace("schema_version: 1", "schema_version: 1\ntags: [統計]");
     fs::write(article_path, source).unwrap();
-    fs::write(fixture.content_dir().join("tags.json"), r#"{"schema_version":1,"entries":{"統計":{"source":"統計","context":"blog tag","translation":{"value":"Statistics","stale":false}}}}"#).unwrap();
+    fs::write(fixture.content_dir().join("tags.json"), r#"{"schema_version":1,"entries":{"統計":{"source":"統計","context":"blog tag","translations":{"en":{"value":"Statistics","stale":false}}}}}"#).unwrap();
     write_translation_copies(&fixture, "en");
     publish(fixture.content_dir(), fixture.output_dir())
         .await
@@ -959,6 +960,7 @@ async fn english_articles_need_an_eligible_category_landing() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
     write_translation_copies(&fixture, "en");
+    write_translation_copies(&fixture, "zh-hans");
     let landing = fixture.content_dir().join("en/tech.md");
     fs::write(
         &landing,
@@ -974,6 +976,18 @@ async fn english_articles_need_an_eligible_category_landing() {
     assert!(index.articles.is_empty());
     assert!(!fixture.site_root().join("en/tech.json").exists());
     assert!(fixture.site_root().join("en/about.json").exists());
+    let locales: blog_domain::SiteLocalesDocument =
+        read_json(fixture.site_root().join("locales.json"));
+    assert_eq!(
+        locales.routes["/tech/tech-required-article"],
+        [blog_domain::Locale::Ja, blog_domain::Locale::ZhHans]
+    );
+    assert!(
+        fixture
+            .site_root()
+            .join("zh-hans/tech/tech-required-article.json")
+            .is_file()
+    );
 }
 
 #[tokio::test]

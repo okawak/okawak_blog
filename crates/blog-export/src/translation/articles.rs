@@ -1,6 +1,6 @@
 use super::{
     ProtectedContent, Texts, TranslationReport, TranslationRequest, TranslationSettings,
-    Translator, cache,
+    Translator, cache, candidate_dir,
     fragments::Fragments,
     plan::{Decision, UpdatePlan, decide, plan_update},
 };
@@ -10,10 +10,13 @@ use crate::{
     output,
 };
 use blog_domain::{Locale, Sha256Digest, Slug, TranslationProvenance};
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
-struct ArticlePlan {
-    original: Document,
+struct ArticlePlan<'a> {
+    original: &'a Document,
     current: Option<Document>,
     fragments: Fragments,
     request: TranslationRequest,
@@ -21,47 +24,35 @@ struct ArticlePlan {
     update: UpdatePlan,
 }
 
-pub(crate) fn translate_stage(
+pub(crate) struct ContentPlan<'a> {
+    target: Locale,
+    articles: Vec<ArticlePlan<'a>>,
+    tags: super::catalog::CatalogPlan,
+}
+
+pub(crate) fn plan_content<'a>(
     stage: &Path,
-    cache_root: &Path,
-    translator: &dyn Translator,
+    originals: &'a [Document],
+    catalog: &blog_domain::LabelCatalog,
     settings: &TranslationSettings,
-) -> Result<TranslationReport<ProtectedContent>> {
-    let mut report = TranslationReport::default();
-    let originals = output::read_locale(stage, Locale::Ja)?;
-    let tags = super::catalog::plan_catalog(&stage.join("tags.json"), settings)?;
+) -> Result<ContentPlan<'a>> {
+    let tags = super::catalog::plan_catalog(&stage.join("tags.json"), catalog, settings)?;
     let mut plans = Vec::new();
     for original in originals {
-        let fragments = Fragments::extract(&original);
+        let fragments = Fragments::extract(original);
         let request = article_request(fragments.texts.clone(), settings);
-        let input = content_input(&request, &original)?;
-        let current = output::read_document(stage, Locale::En, &original.meta)?;
-        let current_hash = current.as_ref().map(text_hash).transpose()?;
-        let decision = decide(
-            input.as_str(),
-            current_hash.as_ref().map(Sha256Digest::as_str),
-            current
-                .as_ref()
-                .and_then(|d| d.meta.translation.as_ref())
-                .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
-        );
-        let candidate_path = stage.join(format!(".export-candidates/{}.md", original.meta.id));
+        let input = content_input(&request, original)?;
+        let current = output::read_document(stage, settings.target, &original.meta)?;
+        let decision = article_decision(&input, current.as_ref())?;
+        let candidate_path = candidate_path(stage, settings.target, &original.meta.id);
         let candidate_decision = if decision != Decision::Reuse && candidate_path.exists() {
             let candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
-            if candidate.meta.id != original.meta.id || candidate.meta.locale != Locale::En {
+            if candidate.meta.id != original.meta.id || candidate.meta.locale != settings.target {
                 return Err(ExportError::translation_conflict(
                     "candidate identity changed",
                 ));
             }
-            Some(decide(
-                input.as_str(),
-                Some(text_hash(&candidate)?.as_str()),
-                candidate
-                    .meta
-                    .translation
-                    .as_ref()
-                    .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
-            ))
+            Some(article_decision(&input, Some(&candidate))?)
         } else {
             None
         };
@@ -75,105 +66,120 @@ pub(crate) fn translate_stage(
             update,
         });
     }
-    // Inspect every candidate before any AI call, cache write or output update.
-    fs::create_dir_all(stage.join("en"))?;
-    let total = plans.len();
-    let ai_requests = plans.iter().try_fold(0, |count, plan| {
-        Ok::<_, ExportError>(
-            count
-                + usize::from(cache::will_call_translator(
-                    plan.update,
-                    &plan.request,
-                    cache_root,
-                )?),
-        )
-    })?;
-    tracing::info!(
-        scope = "Articles",
-        total,
-        ai_requests,
-        "translation phase started"
-    );
-    for (
-        index,
-        ArticlePlan {
-            original,
-            current,
-            fragments,
-            request,
-            input,
-            update,
-        },
-    ) in plans.into_iter().enumerate()
-    {
+    Ok(ContentPlan {
+        target: settings.target,
+        articles: plans,
+        tags,
+    })
+}
+
+impl ContentPlan<'_> {
+    pub(crate) fn apply(
+        self,
+        stage: &Path,
+        catalog: &mut blog_domain::LabelCatalog,
+        cache_root: &Path,
+        translator: &dyn Translator,
+    ) -> Result<TranslationReport<ProtectedContent>> {
+        let Self {
+            target,
+            articles: plans,
+            tags,
+        } = self;
+        let mut report = TranslationReport::default();
+        let total = plans.len();
+        let ai_requests = cache::pending_request_count(
+            cache_root,
+            plans.iter().map(|plan| (plan.update, &plan.request)),
+        )?;
         tracing::info!(
-            scope = "Article",
-            current = index + 1,
+            scope = "Articles",
             total,
-            article_id = %original.meta.id,
-            action = update.action(),
-            "translation item started"
+            ai_requests,
+            "translation phase started"
         );
-        let path = stage.join(original.meta.markdown_path(Locale::En)?);
-        match update {
-            UpdatePlan::Reuse => {
-                let mut preserved = current.unwrap();
-                if let Some(provenance) = &mut preserved.meta.translation
-                    && provenance.stale
-                {
-                    provenance.stale = false;
-                    fs::write(path, preserved.encode()?)?;
-                }
-                report.reused += 1;
-            }
-            UpdatePlan::Generate | UpdatePlan::GenerateCandidate | UpdatePlan::ReuseCandidate => {
-                if update.protects_current() {
+        for (
+            index,
+            ArticlePlan {
+                original,
+                current,
+                fragments,
+                request,
+                input,
+                update,
+            },
+        ) in plans.into_iter().enumerate()
+        {
+            tracing::info!(
+                scope = "Article",
+                current = index + 1,
+                total,
+                article_id = %original.meta.id,
+                action = update.action(),
+                "translation item started"
+            );
+            let path = stage.join(original.meta.markdown_path(target)?);
+            match update {
+                UpdatePlan::Reuse => {
                     let mut preserved = current.unwrap();
-                    if let Some(p) = &mut preserved.meta.translation {
-                        p.stale = true;
+                    if let Some(provenance) = &mut preserved.meta.translation
+                        && provenance.stale
+                    {
+                        provenance.stale = false;
+                        fs::write(path, preserved.encode()?)?;
                     }
-                    fs::write(&path, preserved.encode()?)?;
-                    report
-                        .protected
-                        .push(ProtectedContent::Article(original.meta.id.clone()));
-                    if update == UpdatePlan::ReuseCandidate {
-                        report.reused += 1;
-                        continue;
-                    }
+                    report.reused += 1;
                 }
-                let checked = ArticleTranslator {
-                    translator,
-                    fragments: &fragments,
-                    original: &original,
-                };
-                let result = cache::cached_response(&request, &checked, cache_root)?;
-                let mut translated = fragments.apply(&original, &result)?;
-                translated.meta.locale = Locale::En;
-                translated.meta.translation = Some(TranslationProvenance {
-                    input_hash: input,
-                    generated_hash: text_hash(&translated)?,
-                    stale: false,
-                });
-                let destination = if update.protects_current() {
-                    stage.join(format!(".export-candidates/{}.md", original.meta.id))
-                } else {
-                    path
-                };
-                fs::create_dir_all(destination.parent().unwrap())?;
-                fs::write(destination, translated.encode()?)?;
-                report.generated += 1;
+                UpdatePlan::Generate
+                | UpdatePlan::GenerateCandidate
+                | UpdatePlan::ReuseCandidate => {
+                    if update.protects_current() {
+                        let mut preserved = current.unwrap();
+                        if let Some(p) = &mut preserved.meta.translation {
+                            p.stale = true;
+                        }
+                        fs::write(&path, preserved.encode()?)?;
+                        report
+                            .protected
+                            .push(ProtectedContent::Article(original.meta.id.clone()));
+                        if update == UpdatePlan::ReuseCandidate {
+                            report.reused += 1;
+                            continue;
+                        }
+                    }
+                    let checked = ArticleTranslator {
+                        translator,
+                        fragments: &fragments,
+                        original,
+                    };
+                    let result = cache::cached_response(&request, &checked, cache_root)?;
+                    let mut translated = fragments.apply(original, &result)?;
+                    translated.meta.locale = target;
+                    translated.meta.translation = Some(TranslationProvenance {
+                        input_hash: input,
+                        generated_hash: text_hash(&translated)?,
+                        stale: false,
+                    });
+                    let destination = if update.protects_current() {
+                        candidate_path(stage, target, &original.meta.id)
+                    } else {
+                        path
+                    };
+                    fs::create_dir_all(destination.parent().unwrap())?;
+                    fs::write(destination, translated.encode()?)?;
+                    report.generated += 1;
+                }
             }
         }
+        tracing::info!(scope = "Articles", total, "translation phase completed");
+        let tags = tags.apply(catalog, cache_root, translator)?;
+        report.generated += tags.generated;
+        report.reused += tags.reused;
+        report
+            .protected
+            .extend(tags.protected.into_iter().map(ProtectedContent::Tag));
+        Ok(report)
     }
-    tracing::info!(scope = "Articles", total, "translation phase completed");
-    let tags = tags.apply(cache_root, translator)?;
-    report.generated += tags.generated;
-    report.reused += tags.reused;
-    report
-        .protected
-        .extend(tags.protected.into_iter().map(ProtectedContent::Tag));
-    cache::copy_cache(cache_root, stage)?;
-    Ok(report)
 }
 
 // Validate reconstruction before a fresh response can enter the reusable cache.
@@ -201,7 +207,7 @@ pub(crate) fn accept_article_candidate(
         .into_iter()
         .find(|doc| doc.meta.id == *id)
         .ok_or_else(|| ExportError::translation_conflict("candidate source is missing"))?;
-    let candidate_path = stage.join(format!(".export-candidates/{id}.md"));
+    let candidate_path = candidate_path(stage, settings.target, id);
     let mut candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
     let fragments = Fragments::extract(&original);
     let request = article_request(fragments.texts, settings);
@@ -211,7 +217,7 @@ pub(crate) fn accept_article_candidate(
         .as_ref()
         .ok_or_else(|| ExportError::translation_conflict("candidate has no provenance"))?;
     if candidate.meta.id != *id
-        || candidate.meta.locale != Locale::En
+        || candidate.meta.locale != settings.target
         || provenance.stale
         || provenance.input_hash != content_input(&request, &original)?
     {
@@ -225,6 +231,21 @@ pub(crate) fn accept_article_candidate(
     output::write_document(stage, &candidate)?;
     fs::remove_file(candidate_path)?;
     Ok(())
+}
+
+fn candidate_path(stage: &Path, target: Locale, id: &Slug) -> PathBuf {
+    candidate_dir(stage, target).join(format!("{id}.md"))
+}
+
+fn article_decision(input: &Sha256Digest, document: Option<&Document>) -> Result<Decision> {
+    let hash = document.map(text_hash).transpose()?;
+    Ok(decide(
+        input.as_str(),
+        hash.as_ref().map(Sha256Digest::as_str),
+        document
+            .and_then(|doc| doc.meta.translation.as_ref())
+            .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
+    ))
 }
 
 fn content_input(request: &TranslationRequest, original: &Document) -> Result<Sha256Digest> {

@@ -1,4 +1,4 @@
-use blog_domain::{LabelCatalog, LabelEntry};
+use blog_domain::{LabelCatalog, LabelEntry, Locale};
 use blog_export::{ProtectedContent, Texts, TranslationRequest, TranslationSettings, Translator};
 use rstest::rstest;
 use std::{cell::Cell, fs};
@@ -7,15 +7,21 @@ struct Fake(Cell<usize>);
 impl Translator for Fake {
     fn translate(&self, request: &TranslationRequest) -> blog_export::Result<Texts> {
         self.0.set(self.0.get() + 1);
+        let language = if request.target == Locale::En {
+            "EN"
+        } else {
+            request.target.as_str()
+        };
         Ok(request
             .texts
             .iter()
-            .map(|(k, v)| (k.clone(), format!("EN {v}")))
+            .map(|(k, v)| (k.clone(), format!("{language} {v}")))
             .collect())
     }
 }
 fn settings() -> TranslationSettings {
     TranslationSettings {
+        target: blog_domain::Locale::En,
         model: "fake".into(),
         instruction: "translate".into(),
         glossary: Texts::new(),
@@ -24,6 +30,54 @@ fn settings() -> TranslationSettings {
 fn save(path: &std::path::Path, catalog: &LabelCatalog) {
     fs::write(path, serde_json::to_vec_pretty(catalog).unwrap()).unwrap();
 }
+#[test]
+fn adding_chinese_keeps_english_history_and_accepts_only_the_selected_candidate() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("ui.json");
+    // The English request fingerprint predates the target field.
+    let existing = serde_json::json!({"schema_version": 1, "entries": {"label": {
+        "source": "原文", "context": "button", "translations": {"en": {
+            "value": "Reviewed English", "stale": false, "provenance": {
+                "input_hash": "dffa68cd405dde0f6906a24e3df7e09590d49fe9ac24b49347078cac36070dc7",
+                "generated_hash": "a".repeat(64)
+            }
+        }}
+    }}});
+    fs::write(&path, existing.to_string()).unwrap();
+    let targets = [
+        settings(),
+        TranslationSettings {
+            target: Locale::ZhHans,
+            ..settings()
+        },
+    ];
+    let fake = Fake(Cell::new(0));
+    let translate = || blog_export::translate_catalog_targets(&path, &fake, &targets).unwrap();
+    let read = || serde_json::from_slice::<LabelCatalog>(&fs::read(&path).unwrap()).unwrap();
+    let reports = translate();
+    assert_eq!(
+        (reports[0].reused, reports[1].generated, fake.0.get()),
+        (1, 1, 1)
+    );
+    let mut catalog = read();
+    let entry = catalog.entries.get_mut("label").unwrap();
+    assert_eq!(entry.value(Locale::En), "Reviewed English");
+    assert_eq!(entry.value(Locale::ZhHans), "zh-hans 原文");
+    entry.translations.get_mut(&Locale::ZhHans).unwrap().value = "手动译文".into();
+    entry.source = "更新".into();
+    save(&path, &catalog);
+    for report in translate() {
+        assert_eq!(report.protected, ["label"]);
+    }
+    blog_export::accept_catalog_candidate(&path, "label", &targets[1]).unwrap();
+    let entry = &read().entries["label"];
+    assert_eq!(entry.value(Locale::ZhHans), "zh-hans 更新");
+    assert_eq!(entry.translations[&Locale::En].value, "Reviewed English");
+    assert!(entry.translations[&Locale::En].stale);
+    blog_export::accept_catalog_candidate(&path, "label", &targets[0]).unwrap();
+    assert_eq!(read().entries["label"].value(Locale::En), "EN 更新");
+}
+
 #[test]
 fn catalogs_reuse_each_entry_and_protect_manual_edits_until_candidate_acceptance() {
     let tmp = tempfile::tempdir().unwrap();
@@ -34,7 +88,7 @@ fn catalogs_reuse_each_entry_and_protect_manual_edits_until_candidate_acceptance
         LabelEntry {
             source: "{count}件".into(),
             context: "article count".into(),
-            translation: None,
+            translations: Default::default(),
         },
     );
     save(&path, &catalog);
@@ -47,8 +101,8 @@ fn catalogs_reuse_each_entry_and_protect_manual_edits_until_candidate_acceptance
         .entries
         .get_mut("count")
         .unwrap()
-        .translation
-        .as_mut()
+        .translations
+        .get_mut(&Locale::En)
         .unwrap()
         .value = "{count} manually edited".into();
     catalog.entries.insert(
@@ -56,7 +110,7 @@ fn catalogs_reuse_each_entry_and_protect_manual_edits_until_candidate_acceptance
         LabelEntry {
             source: "新規".into(),
             context: "button".into(),
-            translation: None,
+            translations: Default::default(),
         },
     );
     save(&path, &catalog);
@@ -74,16 +128,16 @@ fn catalogs_reuse_each_entry_and_protect_manual_edits_until_candidate_acceptance
     let protected: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     assert_eq!(
         protected.entries["count"]
-            .translation
-            .as_ref()
+            .translations
+            .get(&Locale::En)
             .unwrap()
             .value,
         "{count} manually edited"
     );
     assert!(
         protected.entries["count"]
-            .translation
-            .as_ref()
+            .translations
+            .get(&Locale::En)
             .unwrap()
             .stale
     );
@@ -108,7 +162,7 @@ fn invalid_placeholder_response_leaves_catalog_unchanged() {
             LabelEntry {
                 source: "{count}件".into(),
                 context: "count".into(),
-                translation: None,
+                translations: Default::default(),
             },
         )]
         .into(),
@@ -135,7 +189,7 @@ fn changed_source_placeholders_regenerate_or_protect_existing_translations() {
                 LabelEntry {
                     source: "{count}件".into(),
                     context: "article count".into(),
-                    translation: None,
+                    translations: Default::default(),
                 },
             );
             save(&path, &catalog);
@@ -143,7 +197,7 @@ fn changed_source_placeholders_regenerate_or_protect_existing_translations() {
             blog_export::translate_catalog(&path, &fake, &settings()).unwrap();
             catalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
             let entry = catalog.entries.get_mut("count").unwrap();
-            let translation = entry.translation.as_mut().unwrap();
+            let translation = entry.translations.get_mut(&Locale::En).unwrap();
             if mode == "manual" {
                 translation.value = "{count} custom".into();
             }
@@ -167,7 +221,10 @@ fn changed_source_placeholders_regenerate_or_protect_existing_translations() {
                 assert_eq!(report.protected, ["count"]);
                 assert_eq!(report.generated, 1);
                 assert_eq!(fake.0.get(), 2);
-                let translation = catalog.entries["count"].translation.as_ref().unwrap();
+                let translation = catalog.entries["count"]
+                    .translations
+                    .get(&Locale::En)
+                    .unwrap();
                 assert_eq!(translation.value, previous);
                 assert!(translation.stale);
                 assert_eq!(
@@ -205,7 +262,7 @@ fn tags_are_translated_once_per_id_and_removed_with_unpublished_sources() {
         "EN 統計"
     );
     let tag = catalog.entries.get_mut("統計").unwrap();
-    tag.translation.as_mut().unwrap().value = "Manual label".into();
+    tag.translations.get_mut(&Locale::En).unwrap().value = "Manual label".into();
     tag.context = "Updated tag context".into();
     save(&path, &catalog);
     let report =
@@ -238,7 +295,7 @@ fn blocked_tag_candidates_stop_before_translating_any_article() {
     blog_export::export_content(source.path(), output.path(), &fake, &settings()).unwrap();
     let mut catalog: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     let entry = catalog.entries.get_mut("統計").unwrap();
-    entry.translation.as_mut().unwrap().value = "Manual statistics".into();
+    entry.translations.get_mut(&Locale::En).unwrap().value = "Manual statistics".into();
     entry.context = "second context".into();
     save(&path, &catalog);
     blog_export::translate_catalog(&path, &fake, &settings()).unwrap();
@@ -289,11 +346,15 @@ fn authored_labels_without_generation_history_are_preserved_and_reported() {
             LabelEntry {
                 source: "実行".into(),
                 context: "button".into(),
-                translation: Some(blog_domain::LabelTranslation {
-                    value: "Run".into(),
-                    provenance: None,
-                    stale: false,
-                }),
+                translations: [(
+                    Locale::En,
+                    blog_domain::LabelTranslation {
+                        value: "Run".into(),
+                        provenance: None,
+                        stale: false,
+                    },
+                )]
+                .into(),
             },
         )]
         .into(),
@@ -338,7 +399,7 @@ fn filename_only_catalog_updates_and_accepts_without_replacing_working_directory
             LabelEntry {
                 source: "実行".into(),
                 context: "button".into(),
-                translation: None,
+                translations: Default::default(),
             },
         )]
         .into(),
@@ -349,7 +410,7 @@ fn filename_only_catalog_updates_and_accepts_without_replacing_working_directory
     blog_export::translate_catalog(path, &fake, &settings()).unwrap();
     catalog = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
     let entry = catalog.entries.get_mut("button").unwrap();
-    entry.translation.as_mut().unwrap().value = "Manual translation".into();
+    entry.translations.get_mut(&Locale::En).unwrap().value = "Manual translation".into();
     entry.context = "updated button context".into();
     save(path, &catalog);
     blog_export::translate_catalog(path, &fake, &settings()).unwrap();
@@ -395,7 +456,7 @@ fn reviewed_catalog_candidates_survive_retries_and_reject_overwrites() {
         LabelEntry {
             source: "表示".into(),
             context: "initial context".into(),
-            translation: None,
+            translations: Default::default(),
         },
     );
     save(&path, &catalog);
@@ -405,8 +466,8 @@ fn reviewed_catalog_candidates_survive_retries_and_reject_overwrites() {
         .entries
         .get_mut("label")
         .unwrap()
-        .translation
-        .as_mut()
+        .translations
+        .get_mut(&Locale::En)
         .unwrap()
         .value = "Manual".into();
     catalog.entries.get_mut("label").unwrap().context = "new context".into();
@@ -433,7 +494,7 @@ fn reviewed_catalog_candidates_survive_retries_and_reject_overwrites() {
         LabelEntry {
             source: "先行項目".into(),
             context: "must not translate before candidate checks".into(),
-            translation: None,
+            translations: Default::default(),
         },
     );
     save(&path, &catalog);
@@ -448,11 +509,11 @@ fn reviewed_catalog_candidates_survive_retries_and_reject_overwrites() {
     assert_eq!(fake.0.get(), 2);
     for reset in [false, true] {
         let mut changed = catalog.clone();
-        let translation = &mut changed.entries.get_mut("label").unwrap().translation;
+        let translation = &mut changed.entries.get_mut("label").unwrap().translations;
         if reset {
-            translation.as_mut().unwrap().value = "EN 表示".into();
+            translation.get_mut(&Locale::En).unwrap().value = "EN 表示".into();
         } else {
-            *translation = None;
+            translation.remove(&Locale::En);
         }
         save(&path, &changed);
         let before_generation = fs::read(&path).unwrap();
@@ -485,7 +546,7 @@ fn catalog_directory_alias_uses_the_real_public_tree_lock_for_update_and_accepta
         LabelEntry {
             source: "タグ".into(),
             context: "tag label".into(),
-            translation: None,
+            translations: Default::default(),
         },
     );
     save(&path, &catalog);
@@ -493,7 +554,7 @@ fn catalog_directory_alias_uses_the_real_public_tree_lock_for_update_and_accepta
     blog_export::translate_catalog(&path, &fake, &settings()).unwrap();
     catalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     let entry = catalog.entries.get_mut("tag").unwrap();
-    entry.translation.as_mut().unwrap().value = "Manual tag".into();
+    entry.translations.get_mut(&Locale::En).unwrap().value = "Manual tag".into();
     entry.context = "new tag context".into();
     save(&path, &catalog);
     blog_export::translate_catalog(&path, &fake, &settings()).unwrap();
@@ -509,7 +570,11 @@ fn catalog_directory_alias_uses_the_real_public_tree_lock_for_update_and_accepta
     blog_export::accept_catalog_candidate(&linked_path, "tag", &settings()).unwrap();
     let accepted: LabelCatalog = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     assert_eq!(
-        accepted.entries["tag"].translation.as_ref().unwrap().value,
+        accepted.entries["tag"]
+            .translations
+            .get(&Locale::En)
+            .unwrap()
+            .value,
         "EN タグ"
     );
     assert_eq!(fake.0.get(), 2);
@@ -530,7 +595,7 @@ fn accepting_catalog_candidates_checks_identity_source_context_and_freshness(#[c
             LabelEntry {
                 source: "原文".into(),
                 context: "button".into(),
-                translation: None,
+                translations: Default::default(),
             },
         )]
         .into(),
@@ -544,8 +609,8 @@ fn accepting_catalog_candidates_checks_identity_source_context_and_freshness(#[c
         .entries
         .get_mut("label")
         .unwrap()
-        .translation
-        .as_mut()
+        .translations
+        .get_mut(&Locale::En)
         .unwrap()
         .value = "Manual label".into();
     catalog.entries.get_mut("label").unwrap().source = "更新した原文".into();

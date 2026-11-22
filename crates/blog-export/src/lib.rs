@@ -10,7 +10,8 @@ mod vault;
 
 pub use error::{ExportError, Result};
 pub use operation::{
-    accept_article_candidate, accept_catalog_candidate, export_content, translate_catalog,
+    accept_article_candidate, accept_catalog_candidate, export_content, export_translations,
+    translate_catalog, translate_catalog_targets,
 };
 pub use translation::{
     CodexTranslator, ProtectedContent, Texts, TranslationReport, TranslationRequest,

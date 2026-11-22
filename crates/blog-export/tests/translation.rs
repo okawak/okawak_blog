@@ -33,16 +33,22 @@ impl Translator for Fake {
                 || v.contains("HTML_SECRET")
                 || v.contains("x^2"))
         );
+        let language = match request.target {
+            blog_domain::Locale::En => "English",
+            blog_domain::Locale::ZhHans => "简体中文",
+            blog_domain::Locale::Ja => panic!("Japanese is the source"),
+        };
         Ok(request
             .texts
             .iter()
-            .map(|(k, v)| (k.clone(), format!("English {v}")))
+            .map(|(k, v)| (k.clone(), format!("{language} {v}")))
             .collect())
     }
 }
 
 fn settings() -> TranslationSettings {
     TranslationSettings {
+        target: blog_domain::Locale::En,
         model: "fake".into(),
         instruction: "test".into(),
         glossary: Texts::new(),
@@ -82,6 +88,53 @@ fn external_image_urls_are_preserved_in_both_locales_without_exporting_assets() 
         );
     }
     assert!(!output.path().join("assets").exists());
+}
+
+#[test]
+fn translation_targets_keep_separate_cache_entries_and_review_candidates() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    write_note(source.path(), "本文");
+    let targets = [
+        settings(),
+        TranslationSettings {
+            target: blog_domain::Locale::ZhHans,
+            ..settings()
+        },
+    ];
+    let fail_second = Fake {
+        calls: Cell::new(0),
+        fail_after: 1,
+    };
+    assert!(
+        blog_export::export_translations(source.path(), output.path(), &fail_second, &targets)
+            .is_err()
+    );
+    assert!(!output.path().join("en").exists());
+    let fake = Fake::new();
+    blog_export::export_translations(source.path(), output.path(), &fake, &targets).unwrap();
+    assert_eq!(
+        fake.calls.get(),
+        1,
+        "retry reuses only the successful English request"
+    );
+    let en = english(output.path());
+    let filename = en.file_name().unwrap();
+    let zh = output.path().join("zh-hans/tech").join(filename);
+    for (path, language) in [(&en, "English"), (&zh, "简体中文")] {
+        let text = fs::read_to_string(path).unwrap();
+        assert!(text.contains(&format!("{language} 記事")));
+        fs::write(path, text.replace(&format!("{language} 記事"), "Reviewed")).unwrap();
+    }
+    write_note(source.path(), "更新");
+    blog_export::export_translations(source.path(), output.path(), &fake, &targets).unwrap();
+    let candidates = output.path().join(".export-candidates");
+    let id = en.file_stem().unwrap().to_str().unwrap().parse().unwrap();
+    blog_export::accept_article_candidate(output.path(), &id, &targets[1]).unwrap();
+    assert!(candidates.join(filename).is_file());
+    assert!(!candidates.join("zh-hans").join(filename).exists());
+    assert!(fs::read_to_string(en).unwrap().contains("Reviewed"));
+    assert!(fs::read_to_string(zh).unwrap().contains("简体中文 更新"));
 }
 
 #[test]
@@ -686,6 +739,7 @@ done
     };
     let result = translator
         .translate(&TranslationRequest {
+            target: blog_domain::Locale::En,
             texts: Texts::from([("title".into(), "記事".into())]),
             context: "title".into(),
             model: "fake".into(),
@@ -734,6 +788,7 @@ fn codex_failure_is_typed_without_exposing_diagnostics() {
 
     let error = translator
         .translate(&TranslationRequest {
+            target: blog_domain::Locale::En,
             texts: Texts::from([("title".into(), "非公開の原文".into())]),
             context: "title".into(),
             model: "fake".into(),
