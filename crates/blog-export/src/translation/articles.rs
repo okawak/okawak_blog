@@ -140,7 +140,7 @@ impl ContentPlan<'_> {
                 action = update.action(),
                 "translation item started"
             );
-            let path = stage.join(original.meta.markdown_path(target));
+            let path = stage.join(original.meta.markdown_path(target)?);
             match update {
                 UpdatePlan::Reuse => {
                     let mut preserved = current.unwrap();
