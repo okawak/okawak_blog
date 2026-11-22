@@ -558,7 +558,8 @@ impl PublishFixture {
             })
             .filter(|m| m.validate().is_ok());
         let path = meta
-            .map(|m| self.content_dir.join(m.markdown_path(m.locale)))
+            .and_then(|m| m.markdown_path(m.locale).ok())
+            .map(|path| self.content_dir.join(path))
             .unwrap_or_else(|| self.content_dir.join("ja").join(format!("{id}.md")));
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, content).unwrap();

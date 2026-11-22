@@ -403,7 +403,10 @@ fn accepting_a_candidate_refreshes_management_metadata_and_keeps_reviewed_prose(
     expected.title = "Reviewed candidate title".parse().unwrap();
     expected.translation = actual.translation.clone();
     assert_eq!(actual, expected);
-    assert_eq!(actual.path(actual.locale), format!("/en/daily/{id}"));
+    assert_eq!(
+        actual.path(actual.locale).unwrap(),
+        format!("/en/daily/{id}")
+    );
     assert!(
         fs::read_to_string(&path)
             .unwrap()

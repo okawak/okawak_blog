@@ -114,7 +114,7 @@ pub(crate) fn translate_stage(
             action = update.action(),
             "translation item started"
         );
-        let path = stage.join(original.meta.markdown_path(Locale::En));
+        let path = stage.join(original.meta.markdown_path(Locale::En)?);
         match update {
             UpdatePlan::Reuse => {
                 let mut preserved = current.unwrap();

@@ -19,7 +19,7 @@ pub(crate) fn read_locale(root: &Path, locale: blog_domain::Locale) -> Result<Ve
         .filter(|p| p.extension().is_some_and(|e| e == "md"))
         .map(|p| {
             let doc = Document::parse(&fs::read_to_string(&p)?)?;
-            if doc.meta.locale != locale || p != root.join(doc.meta.markdown_path(locale)) {
+            if doc.meta.locale != locale || p != root.join(doc.meta.markdown_path(locale)?) {
                 return Err(ExportError::invalid_input(
                     "public filename/locale must match its metadata",
                 ));
@@ -37,7 +37,7 @@ pub(crate) fn read_document(
     locale: Locale,
     source: &PublicContentMeta,
 ) -> Result<Option<Document>> {
-    let path = root.join(source.markdown_path(locale));
+    let path = root.join(source.markdown_path(locale)?);
     match fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.is_file() => {}
         Ok(_) => {
@@ -51,7 +51,7 @@ pub(crate) fn read_document(
     let document = Document::parse(&fs::read_to_string(&path)?)?;
     if document.meta.locale != locale
         || document.meta.id != source.id
-        || path != root.join(document.meta.markdown_path(locale))
+        || path != root.join(document.meta.markdown_path(locale)?)
     {
         return Err(ExportError::invalid_input(
             "public filename/locale must match its metadata",
@@ -101,10 +101,10 @@ fn reconcile_path<'a>(
     sources: &HashMap<&blog_domain::Slug, &'a Document>,
 ) -> Result<Option<&'a Document>> {
     let locale = old.meta.locale;
-    let path = stage.join(old.meta.markdown_path(locale));
+    let path = stage.join(old.meta.markdown_path(locale)?);
     let source = sources.get(&old.meta.id).copied();
     if let Some(doc) = source {
-        if path != stage.join(doc.meta.markdown_path(locale)) {
+        if path != stage.join(doc.meta.markdown_path(locale)?) {
             fs::remove_file(path)?;
         }
     } else {
@@ -120,7 +120,7 @@ fn reconcile_path<'a>(
 }
 
 pub(crate) fn write_document(root: &Path, doc: &Document) -> Result<()> {
-    let path = root.join(doc.meta.markdown_path(doc.meta.locale));
+    let path = root.join(doc.meta.markdown_path(doc.meta.locale)?);
     fs::create_dir_all(path.parent().unwrap())?;
     fs::write(path, doc.encode()?)?;
     Ok(())
