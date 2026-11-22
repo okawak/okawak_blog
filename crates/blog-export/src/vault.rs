@@ -84,6 +84,7 @@ fn extract(root: &Path, previous: &[Document]) -> Result<Vec<VaultNote>> {
             continue;
         }
         // Value conversion rejects unquoted numeric/bool strings accepted by from_str.
+        reject_hidden_comments(body)?;
         let fm: Frontmatter =
             yaml_serde::from_value(fields).or_else(|_| yaml_serde::from_str(yaml))?;
         let relative = path.strip_prefix(root)?;
@@ -139,6 +140,32 @@ fn extract(root: &Path, previous: &[Document]) -> Result<Vec<VaultNote>> {
         });
     }
     Ok(notes)
+}
+
+/// A comment marker in prose makes the note ineligible for export. Code examples
+/// can quote the syntax without accidentally authorizing hidden prose.
+fn reject_hidden_comments(body: &str) -> Result<()> {
+    if !body.contains("%%") {
+        return Ok(());
+    }
+    use pulldown_cmark::{Event, Parser, Tag};
+    let mut cursor = 0;
+    for (event, range) in Parser::new_ext(body, content::options()).into_offset_iter() {
+        if matches!(event, Event::Code(_) | Event::Start(Tag::CodeBlock(_))) {
+            if body[cursor..range.start].contains("%%") {
+                return Err(ExportError::invalid_input(
+                    "remove Obsidian comments before export",
+                ));
+            }
+            cursor = range.end;
+        }
+    }
+    if body[cursor..].contains("%%") {
+        return Err(ExportError::invalid_input(
+            "remove Obsidian comments before export",
+        ));
+    }
+    Ok(())
 }
 
 fn resolve_id(

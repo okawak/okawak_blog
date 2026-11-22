@@ -1966,6 +1966,32 @@ async fn article_returns_internal_server_error_for_invalid_artifacts() {
 }
 
 #[tokio::test]
+async fn unlisted_article_is_rejected_before_reading_its_object() {
+    let root = tempdir().unwrap();
+    std::fs::write(
+        root.path().join("locales.json"),
+        r#"{"schema_version":1,"routes":{"/":["ja"]}}"#,
+    )
+    .unwrap();
+    std::fs::create_dir_all(root.path().join("articles/tech")).unwrap();
+    std::fs::write(
+        root.path().join("articles/tech/unlisted.json"),
+        "invalid JSON",
+    )
+    .unwrap();
+    let router = create_router(Arc::new(LocalArtifactReader::new(root.path())), false);
+    let result = response(
+        &router,
+        Request::builder()
+            .uri("/tech/unlisted")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(result.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn missing_article_returns_not_found_without_an_index() {
     let empty_dir = tempdir().unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(empty_dir.path())), false);
@@ -2086,8 +2112,8 @@ async fn about_shell_initializes_content_enhancements() {
     .await;
 
     assert_eq!(response.status, StatusCode::OK);
-    assert!(response.body.contains("katex@0.16.22/dist/katex.min.css"));
-    assert!(response.body.contains("katex@0.16.22/dist/katex.min.js"));
+    assert!(response.body.contains("katex@0.19.1/dist/katex.min.css"));
+    assert!(response.body.contains("katex@0.19.1/dist/katex.min.js"));
     assert!(response.body.contains("window.okawakRenderMath"));
     assert!(response.body.contains("window.okawakScheduleMathRender"));
     assert!(
