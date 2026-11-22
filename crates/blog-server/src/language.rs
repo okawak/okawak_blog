@@ -22,12 +22,11 @@ use crate::{
 
 const COOKIE: &str = "okawak_locale";
 
-pub(crate) fn is_negotiated_request(uri: &Uri) -> bool {
-    // Preserve the router's canonicalization (and its query) before selecting a translation.
-    uri.path() == "/" || (!uri.path().ends_with('/') && explicit_choice(uri).is_some())
-}
-
-fn explicit_choice(uri: &Uri) -> Option<Locale> {
+pub(crate) fn explicit_choice(uri: &Uri) -> Option<Locale> {
+    // Let the router canonicalize a trailing slash before applying the language choice.
+    if uri.path() != "/" && uri.path().ends_with('/') {
+        return None;
+    }
     let mut choices = uri
         .query()?
         .split('&')
@@ -37,14 +36,15 @@ fn explicit_choice(uri: &Uri) -> Option<Locale> {
 }
 
 pub(crate) fn legacy_location(uri: &Uri) -> Option<String> {
-    let path = uri.path().trim_end_matches('/');
-    let route = path.strip_prefix('/')?;
-    let (first, article) = route
-        .split_once('/')
-        .map_or((route, None), |(c, s)| (c, Some(s)));
-    let first = percent_encoding::percent_decode_str(first)
+    let mut segments = uri
+        .path()
+        .trim_end_matches('/')
+        .strip_prefix('/')?
+        .splitn(2, '/');
+    let first = percent_encoding::percent_decode_str(segments.next()?)
         .decode_utf8()
         .ok()?;
+    let article = segments.next();
     let route = if first == "about" && article.is_none() {
         "/about".to_owned()
     } else {
@@ -107,10 +107,6 @@ fn destination(locales: &SiteLocalesDocument, path: &str, locale: Locale) -> Opt
         })
 }
 
-pub(crate) fn choice_href(path: &str, locale: Locale) -> String {
-    format!("{path}?lang={locale}")
-}
-
 pub(crate) fn vary_home(response: &mut Response) {
     response.headers_mut().insert(
         header::VARY,
@@ -122,9 +118,8 @@ pub(crate) fn vary_home(response: &mut Response) {
     );
 }
 
-pub(crate) async fn redirect(cx: &Cx) -> Option<Response> {
+pub(crate) async fn redirect(cx: &Cx, explicit: Option<Locale>) -> Option<Response> {
     let uri = request::uri(cx);
-    let explicit = explicit_choice(uri);
     let locales = match crate::app::page_loader(cx).load_locales().await {
         Ok(locales) => locales,
         Err(error) => {
@@ -209,7 +204,7 @@ pub(crate) async fn language_switcher(
                         attrs: attributes! {
                             (link_attrs(
                                 cx,
-                                choice_href(&target, other),
+                                format!("{target}?lang={other}"),
                                 PrefetchMode::Never,
                             ))
                             lang=(other.as_str())

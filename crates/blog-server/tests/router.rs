@@ -518,6 +518,8 @@ async fn old_japanese_urls_redirect_permanently_with_the_original_query() {
     let router = create_router(fixture_reader(), false);
     for (path, canonical) in [
         ("/about", "/ja/about"),
+        ("/%61bout/", "/ja/about"),
+        ("/tech/e2e%2Darticle%2Ehtml", "/ja/tech/e2e-article"),
         ("/tech", "/ja/tech"),
         ("/T%45CH/e2e-article.html", "/ja/tech/e2e-article"),
         ("/tech/e2e-article/", "/ja/tech/e2e-article"),
