@@ -118,11 +118,12 @@ pub(crate) fn translate_stage(
         match update {
             UpdatePlan::Reuse => {
                 let mut preserved = current.unwrap();
-                preserved.refresh_translation_metadata(&original);
-                if let Some(provenance) = &mut preserved.meta.translation {
+                if let Some(provenance) = &mut preserved.meta.translation
+                    && provenance.stale
+                {
                     provenance.stale = false;
+                    fs::write(path, preserved.encode()?)?;
                 }
-                fs::write(path, preserved.encode()?)?;
                 report.reused += 1;
             }
             UpdatePlan::Generate | UpdatePlan::GenerateCandidate | UpdatePlan::ReuseCandidate => {
@@ -209,9 +210,7 @@ pub(crate) fn accept_article_candidate(
         .translation
         .as_ref()
         .ok_or_else(|| ExportError::translation_conflict("candidate has no provenance"))?;
-    if original.meta.id != *id
-        || original.meta.locale != Locale::Ja
-        || candidate.meta.id != *id
+    if candidate.meta.id != *id
         || candidate.meta.locale != Locale::En
         || provenance.stale
         || provenance.input_hash != content_input(&request, &original)?
