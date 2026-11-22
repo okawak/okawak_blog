@@ -60,7 +60,7 @@ async fn release_snapshot_preserves_identity_localized_text_and_shared_binary_as
         artifact_prefix: "releases/one/site".into(),
         publisher_commit: "publisher".into(),
         source_commit: "source".into(),
-        content_commit: None,
+        content_commit: "a".repeat(40),
         generated_at: "2026-01-01T00:00:00Z".into(),
     };
     let locales = indoc! {r#"
@@ -79,12 +79,12 @@ async fn release_snapshot_preserves_identity_localized_text_and_shared_binary_as
         event("releases/one/site/locales.json", 200, locales),
         event("releases/one/site/locales.json", 200, locales),
         event(
-            "releases/one/site/en/tags.json",
+            "releases/one/site/en/_data/tags.json",
             200,
             r#"{"rust":"Rust articles"}"#,
         ),
         event(
-            "releases/one/site/en/articles/tech/intro.json",
+            "releases/one/site/en/tech/intro.json",
             200,
             article_json("<p>English 日本</p>"),
         ),
@@ -133,12 +133,12 @@ async fn release_snapshot_preserves_identity_localized_text_and_shared_binary_as
 }
 
 #[tokio::test]
-async fn missing_pointer_and_optional_objects_keep_legacy_japanese_behavior() {
+async fn direct_prefix_snapshot_reads_optional_objects() {
     let name = ContentAssetName::new(format!("{}.png", "b".repeat(64))).unwrap();
     let (reader, transport) = reader(vec![
         missing("current.json"),
         missing("locales.json"),
-        missing("tags.json"),
+        missing("ja/_data/tags.json"),
         missing(&format!("content-assets/{}", name.as_str())),
         missing("locales.json"),
     ]);
@@ -160,7 +160,7 @@ async fn missing_pointer_and_optional_objects_keep_legacy_japanese_behavior() {
 #[case::access_denied(403, "<Error><Code>AccessDenied</Code></Error>")]
 #[case::malformed_json(200, "invalid json")]
 #[tokio::test]
-async fn pointer_errors_do_not_fall_back_to_legacy_storage(
+async fn pointer_errors_prevent_direct_prefix_reads(
     #[case] status: u16,
     #[case] body: &'static str,
 ) {
@@ -171,7 +171,7 @@ async fn pointer_errors_do_not_fall_back_to_legacy_storage(
 
 #[rstest]
 #[case::locales("locales.json".into())]
-#[case::tags("tags.json".into())]
+#[case::tags("ja/_data/tags.json".into())]
 #[case::asset(format!("content-assets/{}.png", "c".repeat(64)))]
 #[tokio::test]
 async fn optional_objects_propagate_access_errors(#[case] key: String) {
@@ -183,7 +183,7 @@ async fn optional_objects_propagate_access_errors(#[case] key: String) {
     let snapshot = reader.snapshot().await.unwrap();
     let failed = match key.as_str() {
         "locales.json" => snapshot.read_locales().await.is_err(),
-        "tags.json" => snapshot.read_tag_labels().await.is_err(),
+        "ja/_data/tags.json" => snapshot.read_tag_labels().await.is_err(),
         _ => snapshot.read_content_asset(&name).await.is_err(),
     };
     assert!(failed, "{key}");
@@ -195,7 +195,10 @@ async fn optional_objects_propagate_access_errors(#[case] key: String) {
 #[case::invalid_utf8(vec![255])]
 #[tokio::test]
 async fn optional_tags_propagate_decoding_errors(#[case] body: Vec<u8>) {
-    let (reader, transport) = reader(vec![missing("current.json"), event("tags.json", 200, body)]);
+    let (reader, transport) = reader(vec![
+        missing("current.json"),
+        event("ja/_data/tags.json", 200, body),
+    ]);
     assert!(
         reader
             .snapshot()
@@ -226,7 +229,7 @@ fn article_json(html: &str) -> String {
 async fn missing_article_json_does_not_request_index_or_html(#[case] body: &str) {
     let (reader, transport) = reader(vec![
         missing("current.json"),
-        event("articles/tech/intro.json", 404, body),
+        event("ja/tech/intro.json", 404, body),
     ]);
     let snapshot = reader.snapshot().await.unwrap();
     assert!(
@@ -249,7 +252,7 @@ async fn missing_article_json_does_not_request_index_or_html(#[case] body: &str)
 async fn article_errors_are_propagated(#[case] status: u16, #[case] body: String) {
     let (reader, transport) = reader(vec![
         missing("current.json"),
-        event("articles/tech/intro.json", status, body),
+        event("ja/tech/intro.json", status, body),
     ]);
     let snapshot = reader.snapshot().await.unwrap();
     assert!(

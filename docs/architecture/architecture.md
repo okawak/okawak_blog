@@ -137,36 +137,30 @@ content kindはarticle、category、page、homeの4種類である。articleはc
 
 ## Artifactとrelease
 
-publishは次のsite treeを生成する。既存URLとの互換性のため、日本語はroot、英語はen/に置く。
+blog-domainがページ種別と安定IDから公開ルートを決め、全言語に同じ保存規則を適用する。公開URLから先頭のスラッシュを外し、ページJSONは `.json` を付ける。トップだけは言語ディレクトリの `index` を使う。
 
 ~~~text
 site/
 ├── locales.json
 ├── content-assets/
-├── articles/
-│   ├── index.json
-│   └── <category>/<slug>.json
-├── categories/<category>.json
-├── pages/<page>.json
-├── home.json
-├── tags.json
-├── metadata/site.json
-└── en/
-    ├── articles/
-    ├── categories/
-    ├── pages/
-    ├── home.json
-    ├── tags.json
-    └── metadata/site.json
+└── <locale>/  # ja, en
+    ├── index.json
+    ├── about.json
+    ├── <category>.json
+    ├── <category>/<slug>.json
+    └── _data/
+        ├── articles.json
+        ├── site.json
+        └── tags.json
 ~~~
 
 locales.jsonは同じreleaseで実在するpathとlocaleの対応、content-assets/は言語間で共有するcontent hash付きassetを持つ。各言語のmetadataはその言語で配信する記事だけを集計する。
 
-記事のJSONは`ArticleArtifactDocument { summary, html }`であり、summaryは同じlocaleのarticles/index.jsonと一致する。publish前の検証で両者を照合する。local / S3 readerは指定category・slugと文書のidentityを検証する。記事JSONが存在しない場合は欠落、破損・権限エラーは失敗として返す。S3の欠落はSDKのNoSuchKeyまたはHTTP 404で判定し、エラーメッセージの文字列では判断しない。一覧や記事HTMLを代わりに読まない。保存形式はArticleArtifactDocumentに統一し、reader境界でidentity・メタデータ・本文を検証して既存のPublishableArticleへ変換する。cacheとSSRはこの検証済みmodelを使い、page builderで再検証しない。
+記事のJSONは`ArticleArtifactDocument { summary, html }`であり、summaryは同じlocaleの_data/articles.jsonと一致する。publish前の検証で両者を照合する。local / S3 readerは指定category・slugと文書のidentityを検証する。記事JSONが存在しない場合は欠落、破損・権限エラーは失敗として返す。S3の欠落はSDKのNoSuchKeyまたはHTTP 404で判定し、エラーメッセージの文字列では判断しない。一覧や記事HTMLを代わりに読まない。保存形式はArticleArtifactDocumentに統一し、reader境界でidentity・メタデータ・本文を検証して既存のPublishableArticleへ変換する。cacheとSSRはこの検証済みmodelを使い、page builderで再検証しない。
 
-home.jsonはhome fragmentがある場合だけ生成する。en/ subtreeも配信可能な英語contentがある場合だけ生成する。
+index.jsonはhome fragmentがある場合だけ生成する。翻訳先のsubtreeは、その言語で配信可能なcontentがある場合だけ生成する。
 
-日本語は記事1件以上、About、記事が属するcategory landingを必須とする。英語は翻訳履歴があり更新待ちでないcontentだけを採用し、landingがないcategoryの記事を掲載しない。英語Aboutは任意である。全言語の生成とpage document構築に成功した場合だけsiteを入れ替え、古いfileを残さない。
+日本語は記事1件以上、About、記事が属するcategory landingを必須とする。各翻訳先は翻訳履歴があり更新待ちでないcontentだけを採用し、landingがないcategoryの記事を掲載しない。翻訳版のAboutは任意である。全言語の生成とpage document構築に成功した場合だけsiteを入れ替え、古いfileを残さない。
 
 本番は次のimmutable release構造を使う。
 
@@ -178,7 +172,7 @@ releases/
     └── site/
 ~~~
 
-current.jsonとmanifest.jsonは同じversion付きpointer schemaを使い、release ID、artifact prefix、publisher / source / content commit、生成時刻を保持する。content_commitを持たない旧releaseと、source_commitがprivate vaultを示す旧値をreaderで受け入れるのは後方互換のためである。新releaseのsource / content commitは公開repositoryの同じcommitを示す。
+current.jsonとmanifest.jsonは同じversion付きpointer schemaを使い、release ID、artifact prefix、publisher / source / content commit、生成時刻を保持する。source / content commitは公開repositoryの同じcommitを示す。
 
 公開workflowはmainから手動実行し、次の順序を守る。
 

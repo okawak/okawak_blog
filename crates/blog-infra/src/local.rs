@@ -7,7 +7,8 @@ use async_trait::async_trait;
 use blog_domain::{
     ArticleArtifactDocument, ArticleIndexDocument, Category, CategoryArtifactDocument,
     ContentAssetName, HomeFragmentArtifactDocument, Locale, PageArtifactDocument, PageKey,
-    PublishableArticle, SiteLocalesDocument, SiteMetadataDocument, Slug,
+    PublishableArticle, SiteLocalesDocument, SiteMetadataDocument, Slug, build_article_path,
+    build_category_path, build_static_page_path,
 };
 
 use crate::{ArtifactReader, ArtifactSnapshot, DynArtifactSnapshot, Result};
@@ -31,7 +32,7 @@ impl LocalArtifactReader {
     }
 
     fn artifact_path(&self, relative: &str) -> PathBuf {
-        self.site_root.join(self.locale.artifact_key(relative))
+        self.site_root.join(relative)
     }
 
     async fn read_json<T>(&self, relative: &str) -> Result<T>
@@ -53,7 +54,7 @@ impl ArtifactReader for LocalArtifactReader {
 #[async_trait]
 impl ArtifactSnapshot for LocalArtifactReader {
     async fn localized(&self, locale: Locale) -> Result<Option<DynArtifactSnapshot>> {
-        if locale == Locale::En && self.read_locales().await?.path("/", locale).is_none() {
+        if locale != Locale::Ja && self.read_locales().await?.path("/", locale).is_none() {
             return Ok(None);
         }
         let mut localized = self.clone();
@@ -62,9 +63,7 @@ impl ArtifactSnapshot for LocalArtifactReader {
     }
 
     async fn read_locales(&self) -> Result<Arc<SiteLocalesDocument>> {
-        let mut root = self.clone();
-        root.locale = Locale::Ja;
-        match root.read_json::<SiteLocalesDocument>("locales.json").await {
+        match self.read_json::<SiteLocalesDocument>("locales.json").await {
             Ok(document) => {
                 document.validate()?;
                 Ok(Arc::new(document))
@@ -75,7 +74,7 @@ impl ArtifactSnapshot for LocalArtifactReader {
     }
 
     async fn read_tag_labels(&self) -> Result<Arc<blog_domain::TagLabels>> {
-        match self.read_json("tags.json").await {
+        match self.read_json(&self.locale.data_key("tags.json")).await {
             Ok(labels) => Ok(labels),
             Err(error) if error.is_not_found() => Ok(Default::default()),
             Err(error) => Err(error),
@@ -91,19 +90,23 @@ impl ArtifactSnapshot for LocalArtifactReader {
     }
 
     async fn read_article_index(&self) -> Result<Arc<ArticleIndexDocument>> {
-        self.read_json("articles/index.json").await
+        self.read_json(&self.locale.data_key("articles.json")).await
     }
 
     async fn read_category_document(
         &self,
         category: &Category,
     ) -> Result<Arc<CategoryArtifactDocument>> {
-        self.read_json(&format!("categories/{}.json", category.as_str()))
-            .await
+        self.read_json(
+            &self
+                .locale
+                .page_file(&build_category_path(category), "json"),
+        )
+        .await
     }
 
     async fn read_site_metadata(&self) -> Result<Arc<SiteMetadataDocument>> {
-        self.read_json("metadata/site.json").await
+        self.read_json(&self.locale.data_key("site.json")).await
     }
 
     async fn read_article(
@@ -111,7 +114,9 @@ impl ArtifactSnapshot for LocalArtifactReader {
         category: &Category,
         slug: &Slug,
     ) -> Result<Option<Arc<PublishableArticle>>> {
-        let path = format!("articles/{}/{}.json", category.as_str(), slug.as_str());
+        let path = self
+            .locale
+            .page_file(&build_article_path(category, slug), "json");
         let article = match self.read_json::<ArticleArtifactDocument>(&path).await {
             Ok(article) => article,
             Err(error) if error.is_not_found() => return Ok(None),
@@ -121,11 +126,11 @@ impl ArtifactSnapshot for LocalArtifactReader {
     }
 
     async fn read_home_fragment(&self) -> Result<Arc<HomeFragmentArtifactDocument>> {
-        self.read_json("home.json").await
+        self.read_json(&self.locale.page_file("/", "json")).await
     }
 
     async fn read_page_document(&self, page: &PageKey) -> Result<Arc<PageArtifactDocument>> {
-        self.read_json(&format!("pages/{}.json", page.as_str()))
+        self.read_json(&self.locale.page_file(&build_static_page_path(page), "json"))
             .await
     }
 }
@@ -140,13 +145,10 @@ mod tests {
     use super::*;
 
     fn write_fixture_site(root: &Path) {
-        fs::create_dir_all(root.join("articles")).unwrap();
-        fs::create_dir_all(root.join("categories")).unwrap();
-        fs::create_dir_all(root.join("metadata")).unwrap();
-        fs::create_dir_all(root.join("pages")).unwrap();
+        fs::create_dir_all(root.join("ja/_data")).unwrap();
 
         fs::write(
-            root.join("articles/index.json"),
+            root.join("ja/_data/articles.json"),
             serde_json::to_string_pretty(&ArticleIndexDocument {
                 articles: vec![ArticleSummaryDocument {
                     slug: "intro00000001".to_string(),
@@ -164,7 +166,7 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            root.join("categories/tech.json"),
+            root.join("ja/tech.json"),
             serde_json::to_string_pretty(&CategoryArtifactDocument {
                 category: "tech".to_string(),
                 title: "Tech".to_string(),
@@ -187,7 +189,7 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            root.join("metadata/site.json"),
+            root.join("ja/_data/site.json"),
             serde_json::to_string_pretty(&SiteMetadataDocument {
                 total_articles: 1,
                 categories: vec![CategoryMetadataDocument {
@@ -198,11 +200,12 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        fs::create_dir_all(root.join("articles/tech")).unwrap();
+        fs::create_dir_all(root.join("ja/tech")).unwrap();
         let index: ArticleIndexDocument =
-            serde_json::from_slice(&fs::read(root.join("articles/index.json")).unwrap()).unwrap();
+            serde_json::from_slice(&fs::read(root.join("ja/_data/articles.json")).unwrap())
+                .unwrap();
         fs::write(
-            root.join("articles/tech/intro00000001.json"),
+            root.join("ja/tech/intro00000001.json"),
             serde_json::to_vec(&ArticleArtifactDocument {
                 summary: index.articles.into_iter().next().unwrap(),
                 html: "<h1>Intro</h1>".into(),
@@ -211,7 +214,7 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            root.join("pages/about.json"),
+            root.join("ja/about.json"),
             serde_json::to_string_pretty(&PageArtifactDocument {
                 page: PageKey::new("about".to_string()).unwrap(),
                 title: "About".to_string(),
@@ -223,7 +226,7 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            root.join("home.json"),
+            root.join("ja/index.json"),
             serde_json::to_string_pretty(&HomeFragmentArtifactDocument {
                 title: "Home".to_string(),
                 description: Some("Home introduction".to_string()),

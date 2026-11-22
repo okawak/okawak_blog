@@ -11,7 +11,7 @@ mise run dev-local
 
 入力は `content/ja/<id>.md`、任意の `content/en/<id>.md` と参照asset。正確なfrontmatterは [公開Markdown契約](../../docs/content/public-markdown.md) を参照する。執筆用Markdownは先に [export](../blog-export/README.md) で抽出する。`is_completed`やWikiLinkを含むObsidian形式は直接受け付けない。
 
-日本語は既存の `site/articles/`、`site/categories/`、`site/pages/`、`site/home.json`、`site/metadata/site.json` を生成し、英語は同じ構造を `site/en/` に生成する。各言語の集計は、その言語で公開する記事の件数である。`site/locales.json` は配信可能なpathの言語対応表であり、参照画像だけを `site/content-assets/` に配置する。
+ページJSONは `site/<locale>/` 配下に保存する。トップは `index.json`、記事は `<category>/<id>.json`、索引とタグ辞書は `_data/` に配置する。各言語の集計は、その言語で公開する記事の件数である。`site/locales.json` は配信可能なpathの言語対応表であり、参照画像だけを `site/content-assets/` に配置する。
 
 日本語は記事1件以上・About・記事カテゴリのlandingを必須にする。英語は翻訳履歴があり更新待ちでない版だけを採用し、未翻訳landingのカテゴリの記事は掲載しない。英語Aboutは任意。`content:<id>#<anchor>` は英訳が配信対象なら `/en/...`、そうでなければ日本語URLへ解決する。未解決ID、未知のschema、identity不整合、未正規化参照はエラーにする。
 

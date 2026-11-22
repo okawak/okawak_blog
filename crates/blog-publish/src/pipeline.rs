@@ -83,10 +83,7 @@ pub async fn publish_with_bookmark_enricher(
             .collect();
         publish_locale(docs, &index, stage.path(), locale, Arc::clone(&enrich)).await?;
         std::fs::write(
-            stage
-                .path()
-                .join("site")
-                .join(locale.artifact_key("tags.json")),
+            stage.path().join("site").join(locale.data_key("tags.json")),
             serde_json::to_vec(&labels)?,
         )?;
     }

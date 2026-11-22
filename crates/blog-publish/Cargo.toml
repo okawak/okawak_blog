@@ -30,4 +30,5 @@ url.workspace = true
 yaml_serde.workspace = true
 
 [dev-dependencies]
+walkdir.workspace = true
 rstest.workspace = true

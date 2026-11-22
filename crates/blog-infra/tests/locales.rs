@@ -3,10 +3,14 @@ use blog_infra::{ArtifactReader, LocalArtifactReader};
 use std::fs;
 
 #[tokio::test]
-async fn locale_snapshots_read_separate_indexes_and_legacy_releases_remain_readable() {
+async fn locale_snapshots_read_separate_indexes_and_missing_locale_manifest_has_no_translations() {
     let temp = tempfile::TempDir::new().unwrap();
-    fs::create_dir_all(temp.path().join("articles")).unwrap();
-    fs::write(temp.path().join("articles/index.json"), "{\"articles\":[]}").unwrap();
+    fs::create_dir_all(temp.path().join("ja/_data")).unwrap();
+    fs::write(
+        temp.path().join("ja/_data/articles.json"),
+        "{\"articles\":[]}",
+    )
+    .unwrap();
     let reader = LocalArtifactReader::new(temp.path());
     let snapshot = reader.snapshot().await.unwrap();
     assert!(snapshot.read_locales().await.unwrap().routes.is_empty());
@@ -20,19 +24,23 @@ async fn locale_snapshots_read_separate_indexes_and_legacy_releases_remain_reada
         serde_json::to_vec(&locales).unwrap(),
     )
     .unwrap();
-    fs::create_dir_all(temp.path().join("en/articles")).unwrap();
+    fs::create_dir_all(temp.path().join("en/_data")).unwrap();
     fs::write(
-        temp.path().join("en/articles/index.json"),
+        temp.path().join("en/_data/articles.json"),
         "{\"articles\":[]}",
     )
     .unwrap();
-    fs::write(temp.path().join("tags.json"), r#"{"統計":"統計"}"#).unwrap();
-    fs::write(temp.path().join("en/tags.json"), r#"{"統計":"Statistics"}"#).unwrap();
+    fs::write(temp.path().join("ja/_data/tags.json"), r#"{"統計":"統計"}"#).unwrap();
+    fs::write(
+        temp.path().join("en/_data/tags.json"),
+        r#"{"統計":"Statistics"}"#,
+    )
+    .unwrap();
     let en = snapshot.localized(Locale::En).await.unwrap().unwrap();
     assert_eq!(snapshot.read_tag_labels().await.unwrap()["統計"], "統計");
     assert_eq!(en.read_tag_labels().await.unwrap()["統計"], "Statistics");
     assert!(en.read_article_index().await.unwrap().articles.is_empty());
-    fs::write(temp.path().join("en/articles/index.json"), "broken").unwrap();
+    fs::write(temp.path().join("en/_data/articles.json"), "broken").unwrap();
     assert!(en.read_article_index().await.is_err());
     assert!(snapshot.read_article_index().await.is_ok());
 }
@@ -41,10 +49,10 @@ async fn locale_snapshots_read_separate_indexes_and_legacy_releases_remain_reada
 async fn cache_reuses_each_locale_without_mixing_indexes_or_assets() {
     use std::{sync::Arc, time::Duration};
     let temp = tempfile::TempDir::new().unwrap();
-    for prefix in ["", "en/"] {
-        fs::create_dir_all(temp.path().join(format!("{prefix}articles"))).unwrap();
+    for prefix in ["ja/", "en/"] {
+        fs::create_dir_all(temp.path().join(format!("{prefix}_data"))).unwrap();
         fs::write(
-            temp.path().join(format!("{prefix}articles/index.json")),
+            temp.path().join(format!("{prefix}_data/articles.json")),
             "{\"articles\":[]}",
         )
         .unwrap();
@@ -67,8 +75,12 @@ async fn cache_reuses_each_locale_without_mixing_indexes_or_assets() {
     );
     let snapshot = reader.snapshot().await.unwrap();
     let ja = snapshot.localized(Locale::Ja).await.unwrap().unwrap();
-    fs::write(temp.path().join("tags.json"), r#"{"統計":"統計"}"#).unwrap();
-    fs::write(temp.path().join("en/tags.json"), r#"{"統計":"Statistics"}"#).unwrap();
+    fs::write(temp.path().join("ja/_data/tags.json"), r#"{"統計":"統計"}"#).unwrap();
+    fs::write(
+        temp.path().join("en/_data/tags.json"),
+        r#"{"統計":"Statistics"}"#,
+    )
+    .unwrap();
     let en = snapshot.localized(Locale::En).await.unwrap().unwrap();
     assert_eq!(snapshot.read_tag_labels().await.unwrap()["統計"], "統計");
     assert_eq!(en.read_tag_labels().await.unwrap()["統計"], "Statistics");
@@ -76,7 +88,7 @@ async fn cache_reuses_each_locale_without_mixing_indexes_or_assets() {
     assert!(!Arc::ptr_eq(&ja, &en));
     assert!(Arc::ptr_eq(&en, &again));
     en.read_article_index().await.unwrap();
-    fs::write(temp.path().join("en/articles/index.json"), "broken").unwrap();
+    fs::write(temp.path().join("en/_data/articles.json"), "broken").unwrap();
     assert!(en.read_article_index().await.is_ok());
     assert!(ja.read_article_index().await.is_ok());
     assert_eq!(
