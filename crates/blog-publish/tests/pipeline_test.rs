@@ -667,6 +667,25 @@ fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> T {
 }
 
 #[tokio::test]
+async fn a_chinese_translation_never_creates_an_english_release() {
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    let about = fs::read_to_string(fixture.content_dir().join("ja/about.md")).unwrap();
+    let translation = about.replace("locale: ja", &format!(
+        "locale: zh-hans\ntranslation:\n  input_hash: '{}'\n  generated_hash: '{}'\n  stale: false",
+        "a".repeat(64), "b".repeat(64)
+    ));
+    let chinese = fixture.content_dir().join("zh-hans");
+    fs::create_dir_all(&chinese).unwrap();
+    fs::write(chinese.join("about.md"), translation).unwrap();
+
+    publish(fixture.content_dir(), fixture.output_dir())
+        .await
+        .unwrap();
+    assert!(!fixture.site_root().join("en").exists());
+}
+
+#[tokio::test]
 async fn publishes_english_separately_and_removes_stale_output() {
     let fixture = PublishFixture::new();
     fixture.write_required_site();
