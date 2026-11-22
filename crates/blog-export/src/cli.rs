@@ -47,14 +47,15 @@ impl Cli {
         match self.command {
             None => {
                 let translator = blog_export::CodexTranslator::default();
-                let settings: Vec<_> = Locale::translations()
-                    .filter(|locale| self.target.is_none_or(|chosen| chosen == *locale))
-                    .map(|target| TranslationSettings {
-                        target,
-                        ..settings.clone()
-                    })
-                    .collect();
-                anyhow::ensure!(!settings.is_empty(), "Japanese is the translation source");
+                let settings = match self.target {
+                    Some(_) => vec![settings],
+                    None => Locale::translations()
+                        .map(|target| TranslationSettings {
+                            target,
+                            ..settings.clone()
+                        })
+                        .collect(),
+                };
                 tracing::info!("content export started");
                 let reports =
                     blog_export::export_translations(source, output, &translator, &settings)?;

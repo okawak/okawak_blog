@@ -6,6 +6,7 @@ use crate::{
 };
 use blog_domain::{Locale, Slug};
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
 };
@@ -141,12 +142,10 @@ fn validate_targets(settings: &[TranslationSettings]) -> Result<()> {
             "at least one translation target is required",
         ));
     }
-    for (index, setting) in settings.iter().enumerate() {
+    let mut seen = HashSet::new();
+    for setting in settings {
         setting.validate_target()?;
-        if settings[..index]
-            .iter()
-            .any(|other| other.target == setting.target)
-        {
+        if !seen.insert(setting.target) {
             return Err(ExportError::invalid_input("duplicate translation target"));
         }
     }
