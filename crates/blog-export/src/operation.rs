@@ -40,7 +40,8 @@ pub fn export_content(
         let previous = output::read_locale(stage, Locale::Ja)?;
         let documents = vault::prepare(&source, &previous)?;
         output::reconcile(stage, previous, &documents)?;
-        output::sync_tags(stage)?;
+        let tags = output::prepare_tag_catalog(stage, &documents)?;
+        output::write_json(&stage.join("tags.json"), &tags)?;
         translation::translate_stage(stage, output, translator, settings)
     })
 }

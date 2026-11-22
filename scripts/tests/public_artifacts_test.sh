@@ -70,6 +70,21 @@ if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/unind
   echo "Every declared article must appear in the locale index" >&2
   exit 1
 fi
+# Leftover JSON is directly readable even if both route and article indexes omit it.
+for page in tech/unlisted about; do
+  cp -R "$validation_tmp/valid" "$validation_tmp/orphan"
+  if [ "$page" = about ]; then
+    jq '.routes["/about"] = ["ja"]' "$validation_tmp/orphan/locales.json" > "$validation_tmp/locales.json"
+    mv "$validation_tmp/locales.json" "$validation_tmp/orphan/locales.json"
+  else
+    cp "$validation_tmp/orphan/en/tech/e2e-article.json" "$validation_tmp/orphan/en/$page.json"
+  fi
+  if bash "$repo_root/scripts/validate_public_artifacts.sh" "$validation_tmp/orphan" >/dev/null 2>&1; then
+    echo "Unlisted page JSON must stop publication: $page" >&2
+    exit 1
+  fi
+  rm -r "$validation_tmp/orphan"
+done
 for about_mode in missing english-only; do
   cp -R "$validation_tmp/valid" "$validation_tmp/about-$about_mode"
   jq --arg mode "$about_mode" 'if $mode == "missing" then del(.routes["/about"]) else .routes["/about"] = ["en"] end' \

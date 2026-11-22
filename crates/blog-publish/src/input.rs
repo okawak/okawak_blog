@@ -34,7 +34,8 @@ pub(crate) fn read(root: &Path) -> Result<Vec<Document>> {
     let mut documents = Vec::new();
     let mut routes = HashSet::new();
     let mut identities = HashSet::new();
-    for locale in Locale::ALL {
+    // The publisher currently emits Japanese and English releases.
+    for locale in [Locale::Ja, Locale::En] {
         let directory = root.join(locale.as_str());
         if !public_directory_exists(&directory)? {
             continue;

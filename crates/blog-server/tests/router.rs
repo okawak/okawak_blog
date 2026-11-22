@@ -2321,6 +2321,7 @@ async fn english_routes_render_matching_metadata_links_and_release_validators() 
         assert!(response.body.contains("hreflang=\"ja\""));
         assert!(response.body.contains("hreflang=\"en\""));
         assert!(response.body.contains("content=\"en_US\""));
+        assert!(response.body.contains("简体中文"));
         assert!(response.body.contains("Main navigation"));
         assert!(!response.body.contains("記事を絞り込む"));
         assert!(response.headers.contains_key(header::ETAG));
