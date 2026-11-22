@@ -1972,12 +1972,8 @@ async fn unlisted_article_is_rejected_before_reading_its_object() {
         r#"{"schema_version":1,"routes":{"/":["ja"]}}"#,
     )
     .unwrap();
-    std::fs::create_dir_all(root.path().join("articles/tech")).unwrap();
-    std::fs::write(
-        root.path().join("articles/tech/unlisted.json"),
-        "invalid JSON",
-    )
-    .unwrap();
+    std::fs::create_dir_all(root.path().join("ja/tech")).unwrap();
+    std::fs::write(root.path().join("ja/tech/unlisted.json"), "invalid JSON").unwrap();
     let router = create_router(Arc::new(LocalArtifactReader::new(root.path())), false);
     let result = response(
         &router,
