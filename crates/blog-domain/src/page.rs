@@ -7,8 +7,7 @@ pub use builder::{
 };
 pub use path::{
     build_article_page_canonical_path, build_article_path, build_category_page_canonical_path,
-    build_category_path, build_home_page_canonical_path, build_static_page_canonical_path,
-    build_static_page_path,
+    build_category_path, build_home_page_canonical_path, build_static_page_path,
 };
 
 use crate::{Category, PageKey, SectionPath, Slug, Title};
