@@ -50,13 +50,13 @@ pub(crate) fn legacy_location(uri: &Uri) -> Option<String> {
     } else {
         let category: blog_domain::Category = first.parse().ok()?;
         match article {
-            None => format!("/{category}"),
+            None => blog_domain::build_category_path(&category),
             Some(article) => {
                 let decoded = percent_encoding::percent_decode_str(article)
                     .decode_utf8()
                     .ok()?;
                 let slug: blog_domain::Slug = decoded.trim_suffix(".html").parse().ok()?;
-                format!("/{category}/{slug}")
+                blog_domain::build_article_path(&category, &slug)
             }
         }
     };

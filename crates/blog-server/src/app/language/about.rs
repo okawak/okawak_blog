@@ -17,10 +17,7 @@ const ABOUT_PAGE_KEY: &str = "about";
 
 #[page]
 async fn about(cx: &Cx) -> Result<impl View> {
-    render_about(cx, *super::language(cx)?).await
-}
-
-pub(crate) async fn render_about(cx: &Cx, locale: Locale) -> Result<impl View> {
+    let locale = *super::language(cx)?;
     let page = PageKey::new(ABOUT_PAGE_KEY.to_string())?;
 
     match page_loader(cx).load_static_page(locale, &page).await {

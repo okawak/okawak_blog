@@ -54,9 +54,7 @@ pub fn export_translations(
         let mut documents = vault::prepare(&source, &previous)?;
         documents.sort_by(|a, b| a.meta.id.as_str().cmp(b.meta.id.as_str()));
         output::reconcile(stage, previous, &documents)?;
-        output::sync_tags(stage)?;
-        let tag_path = stage.join("tags.json");
-        let mut tags = output::read_catalog(&tag_path)?;
+        let mut tags = output::prepare_tag_catalog(stage, &documents)?;
         let plans = settings
             .iter()
             .map(|setting| translation::plan_content(stage, &documents, &tags, setting))
@@ -66,7 +64,7 @@ pub fn export_translations(
             .map(|plan| plan.apply(stage, &mut tags, output, translator))
             .collect::<Result<_>>()?;
         tags.validate()?;
-        output::write_json(&tag_path, &tags)?;
+        output::write_json(&stage.join("tags.json"), &tags)?;
         translation::copy_cache(output, stage)?;
         Ok(reports)
     })
