@@ -31,19 +31,19 @@ fn save(path: &std::path::Path, catalog: &LabelCatalog) {
     fs::write(path, serde_json::to_vec_pretty(catalog).unwrap()).unwrap();
 }
 #[test]
-fn adding_chinese_keeps_legacy_english_history_and_accepts_only_the_selected_candidate() {
+fn adding_chinese_keeps_english_history_and_accepts_only_the_selected_candidate() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("ui.json");
     // The English request fingerprint predates the target field.
-    let legacy = serde_json::json!({"schema_version": 1, "entries": {"label": {
-        "source": "原文", "context": "button", "translation": {
+    let existing = serde_json::json!({"schema_version": 1, "entries": {"label": {
+        "source": "原文", "context": "button", "translations": {"en": {
             "value": "Reviewed English", "stale": false, "provenance": {
                 "input_hash": "dffa68cd405dde0f6906a24e3df7e09590d49fe9ac24b49347078cac36070dc7",
                 "generated_hash": "a".repeat(64)
             }
-        }
+        }}
     }}});
-    fs::write(&path, legacy.to_string()).unwrap();
+    fs::write(&path, existing.to_string()).unwrap();
     let targets = [
         settings(),
         TranslationSettings {
