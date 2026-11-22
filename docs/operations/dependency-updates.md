@@ -69,4 +69,4 @@ App導入後はDependency Dashboardの警告も確認します。更新が週次
 
 ## セキュリティ検知
 
-Security auditは毎週・手動実行・PRで、Git追跡ファイルとPR内のコミットに含まれるシークレット（Gitleaks）、Actions定義（zizmor）、S3の上書き拒否ポリシーと公開処理の条件付き書き込み、E2E依存（bun audit）、ブラウザーが取得する固定CDN資産（SHA-384 / OSV）を検査する。定期・手動実行では既存のRustSec監査も行う。失敗は対応するActionsジョブのログで確認する。ローカルの監査ツールは `mise -E security install` で準備できる。CDNと勧告の照合には外部接続が必要になる。
+Security auditは毎週・手動実行・PRで、Git追跡ファイルとPR内のコミットに含まれるシークレット（Gitleaks）、Actions定義（zizmor）、S3の上書き拒否ポリシーと公開処理の条件付き書き込み、E2E依存（bun audit）、ブラウザーが取得する固定CDN資産（SHA-384 / OSV）を検査する。定期・手動実行では既存のRustSec監査も行う。失敗は対応するActionsジョブのログで確認する。Gitleaks、zizmor、hcl2jsonはルートの `mise.toml` にタスク単位で指定し、`mise.lock` で固定する。ローカルでも `mise run gitleaks -- <引数>`、`mise run audit-workflows`、`mise run audit-release-policy` で実行できる。CDNと勧告の照合には外部接続が必要になる。
