@@ -257,7 +257,7 @@ window.okawakScheduleCodeHighlight = function(root) {
     Ok(view! {
         (status)
         <!DOCTYPE html>
-        <html lang=(locale.language_tag())>
+        <html lang=(locale.as_str())>
             <head>
                 topcoat::metadata::tags()
                 <meta
@@ -271,7 +271,7 @@ window.okawakScheduleCodeHighlight = function(root) {
                 for (other, path) in &alternates {
                     <link
                         rel="alternate"
-                        hreflang=(other.language_tag())
+                        hreflang=(other.as_str())
                         href=(site_url.join(path))
                     >
                 }

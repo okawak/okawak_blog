@@ -3,12 +3,12 @@ import { expect, test } from "@playwright/test";
 const baseURL = "http://127.0.0.1:8008";
 
 test("home follows the browser locale and uses English for unsupported languages", async ({ browser }) => {
-  for (const [locale, path, lang] of [["en-US", "/en", "en"], ["ja-JP", "/ja", "ja"], ["zh-CN", "/zh-hans", "zh-Hans"], ["fr-FR", "/en", "en"]]) {
+  for (const [locale, lang] of [["en-US", "en"], ["ja-JP", "ja"], ["zh-CN", "zh-hans"], ["fr-FR", "en"]]) {
     const context = await browser.newContext({ locale });
     try {
       const page = await context.newPage();
       await page.goto(baseURL);
-      await expect(page).toHaveURL(`${baseURL}${path}`);
+      await expect(page).toHaveURL(`${baseURL}/${lang}`);
       await expect(page.locator("html")).toHaveAttribute("lang", lang);
     } finally {
       await context.close();
@@ -143,11 +143,11 @@ test("English SSR works without JavaScript and untranslated pages do not masquer
 test("简体中文 persists an explicit choice and only advertises translated pages", async ({ page, context }) => {
   const missing = await page.goto("/zh-hans/about");
   expect(missing?.status()).toBe(404);
-  await expect(page.locator("html")).toHaveAttribute("lang", "zh-Hans");
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-hans");
   await expect(page.getByText("没有找到这个页面。", { exact: true })).toBeVisible();
   await expect(page.locator('link[rel="alternate"]')).toHaveCount(0);
   await page.goto("/ja/about");
-  await expect(page.locator('link[hreflang="zh-Hans"]')).toHaveCount(0);
+  await expect(page.locator('link[hreflang="zh-hans"]')).toHaveCount(0);
   await page.locator("header").getByRole("link", { name: "简体中文" }).click();
   await expect(page).toHaveURL(`${baseURL}/zh-hans`);
   expect((await context.cookies()).find(c => c.name === "okawak_locale")?.value).toBe("zh-hans");

@@ -14,7 +14,7 @@ schema versionは`blog_domain::PUBLIC_CONTENT_SCHEMA_VERSION`で定義し、expo
 
 値型の導入でYAML / JSONの形は変わらない。タイトル・日時・タグID・digestは文字列、`section_path`は文字列配列として保存する。検証は元の表記を保持し、タイトル・日時の前後空白、タグIDやdigestの大文字小文字を自動で書き換えない。既存ID、辞書参照、翻訳fingerprintを維持するためである。
 
-`Locale::path()` はページキーに `/ja`、`/en`、`/zh-hans` を付ける。MarkdownとJSONにはそのURLの相対パスを使う。例えば `/ja/tech/intro` は `content/ja/tech/intro.md` と `site/ja/tech/intro.json` に対応する。トップの `/ja` はそれぞれ `ja/index.md` と `ja/index.json` に対応する。exportとpublishはfrontmatterから導いたパスと実ファイルの位置を照合する。`locales.json`のキーは従来どおり言語セグメントを含まない。HTMLのlangとhreflangでは簡体字を `zh-Hans` と表記する。
+`Locale::path()` はページキーに `/ja`、`/en`、`/zh-hans` を付ける。MarkdownとJSONにはそのURLの相対パスを使う。例えば `/ja/tech/intro` は `content/ja/tech/intro.md` と `site/ja/tech/intro.json` に対応する。トップの `/ja` はそれぞれ `ja/index.md` と `ja/index.json` に対応する。exportとpublishはfrontmatterから導いたパスと実ファイルの位置を照合する。`locales.json`のキーは従来どおり言語セグメントを含まない。HTMLのlangとhreflangでは簡体字を `zh-hans` と表記する。
 
 ## タグ表示名
 
