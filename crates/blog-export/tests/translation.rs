@@ -33,10 +33,15 @@ impl Translator for Fake {
                 || v.contains("HTML_SECRET")
                 || v.contains("x^2"))
         );
+        let language = match request.target {
+            blog_domain::Locale::En => "English",
+            blog_domain::Locale::ZhHans => "简体中文",
+            blog_domain::Locale::Ja => panic!("Japanese is the source"),
+        };
         Ok(request
             .texts
             .iter()
-            .map(|(k, v)| (k.clone(), format!("English {v}")))
+            .map(|(k, v)| (k.clone(), format!("{language} {v}")))
             .collect())
     }
 }
@@ -116,14 +121,10 @@ fn translation_targets_keep_separate_cache_entries_and_review_candidates() {
     let en = english(output.path());
     let filename = en.file_name().unwrap();
     let zh = output.path().join("zh-hans/tech").join(filename);
-    for path in [&en, &zh] {
-        fs::write(
-            path,
-            fs::read_to_string(path)
-                .unwrap()
-                .replace("English 記事", "Reviewed"),
-        )
-        .unwrap();
+    for (path, language) in [(&en, "English"), (&zh, "简体中文")] {
+        let text = fs::read_to_string(path).unwrap();
+        assert!(text.contains(&format!("{language} 記事")));
+        fs::write(path, text.replace(&format!("{language} 記事"), "Reviewed")).unwrap();
     }
     write_note(source.path(), "更新");
     blog_export::export_translations(source.path(), output.path(), &fake, &targets).unwrap();
@@ -133,7 +134,7 @@ fn translation_targets_keep_separate_cache_entries_and_review_candidates() {
     assert!(candidates.join(filename).is_file());
     assert!(!candidates.join("zh-hans").join(filename).exists());
     assert!(fs::read_to_string(en).unwrap().contains("Reviewed"));
-    assert!(fs::read_to_string(zh).unwrap().contains("locale: zh-hans"));
+    assert!(fs::read_to_string(zh).unwrap().contains("简体中文 更新"));
 }
 
 #[test]

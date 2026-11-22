@@ -41,19 +41,7 @@ pub(crate) fn plan_catalog(
     for (key, entry) in &catalog.entries {
         let request = request(entry, settings);
         let input = request.fingerprint()?;
-        let current = entry
-            .translations
-            .get(&settings.target)
-            .map(|t| digest(&t.value));
-        let decision = decide(
-            input.as_str(),
-            current.as_ref().map(Sha256Digest::as_str),
-            entry
-                .translations
-                .get(&settings.target)
-                .and_then(|t| t.provenance.as_ref())
-                .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
-        );
+        let decision = label_decision(&input, entry.translations.get(&settings.target));
         let existing_candidate_path = candidate_path(path, key, settings.target);
         let candidate_decision = if decision != Decision::Reuse && existing_candidate_path.exists()
         {
@@ -64,15 +52,7 @@ pub(crate) fn plan_catalog(
                     "catalog candidate identity changed",
                 ));
             }
-            Some(decide(
-                input.as_str(),
-                Some(digest(&candidate.translation.value).as_str()),
-                candidate
-                    .translation
-                    .provenance
-                    .as_ref()
-                    .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
-            ))
+            Some(label_decision(&input, Some(&candidate.translation)))
         } else {
             None
         };
@@ -152,14 +132,9 @@ impl CatalogPlan {
                 | UpdatePlan::GenerateCandidate
                 | UpdatePlan::ReuseCandidate => {
                     if update.protects_current() {
-                        if entry
-                            .translations
-                            .get(&target)
-                            .unwrap()
-                            .provenance
-                            .is_some()
-                        {
-                            entry.translations.get_mut(&target).unwrap().stale = true;
+                        let translation = entry.translations.get_mut(&target).unwrap();
+                        if translation.provenance.is_some() {
+                            translation.stale = true;
                         }
                         report.protected.push(key.clone());
                         if update == UpdatePlan::ReuseCandidate {
@@ -241,6 +216,17 @@ pub(crate) fn accept_catalog_candidate(
     output::write_json(path, &catalog)?;
     fs::remove_file(candidate_path)?;
     Ok(())
+}
+
+fn label_decision(input: &Sha256Digest, translation: Option<&LabelTranslation>) -> Decision {
+    let hash = translation.map(|t| digest(&t.value));
+    decide(
+        input.as_str(),
+        hash.as_ref().map(Sha256Digest::as_str),
+        translation
+            .and_then(|t| t.provenance.as_ref())
+            .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
+    )
 }
 
 fn request(entry: &blog_domain::LabelEntry, settings: &TranslationSettings) -> TranslationRequest {

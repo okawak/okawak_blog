@@ -1,6 +1,6 @@
 use super::{
     ProtectedContent, Texts, TranslationReport, TranslationRequest, TranslationSettings,
-    Translator, cache,
+    Translator, cache, candidate_dir,
     fragments::Fragments,
     plan::{Decision, UpdatePlan, decide, plan_update},
 };
@@ -10,9 +10,10 @@ use crate::{
     output,
 };
 use blog_domain::{Locale, Sha256Digest, Slug, TranslationProvenance};
-use std::{fs, path::Path};
-
-use super::candidate_dir;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 struct ArticlePlan<'a> {
     original: &'a Document,
@@ -42,17 +43,8 @@ pub(crate) fn plan_content<'a>(
         let request = article_request(fragments.texts.clone(), settings);
         let input = content_input(&request, original)?;
         let current = output::read_document(stage, settings.target, &original.meta)?;
-        let current_hash = current.as_ref().map(text_hash).transpose()?;
-        let decision = decide(
-            input.as_str(),
-            current_hash.as_ref().map(Sha256Digest::as_str),
-            current
-                .as_ref()
-                .and_then(|d| d.meta.translation.as_ref())
-                .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
-        );
-        let candidate_path =
-            candidate_dir(stage, settings.target).join(format!("{}.md", original.meta.id));
+        let decision = article_decision(&input, current.as_ref())?;
+        let candidate_path = candidate_path(stage, settings.target, &original.meta.id);
         let candidate_decision = if decision != Decision::Reuse && candidate_path.exists() {
             let candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
             if candidate.meta.id != original.meta.id || candidate.meta.locale != settings.target {
@@ -60,15 +52,7 @@ pub(crate) fn plan_content<'a>(
                     "candidate identity changed",
                 ));
             }
-            Some(decide(
-                input.as_str(),
-                Some(text_hash(&candidate)?.as_str()),
-                candidate
-                    .meta
-                    .translation
-                    .as_ref()
-                    .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
-            ))
+            Some(article_decision(&input, Some(&candidate))?)
         } else {
             None
         };
@@ -183,7 +167,7 @@ impl ContentPlan<'_> {
                         stale: false,
                     });
                     let destination = if update.protects_current() {
-                        candidate_dir(stage, target).join(format!("{}.md", original.meta.id))
+                        candidate_path(stage, target, &original.meta.id)
                     } else {
                         path
                     };
@@ -229,7 +213,7 @@ pub(crate) fn accept_article_candidate(
         .into_iter()
         .find(|doc| doc.meta.id == *id)
         .ok_or_else(|| ExportError::translation_conflict("candidate source is missing"))?;
-    let candidate_path = candidate_dir(stage, settings.target).join(format!("{id}.md"));
+    let candidate_path = candidate_path(stage, settings.target, id);
     let mut candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
     let fragments = Fragments::extract(&original);
     let request = article_request(fragments.texts, settings);
@@ -253,6 +237,21 @@ pub(crate) fn accept_article_candidate(
     output::write_document(stage, &candidate)?;
     fs::remove_file(candidate_path)?;
     Ok(())
+}
+
+fn candidate_path(stage: &Path, target: Locale, id: &Slug) -> PathBuf {
+    candidate_dir(stage, target).join(format!("{id}.md"))
+}
+
+fn article_decision(input: &Sha256Digest, document: Option<&Document>) -> Result<Decision> {
+    let hash = document.map(text_hash).transpose()?;
+    Ok(decide(
+        input.as_str(),
+        hash.as_ref().map(Sha256Digest::as_str),
+        document
+            .and_then(|doc| doc.meta.translation.as_ref())
+            .map(|p| (p.input_hash.as_str(), p.generated_hash.as_str())),
+    ))
 }
 
 fn content_input(request: &TranslationRequest, original: &Document) -> Result<Sha256Digest> {
