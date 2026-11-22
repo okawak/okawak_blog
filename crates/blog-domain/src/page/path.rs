@@ -1,4 +1,4 @@
-use crate::{ArticlePageDocument, Category, CategoryPageDocument, Slug, StaticPageDocument};
+use crate::{ArticlePageDocument, Category, CategoryPageDocument, PageKey, Slug};
 
 pub fn build_home_page_canonical_path() -> &'static str {
     "/"
@@ -20,14 +20,14 @@ pub fn build_category_page_canonical_path(document: &CategoryPageDocument) -> St
     build_category_path(&document.category)
 }
 
-pub fn build_static_page_canonical_path(document: &StaticPageDocument) -> String {
-    format!("/{}", document.page.as_str())
+pub fn build_static_page_path(page: &PageKey) -> String {
+    format!("/{}", page.as_str())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{PageKey, SectionPath, SiteArticleCard, Title};
+    use crate::{SectionPath, SiteArticleCard, Title};
 
     fn article_page() -> ArticlePageDocument {
         ArticlePageDocument {
@@ -73,18 +73,11 @@ mod tests {
             sections: vec![],
             articles: vec![],
         };
-        let static_page = StaticPageDocument {
-            page: PageKey::new("about".to_string()).unwrap(),
-            title: "About".to_string(),
-            description: None,
-            html: "<article><h1>About</h1></article>".to_string(),
-        };
-
         assert_eq!(
             build_article_page_canonical_path(&article),
             "/tech/intro00000001"
         );
         assert_eq!(build_category_page_canonical_path(&category), "/tech");
-        assert_eq!(build_static_page_canonical_path(&static_page), "/about");
+        assert_eq!(build_static_page_path(&"about".parse().unwrap()), "/about");
     }
 }

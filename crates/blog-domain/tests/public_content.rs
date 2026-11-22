@@ -13,7 +13,24 @@ fn metadata() -> PublicContentMeta {
 
 #[test]
 fn locale_preserves_japanese_routes_and_separates_english_keys() {
-    for (locale, code) in [(Locale::Ja, "ja"), (Locale::En, "en")] {
+    for (locale, code) in [
+        (Locale::Ja, "ja"),
+        (Locale::En, "en"),
+        (Locale::ZhHans, "zh-hans"),
+    ] {
+        for (route, basename) in [
+            ("/", "index"),
+            ("/about", "about"),
+            ("/tech", "tech"),
+            ("/tech/intro", "tech/intro"),
+        ] {
+            for ext in ["md", "json"] {
+                assert_eq!(
+                    locale.page_file(route, ext),
+                    format!("{code}/{basename}.{ext}")
+                );
+            }
+        }
         assert_eq!(locale.as_str(), code);
         assert_eq!(locale.to_string(), code);
         assert_eq!(code.parse::<Locale>().unwrap(), locale);
@@ -77,6 +94,9 @@ fn public_content_kinds_require_their_own_routing_fields() {
             page: page.map(|page| PageKey::new(page.into()).unwrap()),
             ..metadata()
         };
+        assert_eq!(meta.route_key().is_ok(), valid);
+        assert_eq!(meta.path(Locale::Ja).is_ok(), valid);
+        assert_eq!(meta.markdown_path(Locale::Ja).is_ok(), valid);
         assert_eq!(
             meta.validate().is_ok(),
             valid,
@@ -126,8 +146,8 @@ fn tags_and_sections_are_each_restricted_to_articles() {
 fn public_contract_checks_schema_kind_and_provenance() {
     let mut meta = metadata();
     meta.validate().unwrap();
-    assert_eq!(meta.path(Locale::Ja), "/tech/legacy123456");
-    assert_eq!(meta.path(Locale::En), "/en/tech/legacy123456");
+    assert_eq!(meta.path(Locale::Ja).unwrap(), "/tech/legacy123456");
+    assert_eq!(meta.path(Locale::En).unwrap(), "/en/tech/legacy123456");
     meta.schema_version = 2;
     assert!(meta.validate().is_err());
     meta.schema_version = 1;

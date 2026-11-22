@@ -27,8 +27,8 @@ pub use page::{
     HomePageDocument, SiteArticleCard, SiteCategorySummary, StaticPageDocument,
     build_article_page_canonical_path, build_article_page_document, build_article_path,
     build_category_page_canonical_path, build_category_page_document, build_category_path,
-    build_home_page_canonical_path, build_home_page_document, build_static_page_canonical_path,
-    build_static_page_document,
+    build_home_page_canonical_path, build_home_page_document, build_static_page_document,
+    build_static_page_path,
 };
 pub use publication::{
     ArticleBody, ArticleMeta, CategoryIndex, CategoryLandingBody, CategoryLandingMeta,

@@ -43,6 +43,14 @@ fn preferred_locale(cx: &Cx) -> Locale {
     }
 }
 
+fn native_name(locale: Locale) -> &'static str {
+    match locale {
+        Locale::Ja => "日本語",
+        Locale::En => "English",
+        Locale::ZhHans => "简体中文",
+    }
+}
+
 fn destination(locales: &SiteLocalesDocument, path: &str, locale: Locale) -> Option<String> {
     locales
         .path(japanese_path(path), locale)
@@ -157,7 +165,7 @@ pub(crate) async fn language_switcher(
                                 None
                             })
                         },
-                        (if other == Locale::Ja { "日本語" } else { "English" })
+                        (native_name(other))
                     )
                 } else {
                     <span
@@ -165,7 +173,7 @@ pub(crate) async fn language_switcher(
                         aria-disabled="true"
                         class="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-transparent px-2 text-xs font-medium text-muted-foreground opacity-50 select-none"
                     >
-                        (if other == Locale::Ja { "日本語" } else { "English" })
+                        (native_name(other))
                     </span>
                 }
             }
