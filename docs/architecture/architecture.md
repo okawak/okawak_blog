@@ -193,7 +193,7 @@ releaseは上書きせず、公開runをrepository単位で直列化する。失
 | Category | `/ja/:category` | `/en/:category` | `/zh-hans/:category` |
 | Article | `/ja/:category/:slug` | `/en/:category/:slug` | `/zh-hans/:category/:slug` |
 
-`GET /` と `HEAD /` は公開済みのトップへ307で転送する。保存済みの選択、TopcoatのAccept-Language照合、英語、日本語の順で選ぶ。簡体字は言語タグ `zh-Hans` に対応し、繁体字を指定するブラウザとは区別する。入口は `Vary: Accept-Language, Cookie` と `Cache-Control: no-store` を返す。各言語のURLはCookieやブラウザ設定に左右されない。旧日本語のAbout・カテゴリ・記事はクエリを保って対応する日本語URLへ308で転送する。API・assetは専用のパスを持つ。
+`GET /` と `HEAD /` は公開済みのトップへ307で転送する。保存済みの選択、TopcoatのAccept-Language照合、英語、日本語の順で選ぶ。簡体字は言語タグ `zh-hans` に対応し、繁体字を指定するブラウザとは区別する。入口は `Vary: Accept-Language, Cookie` と `Cache-Control: no-store` を返す。各言語のURLはCookieやブラウザ設定に左右されない。旧日本語のAbout・カテゴリ・記事はクエリを保って対応する日本語URLへ308で転送する。API・assetは専用のパスを持つ。
 
 言語切替は同じページの翻訳、対象言語トップの順で移動する。公開されていない言語は無効にする。明示的な選択はhost限定、Path=/、HttpOnly、SameSite=LaxのCookieに1年間保存する。各ページのcanonicalは明示URLとし、hreflangは同じリリース内で実在する翻訳間に付ける。未翻訳ページの直接URLはその言語の404、UI文言やタグ表示名の翻訳欠落・更新待ちは日本語表示とする。
 

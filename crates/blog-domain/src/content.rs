@@ -36,13 +36,6 @@ impl Locale {
         }
     }
 
-    pub fn language_tag(self) -> &'static str {
-        match self {
-            Self::ZhHans => "zh-Hans",
-            other => other.as_str(),
-        }
-    }
-
     pub fn translations() -> impl Iterator<Item = Self> {
         Self::ALL.into_iter().filter(|locale| *locale != Self::Ja)
     }

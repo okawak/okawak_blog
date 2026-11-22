@@ -11,7 +11,6 @@ export async function verifyReleaseLocales(page: Page, catalog: LocaleCatalog, b
   expect(catalog.schema_version).toBe(1);
   expect(catalog.routes["/"]).toContain("ja");
   for (const locale of catalog.routes["/"]) {
-    const languageTag = Intl.getCanonicalLocales(locale)[0];
     const paths = Object.keys(catalog.routes).filter(path => catalog.routes[path].includes(locale));
     const category = paths.find(path => /^\/[^/]+$/.test(path) && path !== "/about");
     const article = paths.find(path => /^\/[^/]+\/[^/]+$/.test(path));
@@ -20,13 +19,13 @@ export async function verifyReleaseLocales(page: Page, catalog: LocaleCatalog, b
       const route = `/${locale}${japanesePath === "/" ? "" : japanesePath}`;
       const response = await page.goto(route);
       expect(response?.status(), `${locale}: ${route}`).toBe(200);
-      await expect(page.locator("html")).toHaveAttribute("lang", languageTag);
+      await expect(page.locator("html")).toHaveAttribute("lang", locale);
       const canonical = `${baseURL}${route}`;
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", canonical);
       await expect(page.locator('meta[property="og:url"]')).toHaveAttribute("content", canonical);
       await expect(page.locator("main")).toBeVisible();
       for (const other of catalog.routes[japanesePath]) {
-        await expect(page.locator(`link[rel="alternate"][hreflang="${Intl.getCanonicalLocales(other)[0]}"]`)).toHaveCount(1);
+        await expect(page.locator(`link[rel="alternate"][hreflang="${other}"]`)).toHaveCount(1);
       }
     }
   }
