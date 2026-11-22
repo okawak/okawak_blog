@@ -8,7 +8,7 @@ use std::{
     path::Path,
 };
 
-pub(crate) fn read_locale(root: &Path, locale: blog_domain::Locale) -> Result<Vec<Document>> {
+pub(crate) fn read_locale(root: &Path, locale: Locale) -> Result<Vec<Document>> {
     let directory = root.join(locale.as_str());
     if !directory.exists() {
         return Ok(Vec::new());
@@ -18,12 +18,7 @@ pub(crate) fn read_locale(root: &Path, locale: blog_domain::Locale) -> Result<Ve
         .into_iter()
         .filter(|p| p.extension().is_some_and(|e| e == "md"))
         .map(|p| {
-            let doc = Document::parse(&fs::read_to_string(&p)?)?;
-            if doc.meta.locale != locale || p != root.join(doc.meta.markdown_path(locale)?) {
-                return Err(ExportError::invalid_input(
-                    "public filename/locale must match its metadata",
-                ));
-            }
+            let doc = read_markdown(root, &p)?;
             if !ids.insert(doc.meta.id.clone()) {
                 return Err(ExportError::invalid_input("duplicate public content ID"));
             }
@@ -48,16 +43,23 @@ pub(crate) fn read_document(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.into()),
     }
-    let document = Document::parse(&fs::read_to_string(&path)?)?;
-    if document.meta.locale != locale
-        || document.meta.id != source.id
-        || path != root.join(document.meta.markdown_path(locale)?)
-    {
+    let document = read_markdown(root, &path)?;
+    if document.meta.id != source.id {
+        return Err(ExportError::invalid_input(
+            "public content ID differs from source",
+        ));
+    }
+    Ok(Some(document))
+}
+
+fn read_markdown(root: &Path, path: &Path) -> Result<Document> {
+    let doc = Document::parse(&fs::read_to_string(path)?)?;
+    if path != root.join(doc.meta.markdown_path(doc.meta.locale)?) {
         return Err(ExportError::invalid_input(
             "public filename/locale must match its metadata",
         ));
     }
-    Ok(Some(document))
+    Ok(doc)
 }
 
 pub(crate) fn reconcile(
@@ -71,7 +73,7 @@ pub(crate) fn reconcile(
     // Remove moved paths before writing any replacements, including when two IDs swap routes.
     for old in previous {
         if let Some(source) = reconcile_path(stage, &old, &sources)?
-            && crate::content::text_hash(&old)? == crate::content::text_hash(source)?
+            && old.prose() == source.prose()
         {
             unchanged.insert(old.meta.id);
         }
@@ -283,13 +285,13 @@ mod tests {
     }
 
     #[test]
-    fn syncing_marks_only_changed_source_text_stale_and_preserves_english_prose() {
+    fn moving_an_article_keeps_reviewed_prose_and_marks_only_changed_source_text_stale() {
         for changed in [false, true] {
             let root = tempfile::tempdir().unwrap();
-            fs::create_dir_all(root.path().join("ja/tech")).unwrap();
-            fs::create_dir_all(root.path().join("en/tech")).unwrap();
             let previous = document();
+            write_document(root.path(), &previous).unwrap();
             let mut current = previous.clone();
+            current.meta.category = Some(blog_domain::Category::Daily);
             if changed {
                 current.body = "更新した本文".into();
             }
@@ -303,13 +305,13 @@ mod tests {
                 generated_hash: crate::content::digest("generated"),
                 stale: false,
             });
-            fs::write(
-                root.path().join("en/tech/article.md"),
-                english.encode().unwrap(),
-            )
-            .unwrap();
+            write_document(root.path(), &english).unwrap();
             reconcile(root.path(), vec![previous], std::slice::from_ref(&current)).unwrap();
-            let actual = read_locale(root.path(), Locale::En).unwrap().remove(0);
+            assert!(!root.path().join("ja/tech/article.md").exists());
+            assert!(!root.path().join("en/tech/article.md").exists());
+            let actual = read_document(root.path(), Locale::En, &current.meta)
+                .unwrap()
+                .unwrap();
             assert_eq!(actual.meta.translation.unwrap().stale, changed);
             assert_eq!(actual.meta.summary, english.meta.summary);
             assert_eq!(actual.meta.title, english.meta.title);

@@ -8,8 +8,10 @@ use crate::render::{
     rich_bookmark_enricher,
 };
 use crate::{classify, input, links};
-use blog_domain::{Locale, SiteLocalesDocument};
+use blog_domain::{Locale, Sha256Digest, SiteLocalesDocument};
 use futures::{StreamExt, stream};
+use sha2::{Digest, Sha256};
+use std::io::Read;
 use std::{path::Path, sync::Arc};
 use tracing::info;
 
@@ -99,7 +101,14 @@ pub async fn publish_with_bookmark_enricher(
         let dest = stage.path().join("site/content-assets");
         std::fs::create_dir_all(&dest)?;
         for name in asset_names {
-            std::fs::copy(content_dir.join("assets").join(&name), dest.join(name))?;
+            let staged = dest.join(&name);
+            std::fs::copy(content_dir.join("assets").join(&name), &staged)?;
+            let digest = asset_digest(&staged)?;
+            if !name[..64].eq_ignore_ascii_case(digest.as_str()) {
+                return Err(PublishError::Parse(format!(
+                    "asset digest mismatch: {name}"
+                )));
+            }
         }
     }
     std::fs::create_dir_all(output_dir)?;
@@ -220,4 +229,18 @@ async fn process_article(
         Ok::<_, PublishError>(article.meta)
     })
     .await?
+}
+
+fn asset_digest(path: &Path) -> Result<Sha256Digest> {
+    let mut file = std::fs::File::open(path)?;
+    let mut hash = Sha256::new();
+    let mut buffer = [0; 65536];
+    loop {
+        let n = file.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        hash.update(&buffer[..n]);
+    }
+    Ok(Sha256Digest::from_bytes(hash.finalize().into()))
 }
