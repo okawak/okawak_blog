@@ -126,16 +126,17 @@ pub(crate) fn write_document(root: &Path, doc: &Document) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn sync_tags(stage: &Path) -> Result<()> {
+pub(crate) fn prepare_tag_catalog(stage: &Path, documents: &[Document]) -> Result<LabelCatalog> {
     let path = stage.join("tags.json");
     let mut catalog = if path.exists() {
         read_catalog(&path)?
     } else {
         LabelCatalog::default()
     };
-    let tags = read_locale(stage, Locale::Ja)?
-        .into_iter()
-        .flat_map(|d| d.meta.tags)
+    let tags = documents
+        .iter()
+        .flat_map(|doc| &doc.meta.tags)
+        .map(|tag| tag.as_str())
         .collect::<BTreeSet<_>>();
     if catalog
         .entries
@@ -165,7 +166,7 @@ pub(crate) fn sync_tags(stage: &Path) -> Result<()> {
             });
     }
     catalog.validate()?;
-    write_json(&path, &catalog)
+    Ok(catalog)
 }
 
 pub(crate) fn read_catalog(path: &Path) -> Result<LabelCatalog> {
@@ -355,22 +356,15 @@ mod tests {
     #[test]
     fn tag_catalog_is_archived_only_when_a_tag_is_removed() {
         let root = tempfile::tempdir().unwrap();
-        fs::create_dir_all(root.path().join("ja/tech")).unwrap();
-        let path = root.path().join("ja/tech/article.md");
         let mut doc = document();
-        fs::write(&path, doc.encode().unwrap()).unwrap();
-        sync_tags(root.path()).unwrap();
-        sync_tags(root.path()).unwrap();
+        let catalog = prepare_tag_catalog(root.path(), std::slice::from_ref(&doc)).unwrap();
+        write_json(&root.path().join("tags.json"), &catalog).unwrap();
+        prepare_tag_catalog(root.path(), std::slice::from_ref(&doc)).unwrap();
         assert!(!root.path().join(".export-archive").exists());
+
         doc.meta.tags.clear();
-        fs::write(path, doc.encode().unwrap()).unwrap();
-        sync_tags(root.path()).unwrap();
-        assert!(
-            read_catalog(&root.path().join("tags.json"))
-                .unwrap()
-                .entries
-                .is_empty()
-        );
+        let catalog = prepare_tag_catalog(root.path(), &[doc]).unwrap();
+        assert!(catalog.entries.is_empty());
         assert_eq!(
             fs::read_dir(root.path().join(".export-archive"))
                 .unwrap()

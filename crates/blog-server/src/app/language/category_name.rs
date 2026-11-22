@@ -22,19 +22,8 @@ module_param!(category_name: Category else not_found);
 
 #[page]
 async fn category_page(cx: &Cx) -> Result<impl View> {
-    render_category(
-        cx,
-        *crate::app::language::language(cx)?,
-        *category_name(cx)?,
-    )
-    .await
-}
-
-pub(crate) async fn render_category(
-    cx: &Cx,
-    locale: Locale,
-    category: Category,
-) -> Result<impl View> {
+    let locale = *super::language(cx)?;
+    let category = *category_name(cx)?;
     match load_category(cx, category, locale).await.clone() {
         Ok(Some(presentation)) => {
             Ok(view! { category_document(presentation: presentation, locale: locale) }.boxed())
