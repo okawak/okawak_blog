@@ -3,10 +3,11 @@ use jiff::civil::Date;
 use topcoat::l10n::{DateTime as LocalizedDateTime, DateTimeStyle, Number, locale};
 
 /// Keep framework locale formatting at the server boundary.
-fn formatting_locale(locale: Locale) -> topcoat::l10n::Locale {
+pub(crate) fn formatting_locale(locale: Locale) -> topcoat::l10n::Locale {
     match locale {
         Locale::Ja => locale!("ja"),
         Locale::En => locale!("en"),
+        Locale::ZhHans => locale!("zh-Hans"),
     }
 }
 

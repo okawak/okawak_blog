@@ -13,7 +13,24 @@ fn metadata() -> PublicContentMeta {
 
 #[test]
 fn locale_preserves_japanese_routes_and_separates_english_keys() {
-    for (locale, code) in [(Locale::Ja, "ja"), (Locale::En, "en")] {
+    for (locale, code) in [
+        (Locale::Ja, "ja"),
+        (Locale::En, "en"),
+        (Locale::ZhHans, "zh-hans"),
+    ] {
+        for (route, basename) in [
+            ("/", "index"),
+            ("/about", "about"),
+            ("/tech", "tech"),
+            ("/tech/intro", "tech/intro"),
+        ] {
+            for ext in ["md", "json"] {
+                assert_eq!(
+                    locale.page_file(route, ext),
+                    format!("{code}/{basename}.{ext}")
+                );
+            }
+        }
         assert_eq!(locale.as_str(), code);
         assert_eq!(locale.to_string(), code);
         assert_eq!(code.parse::<Locale>().unwrap(), locale);

@@ -20,8 +20,12 @@ pub fn build_category_page_canonical_path(document: &CategoryPageDocument) -> St
     build_category_path(&document.category)
 }
 
+pub fn build_static_page_path(page: &crate::PageKey) -> String {
+    format!("/{}", page.as_str())
+}
+
 pub fn build_static_page_canonical_path(document: &StaticPageDocument) -> String {
-    format!("/{}", document.page.as_str())
+    build_static_page_path(&document.page)
 }
 
 #[cfg(test)]

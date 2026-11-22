@@ -13,37 +13,77 @@ pub const PUBLIC_CONTENT_SCHEMA_VERSION: u32 = 1;
 /// This does not restrict explicit Slugs or include anchor prefixes and suffixes.
 pub const GENERATED_ID_HASH_LENGTH: usize = 12;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Locale {
     #[default]
     Ja,
     En,
+    #[serde(rename = "zh-hans")]
+    ZhHans,
 }
 
 impl Locale {
-    pub const ALL: [Self; 2] = [Self::Ja, Self::En];
+    pub const ALL: [Self; 3] = [Self::Ja, Self::En, Self::ZhHans];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Ja => "ja",
             Self::En => "en",
+            Self::ZhHans => "zh-hans",
         }
     }
 
-    pub fn path(self, japanese_path: &str) -> String {
+    pub fn language_tag(self) -> &'static str {
         match self {
-            Self::Ja => japanese_path.to_owned(),
-            Self::En if japanese_path == "/" => "/en".into(),
-            Self::En => format!("/en{japanese_path}"),
+            Self::ZhHans => "zh-Hans",
+            other => other.as_str(),
+        }
+    }
+
+    pub fn translations() -> impl Iterator<Item = Self> {
+        Self::ALL.into_iter().filter(|locale| *locale != Self::Ja)
+    }
+
+    pub fn path(self, route: &str) -> String {
+        if self == Self::Ja {
+            route.to_owned()
+        } else {
+            self.prefixed_path(route)
         }
     }
 
     pub fn artifact_key(self, key: &str) -> String {
-        match self {
-            Self::Ja => key.to_owned(),
-            Self::En => format!("en/{key}"),
+        if self == Self::Ja {
+            key.to_owned()
+        } else {
+            format!("{self}/{key}")
         }
+    }
+
+    fn prefixed_path(self, route: &str) -> String {
+        format!("/{}{}", self.as_str(), route.trim_end_matches('/'))
+    }
+
+    pub fn split_path(path: &str) -> Option<(Self, &str)> {
+        let first = path.strip_prefix('/')?.split('/').next()?;
+        let locale = first.parse().ok()?;
+        let rest = &path[first.len() + 1..];
+        Some((locale, if rest.is_empty() { "/" } else { rest }))
+    }
+
+    /// Derive the storage path from the canonical URL. Only the locale home needs a basename.
+    pub fn page_file(self, route: &str, extension: &str) -> String {
+        let url = self.prefixed_path(route);
+        let stem = url.trim_start_matches('/');
+        let index = if route == "/" { "/index" } else { "" };
+        format!("{stem}{index}.{extension}")
+    }
+
+    pub fn data_key(self, filename: &str) -> String {
+        format!("{}/_data/{filename}", self.as_str())
     }
 }
 
@@ -56,11 +96,10 @@ impl fmt::Display for Locale {
 impl FromStr for Locale {
     type Err = DomainError;
     fn from_str(value: &str) -> Result<Self> {
-        match value {
-            "ja" => Ok(Self::Ja),
-            "en" => Ok(Self::En),
-            _ => Err(DomainError::validation("unsupported locale")),
-        }
+        Self::ALL
+            .into_iter()
+            .find(|locale| locale.as_str() == value)
+            .ok_or_else(|| DomainError::validation("unsupported locale"))
     }
 }
 
@@ -147,18 +186,25 @@ impl PublicContentMeta {
     /// Build the canonical route in a locale without copying the metadata.
     /// Call validate before routing a deserialized document.
     pub fn path(&self, locale: Locale) -> String {
-        let path = match self.kind {
-            ContentKind::Article => format!(
-                "/{}/{}",
-                self.category.map_or_default(|c| c.as_str()),
-                self.id
-            ),
-            ContentKind::Category => {
-                format!("/{}", self.category.map_or_default(|c| c.as_str()))
+        locale.path(&self.route_key())
+    }
+
+    pub fn route_key(&self) -> String {
+        match self.kind {
+            ContentKind::Article => {
+                crate::build_article_path(&self.category.expect("validated article"), &self.id)
             }
-            ContentKind::Page => format!("/{}", self.page.as_ref().map_or_default(PageKey::as_str)),
-            ContentKind::Home => "/".into(),
-        };
-        locale.path(&path)
+            ContentKind::Category => {
+                crate::build_category_path(&self.category.expect("validated category"))
+            }
+            ContentKind::Page => {
+                crate::build_static_page_path(self.page.as_ref().expect("validated page"))
+            }
+            ContentKind::Home => crate::build_home_page_canonical_path().into(),
+        }
+    }
+
+    pub fn markdown_path(&self, locale: Locale) -> String {
+        locale.page_file(&self.route_key(), "md")
     }
 }
