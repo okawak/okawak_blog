@@ -10,14 +10,14 @@ use topcoat::{
     view::{Unescaped, View, ViewExt, component, view},
 };
 
-use super::page_loader;
+use crate::app::page_loader;
 use crate::shell::{internal_server_error_page, site_shell};
 
 const ABOUT_PAGE_KEY: &str = "about";
 
 #[page]
 async fn about(cx: &Cx) -> Result<impl View> {
-    render_about(cx, Locale::Ja).await
+    render_about(cx, *super::language(cx)?).await
 }
 
 pub(crate) async fn render_about(cx: &Cx, locale: Locale) -> Result<impl View> {

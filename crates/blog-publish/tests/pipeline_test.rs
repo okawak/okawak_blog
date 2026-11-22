@@ -140,10 +140,10 @@ async fn test_publish_resolves_links_to_all_content_kinds() {
         .unwrap();
     let html = read_json::<blog_domain::ArticleArtifactDocument>(html_path).html;
     for expected in [
-        r#"href="/about">About</a>"#,
-        r#"href="/">Home</a>"#,
-        r#"href="/tech">Tech</a>"#,
-        r#"href="/about">About page</a>"#,
+        r#"href="/ja/about">About</a>"#,
+        r#"href="/ja">Home</a>"#,
+        r#"href="/ja/tech">Tech</a>"#,
+        r#"href="/ja/about">About page</a>"#,
     ] {
         assert!(html.contains(expected), "missing {expected}");
     }

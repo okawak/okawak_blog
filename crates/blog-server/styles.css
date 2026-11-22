@@ -52,6 +52,10 @@
 
 }
 
+:root:lang(zh-Hans) {
+  --site-font-sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
 .dark {
   --background: #0d0a08;
   --foreground: #e1d9d1;

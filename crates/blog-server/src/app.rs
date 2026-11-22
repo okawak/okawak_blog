@@ -4,11 +4,9 @@ use crate::i18n::{Message, t};
 use crate::metadata::*;
 use blog_domain::Locale;
 
-mod about;
 mod api;
-mod category_name;
 mod content_assets;
-mod en;
+mod language;
 
 use std::sync::Arc;
 
@@ -128,6 +126,11 @@ fn not_modified_response(conditional_get: &ArtifactConditionalGetDecision) -> Re
 
 fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
     Box::pin(async move {
+        if matches!(*request::method(cx), Method::GET | Method::HEAD)
+            && let Some(location) = crate::language::legacy_location(request::uri(cx))
+        {
+            return topcoat::router::error::redirect_permanent(location).into_response(cx);
+        }
         let state = context::<ArtifactHttpCacheState>(cx);
         let conditional_get = state
             // Runtime page re-runs rewrite POST into GET, but their signal-dependent

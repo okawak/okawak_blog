@@ -732,6 +732,7 @@ dependencies = [
  "headers",
  "httpdate",
  "jiff",
+ "percent-encoding",
  "serde_json",
  "tempfile",
  "tokio",

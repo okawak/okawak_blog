@@ -48,22 +48,6 @@ impl Locale {
     }
 
     pub fn path(self, route: &str) -> String {
-        if self == Self::Ja {
-            route.to_owned()
-        } else {
-            self.prefixed_path(route)
-        }
-    }
-
-    pub fn artifact_key(self, key: &str) -> String {
-        if self == Self::Ja {
-            key.to_owned()
-        } else {
-            format!("{self}/{key}")
-        }
-    }
-
-    fn prefixed_path(self, route: &str) -> String {
         format!("/{}{}", self.as_str(), route.trim_end_matches('/'))
     }
 
@@ -76,7 +60,7 @@ impl Locale {
 
     /// Derive the storage path from the canonical URL. Only the locale home needs a basename.
     pub fn page_file(self, route: &str, extension: &str) -> String {
-        let url = self.prefixed_path(route);
+        let url = self.path(route);
         let stem = url.trim_start_matches('/');
         let index = if route == "/" { "/index" } else { "" };
         format!("{stem}{index}.{extension}")

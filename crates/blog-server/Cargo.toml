@@ -14,6 +14,7 @@ async-trait.workspace = true
 blog-domain = { path = "../blog-domain", features = ["schema"] }
 blog-infra = { path = "../blog-infra" }
 headers.workspace = true
+percent-encoding.workspace = true
 httpdate.workspace = true
 jiff = { workspace = true, features = ["tz-system", "tzdb-zoneinfo", "tzdb-concatenated"] }
 serde_json.workspace = true

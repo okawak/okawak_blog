@@ -1,0 +1,20 @@
+{
+  "summary": {
+    "slug": "e2e-article",
+    "title": "浏览器测试文章",
+    "category": "tech",
+    "section_path": [
+      "rust",
+      "async"
+    ],
+    "description": "文章测试说明",
+    "tags": [
+      "rust",
+      "e2e"
+    ],
+    "priority": 10,
+    "created_at": "2026-01-01T00:00:00+09:00",
+    "updated_at": "2026-01-02T00:00:00+09:00"
+  },
+  "html": "<p>用于浏览器测试的简体中文内容。</p>"
+}

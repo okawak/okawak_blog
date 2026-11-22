@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const SITE_NAME = "ぶくせんの探窟メモ";
 
 test("empty home keeps its metadata in the initial response", async ({ page }) => {
-  const response = await page.goto("/");
+  const response = await page.goto("/ja");
 
   expect(response?.status()).toBe(200);
   await expect(page.getByText("記事がありません")).toBeVisible();
@@ -14,7 +14,7 @@ test("empty home keeps its metadata in the initial response", async ({ page }) =
   );
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
-    "http://127.0.0.1:8008",
+    "http://127.0.0.1:8008/ja",
   );
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
     "content",
@@ -26,6 +26,6 @@ test("empty home keeps its metadata in the initial response", async ({ page }) =
   );
   await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
     "content",
-    "http://127.0.0.1:8008",
+    "http://127.0.0.1:8008/ja",
   );
 });

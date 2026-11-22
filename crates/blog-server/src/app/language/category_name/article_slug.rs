@@ -15,8 +15,8 @@ use topcoat::{
     view::{Unescaped, View, ViewExt, component, view},
 };
 
-use super::super::page_loader;
 use super::category_name;
+use crate::app::page_loader;
 use crate::components::badge::{BadgeVariant, badge};
 use crate::shell::{article_internal_server_error_page, site_shell};
 
@@ -24,7 +24,13 @@ module_param!(article_slug);
 
 #[page]
 async fn article_page(cx: &Cx) -> Result<impl View> {
-    render_article(cx, Locale::Ja, *category_name(cx)?, article_slug(cx)).await
+    render_article(
+        cx,
+        *crate::app::language::language(cx)?,
+        *category_name(cx)?,
+        article_slug(cx),
+    )
+    .await
 }
 
 pub(crate) async fn render_article(

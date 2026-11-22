@@ -135,11 +135,11 @@ mod tests {
         };
         document.validate().unwrap();
         for (path, locale, expected) in [
-            ("/", Locale::Ja, Some("/")),
+            ("/", Locale::Ja, Some("/ja")),
             ("/", Locale::En, Some("/en")),
-            ("/about", Locale::Ja, Some("/about")),
+            ("/about", Locale::Ja, Some("/ja/about")),
             ("/about", Locale::En, None),
-            ("/tech/article", Locale::Ja, Some("/tech/article")),
+            ("/tech/article", Locale::Ja, Some("/ja/tech/article")),
             ("/tech/article", Locale::En, Some("/en/tech/article")),
             ("/daily/english", Locale::Ja, None),
             ("/daily/english", Locale::En, Some("/en/daily/english")),

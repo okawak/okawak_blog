@@ -10,7 +10,7 @@ okawak_blogは、Obsidianで書いたMarkdownを公開artifactへ変換し、Top
 
 1. ローカルのexportがprivate Obsidianから公開対象を抽出・正規化する
 2. 公開文章、タグ表示名、UI文言の必要な差分だけをローカルCodexで翻訳する
-3. review済みの日英Markdownと辞書をGitへ確定する
+3. review済みの多言語Markdownと辞書をGitへ確定する
 4. publishが言語別HTML・JSONと公開path対応表を生成する
 5. GitHub Actionsがimmutable S3 releaseへuploadし、artifactと表示を検証する
 6. 検証成功後だけcurrent.jsonを新releaseへ切り替える
@@ -125,7 +125,7 @@ scripts/tests/は運用スクリプト、service/tests/はsystemd unitを検証�
 
 ## コンテンツ境界
 
-private Obsidianは執筆形式、content/はexportとpublish間の公開契約である。Obsidian固有frontmatter、WikiLink、embed、private pathをpublishへ渡さない。公開Markdownはschema version、安定ID、locale、kind、日時、元pathのdigestを持ち、英語版だけが翻訳追跡情報を持つ。正確なfieldと組合せは[公開Markdown契約](../content/public-markdown.md)を正本とする。
+private Obsidianは執筆形式、content/はexportとpublish間の公開契約である。Obsidian固有frontmatter、WikiLink、embed、private pathをpublishへ渡さない。公開Markdownはschema version、安定ID、locale、kind、日時、元pathのdigestを持ち、翻訳版が翻訳追跡情報を持つ。正確なfieldと組合せは[公開Markdown契約](../content/public-markdown.md)を正本とする。
 
 content kindはarticle、category、page、homeの4種類である。articleはcategoryと同名の入力directoryに置き、categoryからの相対pathをsection_pathとして一覧のgroupingに使う。URLはsection_pathに依存しない。執筆例とdirectory規則は[Obsidian template](../content/obsidian-template.md)に置く。
 
@@ -135,13 +135,13 @@ content kindはarticle、category、page、homeの4種類である。articleはc
 
 ## Artifactとrelease
 
-blog-domainがページ種別と安定IDから公開ルートを決め、全言語に同じ保存規則を適用する。公開URLから先頭のスラッシュを外し、ページJSONは `.json` を付ける。トップだけは言語ディレクトリの `index` を使う。
+blog-domainがページ種別と安定IDから公開ルートを決め、全言語に同じ保存規則を適用する。公開URLから先頭のスラッシュを外し、Markdownは `.md`、ページJSONは `.json` を付ける。トップだけは言語ディレクトリの `index` を使う。
 
 ~~~text
 site/
 ├── locales.json
 ├── content-assets/
-└── <locale>/  # ja, en
+└── <locale>/  # ja, en, zh-hans
     ├── index.json
     ├── about.json
     ├── <category>.json
@@ -184,20 +184,18 @@ releaseは上書きせず、公開runをrepository単位で直列化する。失
 
 ## 公開URLと言語
 
-日本語URLは既存pathを維持し、英語だけ/en prefixを付ける。
+公開ページの先頭は全言語で明示する。言語に依存しないページキーと安定IDを共有し、同じ記事は全言語で同じslugを使う。
 
-| Page | 日本語 | 英語 |
-| --- | --- | --- |
-| Home | / | /en |
-| About | /about | /en/about |
-| Category | /:category | /en/:category |
-| Article | /:category/:slug | /en/:category/:slug |
+| ページ | 日本語 | 英語 | 簡体字中国語 |
+| --- | --- | --- | --- |
+| Home | `/ja` | `/en` | `/zh-hans` |
+| About | `/ja/about` | `/en/about` | `/zh-hans/about` |
+| Category | `/ja/:category` | `/en/:category` | `/zh-hans/:category` |
+| Article | `/ja/:category/:slug` | `/en/:category/:slug` | `/zh-hans/:category/:slug` |
 
-/articles/:slugと/categories/:categoryは現行の公開routeではない。末尾slashはqueryを維持した308で正規URLへ移す。
+`GET /` と `HEAD /` は公開済みのトップへ307で転送する。保存済みの選択、TopcoatのAccept-Language照合、英語、日本語の順で選ぶ。簡体字は言語タグ `zh-Hans` に対応し、繁体字を指定するブラウザとは区別する。入口は `Vary: Accept-Language, Cookie` と `Cache-Control: no-store` を返す。各言語のURLはCookieやブラウザ設定に左右されない。旧日本語のAbout・カテゴリ・記事はクエリを保って対応する日本語URLへ308で転送する。API・assetは専用のパスを持つ。
 
-トップページのGET / HEADだけは、保存済みlocale cookie、Accept-Language、英語の順で初期言語を選ぶ。記事などの直接URLはブラウザ設定で変更しない。言語切替は同じpageの翻訳、対象言語homeの順に移動し、対象言語が公開されていなければ無効にする。選択はhost限定、Path=/、HttpOnly、SameSite=Laxのcookieへ1年間保存する。Cookieの解析とSet-Cookie生成はTopcoatのCookieLayer / CookieJarに委譲する。Accept-Languageの解析と日英の照合はTopcoatのaccept_language / negotiateに委譲する。wildcardとq=0は候補から除外し、有効な候補が日英どちらにも一致しなければ英語を選ぶ。独自の重み計算やwildcard補正は行わない。
-
-同じpageの翻訳が実在する場合だけhreflangを出す。英語artifactがないURLは英語404とし、日本語本文を英語版として配信しない。英語UI文言の欠落・更新待ちは日本語、未知のUI keyはkey文字列、英語タグ表示名の欠落は日本語名へfallbackする。
+言語切替は同じページの翻訳、対象言語トップの順で移動する。公開されていない言語は無効にする。明示的な選択はhost限定、Path=/、HttpOnly、SameSite=LaxのCookieに1年間保存する。各ページのcanonicalは明示URLとし、hreflangは同じリリース内で実在する翻訳間に付ける。未翻訳ページの直接URLはその言語の404、UI文言やタグ表示名の翻訳欠落・更新待ちは日本語表示とする。
 
 ## Pageとruntime境界
 
@@ -205,7 +203,7 @@ blog-domainのpage documentは言語やstorageに依存しない表示データ�
 
 1 request内のpage documentとmetadataは同じartifact snapshotから組み立てる。serverのpageは同じpresentationからTopcoatのMetadataを直接組み立て、shellがcanonical・サイト名を補って統合contextへ登録し、title・canonical・social metadataを描画する。公開URLは起動時に検証したTopcoatのBaseUrlに統一し、描画時に環境変数を読み直さない。hreflangとog:localeは公開locale情報から補う。home fragmentだけを任意とし、必要なartifactの欠落・読取失敗を空値へ変換しない。404とstorage errorはroute境界で異なるstatusとして扱う。/api/articlesは互換endpointとして維持し、page専用APIは増やさない。
 
-公開routeはTopcoatのmodule treeから導出する。app.rsをrootとし、static segmentと`module_param!()`で宣言するdynamic segmentをfile moduleでURL構造へ対応させ、mod.rsは使わない。日本語と英語は描画処理を共有する。release-aware HTTP cacheはroute固有処理ではなくglobal layerとして構成する。
+公開routeはTopcoatのmodule treeから導出する。app.rsをrootとし、static segmentと`module_param!()`で宣言するdynamic segmentをfile moduleでURL構造へ対応させ、mod.rsは使わない。各言語は型付きのlanguage segmentと描画処理を共有する。release-aware HTTP cacheはroute固有処理ではなくglobal layerとして構成する。
 
 responsive menuはTopcoat UIのPopoverとブラウザー標準の開閉・focus管理を使う。serverのshellがリンク選択・履歴移動・画面幅切替に伴う閉じる処理を補う。Topcoat runtimeはcategory内の記事絞り込み、UIが生成する内部linkのnavigationと先読みに使う。navigationはserverで描画したdocumentとmetadataを更新し、履歴・scrollを管理する。hover・focus・touchで先読みし、cookieを変更する言語選択linkは先読みしない。言語選択はruntime navigationのrewrite後GETにも適用する。生成Markdownのanchorは通常のbrowser navigationを維持する。初期HTMLには全記事と通常linkを含め、JavaScriptや外部CDNが失敗しても本文とnavigationを利用可能にする。UI component、asset、styleの詳細は[server README](../../crates/blog-server/README.md)を正本とする。
 
@@ -219,15 +217,15 @@ PageLoaderのpresentationは辞書とlocale catalogの共有参照を保持す�
 
 - local readerはdev-localと固定fixtureでfilesystem treeを読み、memory cacheを適用しない
 - S3 readerはcurrent.jsonからrelease prefixを固定し、snapshotと取得済みartifactをmemory cacheする
-- current.jsonが初回から存在しない場合だけ旧bucket rootを日本語releaseとして読む
+- 公開前smokeではreleaseのsite prefixを直接指定し、current.jsonがない場合はそのprefixから同じ構造を読む
 
 release snapshotのTTL・identity比較・stale fallbackはinfraが判断する。S3 snapshot cacheは既定5秒のTTLを持つ。TTL後もrelease identityが同じならartifact cacheを維持し、identityが変わったときだけ新cacheへ切り替える。既存requestが保持するsnapshotはrequest完了まで有効である。同じartifactへのconcurrent missは1回のreadへまとめ、errorはcacheしない。
 
-snapshot更新に失敗した場合、cache済みの直前のimmutable releaseを配信し、次のTTLで再試行する。運用中にcurrent.jsonが消えてもlegacy rootへ戻らない。初回取得失敗、legacy root、TTL=0ではstale fallbackしない。未取得artifactのread失敗まで隠さず、そのrequestはerrorにする。
+snapshot更新に失敗した場合、cache済みの直前のimmutable releaseを配信し、次のTTLで再試行する。運用中にcurrent.jsonが消えても直接指定したprefixへ戻らない。初回取得失敗、直接指定したprefix、TTL=0ではstale fallbackしない。未取得artifactのread失敗まで隠さず、そのrequestはerrorにする。
 
 artifact-backedなGET / HEADはprocess instance、release identity、request URIからweak ETag、release生成時刻とprocess起動時刻からLast-Modifiedを作る。URIを含めて異なるrepresentationのvalidatorを分離し、process再起動でもvalidatorを変えてserver / UI更新後の古いrepresentationを再利用させない。ETagの解析・weak比較はheaders crateに委譲する。wildcard単独では描画前の304を返さない。If-None-MatchをIf-Modified-Sinceより優先し、resourceが存在する成功responseだけを304へ変換する。
 
-Topcoatのpage再描画はpage自身のURLにruntime header付きでPOSTし、runtime layerがapplication layerより前にGETへ変換するため、cache対象のmethod判定にはoriginal methodを使う。local reader、legacy root、release prefixを直接読む公開前smoke、TTL=0、health / readiness、asset、404 / error responseにはartifact validatorを付けない。
+Topcoatのpage再描画はpage自身のURLにruntime header付きでPOSTし、runtime layerがapplication layerより前にGETへ変換するため、cache対象のmethod判定にはoriginal methodを使う。local reader、release prefixを直接読む公開前smoke、TTL=0、health / readiness、asset、404 / error responseにはartifact validatorを付けない。
 
 /api/healthはprocess livenessだけ、/api/readyはconfigured readerからsnapshotとsite metadataを読めることを確認する。cache済みstale snapshotを配信できる場合はreadyとする。
 
