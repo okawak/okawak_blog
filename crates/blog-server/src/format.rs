@@ -7,7 +7,7 @@ pub(crate) fn formatting_locale(locale: Locale) -> topcoat::l10n::Locale {
     match locale {
         Locale::Ja => locale!("ja"),
         Locale::En => locale!("en"),
-        Locale::ZhHans => locale!("zh-Hans"),
+        Locale::ZhHans => locale!("zh-hans"),
     }
 }
 
