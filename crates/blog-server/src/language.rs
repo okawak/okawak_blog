@@ -158,7 +158,7 @@ pub(crate) async fn language_switcher(
                                 choice_href(&target, other),
                                 PrefetchMode::Never,
                             ))
-                            lang=(other.language_tag())
+                            lang=(other.as_str())
                             aria-current=(if other == locale {
                                 Some("true")
                             } else {
@@ -169,7 +169,7 @@ pub(crate) async fn language_switcher(
                     )
                 } else {
                     <span
-                        lang=(other.language_tag())
+                        lang=(other.as_str())
                         aria-disabled="true"
                         class="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-transparent px-2 text-xs font-medium text-muted-foreground opacity-50 select-none"
                     >
