@@ -88,16 +88,10 @@ impl ContentPlan<'_> {
         } = self;
         let mut report = TranslationReport::default();
         let total = plans.len();
-        let ai_requests = plans.iter().try_fold(0, |count, plan| {
-            Ok::<_, ExportError>(
-                count
-                    + usize::from(cache::will_call_translator(
-                        plan.update,
-                        &plan.request,
-                        cache_root,
-                    )?),
-            )
-        })?;
+        let ai_requests = cache::pending_request_count(
+            cache_root,
+            plans.iter().map(|plan| (plan.update, &plan.request)),
+        )?;
         tracing::info!(
             scope = "Articles",
             total,
