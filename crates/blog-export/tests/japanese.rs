@@ -738,3 +738,33 @@ fn wiki_note_embeds_remain_links_and_markdown_images_require_http_urls(#[case] i
     assert!(run_export(source.path(), output.path()).is_err());
     assert_eq!(outputs(output.path()), before);
 }
+
+#[test]
+fn hidden_comments_stop_export_and_code_examples_remain_publishable() {
+    let source = TempDir::new().unwrap();
+    let output = TempDir::new().unwrap();
+    let path = "tech/comment.md";
+    note(
+        source.path(),
+        path,
+        "Test",
+        true,
+        "Inline `%%` and code:\n\n```md\n%% sample %%\n```",
+    );
+    run_export(source.path(), output.path()).unwrap();
+    let before = outputs(output.path());
+    for body in [
+        "before %% editorial %% after",
+        "%%\neditorial\n%%",
+        "before %% unfinished",
+    ] {
+        note(source.path(), path, "Test", true, body);
+        assert!(
+            run_export(source.path(), output.path())
+                .unwrap_err()
+                .to_string()
+                .contains("Obsidian comments")
+        );
+        assert_eq!(outputs(output.path()), before);
+    }
+}

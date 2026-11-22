@@ -12,9 +12,9 @@ schema = ["dep:schemars"]
 
 [dependencies]
 # Keep blog-domain dependencies pure and WASM-compatible.
-jiff.workspace = true
+jiff = { workspace = true, features = ["std"] }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive", "rc"] }
 thiserror.workspace = true
 
 [dev-dependencies]

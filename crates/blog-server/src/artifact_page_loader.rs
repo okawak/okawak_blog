@@ -111,6 +111,12 @@ impl PageLoader for ArtifactPageLoader {
         let Some((root, snapshot)) = self.for_locale(locale).await? else {
             return Ok(None);
         };
+        let catalog = root.read_locales().await.map_err(|e| e.to_string())?;
+        let route = blog_domain::build_article_path(category, slug);
+        // A missing catalog is the supported legacy Japanese layout.
+        if !catalog.routes.is_empty() && catalog.path(&route, locale).is_none() {
+            return Ok(None);
+        }
         let Some(article) = snapshot
             .read_article(category, slug)
             .await
@@ -118,8 +124,15 @@ impl PageLoader for ArtifactPageLoader {
         else {
             return Ok(None);
         };
-        let document = build_article_page_document(&article);
-        presentation(document, &root, &snapshot).await.map(Some)
+        let labels = snapshot
+            .read_tag_labels()
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(Some(Presentation {
+            document: build_article_page_document(&article),
+            labels,
+            locales: catalog,
+        }))
     }
 
     async fn load_category(
