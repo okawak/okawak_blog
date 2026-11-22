@@ -30,7 +30,7 @@ headers = "0.4"
 httpdate = "1"
 http = "1"
 indoc = "2"
-jiff = { version = "1", default-features = false, features = ["std"] }
+jiff = { version = "1", default-features = false }
 moka = { version = "0.12", default-features = false }
 pulldown-cmark = "0.13"
 percent-encoding = "2"
@@ -39,7 +39,7 @@ reqwest = "0.13"
 rstest = "0.28"
 scraper = "0.29"
 schemars = "1"
-serde = { version = "1", features = ["rc"] }
+serde = "1"
 serde_json = "1"
 sha2 = "0.11"
 tempfile = "3"
