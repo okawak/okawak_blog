@@ -144,11 +144,12 @@ impl ContentPlan<'_> {
             match update {
                 UpdatePlan::Reuse => {
                     let mut preserved = current.unwrap();
-                    preserved.refresh_translation_metadata(original);
-                    if let Some(provenance) = &mut preserved.meta.translation {
+                    if let Some(provenance) = &mut preserved.meta.translation
+                        && provenance.stale
+                    {
                         provenance.stale = false;
+                        fs::write(path, preserved.encode()?)?;
                     }
-                    fs::write(path, preserved.encode()?)?;
                     report.reused += 1;
                 }
                 UpdatePlan::Generate
