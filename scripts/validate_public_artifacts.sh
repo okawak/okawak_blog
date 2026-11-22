@@ -33,13 +33,13 @@ for locale in $(jq -r '.routes["/"][]' "$root/locales.json"); do
         article_count: ([$index[0].articles[] | select(.category == $category)] | length)}] |
        sort_by(.category))
   ' "$locale_root/_data/site.json" >/dev/null
-  for category_file in "$locale_root"/*.json; do
-    [ -e "$category_file" ] || continue
-    category="${category_file##*/}"
-    category="${category%.json}"
-    case "$category" in index|about) continue ;; esac
-    jq -e --arg category "$category" 'any(.categories[]; .category == $category)' \
-      "$locale_root/_data/site.json" >/dev/null
+  # Readers can fetch pages by their keys directly. Every page file must be advertised.
+  for page in "$locale_root"/*.json "$locale_root"/*/*.json; do
+    [ -f "$page" ] || continue
+    relative="${page#"$locale_root"/}"
+    case "$relative" in index.json|_data/*) continue ;; esac
+    jq -e --arg route "/${relative%.json}" --arg locale "$locale" \
+      '.routes[$route] | index($locale) != null' "$root/locales.json" >/dev/null
   done
   while IFS= read -r category; do
     jq -e --arg category "$category" --slurpfile index "$locale_root/_data/articles.json" '
@@ -47,10 +47,6 @@ for locale in $(jq -r '.routes["/"][]' "$root/locales.json"); do
         ([$index[0].articles[] | select(.category == $category)] | sort_by(.slug))
     ' "$locale_root/$category.json" >/dev/null
   done < <(jq -r '.categories[].category' "$locale_root/_data/site.json")
-  while IFS=$'\t' read -r category slug; do
-    jq -e --arg route "/$category/$slug" --arg locale "$locale" '.routes[$route] | index($locale) != null' "$root/locales.json" >/dev/null
-    test -s "$locale_root/$category/$slug.json"
-  done < <(jq -r '.articles[] | [.category, .slug] | @tsv' "$locale_root/_data/articles.json")
   while IFS= read -r route; do
     case "$route" in
       /) ;;

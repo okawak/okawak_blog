@@ -31,16 +31,21 @@ pub async fn publish_with_bookmark_enricher(
         .map(Vec::as_slice)
         .unwrap_or_default();
     validate_japanese(japanese)?;
+    let mut japanese_links = links::Index::default();
+    japanese_links.add_documents(japanese);
     let mut publications = Vec::new();
     let mut asset_names = std::collections::BTreeSet::new();
-    for (&locale, docs) in &groups {
+    for (locale, docs) in groups {
         if docs.is_empty() {
             continue;
         }
-        let index = links::Index::new(japanese, docs);
-        index.validate(docs)?;
-        publications.push((locale, index));
-        asset_names.extend(links::assets(docs)?);
+        let mut index = japanese_links.clone();
+        if locale != Locale::Ja {
+            index.add_documents(&docs);
+        }
+        index.validate(&docs)?;
+        asset_names.extend(links::assets(&docs)?);
+        publications.push((locale, docs, index));
     }
     for name in &asset_names {
         let path = content_dir.join("assets").join(name);
@@ -59,9 +64,7 @@ pub async fn publish_with_bookmark_enricher(
         .prefix(".publish-stage-")
         .tempdir_in(parent)?;
     let mut locales = SiteLocalesDocument::default();
-    let mut groups = groups;
-    for (locale, index) in publications {
-        let docs = groups.remove(&locale).expect("indexed locale");
+    for (locale, docs, index) in publications {
         locales.routes.entry("/".into()).or_default().push(locale);
         for doc in &docs {
             let available = locales.routes.entry(doc.meta.route_key()).or_default();
