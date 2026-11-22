@@ -1,7 +1,7 @@
 use crate::i18n::{Message, t};
 use crate::metadata::*;
 use blog_domain::Locale;
-use blog_domain::{PageKey, StaticPageDocument, build_static_page_canonical_path};
+use blog_domain::{PageKey, StaticPageDocument, build_static_page_path};
 use topcoat::{
     Result,
     context::Cx,
@@ -55,7 +55,7 @@ async fn about_document(
     } = presentation;
     let title = build_static_page_title(&document, locale);
     let description = build_static_page_description(&document, locale);
-    let canonical_path = locale.path(&build_static_page_canonical_path(&document));
+    let canonical_path = locale.path(&build_static_page_path(&document.page));
     let page_title = document.title;
     // The publish pipeline escapes raw Markdown HTML and neutralizes unsafe href schemes before
     // persisting this fragment. It is therefore the trusted HTML boundary for Topcoat as well.
