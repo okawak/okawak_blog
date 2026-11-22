@@ -126,26 +126,22 @@ fn not_modified_response(conditional_get: &ArtifactConditionalGetDecision) -> Re
 
 fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
     Box::pin(async move {
-        if matches!(*request::method(cx), Method::GET | Method::HEAD)
-            && let Some(location) = crate::language::legacy_location(request::uri(cx))
-        {
+        let uri = request::uri(cx);
+        let is_read = matches!(*request::method(cx), Method::GET | Method::HEAD);
+        if is_read && let Some(location) = crate::language::legacy_location(uri) {
             return topcoat::router::error::redirect_permanent(location).into_response(cx);
         }
         let state = context::<ArtifactHttpCacheState>(cx);
         let conditional_get = state
             // Runtime page re-runs rewrite POST into GET, but their signal-dependent
             // HTML must not share validators with the ordinary published page.
-            .conditional_get(
-                request::original_method(cx),
-                request::uri(cx),
-                request::headers(cx),
-            )
+            .conditional_get(request::original_method(cx), uri, request::headers(cx))
             .await;
 
         // Language selection also applies to runtime navigation's rewritten GET.
-        let negotiate = matches!(*request::method(cx), Method::GET | Method::HEAD)
-            && is_site_page_path(request::uri(cx).path())
-            && crate::language::is_negotiated_request(request::uri(cx));
+        let explicit = crate::language::explicit_choice(uri);
+        let negotiate =
+            is_read && is_site_page_path(uri.path()) && (uri.path() == "/" || explicit.is_some());
         let mut snapshot = conditional_get
             .as_ref()
             .and_then(|decision| decision.snapshot());
@@ -159,12 +155,12 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
         });
         let cx = scoped.as_ref().unwrap_or(cx);
         // A Japanese home ETag must never suppress a redirect selected by an English browser.
-        if negotiate && let Some(response) = crate::language::redirect(cx).await {
+        if negotiate && let Some(response) = crate::language::redirect(cx, explicit).await {
             return Ok(response);
         }
         let Some(conditional_get) = conditional_get else {
             let mut response = next.run(cx, body).await?;
-            if negotiate && request::uri(cx).path() == "/" {
+            if negotiate && uri.path() == "/" {
                 crate::language::vary_home(&mut response);
             }
             return Ok(response);
@@ -182,7 +178,7 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
                 response
             }
         };
-        if request::uri(cx).path() == "/" {
+        if uri.path() == "/" {
             crate::language::vary_home(&mut response);
         }
         Ok(response)

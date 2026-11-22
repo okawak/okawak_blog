@@ -129,11 +129,13 @@ pub(crate) async fn site_shell(
     #[default] locales: std::sync::Arc<SiteLocalesDocument>,
     #[default] child: Child<'_>,
 ) -> Result<impl View> {
-    let available = locales.routes.get(route_key(&canonical_path));
-    let alternates = available
+    let route = route_key(&canonical_path);
+    let alternates = locales
+        .routes
+        .get(route)
         .into_iter()
         .flatten()
-        .map(|other| (*other, other.path(route_key(&canonical_path))))
+        .map(|other| (*other, other.path(route)))
         .collect::<Vec<_>>();
     let switch_locales = if status != StatusCode::OK {
         crate::app::page_loader(cx)
