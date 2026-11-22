@@ -35,7 +35,7 @@ pub(crate) fn translate_stage(
         let fragments = Fragments::extract(&original);
         let request = article_request(fragments.texts.clone(), settings);
         let input = content_input(&request, &original)?;
-        let current = output::read_document(stage, Locale::En, &original.meta.id)?;
+        let current = output::read_document(stage, Locale::En, &original.meta)?;
         let current_hash = current.as_ref().map(text_hash).transpose()?;
         let decision = decide(
             input.as_str(),
@@ -114,15 +114,16 @@ pub(crate) fn translate_stage(
             action = update.action(),
             "translation item started"
         );
-        let path = stage.join(format!("en/{}.md", original.meta.id));
+        let path = stage.join(original.meta.markdown_path(Locale::En)?);
         match update {
             UpdatePlan::Reuse => {
                 let mut preserved = current.unwrap();
-                preserved.refresh_translation_metadata(&original);
-                if let Some(provenance) = &mut preserved.meta.translation {
+                if let Some(provenance) = &mut preserved.meta.translation
+                    && provenance.stale
+                {
                     provenance.stale = false;
+                    fs::write(path, preserved.encode()?)?;
                 }
-                fs::write(path, preserved.encode()?)?;
                 report.reused += 1;
             }
             UpdatePlan::Generate | UpdatePlan::GenerateCandidate | UpdatePlan::ReuseCandidate => {
@@ -196,7 +197,10 @@ pub(crate) fn accept_article_candidate(
     id: &Slug,
     settings: &TranslationSettings,
 ) -> Result<()> {
-    let original = Document::parse(&fs::read_to_string(stage.join(format!("ja/{id}.md")))?)?;
+    let original = output::read_locale(stage, Locale::Ja)?
+        .into_iter()
+        .find(|doc| doc.meta.id == *id)
+        .ok_or_else(|| ExportError::translation_conflict("candidate source is missing"))?;
     let candidate_path = stage.join(format!(".export-candidates/{id}.md"));
     let mut candidate = Document::parse(&fs::read_to_string(&candidate_path)?)?;
     let fragments = Fragments::extract(&original);
@@ -206,9 +210,7 @@ pub(crate) fn accept_article_candidate(
         .translation
         .as_ref()
         .ok_or_else(|| ExportError::translation_conflict("candidate has no provenance"))?;
-    if original.meta.id != *id
-        || original.meta.locale != Locale::Ja
-        || candidate.meta.id != *id
+    if candidate.meta.id != *id
         || candidate.meta.locale != Locale::En
         || provenance.stale
         || provenance.input_hash != content_input(&request, &original)?
@@ -220,8 +222,7 @@ pub(crate) fn accept_article_candidate(
     // Candidate prose may have been reviewed manually while management
     // fields changed in Japanese. Those fields always come from the source.
     candidate.refresh_translation_metadata(&original);
-    fs::create_dir_all(stage.join("en"))?;
-    fs::write(stage.join(format!("en/{id}.md")), candidate.encode()?)?;
+    output::write_document(stage, &candidate)?;
     fs::remove_file(candidate_path)?;
     Ok(())
 }

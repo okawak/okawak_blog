@@ -105,7 +105,7 @@ exec "$FAKE_CODEX_TEST" --exact fake_codex_process --nocapture
 
     fn prepare_review_candidates(&self) -> Output {
         self.run(&[]);
-        let english = self.path(&format!("content/en/{ARTICLE}.md"));
+        let english = self.path(&format!("content/en/tech/{ARTICLE}.md"));
         let translated = fs::read_to_string(&english).unwrap();
         fs::write(
             &english,
@@ -226,7 +226,7 @@ fn default_export_translates_every_scope_and_reuses_unchanged_results() {
         !logs.contains("こんにちは"),
         "UI source text must not be logged"
     );
-    let english = project.path(&format!("content/en/{ARTICLE}.md"));
+    let english = project.path(&format!("content/en/tech/{ARTICLE}.md"));
     assert!(
         fs::read_to_string(&english)
             .unwrap()
@@ -281,7 +281,7 @@ fn default_export_translates_only_the_changed_article() {
     project.run(&[]);
     assert_eq!(project.calls(), calls + 1);
     assert!(
-        fs::read_to_string(project.path(&format!("content/en/{ARTICLE}.md")))
+        fs::read_to_string(project.path(&format!("content/en/tech/{ARTICLE}.md")))
             .unwrap()
             .contains("English 更新した本文")
     );
@@ -291,7 +291,7 @@ fn default_export_translates_only_the_changed_article() {
 fn manual_edits_are_preserved_and_matching_candidates_are_reused() {
     let project = Project::new();
     let result = project.prepare_review_candidates();
-    let english = project.path(&format!("content/en/{ARTICLE}.md"));
+    let english = project.path(&format!("content/en/tech/{ARTICLE}.md"));
     assert!(
         fs::read_to_string(&english)
             .unwrap()
@@ -330,7 +330,7 @@ fn accepting_candidates_needs_neither_private_input_nor_ai() {
     let project = Project::new();
     project.prepare_review_candidates();
     let calls = project.calls();
-    let english = project.path(&format!("content/en/{ARTICLE}.md"));
+    let english = project.path(&format!("content/en/tech/{ARTICLE}.md"));
     let candidate = project.path(&format!("content/.export-candidates/{ARTICLE}.md"));
     let source = project.path("obsidian");
     let away = project.path("unavailable-vault");
@@ -407,8 +407,8 @@ fn codex_failure_rolls_back_japanese_and_english_and_stops_before_ui_translation
     let project = Project::new();
     project.run(&[]);
     let paths = [
-        format!("content/ja/{ARTICLE}.md"),
-        format!("content/en/{ARTICLE}.md"),
+        format!("content/ja/tech/{ARTICLE}.md"),
+        format!("content/en/tech/{ARTICLE}.md"),
         "content/tags.json".into(),
         "crates/blog-server/locales/ui.json".into(),
     ];
