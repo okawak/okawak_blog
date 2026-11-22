@@ -12,6 +12,14 @@
             "generated_hash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
           },
           "stale": false
+        },
+        "zh-hans": {
+          "value": "测试",
+          "provenance": {
+            "input_hash": "9aa5a67cbc3bb29718f86d76f2fdeff31791a44607a14e56175d6180a9ed5c4a",
+            "generated_hash": "6aa8f49cc992dfd75a114269ed26de0ad6d4e7d7a70d9c8afb3d7a57a88a73ed"
+          },
+          "stale": false
         }
       }
     }
