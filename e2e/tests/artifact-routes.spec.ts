@@ -383,7 +383,7 @@ test("mobile navigation stays in the viewport and exposes its state", async ({ p
 
   const header = page.locator("header");
   const logo = header.getByRole("link", { name: SITE_NAME });
-  const menuButton = header.locator('button[popovertarget]');
+  const menuButton = header.getByRole("button", { name: /ナビゲーションメニュー/ });
   const navigation = header.locator("[data-mobile-navigation]");
 
   await expect(logo).toBeVisible();
@@ -418,7 +418,7 @@ test("mobile navigation stays in the viewport and exposes its state", async ({ p
 test("browser history reconstructs the closed mobile menu", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/ja");
-  const menuButton = page.locator('button[popovertarget]');
+  const menuButton = page.getByRole("button", { name: /ナビゲーションメニュー/ });
   await menuButton.click();
   await page.getByRole("link", { name: "About", exact: true }).click();
   await expect(page).toHaveURL(/\/about$/);
@@ -525,7 +525,7 @@ test("category filtering morphs only the list and preserves browser state", asyn
   const browserErrors = captureBrowserErrors(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/ja/tech");
-  const menu = page.locator('button[popovertarget]');
+  const menu = page.getByRole("button", { name: /ナビゲーションメニュー/ });
   await menu.click();
   await page.locator("header").evaluate((element) => element.setAttribute("data-preserved", "true"));
   const input = page.getByRole("searchbox", { name: "記事を絞り込む" });
@@ -582,7 +582,7 @@ test("GitHub tooltip stays associated and within the viewport", async ({ page })
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/ja/tech");
     if (width < 768) {
-      await page.locator('button[popovertarget]').click();
+      await page.getByRole("button", { name: /ナビゲーションメニュー/ }).click();
     }
     const github = page.locator("header").getByRole("link", { name: "okawakのGitHubプロフィールを開く" });
     await github.focus();

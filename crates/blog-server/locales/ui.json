@@ -505,42 +505,6 @@
         }
       }
     },
-    "footer.copyright": {
-      "source": "© {year} okawak. All Rights Reserved.",
-      "context": "Copyright notice. Preserve {year}.",
-      "translations": {
-        "en": {
-          "value": "© {year} okawak. All Rights Reserved.",
-          "stale": false
-        },
-        "zh-hans": {
-          "value": "© {year} okawak. 保留所有权利。",
-          "provenance": {
-            "input_hash": "e5fddd8bca612414dc1a7e015b42d28a3dd27dcbad0f411ba8f95f38c6935bf2",
-            "generated_hash": "0ec16e020907f50d6899b3db5ac523f175a588d8f5d630b29f5bb5e653cc8bdd"
-          },
-          "stale": false
-        }
-      }
-    },
-    "footer.powered": {
-      "source": "Powered by ",
-      "context": "Attribution prefix before Topcoat link. Preserve trailing space.",
-      "translations": {
-        "en": {
-          "value": "Powered by ",
-          "stale": false
-        },
-        "zh-hans": {
-          "value": "技术支持：",
-          "provenance": {
-            "input_hash": "c6041250389070f7e9873c7c128b6e30c596f2fa0df92ff9aefb7b5cde1fcf16",
-            "generated_hash": "02ee23a5f9b6008729dffca44f30a45a7f102fc5242ab8cd0261cc38a718693a"
-          },
-          "stale": false
-        }
-      }
-    },
     "home.description": {
       "source": "新しい順に、公開済みの記事を紹介します。",
       "context": "Recent articles introduction.",

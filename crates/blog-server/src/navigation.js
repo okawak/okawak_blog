@@ -2,13 +2,13 @@
 // belong to the native popover. Only document transitions need coordination.
 (() => {
   const closeMenus = () => {
-    document.querySelectorAll('[data-mobile-navigation]:popover-open')
+    document.querySelectorAll('header [popover]:popover-open')
       .forEach((menu) => menu.hidePopover());
   };
   // Delegation survives Topcoat's document morphs; no per-render listeners.
   document.addEventListener('click', (event) => {
     if (event.target instanceof Element &&
-        event.target.closest('[data-mobile-navigation] a[href]')) {
+        event.target.closest('header [popover] a[href]')) {
       closeMenus();
     }
   }, true);

@@ -12,11 +12,15 @@ use topcoat::{
         response::{IntoResponse, Response},
     },
     runtime::{PrefetchMode, link_attrs},
-    view::{View, attributes, component, view},
+    view::{View, attributes, component, element_id, view},
 };
 
 use crate::{
-    components::toggle::{ToggleSize, toggle_group, toggle_link},
+    components::{
+        button::{ButtonSize, ButtonVariant, button_variants},
+        floating::FloatingAlign,
+        popover::{popover, popover_content, popover_trigger},
+    },
     i18n::{Message, route_key, t},
 };
 
@@ -188,44 +192,62 @@ pub(crate) async fn language_switcher(
     path: &str,
     locales: &SiteLocalesDocument,
 ) -> topcoat::Result<impl View> {
+    let panel_id = element_id(&cx.keyed(path));
     Ok(view! {
-        toggle_group(
-            attrs: attributes! {
-                role="group"
-                aria-label=(t(locale, Message::NavLanguage))
-                class="shrink-0 border-primary/30 bg-background/45 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)]"
-            },
-            #[key(other.as_str())]
-            for other in Locale::ALL {
-                if let Some(target) = destination(locales, path, other) {
-                    toggle_link(
-                        active: other == locale,
-                        size: ToggleSize::Sm,
-                        attrs: attributes! {
+        popover(
+            popover_trigger(
+                target: &panel_id,
+                attrs: attributes! {
+                    aria-label=(format!(
+                        "{} {}",
+                        t(locale, Message::NavLanguage),
+                        native_name(locale),
+                    ))
+                    class=(button_variants(ButtonVariant::Outline, ButtonSize::Md))
+                },
+                <span class="max-w-24 truncate">(native_name(locale))</span>
+                <span
+                    aria-hidden="true"
+                    class="size-2 shrink-0 -translate-y-0.5 rotate-45 border-r border-b border-current group-has-[:popover-open]/popover:translate-y-0.5 group-has-[:popover-open]/popover:rotate-225"
+                ></span>
+            )
+            popover_content(
+                id: &panel_id,
+                align: FloatingAlign::End,
+                attrs: attributes! {
+                    role="group"
+                    aria-label=(t(locale, Message::NavLanguage))
+                    class="max-w-[min(11rem,calc(100vw-2rem))] max-h-[calc(100dvh-7rem)] overflow-y-auto p-1.5! text-left text-sm"
+                },
+                #[key(other.as_str())]
+                for other in Locale::ALL {
+                    if let Some(target) = destination(locales, path, other) {
+                        <a
                             (link_attrs(
                                 cx,
                                 format!("{target}?lang={other}"),
                                 PrefetchMode::Never,
                             ))
                             lang=(other.as_str())
-                            aria-current=(if other == locale {
-                                Some("true")
-                            } else {
-                                None
-                            })
-                        },
-                        (native_name(other))
-                    )
-                } else {
-                    <span
-                        lang=(other.as_str())
-                        aria-disabled="true"
-                        class="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-transparent px-2 text-xs font-medium text-muted-foreground opacity-50 select-none"
-                    >
-                        (native_name(other))
-                    </span>
+                            aria-current=((other == locale).then_some("true"))
+                            class="flex min-h-11 items-center justify-between gap-2 rounded-md px-3 text-foreground no-underline hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring aria-current:bg-accent aria-current:font-semibold"
+                        >
+                            (native_name(other))
+                            if other == locale {
+                                <span aria-hidden="true" class="text-primary">"✓"</span>
+                            }
+                        </a>
+                    } else {
+                        <span
+                            lang=(other.as_str())
+                            aria-disabled="true"
+                            class="flex min-h-11 items-center px-3 text-muted-foreground"
+                        >
+                            (native_name(other))
+                        </span>
+                    }
                 }
-            }
+            )
         )
     })
 }
