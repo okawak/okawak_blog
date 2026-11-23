@@ -59,6 +59,22 @@ pub(crate) enum Message {
     SiteName,
 }
 impl Message {
+    fn article_count(count: usize) -> Self {
+        match count {
+            0 => Self::CountArticlesZero,
+            1 => Self::CountArticlesOne,
+            _ => Self::CountArticlesMany,
+        }
+    }
+
+    fn category_count(count: usize) -> Self {
+        match count {
+            0 => Self::CountCategoriesZero,
+            1 => Self::CountCategoriesOne,
+            _ => Self::CountCategoriesMany,
+        }
+    }
+
     fn key(self) -> &'static str {
         match self {
             Self::ArticleNoDescription => "article.no_description",
@@ -153,22 +169,14 @@ pub(crate) fn interpolate(locale: Locale, message: Message, values: &[(&str, Str
 pub(crate) fn article_count(locale: Locale, count: usize) -> String {
     interpolate(
         locale,
-        match count {
-            0 => Message::CountArticlesZero,
-            1 => Message::CountArticlesOne,
-            _ => Message::CountArticlesMany,
-        },
+        Message::article_count(count),
         &[("count", crate::format::format_count(count, locale))],
     )
 }
 pub(crate) fn category_count(locale: Locale, count: usize) -> String {
     interpolate(
         locale,
-        match count {
-            0 => Message::CountCategoriesZero,
-            1 => Message::CountCategoriesOne,
-            _ => Message::CountCategoriesMany,
-        },
+        Message::category_count(count),
         &[("count", crate::format::format_count(count, locale))],
     )
 }
@@ -317,6 +325,20 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn count_keys_stay_distinct_when_their_translations_coincide() {
+        for (count, form) in [(0, "zero"), (1, "one"), (2, "many")] {
+            assert_eq!(
+                Message::article_count(count).key(),
+                format!("count.articles.{form}")
+            );
+            assert_eq!(
+                Message::category_count(count).key(),
+                format!("count.categories.{form}")
+            );
+        }
+    }
+
     #[test]
     fn counts_fallback_and_interpolation_are_explicit() {
         assert_eq!(article_count(Locale::En, 0), "0 articles");

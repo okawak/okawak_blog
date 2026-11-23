@@ -44,7 +44,7 @@ impl Index {
         for document in documents {
             for event in Parser::new_ext(
                 &document.body,
-                Options::ENABLE_WIKILINKS | Options::ENABLE_TABLES,
+                Options::ENABLE_WIKILINKS.union(Options::ENABLE_TABLES),
             ) {
                 if let Event::Start(
                     Tag::Link {

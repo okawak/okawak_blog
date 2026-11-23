@@ -107,20 +107,20 @@ fn same_tree(left_root: &Path, right_root: &Path) -> Result<bool> {
 fn same_file(a: &Path, b: &Path) -> io::Result<bool> {
     let mut a = fs::File::open(a)?;
     let mut b = fs::File::open(b)?;
-    let mut remaining = a.metadata()?.len();
-    if remaining != b.metadata()?.len() {
+    let size = a.metadata()?.len();
+    if size != b.metadata()?.len() {
         return Ok(false);
     }
-    let mut left = [0; 8 * 1024];
-    let mut right = [0; 8 * 1024];
-    while remaining > 0 {
-        let len = remaining.min(left.len() as u64) as usize;
+    const CHUNK_SIZE: usize = 8192;
+    let mut left = [0; CHUNK_SIZE];
+    let mut right = [0; CHUNK_SIZE];
+    for start in (0..size).step_by(CHUNK_SIZE) {
+        let len = (size - start).min(CHUNK_SIZE as u64) as usize;
         a.read_exact(&mut left[..len])?;
         b.read_exact(&mut right[..len])?;
         if left[..len] != right[..len] {
             return Ok(false);
         }
-        remaining -= len as u64;
     }
     Ok(true)
 }

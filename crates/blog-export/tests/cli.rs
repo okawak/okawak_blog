@@ -71,17 +71,23 @@ exec "$FAKE_CODEX_TEST" --exact fake_codex_process --nocapture
         serde_json::from_slice(&fs::read(self.path(path)).unwrap()).unwrap()
     }
 
-    fn invoke(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_blog-export"))
+    fn command(&self) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_blog-export"));
+        command
             .current_dir(self.0.path())
-            .args(["--target", "en"])
-            .args(args)
             .env("PATH", self.path("bin"))
             .env("RUST_LOG", "info")
             // Keep log-field assertions independent of the parent terminal settings.
             .env("NO_COLOR", "1")
             .env("FAKE_CODEX_TEST", std::env::current_exe().unwrap())
-            .env("FAKE_CODEX_LOG", self.path("calls"))
+            .env("FAKE_CODEX_LOG", self.path("calls"));
+        command
+    }
+
+    fn invoke(&self, args: &[&str]) -> Output {
+        self.command()
+            .args(["--target", "en"])
+            .args(args)
             .output()
             .unwrap()
     }
@@ -164,6 +170,28 @@ fn fake_codex_process() {
         .open(std::env::var_os("FAKE_CODEX_LOG").unwrap())
         .unwrap();
     writeln!(log, "translated").unwrap();
+}
+
+#[test]
+fn omitting_target_publishes_both_translation_languages() {
+    let project = Project::new();
+    let result = project.command().output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let ui = project.read_json("crates/blog-server/locales/ui.json");
+    let tags = project.read_json("content/tags.json");
+    for locale in ["en", "zh-hans"] {
+        assert!(
+            project
+                .path(&format!("content/{locale}/tech/{ARTICLE}.md"))
+                .is_file()
+        );
+        assert!(tags["entries"]["Rust"]["translations"][locale]["value"].is_string());
+        assert!(ui["entries"]["greeting"]["translations"][locale]["value"].is_string());
+    }
 }
 
 #[test]

@@ -30,6 +30,31 @@ fn settings() -> TranslationSettings {
 fn save(path: &std::path::Path, catalog: &LabelCatalog) {
     fs::write(path, serde_json::to_vec_pretty(catalog).unwrap()).unwrap();
 }
+
+#[test]
+fn invalid_target_lists_are_rejected_before_translating() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("ui.json");
+    let catalog =
+        r#"{"schema_version":1,"entries":{"label":{"source":"原文","context":"button"}}}"#;
+    fs::write(&path, catalog).unwrap();
+    let fake = Fake(Cell::new(0));
+    for targets in [
+        vec![],
+        vec![settings(), settings()],
+        vec![TranslationSettings {
+            target: Locale::Ja,
+            ..settings()
+        }],
+    ] {
+        assert!(matches!(
+            blog_export::translate_catalog_targets(&path, &fake, &targets),
+            Err(blog_export::ExportError::InvalidInput(_))
+        ));
+        assert_eq!(fake.0.get(), 0);
+        assert_eq!(fs::read_to_string(&path).unwrap(), catalog);
+    }
+}
 #[test]
 fn adding_chinese_keeps_english_history_and_accepts_only_the_selected_candidate() {
     let root = tempfile::tempdir().unwrap();

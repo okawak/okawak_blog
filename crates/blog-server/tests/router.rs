@@ -354,6 +354,29 @@ async fn home_selects_browser_language_with_english_default_and_saved_preference
 }
 
 #[tokio::test]
+async fn home_falls_back_to_japanese_when_the_locale_catalog_cannot_select_a_home() {
+    let root = tempdir().unwrap();
+    for catalog in [
+        "invalid JSON",
+        r#"{"schema_version":1,"routes":{"/about":["en"]}}"#,
+    ] {
+        std::fs::write(root.path().join("locales.json"), catalog).unwrap();
+        let router = create_router(Arc::new(LocalArtifactReader::new(root.path())), false);
+        let result = response(
+            &router,
+            Request::builder()
+                .uri("/?from=nav")
+                .header(header::ACCEPT_LANGUAGE, "en")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::TEMPORARY_REDIRECT);
+        assert_eq!(result.headers[header::LOCATION], "/ja?from=nav");
+    }
+}
+
+#[tokio::test]
 async fn manual_language_choice_is_saved_and_falls_back_to_the_published_home() {
     let router = create_router(validator_reader(fixture_reader()), true);
     for (path, language, location) in [

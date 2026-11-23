@@ -62,12 +62,16 @@ pub(crate) fn digest(bytes: impl AsRef<[u8]>) -> Sha256Digest {
 }
 
 pub(crate) fn options() -> Options {
-    Options::ENABLE_TABLES
-        | Options::ENABLE_FOOTNOTES
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_MATH
-        | Options::ENABLE_WIKILINKS
+    [
+        Options::ENABLE_TABLES,
+        Options::ENABLE_FOOTNOTES,
+        Options::ENABLE_STRIKETHROUGH,
+        Options::ENABLE_TASKLISTS,
+        Options::ENABLE_MATH,
+        Options::ENABLE_WIKILINKS,
+    ]
+    .into_iter()
+    .collect()
 }
 
 pub(crate) fn text_hash(document: &Document) -> Result<Sha256Digest> {

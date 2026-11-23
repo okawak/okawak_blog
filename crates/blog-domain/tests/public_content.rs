@@ -28,6 +28,10 @@ fn locale_prefix_is_shared_by_urls_and_page_files() {
                 locale.path(route),
                 format!("/{code}{}", route.trim_end_matches('/'))
             );
+            assert_eq!(
+                Locale::split_path(&locale.path(route)),
+                Some((locale, route))
+            );
             for ext in ["md", "json"] {
                 assert_eq!(
                     locale.page_file(route, ext),
@@ -53,6 +57,17 @@ fn locale_prefix_is_shared_by_urls_and_page_files() {
         "en/_data/articles.json"
     );
     assert!("fr".parse::<Locale>().is_err());
+    for path in ["/", "/english/tech", "en/about"] {
+        assert_eq!(Locale::split_path(path), None);
+    }
+}
+
+#[test]
+fn translation_targets_are_english_and_simplified_chinese() {
+    assert_eq!(
+        Locale::translations().collect::<Vec<_>>(),
+        [Locale::En, Locale::ZhHans]
+    );
 }
 
 #[test]

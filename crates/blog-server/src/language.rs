@@ -257,6 +257,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn negotiated_home_responses_vary_by_both_language_preferences() {
+        let mut response = Response::new(topcoat::router::Body::empty());
+        vary_home(&mut response);
+        assert_eq!(response.headers()[header::VARY], "Accept-Language, Cookie");
+        assert_eq!(
+            response.headers()[header::CACHE_CONTROL],
+            "private, no-cache"
+        );
+    }
+
+    #[test]
     fn missing_translation_uses_its_home_but_missing_language_is_unavailable() {
         let catalog: SiteLocalesDocument = serde_json::from_str(
             r#"{

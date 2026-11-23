@@ -43,6 +43,34 @@ async fn test_publish_with_empty_directory() {
 }
 
 #[tokio::test]
+async fn pages_and_category_landings_do_not_satisfy_the_article_requirement() {
+    let fixture = PublishFixture::new();
+    fixture.write_about_page();
+    fixture.write_tech_category_landing();
+    std::assert_matches!(
+        publish(fixture.content_dir(), fixture.output_dir()).await,
+        Err(PublishError::NoArticles)
+    );
+}
+
+#[tokio::test]
+async fn rejects_duplicate_content_ids_on_different_routes() {
+    let fixture = PublishFixture::new();
+    fixture.write_required_site();
+    let about = fixture.content_dir().join("ja/about.md");
+    let source = fs::read_to_string(&about).unwrap();
+    fs::write(
+        about,
+        source.replace("id: about\n", "id: tech-required-article\n"),
+    )
+    .unwrap();
+    std::assert_matches!(
+        publish(fixture.content_dir(), fixture.output_dir()).await,
+        Err(PublishError::ContentErrors { .. })
+    );
+}
+
+#[tokio::test]
 async fn test_publish_requires_about_page() {
     let fixture = PublishFixture::new();
     fixture.write_required_article();
@@ -130,6 +158,8 @@ async fn test_publish_resolves_links_to_all_content_kinds() {
     fixture.write_about_page();
     fixture.write_home_fragment("home.md");
     fixture.write_tech_category_landing();
+    write_translation_copies(&fixture, "en");
+    fs::remove_file(fixture.content_dir().join("en/about.md")).unwrap();
 
     publish(fixture.content_dir(), fixture.output_dir())
         .await
@@ -146,6 +176,15 @@ async fn test_publish_resolves_links_to_all_content_kinds() {
         r#"href="/ja/about">About page</a>"#,
     ] {
         assert!(html.contains(expected), "missing {expected}");
+    }
+    let english: blog_domain::ArticleArtifactDocument =
+        read_json(fixture.site_root().join("en/tech/tech-links.json"));
+    for expected in [
+        r#"href="/en">Home</a>"#,
+        r#"href="/en/tech">Tech</a>"#,
+        r#"href="/ja/about">About</a>"#,
+    ] {
+        assert!(english.html.contains(expected), "missing {expected}");
     }
 }
 
@@ -823,19 +862,24 @@ async fn rejects_divergent_english_management_metadata_without_replacing_release
         .unwrap();
     let mut metadata: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
     metadata[field] = yaml_serde::from_str(value).unwrap();
+    // Keep the translated filename valid so only its divergence from the source is tested.
+    let meta: blog_domain::PublicContentMeta = yaml_serde::from_value(metadata).unwrap();
+    let target = fixture
+        .content_dir()
+        .join(meta.markdown_path(meta.locale).unwrap());
+    if target != article {
+        fs::remove_file(&article).unwrap();
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+    }
     fs::write(
-        &article,
-        format!(
-            "---\n{}---\n{body}",
-            yaml_serde::to_string(&metadata).unwrap()
-        ),
+        target,
+        format!("---\n{}---\n{body}", yaml_serde::to_string(&meta).unwrap()),
     )
     .unwrap();
-    assert!(
-        publish(fixture.content_dir(), fixture.output_dir())
-            .await
-            .is_err(),
-        "accepted divergent {field}"
+    std::assert_matches!(
+        publish(fixture.content_dir(), fixture.output_dir()).await,
+        Err(PublishError::ContentErrors { .. }),
+        "divergent {field}"
     );
     assert_eq!(fs::read(index).unwrap(), before);
 }
