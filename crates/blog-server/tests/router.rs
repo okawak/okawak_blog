@@ -1305,22 +1305,25 @@ async fn home_shell_exposes_topcoat_mobile_navigation_contract() {
     );
     assert!(!response.body.contains("navigation-test.js"));
     assert!(!response.body.contains("okawak-shell-version"));
-    let panel_id = response
-        .body
-        .split("popovertarget=\"")
-        .nth(1)
-        .expect("mobile menu trigger")
-        .split('"')
-        .next()
-        .unwrap();
     let panel = response
         .body
         .split("<div ")
         .filter_map(|part| part.split('>').next())
-        .find(|attrs| attrs.contains(&format!("id=\"{panel_id}\"")))
-        .expect("trigger target exists");
+        .find(|attrs| attrs.contains("data-mobile-navigation=\"\""))
+        .expect("mobile navigation panel");
+    let panel_id = panel
+        .split("id=\"")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap();
+    assert!(
+        response
+            .body
+            .contains(&format!("popovertarget=\"{panel_id}\""))
+    );
     assert!(panel.contains("popover=\"auto\""));
-    assert!(response.body.contains("data-mobile-navigation=\"\""));
     assert!(response.body.contains("ナビゲーションメニューを開く"));
     assert!(response.body.contains("ナビゲーションメニューを閉じる"));
     // The browser exposes expanded state; no independently maintained signal.

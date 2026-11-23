@@ -1,6 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const baseURL = "http://127.0.0.1:8008";
+
+const languageButton = (page: Page) => page.getByRole("button", { name: /^(言語|Language|语言) / });
 
 test("home follows the browser locale and uses English for unsupported languages", async ({ browser }) => {
   for (const [locale, lang] of [["en-US", "en"], ["ja-JP", "ja"], ["zh-CN", "zh-hans"], ["fr-FR", "en"]]) {
@@ -10,6 +12,10 @@ test("home follows the browser locale and uses English for unsupported languages
       await page.goto(baseURL);
       await expect(page).toHaveURL(`${baseURL}/${lang}`);
       await expect(page.locator("html")).toHaveAttribute("lang", lang);
+      const footer = page.getByRole("contentinfo");
+      await expect(footer).toHaveAttribute("lang", "en");
+      await expect(footer).toContainText(/© \d{4} okawak\. All Rights Reserved\./);
+      await expect(footer).toContainText("Powered by Topcoat");
     } finally {
       await context.close();
     }
@@ -19,6 +25,7 @@ test("home follows the browser locale and uses English for unsupported languages
 test("switching languages applies the page font to text and headings", async ({ page }) => {
   await page.goto("/ja");
   for (const [name, family] of [["日本語", "Noto Sans JP"], ["English", "Noto Sans"], ["简体中文", "Noto Sans SC"]]) {
+    await languageButton(page).click();
     await page.locator("header").getByRole("link", { name, exact: true }).click();
     const font = new RegExp(`^"${family}",`);
     await expect(page.locator("body")).toHaveCSS("font-family", font);
@@ -34,6 +41,7 @@ test("header language choices persist and direct article URLs keep their locale"
   try {
     const page = await context.newPage();
     await page.goto(baseURL);
+    await languageButton(page).click();
     const switcher = page.locator("header").getByRole("group");
     await expect(switcher.getByRole("link", { name: "English" })).toHaveAttribute("aria-current", "true");
     await switcher.getByRole("link", { name: "日本語" }).click();
@@ -45,13 +53,22 @@ test("header language choices persist and direct article URLs keep their locale"
     await expect(page.locator("html")).toHaveAttribute("lang", "ja");
     await page.goto(`${baseURL}/en/tech/e2e-article`);
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await languageButton(page).click();
     await switcher.getByRole("link", { name: "日本語" }).click();
     await expect(page).toHaveURL(`${baseURL}/ja/tech/e2e-article`);
     await page.setViewportSize({ width: 320, height: 740 });
+    await expect(languageButton(page)).toHaveAccessibleName("言語 日本語");
+    await expect(switcher).toBeHidden();
+    await languageButton(page).press("Enter");
+    await expect(switcher).toBeInViewport({ ratio: 1 });
+    await page.keyboard.press("Escape");
+    await expect(languageButton(page)).toBeFocused();
+    await languageButton(page).click();
     await expect(switcher.getByRole("link", { name: "English" })).toBeVisible();
     await expect(page.getByRole("button", { name: "ナビゲーションメニューを開く" })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
-    await page.screenshot({ path: testInfo.outputPath("language-menu-mobile.png") });
+    await expect(switcher).toHaveCSS("opacity", "1");
+    await page.screenshot({ path: testInfo.outputPath("language-menu-mobile.png"), animations: "disabled" });
     await switcher.getByRole("link", { name: "English" }).click();
     await expect(page).toHaveURL(`${baseURL}/en/tech/e2e-article`);
     await page.goto(baseURL);
@@ -68,11 +85,13 @@ test("language switching works without JavaScript and returns from missing pages
     const response = await page.goto(`${baseURL}/ja/tech/untranslated`);
     expect(response?.status()).toBe(404);
     await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+    await languageButton(page).click();
     const english = page.locator("header").getByRole("link", { name: "English" });
     await expect(english).toHaveAttribute("href", "/en?lang=en");
     await english.focus();
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(`${baseURL}/en`);
+    await languageButton(page).click();
     await page.locator("header").getByRole("link", { name: "日本語" }).click();
     await page.goto(baseURL);
     await expect(page.locator("html")).toHaveAttribute("lang", "ja");
@@ -86,6 +105,7 @@ test("language links select existing translations and matching metadata", async 
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/ja");
   await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+  await languageButton(page).click();
   await page.getByRole("link", { name: "English", exact: true }).click();
   await expect(page).toHaveURL(`${baseURL}/en`);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
@@ -99,6 +119,7 @@ test("language links select existing translations and matching metadata", async 
   await expect(page).toHaveURL(`${baseURL}/en/tech/e2e-article`);
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${baseURL}/en/tech/e2e-article`);
   await expect(page.locator("main")).toContainText("#Browser testing");
+  await languageButton(page).click();
   await page.getByRole("link", { name: "日本語", exact: true }).click();
   await expect(page).toHaveURL(`${baseURL}/ja/tech/e2e-article`);
   await expect(page.locator('meta[property="og:site_name"]')).toHaveAttribute("content", "ぶくせんの探窟メモ");
@@ -161,6 +182,7 @@ test("简体中文 persists an explicit choice and only advertises translated pa
   await expect(page.locator('link[rel="alternate"]')).toHaveCount(0);
   await page.goto("/ja/about");
   await expect(page.locator('link[hreflang="zh-hans"]')).toHaveCount(0);
+  await languageButton(page).click();
   await page.locator("header").getByRole("link", { name: "简体中文" }).click();
   await expect(page).toHaveURL(`${baseURL}/zh-hans`);
   expect((await context.cookies()).find(c => c.name === "okawak_locale")?.value).toBe("zh-hans");

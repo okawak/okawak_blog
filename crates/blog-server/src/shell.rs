@@ -338,19 +338,16 @@ window.okawakScheduleCodeHighlight = function(root) {
                     )
                     <main class="content-container flex-1">(child)</main>
                     <footer
+                        lang="en"
                         class="border-t border-border bg-gradient-to-r from-card to-background px-4 py-8 text-center text-sm text-muted-foreground"
                     >
                         <div class="mx-auto max-w-[var(--site-content-width)]">
                             <p class="my-2 leading-relaxed">
-                                (crate::i18n::interpolate(
-                                    locale,
-                                    Message::FooterCopyright,
-                                    &[("year", year.to_string())],
-                                ))
+                                (format!("© {year} okawak. All Rights Reserved."))
                             </p>
                             <p class="my-2 leading-relaxed">
                                 <small>
-                                    (t(locale, Message::FooterPowered))
+                                    "Powered by "
                                     <a
                                         href="https://github.com/tokio-rs/topcoat"
                                         target="_blank"

@@ -24,6 +24,7 @@ test("intent prefetch is reused without a document reload", async ({ page }) => 
 
 test("language choices never prefetch or change cookies before a click", async ({ page, context }) => {
   await page.goto("/ja/tech/e2e-article");
+  await page.getByRole("button", { name: "言語 日本語" }).click();
   const english = page.locator("header").getByRole("link", { name: "English", exact: true });
   const chinese = page.locator("header").getByRole("link", { name: "简体中文", exact: true });
   const choices: string[] = [];
