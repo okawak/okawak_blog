@@ -270,6 +270,16 @@ mod tests {
         assert!(read_document(root.path(), Locale::Ja, &source).is_err());
     }
 
+    #[test]
+    fn direct_document_read_propagates_a_non_directory_parent() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("en"), "regular file").unwrap();
+        assert!(matches!(
+            read_document(root.path(), Locale::En, &document().meta),
+            Err(ExportError::Io(error)) if error.kind() == std::io::ErrorKind::NotADirectory
+        ));
+    }
+
     #[cfg(unix)]
     #[test]
     fn direct_document_read_rejects_symlinks_including_broken_links() {

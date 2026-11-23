@@ -21,15 +21,16 @@ pub(crate) fn format_display_date(value: &str, locale: Locale) -> String {
         .or_else(|| Date::strptime("%F", value).ok())
         .or_else(|| Date::strptime("%FT%R", value).ok())
         .or_else(|| {
-            // Ignore digits beyond Jiff's nanosecond precision in legacy artifacts.
-            let mut local = value;
-            if let Some((seconds, fraction)) = value.split_once('.')
-                && fraction.len() > 9
-                && fraction.bytes().all(|b| b.is_ascii_digit())
-            {
-                local = &value[..seconds.len() + 1 + 9];
-            }
-            Date::strptime("%FT%T%.f", local).ok()
+            // Only the calendar day is displayed. Legacy fractions may exceed nanosecond precision.
+            let local = if let Some((seconds, fraction)) = value.split_once('.') {
+                if fraction.is_empty() || !fraction.bytes().all(|b| b.is_ascii_digit()) {
+                    return None;
+                }
+                seconds
+            } else {
+                value
+            };
+            Date::strptime("%FT%T", local).ok()
         });
 
     match date {
@@ -101,6 +102,8 @@ mod tests {
     fn preserves_unknown_values() {
         for value in [
             "unknown",
+            ".1234567890",
+            "2025-05-04T16:50:30.",
             "2025-05-04T24:01",
             "2025-05-04T16:50:30.123456789x",
         ] {

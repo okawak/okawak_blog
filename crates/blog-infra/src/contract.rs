@@ -26,12 +26,12 @@ pub trait ArtifactSnapshot: Send + Sync {
 
     /// Older releases have no locale catalog and remain Japanese-only.
     async fn read_locales(&self) -> Result<Arc<SiteLocalesDocument>> {
-        Ok(Arc::new(SiteLocalesDocument::default()))
+        Ok(Arc::new(Default::default()))
     }
 
     /// Labels are part of the content release; legacy releases use original IDs.
     async fn read_tag_labels(&self) -> Result<Arc<blog_domain::TagLabels>> {
-        Ok(Default::default())
+        Ok(Arc::new(Default::default()))
     }
 
     async fn read_content_asset(&self, _name: &ContentAssetName) -> Result<Option<bytes::Bytes>> {

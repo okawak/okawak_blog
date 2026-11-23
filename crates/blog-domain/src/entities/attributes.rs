@@ -294,6 +294,15 @@ mod tests {
     }
 
     #[test]
+    fn calendar_date_preserves_the_day_at_the_written_offset() {
+        let day = jiff::civil::date(2024, 2, 29);
+        for value in ["2024-02-29T00:01:00+09:00", "2024-02-29T23:59:00-09:00"] {
+            assert_eq!(Timestamp::parse_calendar_date(value), Some(day));
+        }
+        assert_eq!(Timestamp::parse_calendar_date("2025-02-29T00:00:00Z"), None);
+    }
+
+    #[test]
     fn test_timestamp_rejects_invalid_values() {
         for value in [
             "",

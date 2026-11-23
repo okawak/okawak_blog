@@ -238,21 +238,63 @@ mod tests {
             "10.1.2.3",
             "169.254.1.1",
             "100.64.0.1",
+            "100.127.255.255",
             "198.18.0.1",
             "224.0.0.1",
             "::1",
             "::ffff:127.0.0.1",
             "64:ff9b::1",
             "2002::1",
+            "2001:1ff::1",
+            "2001:db8::1",
+            "3fff:fff::1",
             "fc00::1",
             "fe80::1",
         ] {
             assert!(!public_address(ip.parse().unwrap()), "{ip}");
         }
-        for ip in ["1.1.1.1", "2606:4700:4700::1111"] {
-            assert!(public_address(ip.parse().unwrap()));
+        for ip in [
+            "1.1.1.1",
+            "100.63.255.255",
+            "100.128.0.1",
+            "8.64.0.1",
+            "2001:200::1",
+            "2606:4700:4700::1111",
+            "2606:db8::1",
+            "3fff:1000::1",
+        ] {
+            assert!(public_address(ip.parse().unwrap()), "{ip}");
         }
+        assert!(public_url(
+            &Url::parse("https://example.com/article").unwrap()
+        ));
         assert!(!public_url(&Url::parse("http://[::1]/").unwrap()));
+    }
+
+    #[tokio::test]
+    async fn resolver_returns_only_public_addresses() {
+        let public = "1.1.1.1".parse::<std::net::Ipv4Addr>().unwrap();
+        let addresses: Vec<_> = PublicResolver
+            .resolve("1.1.1.1".parse().unwrap())
+            .await
+            .unwrap()
+            .collect();
+        assert_eq!(addresses, [std::net::SocketAddr::from((public, 0))]);
+        assert!(
+            PublicResolver
+                .resolve("127.0.0.1".parse().unwrap())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_rejects_a_non_public_bookmark_before_sending() {
+        let fetcher = Fetcher::new().unwrap();
+        std::assert_matches!(
+            fetcher.fetch("http://127.0.0.1/").await,
+            Err(PublishError::Parse(_))
+        );
     }
 
     #[tokio::test]
@@ -274,10 +316,13 @@ mod tests {
 
     #[test]
     fn enforces_size_across_chunks() {
-        let mut bytes = vec![0; MAX_HTML_BYTES - 1];
+        // Bookmark HTML is capped at one MiB, including previous chunks.
+        let limit = 1 << 20;
+        let mut bytes = Vec::new();
+        append_html(&mut bytes, &vec![0; limit - 1]).unwrap();
         append_html(&mut bytes, &[0]).unwrap();
         assert!(append_html(&mut bytes, &[0]).is_err());
-        assert_eq!(bytes.len(), MAX_HTML_BYTES);
+        assert_eq!(bytes.len(), limit);
     }
 
     #[test]

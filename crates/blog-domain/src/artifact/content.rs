@@ -283,6 +283,14 @@ mod tests {
             },
             html: " <p>Intro</p> ".into(),
         };
+        for (category, slug) in [(Category::Daily, "intro"), (Category::Tech, "other")] {
+            assert!(
+                document
+                    .clone()
+                    .into_article(&category, &slug.parse().unwrap())
+                    .is_err()
+            );
+        }
         let article = document
             .into_article(&Category::Tech, &"intro".parse().unwrap())
             .unwrap();
