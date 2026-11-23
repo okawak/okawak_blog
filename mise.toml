@@ -27,7 +27,7 @@ run = "gitleaks"
 
 [tasks.audit-workflows]
 description = "Audit GitHub Actions workflow permissions and inputs"
-tools = { zizmor = "1.32.0" }
+tools = { zizmor = "1.33.1" }
 run = "zizmor --offline --min-severity medium .github/workflows"
 
 [tasks.audit-release-policy]
