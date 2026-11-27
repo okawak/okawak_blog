@@ -1519,6 +1519,41 @@ async fn pages_share_one_snapshot_per_request_and_support_conditional_get() {
 }
 
 #[tokio::test]
+async fn page_frames_do_not_share_the_html_http_cache() {
+    let router = create_router(validator_reader(fixture_reader()), true);
+    let page = response(&router, Request::get("/ja").body(Body::empty()).unwrap()).await;
+    let etag = &page.headers[header::ETAG];
+    for method in [Method::GET, Method::HEAD] {
+        let frames = response(
+            &router,
+            Request::builder()
+                .method(method)
+                .uri("/ja")
+                .header(header::ACCEPT, "application/x-ndjson")
+                .header(header::IF_NONE_MATCH, etag)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(frames.status, StatusCode::OK);
+        assert_eq!(frames.content_type.as_deref(), Some("application/x-ndjson"));
+        assert_eq!(frames.headers[header::CACHE_CONTROL], "no-store");
+        assert!(!frames.headers.contains_key(header::ETAG));
+        assert!(!frames.headers.contains_key(header::LAST_MODIFIED));
+    }
+    let cached = response(
+        &router,
+        Request::get("/ja")
+            .header(header::IF_NONE_MATCH, etag)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(cached.status, StatusCode::NOT_MODIFIED);
+    assert_eq!(cached.headers[header::VARY], "Accept");
+}
+
+#[tokio::test]
 async fn category_renders_the_published_landing_and_articles_as_html() {
     let router = create_router(fixture_reader(), false);
     let response = response(

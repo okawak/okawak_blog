@@ -22,9 +22,11 @@ use topcoat::{
     cookie::CookieLayer,
     metadata::Metadata,
     router::{
-        Body, Layer, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode, TrailingSlash,
+        Body, HeaderValue, Layer, LayerFn, LayerFuture, Method, Next, Path, Router, StatusCode,
+        TrailingSlash,
+        content::{ViewResponseDelivery, view_response_delivery},
         error::{NotFoundError, not_found},
-        page, request,
+        header, page, request,
         response::{IntoResponse, Response},
     },
     runtime::{PrefetchMode, RuntimeLayer, link_attrs, prefetch_mode},
@@ -128,6 +130,7 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
     Box::pin(async move {
         let uri = request::uri(cx);
         let is_read = matches!(*request::method(cx), Method::GET | Method::HEAD);
+        let is_page = is_site_page_path(uri.path());
         if is_read && let Some(location) = crate::language::legacy_location(uri) {
             return topcoat::router::error::redirect_permanent(location).into_response(cx);
         }
@@ -140,8 +143,7 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
 
         // Language selection also applies to runtime navigation's rewritten GET.
         let explicit = crate::language::explicit_choice(uri);
-        let negotiate =
-            is_read && is_site_page_path(uri.path()) && (uri.path() == "/" || explicit.is_some());
+        let negotiate = is_read && is_page && (uri.path() == "/" || explicit.is_some());
         let mut snapshot = conditional_get
             .as_ref()
             .and_then(|decision| decision.snapshot());
@@ -156,6 +158,18 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
         let cx = scoped.as_ref().unwrap_or(cx);
         // A Japanese home ETag must never suppress a redirect selected by an English browser.
         if negotiate && let Some(response) = crate::language::redirect(cx, explicit).await {
+            return Ok(response);
+        }
+        // A runtime POST can follow a 303 as a GET that still asks for frames.
+        // Keep that response out of the HTTP cache used for document navigation.
+        if is_page
+            && matches!(*request::original_method(cx), Method::GET | Method::HEAD)
+            && view_response_delivery(cx) == ViewResponseDelivery::Frames
+        {
+            let mut response = next.run(cx, body).await?;
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
             return Ok(response);
         }
         let Some(conditional_get) = conditional_get else {
@@ -180,6 +194,10 @@ fn artifact_conditional_get<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> Layer
         };
         if uri.path() == "/" {
             crate::language::vary_home(&mut response);
+        } else if is_page && response.status() == StatusCode::NOT_MODIFIED {
+            response
+                .headers_mut()
+                .append(header::VARY, HeaderValue::from_static("Accept"));
         }
         Ok(response)
     })
